@@ -1,0 +1,107 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}دفتر حركات وعمليات العملاء - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'sales_orders_list' %}" class="hover:text-brand-600 transition-colors">المبيعات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">دفتر حركات العملاء</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">دفتر قيود وحركات العملاء (Customer Ledger)</h1>
+            <p class="text-sm text-slate-500 mt-0.5">سجل القيود المحاسبية التفصيلية لفواتير المبيعات وسندات التحصيل</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'accounting_customers_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base text-slate-500">arrow_forward</span>
+                <span>الأرصدة الإجمالية</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <form method="GET" class="flex flex-col md:flex-row gap-3">
+            <div class="w-full md:w-80">
+                <select name="customer_id" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                    <option value="">جميع العملاء</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if selected_customer_id|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_customer_id %}
+            <a href="{% url 'customer_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+                عرض كافة العملاء
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Ledger Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                        <th class="py-3.5 px-4">رقم القيد</th>
+                        <th class="py-3.5 px-4">العميل</th>
+                        <th class="py-3.5 px-4">التاريخ</th>
+                        <th class="py-3.5 px-4">التوصيف والبيان</th>
+                        <th class="py-3.5 px-4 text-left">مدين (فاتورة)</th>
+                        <th class="py-3.5 px-4 text-left">دائن (تحصيل)</th>
+                        <th class="py-3.5 px-4 text-left">الرصيد بعد القيد</th>
+                        <th class="py-3.5 px-4">المسئول</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for tx in transactions %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                            #{{ tx.serial }}
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ tx.account.customer.name }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                            {{ tx.transaction_date|date:"Y-m-d" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-medium text-slate-700">
+                            {{ tx.description }}
+                        </td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-xs {% if tx.debit > 0 %}text-rose-600{% else %}text-slate-300{% endif %}">
+                            {% if tx.debit > 0 %}{{ tx.debit|floatformat:2 }} ج.م{% else %}—{% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-xs {% if tx.credit > 0 %}text-emerald-600{% else %}text-slate-300{% endif %}">
+                            {% if tx.credit > 0 %}{{ tx.credit|floatformat:2 }} ج.م{% else %}—{% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-slate-900 text-sm">
+                            {{ tx.running_balance|floatformat:2 }} ج.م
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-500">
+                            {{ tx.created_by|default:"النظام" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">receipt_long</span>
+                            <p class="font-medium text-slate-600">لا توجد حركات مسجلة</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

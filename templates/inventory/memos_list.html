@@ -1,0 +1,100 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}أذونات المخزن - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">المخازن والمخزون</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">أذونات المخزن</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">أذونات المخازن (إضافة وصرف)</h1>
+            <p class="text-sm text-slate-500 mt-0.5">سجل الحركات المخزنية الواردة والصادرة والتوثيق الرسمي للكميات والتشغيلات</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'inventory_stock_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base text-slate-500">inventory_2</span>
+                <span>الأرصدة الحالية</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Memos Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                        <th class="py-3.5 px-4">رقم الإذن</th>
+                        <th class="py-3.5 px-4">نوع الحركة</th>
+                        <th class="py-3.5 px-4">المخزن</th>
+                        <th class="py-3.5 px-4">البيان والسبب</th>
+                        <th class="py-3.5 px-4">عدد الأصناف</th>
+                        <th class="py-3.5 px-4">تاريخ التنفيذ</th>
+                        <th class="py-3.5 px-4">المسئول</th>
+                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for memo in memos %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                            {{ memo.memo_number }}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            {% if memo.memo_type == 'inward' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                <span class="material-symbols-outlined text-xs">arrow_downward</span>
+                                <span>إذن إضافة</span>
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+                                <span class="material-symbols-outlined text-xs">arrow_upward</span>
+                                <span>إذن صرف / خصم</span>
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 font-medium text-slate-800">
+                            {{ memo.warehouse.name }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600 font-medium">
+                            {{ memo.statement }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-bold text-slate-700">
+                            {{ memo.items.count }} صنف
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">
+                            {{ memo.created_at|date:"Y-m-d H:i" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600">
+                            {{ memo.created_by|default:"النظام" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                {{ memo.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">receipt_long</span>
+                            <p class="font-medium text-slate-600">لا توجد أذونات مخزنية مسجلة</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

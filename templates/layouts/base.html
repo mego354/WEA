@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}نظام إدارة الموارد المؤسسي{% endblock %} - WEA Pharma ERP</title>
+
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Material Symbols -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <!-- Tailwind CSS CDN for high fidelity styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdfd',
+                            100: '#ccfbfb',
+                            200: '#99f6f6',
+                            300: '#5eead4',
+                            400: '#2dd4bf',
+                            500: '#27bebe', /* Primary ERP teal */
+                            600: '#1fa8a8',
+                            700: '#1a8b8b',
+                            800: '#196e6e',
+                            900: '#185a5a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Cairo', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .material-symbols-fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="w-72 bg-white border-l border-slate-200 min-h-screen flex flex-col fixed inset-y-0 right-0 z-40 transition-transform duration-300 ease-in-out">
+        <!-- Logo Header -->
+        <div class="h-16 flex items-center justify-between px-6 border-b border-slate-100 bg-white">
+            <a href="{% url 'home' %}" class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center text-white shadow-md shadow-brand-500/20 font-bold text-xl">
+                    W
+                </div>
+                <div>
+                    <h1 class="text-base font-bold text-slate-900 leading-tight">WEA PHARMA</h1>
+                    <span class="text-xs text-brand-600 font-medium">نظام الموارد المتكامل</span>
+                </div>
+            </a>
+            <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Navigation Links -->
+        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+            <!-- Home -->
+            <a href="{% url 'home' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+                <span class="material-symbols-outlined text-xl {% if request.resolver_match.url_name == 'home' %}text-brand-600 material-symbols-fill{% endif %}">home</span>
+                <span>الرئيسية</span>
+            </a>
+
+            <!-- Contacts -->
+            <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+                <span class="material-symbols-outlined text-xl {% if 'contacts' in request.path %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
+                <span>جهات الاتصال (الموردين والعملاء)</span>
+            </a>
+
+            <!-- Products / Catalog -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl">store</span>
+                        <span>المنتجات والكتالوج</span>
+                    </div>
+                    <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if 'catalog' in request.path or 'products' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'products_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">قائمة المنتجات</a>
+                    <a href="{% url 'categories_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">التصنيفات</a>
+                </div>
+            </div>
+
+            <!-- Purchases (P0 Core) -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl {% if 'purchase' in request.path or 'vendor' in request.path %}text-brand-600 material-symbols-fill{% endif %}">shopping_cart</span>
+                        <span>المشتريات</span>
+                    </div>
+                    <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'purchase_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium">أوامر المشتريات</a>
+                    <a href="{% url 'purchase_order_create' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أمر مشتريات جديد</a>
+                    <a href="{% url 'vendor_payments_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">المدفوعات وسندات الصرف</a>
+                    <a href="{% url 'accounting_vendors_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حسابات وأرصدة الموردين</a>
+                    <a href="{% url 'vendor_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">دفتر عمليات الموردين</a>
+                </div>
+            </div>
+
+            <!-- Warehouses & Inventory -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl">warehouse</span>
+                        <span>المخازن والمخزون</span>
+                    </div>
+                    <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if 'inventory' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'inventory_stock_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أرصدة المخزون والتشغيلات</a>
+                    <a href="{% url 'warehouses_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">المخازن</a>
+                    <a href="{% url 'inventory_memos_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أذونات المخزن (إضافة وصرف)</a>
+                </div>
+            </div>
+
+            <!-- Treasury / Vaults -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
+                        <span>الخزن والمالية</span>
+                    </div>
+                    <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if 'vault' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'vaults_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">الخزن النقدية والحسابات</a>
+                    <a href="{% url 'vault_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حركات النقدية</a>
+                </div>
+            </div>
+
+            <!-- Sales (P1) -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl">storefront</span>
+                        <span>المبيعات والعملاء</span>
+                    </div>
+                    <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أوامر البيع</a>
+                    <a href="{% url 'collections_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">التحصيلات</a>
+                    <a href="{% url 'accounting_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حسابات العملاء</a>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl">settings</span>
+                        <span>الإعدادات والنظام</span>
+                    </div>
+                    <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-settings" class="pr-9 pl-2 space-y-1 {% if 'settings' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'roles_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">الأدوار والصلاحيات</a>
+                    <a href="{% url 'users_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">إدارة المستخدمين</a>
+                    <a href="{% url 'branding_settings' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">بيانات الشركة والفاتورة</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Profile Footer -->
+        <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm">
+                    {{ request.user.name|default:request.user.username|slice:":2" }}
+                </div>
+                <div class="overflow-hidden">
+                    <p class="text-sm font-bold text-slate-900 truncate">{{ request.user.name|default:request.user.username }}</p>
+                    <p class="text-xs text-slate-500 truncate">{{ request.user.role_name }}</p>
+                </div>
+            </div>
+            <a href="{% url 'logout' %}" title="تسجيل الخروج" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <span class="material-symbols-outlined">logout</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- MAIN WRAPPER -->
+    <div class="flex-1 flex flex-col min-w-0 mr-0 lg:mr-72 transition-all duration-300">
+        <!-- TOPBAR -->
+        <header class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
+            <div class="flex items-center gap-4">
+                <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <div class="flex items-center gap-2 text-sm text-slate-500">
+                    {% block breadcrumb %}
+                    <span class="font-medium text-slate-700">الرئيسية</span>
+                    {% endblock %}
+                </div>
+            </div>
+
+            <!-- Top Actions -->
+            <div class="flex items-center gap-3">
+                <!-- Notifications -->
+                <button class="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+                    <span class="material-symbols-outlined">notifications</span>
+                    <span class="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">105</span>
+                </button>
+
+                <!-- Language indicator -->
+                <span class="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg">عربي (EGP)</span>
+
+                <!-- Quick Action Button -->
+                {% block top_actions %}
+                <a href="{% url 'purchase_order_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
+                    <span class="material-symbols-outlined text-base">add</span>
+                    <span>أمر مشتريات جديد</span>
+                </a>
+                {% endblock %}
+            </div>
+        </header>
+
+        <!-- FLASH MESSAGES -->
+        {% if messages %}
+        <div class="px-6 pt-4 space-y-2">
+            {% for message in messages %}
+            <div class="p-4 rounded-xl flex items-center gap-3 text-sm font-medium {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% elif message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+                <span class="material-symbols-outlined text-lg">{% if message.tags == 'error' %}error{% elif message.tags == 'success' %}check_circle{% else %}info{% endif %}</span>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- PAGE CONTENT -->
+        <main class="flex-1 p-6">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Script for sidebar toggle & submenus -->
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('translate-x-full');
+        }
+
+        function toggleSubmenu(id) {
+            const menu = document.getElementById(id);
+            if (menu) {
+                menu.classList.toggle('hidden');
+            }
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

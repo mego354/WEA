@@ -1,0 +1,74 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}حسابات وأرصدة الموردين (Vendor Accounts){% endblock %}
+
+{% block breadcrumb %}
+    <span class="text-slate-400">المشتريات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">حسابات الموردين (Vendor Balances)</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">account_balance</span>
+                <span>أرصدة حسابات الموردين ومتابعة المديونيات</span>
+            </h2>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">اسم المورد / الحساب</th>
+                        <th class="py-3 px-4">المنطقة</th>
+                        <th class="py-3 px-4">حد الائتمان</th>
+                        <th class="py-3 px-4">مدة الائتمان</th>
+                        <th class="py-3 px-4">الرصيد المستحق (ج.م)</th>
+                        <th class="py-3 px-4">تاريخ آخر معاملة</th>
+                        <th class="py-3 px-4 text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for acc in accounts %}
+                    <tr class="hover:bg-slate-50/70">
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ acc.supplier.name }}
+                            <span class="block text-[11px] text-slate-400 font-normal">كود: {{ acc.supplier.formatted_number }}</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600">{{ acc.supplier.area.name|default:"-" }}</td>
+                        <td class="py-3.5 px-4 font-mono font-semibold">{{ acc.credit_limit|intcomma }} ج.م</td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600 font-mono">{{ acc.credit_period_days }} يوم</td>
+                        <td class="py-3.5 px-4 font-black text-amber-700 text-base font-mono">
+                            {{ acc.current_balance|intcomma }} ج.م
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ acc.last_transaction_date|date:"Y-m-d"|default:"-" }}</td>
+                        <td class="py-3.5 px-4 text-center">
+                            <div class="inline-flex items-center gap-2">
+                                <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ acc.supplier.id }}" class="px-2.5 py-1 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">receipt_long</span>
+                                    <span>كشف حساب</span>
+                                </a>
+                                <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="px-2.5 py-1 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">payments</span>
+                                    <span>سداد</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-slate-400">لا توجد حسابات موردين مسجلة.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

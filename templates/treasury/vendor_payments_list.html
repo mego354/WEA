@@ -1,0 +1,79 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}المدفوعات وسندات الصرف (Vendor Payments){% endblock %}
+
+{% block breadcrumb %}
+    <span class="text-slate-400">المشتريات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">المدفوعات وسندات الصرف (Vendor Payments)</span>
+{% endblock %}
+
+{% block top_actions %}
+    <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
+        <span class="material-symbols-outlined text-base">payments</span>
+        <span>سند صرف جديد (New Payment)</span>
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">receipt</span>
+                <span>سندات صرف دفعات الموردين</span>
+            </h2>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">رقم السند</th>
+                        <th class="py-3 px-4">المورد</th>
+                        <th class="py-3 px-4">تاريخ الصرف</th>
+                        <th class="py-3 px-4">المبلغ المسدد</th>
+                        <th class="py-3 px-4">وسيلة الدفع</th>
+                        <th class="py-3 px-4">الخزنة</th>
+                        <th class="py-3 px-4">المرجع</th>
+                        <th class="py-3 px-4">المسئول</th>
+                        <th class="py-3 px-4">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for p in payments %}
+                    <tr class="hover:bg-slate-50/70">
+                        <td class="py-3.5 px-4 font-mono font-bold text-brand-700">#{{ p.serial_num }}</td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">{{ p.supplier.name }}</td>
+                        <td class="py-3.5 px-4 text-xs text-slate-500 font-mono">{{ p.payment_date|date:"Y-m-d" }}</td>
+                        <td class="py-3.5 px-4 font-black text-slate-900 text-sm">{{ p.amount|intcomma }} ج.م</td>
+                        <td class="py-3.5 px-4 text-xs font-semibold">{{ p.get_payment_method_display }}</td>
+                        <td class="py-3.5 px-4 text-xs text-slate-700">{{ p.vault.name }}</td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ p.reference_number|default:"-" }}</td>
+                        <td class="py-3.5 px-4 text-xs">{{ p.created_by.name|default:p.created_by.username }}</td>
+                        <td class="py-3.5 px-4">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {{ p.get_status_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">payments</span>
+                            <p class="text-sm font-semibold">لا توجد مدفوعات مسجلة بعد.</p>
+                            <a href="{% url 'vendor_payment_create' %}" class="inline-block mt-3 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm">
+                                إنشاء سند صرف جديد
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

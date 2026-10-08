@@ -1,0 +1,233 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}تفاصيل أمر الشراء {{ order.order_number }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'purchase_orders_list' %}" class="text-slate-400 hover:text-brand-600">المشتريات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">أمر شراء {{ order.order_number }}</span>
+{% endblock %}
+
+{% block top_actions %}
+    <a href="{% url 'purchase_order_print' order.pk %}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+        <span class="material-symbols-outlined text-base">print</span>
+        <span>طباعة الفاتورة</span>
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Top Dossier Header Card -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-black text-slate-900">{{ order.order_number }}</h1>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ order.status_badge_class }}">
+                    {{ order.get_status_display }}
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5 flex items-center gap-2">
+                <span>المورد: <strong class="text-slate-800">{{ order.supplier.name }}</strong></span>
+                <span>&bull;</span>
+                <span>المخزن: <strong class="text-slate-800">{{ order.target_warehouse.name }}</strong></span>
+                <span>&bull;</span>
+                <span>التاريخ: <strong class="text-slate-800 font-mono">{{ order.order_date|date:"Y-m-d" }}</strong></span>
+                <span>&bull;</span>
+                <span>أنشئ بواسطة: <strong class="text-slate-800">{{ order.created_by.name|default:order.created_by.username }}</strong></span>
+            </p>
+        </div>
+
+        <!-- WORKFLOW ACTION BUTTONS -->
+        <div class="flex flex-wrap items-center gap-2">
+            {% if order.status == 'pending' %}
+            <a href="{% url 'purchase_order_action' order.pk 'approve' %}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">check_circle</span>
+                <span>اعتماد الطلب (Approve)</span>
+            </a>
+            <a href="{% url 'purchase_order_action' order.pk 'cancel' %}" onclick="return confirm('هل أنت متأكد من إلغاء أمر الشراء؟')" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>إلغاء الطلب</span>
+            </a>
+            {% elif order.status == 'approved' %}
+            <a href="{% url 'purchase_order_action' order.pk 'stock' %}" onclick="return confirm('تأكيد استلام الأصناف في المخزن وتوليد إذن إضافة؟')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">inventory</span>
+                <span>استلام البضاعة في المخزن (Stock -> Picked)</span>
+            </a>
+            {% elif order.status == 'picked' %}
+            <a href="{% url 'purchase_order_action' order.pk 'invoice' %}" onclick="return confirm('ترحيل الفاتورة لحسابات المورد وتثبيت الاستحقاق المالي؟')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">receipt_long</span>
+                <span>ترحيل الفاتورة للحسابات (Invoice -> Settled)</span>
+            </a>
+            {% elif order.status == 'settled' %}
+            <a href="{% url 'purchase_order_action' order.pk 'undo_invoice' %}" onclick="return confirm('هل أنت متأكد من إلغاء الفاتورة وإعادتها لحالة الاستلام بالمخزن؟')" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-colors flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">undo</span>
+                <span>إلغاء الفاتورة (Undo Invoice)</span>
+            </a>
+            <a href="{% url 'vendor_payment_create' %}?supplier_id={{ order.supplier.id }}" class="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">payments</span>
+                <span>سداد دفعة للمورد</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Items Table Card -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">format_list_bulleted</span>
+                <span>بنود وأصناف أمر الشراء (Line Items)</span>
+            </h2>
+            <span class="text-xs font-bold text-slate-500">إجمالي الأصناف: {{ order.items_count }} ({{ order.items_quantity|intcomma }} وحدة)</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">#</th>
+                        <th class="py-3 px-4">كود الصنف</th>
+                        <th class="py-3 px-4">اسم المنتج</th>
+                        <th class="py-3 px-4">الكمية</th>
+                        <th class="py-3 px-4">سعر تكلفة الوحدة</th>
+                        <th class="py-3 px-4">رقم التشغيلة (Batch)</th>
+                        <th class="py-3 px-4">تاريخ الصلاحية</th>
+                        <th class="py-3 px-4">الخصم</th>
+                        <th class="py-3 px-4">المجموع الصافي</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for itm in order.items.all %}
+                    <tr class="hover:bg-slate-50/60">
+                        <td class="py-3 px-4 font-mono text-slate-400 font-bold">{{ itm.item_order }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-brand-600">{{ itm.product.sku_code }}</td>
+                        <td class="py-3 px-4 font-bold text-slate-900">{{ itm.product.name }}</td>
+                        <td class="py-3 px-4 font-black text-slate-900">{{ itm.quantity|intcomma }}</td>
+                        <td class="py-3 px-4 font-mono">{{ itm.unit_price|intcomma }} ج.م</td>
+                        <td class="py-3 px-4 font-mono font-semibold text-slate-700">{{ itm.product_batch_number|default:"-" }}</td>
+                        <td class="py-3 px-4 font-mono text-slate-600">{{ itm.product_expiry_date|date:"Y-m-d"|default:"-" }}</td>
+                        <td class="py-3 px-4 text-red-600 font-semibold">{{ itm.discount_amount|intcomma }} ج.م ({{ itm.discount_percentage }}%)</td>
+                        <td class="py-3 px-4 font-black text-slate-900">{{ itm.total_price|intcomma }} ج.م</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3-Column Info Cards (Calculations, Warehouse Memo, Accounting Ledger) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- 1. Financial Breakdown -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
+            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-brand-600 text-base">calculate</span>
+                <span>الملخص المالي والضرائب</span>
+            </h3>
+
+            <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>المجموع الفرعي للأصناف:</span>
+                <span class="font-bold text-slate-800">{{ order.subtotal|intcomma }} ج.م</span>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>خصومات الأصناف:</span>
+                <span class="font-bold text-red-600">- {{ order.items_discount_total|intcomma }} ج.م</span>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>خصم إضافي على الطلب ({{ order.custom_discount_percentage }}%):</span>
+                <span class="font-bold text-red-600">- {{ order.custom_discount_amount|intcomma }} ج.م</span>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-600">
+                <span>مصاريف الشحن والتوصيل:</span>
+                <span class="font-bold text-slate-800">+ {{ order.shipping_fees|intcomma }} ج.م</span>
+            </div>
+
+            <div class="pt-3 border-t-2 border-slate-200 flex items-center justify-between">
+                <span class="text-sm font-black text-slate-900">الإجمالي النهائي:</span>
+                <span class="text-xl font-black text-brand-700">{{ order.grand_total|intcomma }} ج.م</span>
+            </div>
+        </div>
+
+        <!-- 2. Warehouse Stock Memo Linkage -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
+            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-blue-600 text-base">warehouse</span>
+                <span>حركة المخزن (Inventory Status)</span>
+            </h3>
+
+            {% if order.memo %}
+            <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">رقم إذن الإضافة:</span>
+                    <strong class="text-blue-700 font-mono">{{ order.memo.memo_number }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">المخزن المستلم:</span>
+                    <strong class="text-slate-800">{{ order.memo.warehouse.name }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">وقت الاستلام:</span>
+                    <strong class="text-slate-800 font-mono">{{ order.stocked_at|date:"Y-m-d H:i" }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">الحالة:</span>
+                    <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">مضاف للمخزون</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="py-6 text-center text-slate-400 text-xs">
+                <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">pending_actions</span>
+                <p>لم يتم استلام البضاعة في المخزن بعد.</p>
+                <p class="text-[11px] text-slate-400 mt-1">يتم توليد إذن الإضافة آلياً عند الاستلام.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 3. Supplier Accounting Ledger Linkage -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
+            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-emerald-600 text-base">receipt_long</span>
+                <span>الحسابات والمديونية (Accounting Ledger)</span>
+            </h3>
+
+            {% if linked_tx %}
+            <div class="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">رقم قيد اليومية:</span>
+                    <strong class="text-emerald-700 font-mono">#{{ linked_tx.serial }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">المبلغ المقيد دائناً:</span>
+                    <strong class="text-emerald-700 font-black">{{ linked_tx.credit|intcomma }} ج.م</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">تاريخ القيد:</span>
+                    <strong class="text-slate-800 font-mono">{{ linked_tx.transaction_date|date:"Y-m-d" }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">تاريخ الاستحقاق:</span>
+                    <strong class="text-slate-800 font-mono">{{ linked_tx.due_date|date:"Y-m-d" }}</strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">رصيد المورد الإجمالي:</span>
+                    <strong class="text-slate-900 font-black">{{ linked_tx.account.current_balance|intcomma }} ج.م</strong>
+                </div>
+            </div>
+            {% else %}
+            <div class="py-6 text-center text-slate-400 text-xs">
+                <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">hourglass_empty</span>
+                <p>الفاتورة غير مرحلة للحسابات بعد.</p>
+                <p class="text-[11px] text-slate-400 mt-1">يتم القيد بالدفتر عند فوترة الطلب (Settled).</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

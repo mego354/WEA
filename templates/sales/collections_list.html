@@ -1,0 +1,100 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}سندات التحصيل - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">المبيعات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">سندات التحصيل</span>
+{% endblock %}
+
+{% block top_actions %}
+<a href="{% url 'collection_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
+    <span class="material-symbols-outlined text-base">add</span>
+    <span>سند تحصيل جديد</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">سندات التحصيل (Collections)</h1>
+            <p class="text-sm text-slate-500 mt-0.5">سجل المبالغ المحصلة من العملاء والصيدليات وتوريدها إلى الخزن</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'collection_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>تسجيل تحصيل نقدية</span>
+            </a>
+            <a href="{% url 'accounting_customers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
+                <span>أرصدة ومديونيات العملاء</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Collections Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                        <th class="py-3.5 px-4">رقم السند</th>
+                        <th class="py-3.5 px-4">العميل</th>
+                        <th class="py-3.5 px-4">الخزنة المودع بها</th>
+                        <th class="py-3.5 px-4">طريقة الدفع</th>
+                        <th class="py-3.5 px-4">تاريخ التحصيل</th>
+                        <th class="py-3.5 px-4">المحصل</th>
+                        <th class="py-3.5 px-4 text-left">المبلغ المحصل</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for col in collections %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                            #{{ col.serial_num }}
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ col.customer.name }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600 text-xs">
+                            <span class="inline-flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-slate-400">account_balance_wallet</span>
+                                <span>{{ col.vault.name }}</span>
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs">
+                            <span class="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
+                                {{ col.get_payment_method_display }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                            {{ col.collection_date|date:"Y-m-d" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600">
+                            {{ col.created_by|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-emerald-700 text-base">
+                            +{{ col.amount|floatformat:2 }} ج.م
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">payments</span>
+                            <p class="font-medium text-slate-600">لا توجد سندات تحصيل مسجلة</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

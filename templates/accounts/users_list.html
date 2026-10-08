@@ -1,0 +1,107 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}إدارة المستخدمين - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">النظام والإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">المستخدمين</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">إدارة المستخدمين وحسابات الموظفين</h1>
+            <p class="text-sm text-slate-500 mt-0.5">التحكم في حسابات المستخدمين، المناديب، مسؤولي الفروع والأدوار الوظيفية</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'roles_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base text-slate-500">security</span>
+                <span>الأدوار والصلاحيات</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                        <th class="py-3.5 px-4">المستخدم</th>
+                        <th class="py-3.5 px-4">اسم المستخدم</th>
+                        <th class="py-3.5 px-4">البريد الإلكتروني</th>
+                        <th class="py-3.5 px-4">رقم الهاتف</th>
+                        <th class="py-3.5 px-4">الدور والصلاحية</th>
+                        <th class="py-3.5 px-4 text-center">نوع المستخدم</th>
+                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for u in users %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-xs">
+                                    {{ u.name|default:u.username|slice:":2" }}
+                                </div>
+                                <div class="font-bold text-slate-900">{{ u.name|default:u.username }}</div>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4 font-mono text-xs text-slate-600">
+                            {{ u.username }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600 font-mono">
+                            {{ u.email|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                            {{ u.phone|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200/60">
+                                {{ u.role.name|default:"مسؤول نظام SuperAdmin" }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-center text-xs">
+                            {% if u.is_rep %}
+                            <span class="px-2 py-0.5 rounded-full font-bold bg-amber-50 text-amber-700 border border-amber-200/60">مندوب مبيعات</span>
+                            {% elif u.is_area_manager %}
+                            <span class="px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200/60">مدير منطقة</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">إدارة مركزية</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            {% if u.is_active %}
+                            <span class="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span>نشط</span>
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 text-slate-400 text-xs font-bold">
+                                <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                                <span>معطل</span>
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">group</span>
+                            <p class="font-medium text-slate-600">لا يوجد مستخدمين مسجلين</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

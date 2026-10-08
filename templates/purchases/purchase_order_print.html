@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>فاتورة أمر شراء {{ order.order_number }} - WEA Pharma</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; }
+        @media print {
+            .no-print { display: none; }
+            body { background: white; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 p-6 text-slate-800">
+
+    <div class="max-w-3xl mx-auto mb-4 no-print flex justify-end gap-3">
+        <button onclick="window.print()" class="px-4 py-2 bg-teal-600 text-white font-bold text-xs rounded-lg shadow">
+            طباعة الفاتورة (Print)
+        </button>
+        <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">
+            إغلاق
+        </button>
+    </div>
+
+    <div class="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow border border-slate-200 text-xs">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b pb-4 mb-6">
+            <div>
+                <h1 class="text-xl font-black text-slate-900">WEA PHARMA</h1>
+                <p class="text-slate-500">173 ز - البوابة الأولى- حدائق الأهرام</p>
+                <p class="text-slate-500">سجل تجاري: 184791 | بطاقة ضريبية: 978-339-684</p>
+                <p class="text-slate-500">هاتف: 01111787179 - 01024070412</p>
+            </div>
+            <div class="text-left">
+                <h2 class="text-lg font-bold text-teal-700">أمر توريد / فاتورة شراء</h2>
+                <p class="font-mono font-bold text-slate-900 text-sm">{{ order.order_number }}</p>
+                <p class="text-slate-500">التاريخ: {{ order.order_date|date:"Y-m-d" }}</p>
+                <p class="text-slate-500">الحالة: {{ order.get_status_display }}</p>
+            </div>
+        </div>
+
+        <!-- Supplier & Delivery Info -->
+        <div class="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl mb-6">
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات المورد:</h3>
+                <p>الاسم: <strong>{{ order.supplier.name }}</strong></p>
+                <p>الهاتف: {{ order.supplier.mobile|default:order.supplier.phone|default:"-" }}</p>
+                <p>المنطقة: {{ order.supplier.area.name|default:"-" }}</p>
+                <p>البطاقة الضريبية: {{ order.supplier.tax_card|default:"-" }}</p>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات التوريد:</h3>
+                <p>مخزن الاستلام: <strong>{{ order.target_warehouse.name }}</strong></p>
+                <p>المنشئ: {{ order.created_by.name|default:order.created_by.username }}</p>
+                {% if order.memo %}
+                <p>إذن المخزن: {{ order.memo.memo_number }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Line items -->
+        <table class="w-full text-right border-collapse mb-6">
+            <thead>
+                <tr class="border-b-2 border-slate-300 font-bold bg-slate-50">
+                    <th class="py-2 px-2">#</th>
+                    <th class="py-2 px-2">كود</th>
+                    <th class="py-2 px-2">الصنف</th>
+                    <th class="py-2 px-2">الكمية</th>
+                    <th class="py-2 px-2">سعر الوحدة</th>
+                    <th class="py-2 px-2">التشغيلة</th>
+                    <th class="py-2 px-2">الصلاحية</th>
+                    <th class="py-2 px-2 text-left">الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for itm in order.items.all %}
+                <tr>
+                    <td class="py-2 px-2 font-mono">{{ itm.item_order }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product.sku_code }}</td>
+                    <td class="py-2 px-2 font-bold">{{ itm.product.name }}</td>
+                    <td class="py-2 px-2 font-bold">{{ itm.quantity }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.unit_price }} ج.م</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product_batch_number|default:"-" }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product_expiry_date|date:"Y-m-d"|default:"-" }}</td>
+                    <td class="py-2 px-2 font-mono font-bold text-left">{{ itm.total_price }} ج.م</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Totals -->
+        <div class="w-64 mr-auto space-y-1.5 border-t pt-2 mb-8">
+            <div class="flex justify-between">
+                <span>المجموع الفرعي:</span>
+                <span class="font-bold">{{ order.subtotal }} ج.م</span>
+            </div>
+            {% if order.items_discount_total > 0 %}
+            <div class="flex justify-between text-red-600">
+                <span>خصم الأصناف:</span>
+                <span>- {{ order.items_discount_total }} ج.م</span>
+            </div>
+            {% endif %}
+            {% if order.custom_discount_amount > 0 %}
+            <div class="flex justify-between text-red-600">
+                <span>خصم إضافي:</span>
+                <span>- {{ order.custom_discount_amount }} ج.م</span>
+            </div>
+            {% endif %}
+            {% if order.shipping_fees > 0 %}
+            <div class="flex justify-between">
+                <span>مصاريف الشحن:</span>
+                <span>+ {{ order.shipping_fees }} ج.م</span>
+            </div>
+            {% endif %}
+            <div class="flex justify-between font-black text-sm border-t pt-1.5 text-teal-800">
+                <span>الإجمالي النهائي:</span>
+                <span>{{ order.grand_total }} ج.م</span>
+            </div>
+        </div>
+
+        <!-- Signature boxes -->
+        <div class="grid grid-cols-3 gap-8 pt-8 border-t text-center font-bold text-slate-700">
+            <div>توقيع المستلم بالمخزن<br><br>......................</div>
+            <div>توقيع المورد / الناقل<br><br>......................</div>
+            <div>اعتماد الإدارة المالية<br><br>......................</div>
+        </div>
+    </div>
+
+</body>
+</html>

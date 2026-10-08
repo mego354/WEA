@@ -1,0 +1,159 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}أمر بيع {{ order.order_number }} - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'sales_orders_list' %}" class="hover:text-brand-600 transition-colors">المبيعات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{{ order.order_number }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header Actions & Status -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight">{{ order.order_number }}</h1>
+                {% if order.status == 'pending' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">قيد المراجعة</span>
+                {% elif order.status == 'manager_approval' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">معتمد من الإدارة</span>
+                {% elif order.status == 'preparing' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">جاري التجهيز بالمخزن</span>
+                {% elif order.status == 'delivered' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">تم التسليم وصرف المخزن</span>
+                {% elif order.status == 'invoiced' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">تمت الفوترة وترحيل الحسابات</span>
+                {% elif order.status == 'cancelled' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">ملغي</span>
+                {% endif %}
+            </div>
+            <p class="text-xs text-slate-400 mt-1 font-mono">تاريخ الإنشاء: {{ order.created_at|date:"Y-m-d H:i" }} | بواسطة: {{ order.created_by.name|default:order.created_by.username }}</p>
+        </div>
+
+        <!-- Workflow Action Buttons -->
+        <div class="flex items-center gap-2 flex-wrap">
+            {% if order.status == 'pending' %}
+            <a href="{% url 'sales_order_action' order.pk 'approve' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base">verified</span>
+                <span>اعتماد الطلب</span>
+            </a>
+            <a href="{% url 'sales_order_action' order.pk 'cancel' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition-all">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>إلغاء</span>
+            </a>
+            {% elif order.status == 'manager_approval' %}
+            <a href="{% url 'sales_order_action' order.pk 'prepare' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base">inventory</span>
+                <span>تجهيز وحجز بالمخزن</span>
+            </a>
+            <a href="{% url 'sales_order_action' order.pk 'cancel' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition-all">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>إلغاء</span>
+            </a>
+            {% elif order.status == 'preparing' %}
+            <a href="{% url 'sales_order_action' order.pk 'deliver' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all">
+                <span class="material-symbols-outlined text-base">local_shipping</span>
+                <span>تسليم وصرف المخزن</span>
+            </a>
+            <a href="{% url 'sales_order_action' order.pk 'cancel' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition-all">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>إلغاء</span>
+            </a>
+            {% elif order.status == 'delivered' %}
+            <a href="{% url 'sales_order_action' order.pk 'invoice' %}" class="inline-flex items-center gap-1.5 px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all">
+                <span class="material-symbols-outlined text-base">receipt_long</span>
+                <span>فوترة وترحيل للحسابات</span>
+            </a>
+            {% endif %}
+
+            <a href="{% url 'sales_orders_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+                رجوع
+            </a>
+        </div>
+    </div>
+
+    <!-- Master Info Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- Customer Info -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-brand-600">person</span>
+                <span>بيانات العميل</span>
+            </h3>
+            <p class="font-bold text-slate-900 text-base">{{ order.customer.name }}</p>
+            <p class="text-xs text-slate-500 mt-1">المنطقة: {{ order.customer.area.name|default:"غير محدد" }}</p>
+            <p class="text-xs text-slate-500 mt-0.5">الهاتف: {{ order.customer.mobile|default:"—" }}</p>
+        </div>
+
+        <!-- Warehouse & Delivery -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-brand-600">warehouse</span>
+                <span>المخزن والتسليم</span>
+            </h3>
+            <p class="font-bold text-slate-900 text-sm">مخزن الصرف: {{ order.source_warehouse.name }}</p>
+            <p class="text-xs text-slate-500 mt-1">تاريخ الطلب: {{ order.order_date|date:"Y-m-d" }}</p>
+            <p class="text-xs text-slate-500 mt-0.5">تاريخ التسليم: {{ order.delivery_date|date:"Y-m-d"|default:"غير محدد" }}</p>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-brand-600">payments</span>
+                <span>القيمة الإجمالية</span>
+            </h3>
+            <p class="text-2xl font-black font-mono text-brand-700">{{ order.grand_total|floatformat:2 }} ج.م</p>
+            {% if order.memo %}
+            <p class="text-xs text-emerald-600 font-bold mt-2 flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">check_circle</span>
+                <span>إذن صرف مخزن: {{ order.memo.memo_number }}</span>
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">format_list_bulleted</span>
+                <span>قائمة الأصناف المحجوزة</span>
+            </h3>
+            <span class="text-xs font-bold text-slate-500">{{ order.items.count }} صنف</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase">
+                        <th class="py-3 px-4 w-12">#</th>
+                        <th class="py-3 px-4">كود الصنف</th>
+                        <th class="py-3 px-4">اسم المنتج</th>
+                        <th class="py-3 px-4 text-center">الكمية</th>
+                        <th class="py-3 px-4 text-center">سعر البيع</th>
+                        <th class="py-3 px-4 text-left">المجموع</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for item in order.items.all %}
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-400 text-center">{{ forloop.counter }}</td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">{{ item.product.sku_code }}</td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">{{ item.product.name }}</td>
+                        <td class="py-3.5 px-4 text-center font-bold text-slate-900">{{ item.quantity|floatformat:0 }}</td>
+                        <td class="py-3.5 px-4 text-center font-mono text-xs">{{ item.unit_price|floatformat:2 }} ج.م</td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">{{ item.subtotal|floatformat:2 }} ج.م</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
