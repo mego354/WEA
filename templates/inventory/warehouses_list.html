@@ -1,0 +1,128 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}المخازن - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">المخازن والمخزون</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">المخازن</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">إدارة المخازن</h1>
+            <p class="text-sm text-slate-500 mt-0.5">مستودعات الشركة ومخازن الفروع وتوزيع المخزون</p>
+        </div>
+        <button onclick="toggleModal('new-warehouse-modal')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+            <span class="material-symbols-outlined text-base">add</span>
+            <span>إضافة مخزن جديد</span>
+        </button>
+    </div>
+
+    <!-- Warehouses Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {% for wh in warehouses %}
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-2xl">warehouse</span>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors">{{ wh.name }}</h2>
+                        <span class="text-xs font-mono font-bold text-slate-400">#{{ wh.code }}</span>
+                    </div>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold {% if wh.is_active %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-slate-100 text-slate-500{% endif %}">
+                    {% if wh.is_active %}نشط{% else %}معطل{% endif %}
+                </span>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">العنوان:</span>
+                    <span class="font-medium text-slate-700">{{ wh.address|default:"غير محدد" }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">أمين المخزن / المدير:</span>
+                    <span class="font-medium text-slate-700">{{ wh.manager.name|default:"غير معين" }}</span>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-3 flex items-center justify-end gap-2">
+                <a href="{% url 'inventory_stock_list' %}?warehouse={{ wh.id }}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                    <span>عرض الأرصدة بالمخزن</span>
+                    <span class="material-symbols-outlined text-sm">arrow_left</span>
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-400">
+            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">warehouse</span>
+            <p class="font-medium text-slate-600">لا توجد مخازن مسجلة حتى الآن</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Add Warehouse Modal -->
+    <div id="new-warehouse-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-lg">warehouse</span>
+                    </div>
+                    <h3 class="font-bold text-slate-900">إضافة مخزن جديد</h3>
+                </div>
+                <button type="button" onclick="toggleModal('new-warehouse-modal')" class="text-slate-400 hover:text-slate-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <form method="POST" action="{% url 'warehouses_list' %}" class="p-6 space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">اسم المخزن <span class="text-rose-500">*</span></label>
+                    <input type="text" name="name" required placeholder="مثال: مخزن الدلتا الرئيسي"
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">كود المخزن <span class="text-rose-500">*</span></label>
+                    <input type="text" name="code" required placeholder="مثال: WH-02"
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">العنوان وموقع المخزن</label>
+                    <textarea name="address" rows="3" placeholder="العنوان التفصيلي للمخزن..."
+                              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                </div>
+
+                <div class="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
+                    <button type="button" onclick="toggleModal('new-warehouse-modal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+                        إلغاء
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+                        حفظ المخزن
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function toggleModal(id) {
+        const modal = document.getElementById(id);
+        modal.classList.toggle('hidden');
+    }
+</script>
+{% endblock %}

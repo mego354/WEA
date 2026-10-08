@@ -1,0 +1,80 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}دفتر عمليات وقيد الموردين (Vendor Transactions){% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'accounting_vendors_list' %}" class="text-slate-400 hover:text-brand-600">حسابات الموردين</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">عمليات الموردين (Vendor Ledger)</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <!-- Filter Bar -->
+    <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <form method="GET" class="flex items-center gap-3 w-full md:w-auto">
+            <label class="text-xs font-bold text-slate-600">فلترة حسب المورد:</label>
+            <select name="vendor_id" onchange="this.form.submit()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900">
+                <option value="">-- كافة الموردين --</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if selected_vendor_id == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <!-- Ledger Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">رقم القيد</th>
+                        <th class="py-3 px-4">المورد / الحساب</th>
+                        <th class="py-3 px-4">تاريخ المعاملة</th>
+                        <th class="py-3 px-4">البيان والتوصيف</th>
+                        <th class="py-3 px-4">تاريخ الاستحقاق</th>
+                        <th class="py-3 px-4 text-emerald-700 font-black">دائن / فاتورة (+)</th>
+                        <th class="py-3 px-4 text-blue-700 font-black">مدين / سداد (-)</th>
+                        <th class="py-3 px-4">الرصيد المستحق</th>
+                        <th class="py-3 px-4">المسئول</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for tx in transactions %}
+                    <tr class="hover:bg-slate-50/70">
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900">#{{ tx.serial }}</td>
+                        <td class="py-3 px-4 font-bold text-slate-900">{{ tx.account.supplier.name }}</td>
+                        <td class="py-3 px-4 font-mono text-slate-500">{{ tx.transaction_date|date:"Y-m-d" }}</td>
+                        <td class="py-3 px-4 font-medium text-slate-800">
+                            {{ tx.description }}
+                            {% if tx.purchase_order %}
+                            <a href="{% url 'purchase_order_detail' tx.purchase_order.pk %}" class="text-brand-600 hover:underline mr-1 font-bold">({{ tx.purchase_order.order_number }})</a>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 font-mono text-slate-500">{{ tx.due_date|date:"Y-m-d"|default:"-" }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-emerald-700">
+                            {% if tx.credit > 0 %}{{ tx.credit|intcomma }} ج.م{% else %}-{% endif %}
+                        </td>
+                        <td class="py-3 px-4 font-mono font-bold text-blue-700">
+                            {% if tx.debit > 0 %}{{ tx.debit|intcomma }} ج.م{% else %}-{% endif %}
+                        </td>
+                        <td class="py-3 px-4 font-mono font-black text-slate-900">
+                            {{ tx.running_balance|intcomma }} ج.م
+                        </td>
+                        <td class="py-3 px-4 text-slate-500">{{ tx.created_by.name|default:tx.created_by.username }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-10 text-center text-slate-400 font-semibold">لا توجد قيود مسجلة بالدفتر.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

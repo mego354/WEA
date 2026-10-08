@@ -1,0 +1,75 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}تصنيفات المنتجات{% endblock %}
+
+{% block breadcrumb %}
+    <span class="text-slate-400">المنتجات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">التصنيفات (Categories)</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header & Add Category Box -->
+    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-brand-600">category</span>
+            <span>إضافة تصنيف جديد (New Category)</span>
+        </h2>
+        <form method="POST" action="{% url 'categories_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">اسم التصنيف *</label>
+                <input type="text" name="name" required placeholder="مثال: أدوية بيطرية" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">كود التصنيف *</label>
+                <input type="text" name="code" required placeholder="مثال: VET" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900 font-mono">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">الوصف</label>
+                <input type="text" name="description" placeholder="وصف التصنيف..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
+            </div>
+            <div>
+                <button type="submit" class="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center justify-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">add</span>
+                    <span>إنشاء التصنيف</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Categories List Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-800">التصنيفات المسجلة</h3>
+        </div>
+        <table class="w-full text-right text-sm">
+            <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
+                <tr>
+                    <th class="py-3 px-4">كود التصنيف</th>
+                    <th class="py-3 px-4">اسم التصنيف</th>
+                    <th class="py-3 px-4">الوصف</th>
+                    <th class="py-3 px-4">تاريخ الإنشاء</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+                {% for cat in categories %}
+                <tr class="hover:bg-slate-50/70">
+                    <td class="py-3.5 px-4 font-mono font-bold text-brand-600">{{ cat.code }}</td>
+                    <td class="py-3.5 px-4 font-bold text-slate-900">{{ cat.name }}</td>
+                    <td class="py-3.5 px-4 text-xs text-slate-500">{{ cat.description|default:"-" }}</td>
+                    <td class="py-3.5 px-4 text-xs text-slate-400 font-mono">{{ cat.created_at|date:"Y-m-d" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="py-8 text-center text-slate-400">لا توجد تصنيفات بعد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}
