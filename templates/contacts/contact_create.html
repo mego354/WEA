@@ -1,0 +1,839 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}انشئ جهة اتصال{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Styling to match reference ERP Angular Material / Bricks ERP UI */
+    .form-section-title {
+        color: #27bebe;
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .custom-input-label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 0.375rem;
+    }
+    .custom-input-label .required-star {
+        color: #ef4444;
+        margin-right: 0.2rem;
+    }
+    .mat-like-input, .mat-like-select {
+        width: 100%;
+        height: 48px;
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 0 0.875rem;
+        font-size: 0.875rem;
+        color: #1e293b;
+        transition: all 0.2s ease-in-out;
+        outline: none;
+    }
+    .mat-like-input:focus, .mat-like-select:focus {
+        border-color: #27bebe;
+        box-shadow: 0 0 0 2px rgba(39, 190, 190, 0.25);
+    }
+    .mat-like-input.has-error, .mat-like-select.has-error {
+        border-color: #ef4444 !important;
+        background-color: #fffaf0;
+    }
+    .field-error-text {
+        color: #ef4444;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-top: 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .card-container {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .phone-split-container {
+        display: flex;
+        align-items: center;
+        height: 48px;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: all 0.2s ease-in-out;
+    }
+    .phone-split-container:focus-within {
+        border-color: #27bebe;
+        box-shadow: 0 0 0 2px rgba(39, 190, 190, 0.25);
+    }
+    .phone-country-select {
+        height: 100%;
+        border: none;
+        background: #f8fafc;
+        border-left: 1px solid #e2e8f0;
+        padding: 0 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #334155;
+        outline: none;
+        cursor: pointer;
+        min-width: 100px;
+    }
+    .phone-number-input {
+        flex: 1;
+        height: 100%;
+        border: none;
+        padding: 0 0.875rem;
+        font-size: 0.875rem;
+        color: #1e293b;
+        outline: none;
+    }
+    /* Material-like Multi-Select Dropdown */
+    .relation-multiselect-dropdown {
+        position: relative;
+    }
+    .relation-trigger {
+        width: 100%;
+        height: 48px;
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 0 0.875rem;
+        font-size: 0.875rem;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+    }
+    .relation-trigger:focus {
+        border-color: #27bebe;
+        box-shadow: 0 0 0 2px rgba(39, 190, 190, 0.25);
+    }
+    .relation-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        left: 0;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        margin-top: 4px;
+        padding: 0.5rem 0;
+        z-index: 50;
+        display: none;
+    }
+    .relation-menu.show {
+        display: block;
+    }
+    .relation-option-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    .relation-option-item:hover {
+        background-color: #f1f5f9;
+    }
+    .relation-tag {
+        display: inline-flex;
+        align-items: center;
+        background-color: #f0fdfd;
+        color: #1a8b8b;
+        border: 1px solid #99f6f6;
+        border-radius: 6px;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.25rem;
+    }
+    /* Red location banner */
+    .location-warning-banner {
+        background-color: #fee2e2;
+        color: #dc2626;
+        border-radius: 6px;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'contacts_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">جهات الاتصال</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-brand-600">انشئ جهة اتصال</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto pb-16">
+
+    <!-- Page Title Header -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-brand-500 tracking-tight flex items-center gap-2">
+            انشئ جهة اتصال
+        </h1>
+        <a href="{% url 'contacts_list' %}" class="inline-flex items-center gap-1 text-sm font-semibold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 px-3.5 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-all">
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+            <span>العودة للقائمة</span>
+        </a>
+    </div>
+
+    <!-- Main Form -->
+    <form id="contact-create-form" method="POST" action="{% url 'contact_create' %}" novalidate>
+        {% csrf_token %}
+
+        <!-- ========================================== -->
+        <!-- SECTION 1: معلومات اساسية (Basic Information) -->
+        <!-- ========================================== -->
+        <div class="card-container">
+            <div class="form-section-title">
+                <span class="material-symbols-outlined text-brand-500 text-xl">person</span>
+                <span>معلومات اساسية</span>
+            </div>
+
+            <!-- Row 1: Contact Type & Business Relations -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                <!-- Field: النوع (Contact Type) -->
+                <div>
+                    <label class="custom-input-label" for="contact_type">
+                        النوع <span class="required-star">*</span>
+                    </label>
+                    <select name="contact_type" id="contact_type" class="mat-like-select" required>
+                        <option value="organization" selected>مؤسسة</option>
+                        <option value="person">شخص</option>
+                    </select>
+                </div>
+
+                <!-- Field: علاقة العمل (Business Relation) Multi-Select -->
+                <div>
+                    <label class="custom-input-label">
+                        علاقة العمل <span class="required-star">*</span>
+                    </label>
+                    <div class="relation-multiselect-dropdown">
+                        <div id="relation-trigger" class="relation-trigger" tabindex="0">
+                            <div id="selected-relations-display" class="flex flex-wrap items-center gap-1 overflow-hidden">
+                                <span class="text-slate-400 text-sm">اختر علاقة العمل...</span>
+                            </div>
+                            <span class="material-symbols-outlined text-slate-400 text-lg">arrow_drop_down</span>
+                        </div>
+
+                        <!-- Dropdown Menu -->
+                        <div id="relation-menu" class="relation-menu">
+                            <label class="relation-option-item">
+                                <input type="checkbox" name="relations" value="عميل" id="rel_customer" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
+                                <span class="text-sm font-semibold text-slate-700">عميل</span>
+                            </label>
+                            <label class="relation-option-item">
+                                <input type="checkbox" name="relations" value="مورد" id="rel_supplier" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
+                                <span class="text-sm font-semibold text-slate-700">مورد</span>
+                            </label>
+                            <label class="relation-option-item">
+                                <input type="checkbox" name="relations" value="أخرى" id="rel_other" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
+                                <span class="text-sm font-semibold text-slate-700">أخرى</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="relation-error" class="field-error-text hidden">
+                        <span class="material-symbols-outlined text-sm">error</span>
+                        <span>هذا الحقل مطلوب</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONDITIONAL CUSTOMER SECTION: Visible when 'عميل' is checked -->
+            <div id="customer-specific-fields" class="mb-5 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4 hidden transition-all duration-300">
+                <div class="text-xs font-bold text-brand-600 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">badge</span>
+                    <span>بيانات تصنيف العميل</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- تصنيف العميل* -->
+                    <div>
+                        <label class="custom-input-label" for="customer_category">
+                            تصنيف العميل <span class="required-star">*</span>
+                        </label>
+                        <select name="customer_category" id="customer_category" class="mat-like-select">
+                            <option value="" disabled selected>اختر تصنيف العميل...</option>
+                            {% for cat in customer_categories %}
+                                <option value="{{ cat }}">{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                        <div id="customer_category-error" class="field-error-text hidden">
+                            <span class="material-symbols-outlined text-sm">error</span>
+                            <span>هذا الحقل مطلوب</span>
+                        </div>
+                    </div>
+
+                    <!-- التخصص* -->
+                    <div>
+                        <label class="custom-input-label" for="specialty">
+                            التخصص <span class="required-star">*</span>
+                        </label>
+                        <select name="specialty" id="specialty" class="mat-like-select">
+                            <option value="" disabled selected>اختر التخصص...</option>
+                            {% for spec in specialties %}
+                                <option value="{{ spec }}">{{ spec }}</option>
+                            {% endfor %}
+                        </select>
+                        <div id="specialty-error" class="field-error-text hidden">
+                            <span class="material-symbols-outlined text-sm">error</span>
+                            <span>هذا الحقل مطلوب</span>
+                        </div>
+                    </div>
+
+                    <!-- نوع الاكونت* -->
+                    <div>
+                        <label class="custom-input-label" for="account_type">
+                            نوع الاكونت <span class="required-star">*</span>
+                        </label>
+                        <select name="account_type" id="account_type" class="mat-like-select">
+                            <option value="" disabled selected>اختر نوع الاكونت...</option>
+                            {% for acc in account_types %}
+                                <option value="{{ acc }}">{{ acc }}</option>
+                            {% endfor %}
+                        </select>
+                        <div id="account_type-error" class="field-error-text hidden">
+                            <span class="material-symbols-outlined text-sm">error</span>
+                            <span>هذا الحقل مطلوب</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: الاسم (Full Width) -->
+            <div class="mb-5">
+                <label class="custom-input-label" for="contact_name">
+                    الاسم <span class="required-star">*</span>
+                </label>
+                <input type="text" name="name" id="contact_name" class="mat-like-input" placeholder="" required>
+                <div id="name-error" class="field-error-text hidden">
+                    <span class="material-symbols-outlined text-sm">error</span>
+                    <span>هذا الحقل مطلوب</span>
+                </div>
+            </div>
+
+            <!-- Row 3: الموبايل & التليفون (Split Inputs) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- الموبايل -->
+                <div>
+                    <label class="custom-input-label">الموبايل</label>
+                    <div class="phone-split-container">
+                        <select name="mobile_country_code" class="phone-country-select">
+                            {% for cc in country_codes %}
+                                <option value="{{ cc.code }}" {% if cc.is_default %}selected{% endif %}>
+                                    {{ cc.flag }} {{ cc.name }} {{ cc.code }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="tel" name="mobile_number" class="phone-number-input" placeholder="أدخل رقم الهاتف">
+                    </div>
+                </div>
+
+                <!-- التليفون -->
+                <div>
+                    <label class="custom-input-label">التليفون</label>
+                    <div class="phone-split-container">
+                        <select name="phone_country_code" class="phone-country-select">
+                            {% for cc in country_codes %}
+                                <option value="{{ cc.code }}" {% if cc.is_default %}selected{% endif %}>
+                                    {{ cc.flag }} {{ cc.name }} {{ cc.code }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="tel" name="phone_number" class="phone-number-input" placeholder="أدخل رقم الهاتف">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SECTION 2: العناوين (Addresses)            -->
+        <!-- ========================================== -->
+        <div class="mb-6">
+            <div class="form-section-title px-1">
+                <span class="material-symbols-outlined text-brand-500 text-xl">location_on</span>
+                <span>العناوين</span>
+            </div>
+
+            <!-- Address Cards Container -->
+            <div id="address-cards-wrapper" class="space-y-4">
+                <!-- Address Card Template / Card 1 -->
+                <div class="card-container address-card relative border-slate-200">
+                    <!-- Top Left Clear/Delete Icon Button -->
+                    <button type="button" class="remove-address-btn absolute top-4 left-4 text-slate-400 hover:text-rose-500 p-1 rounded-full hover:bg-slate-100 transition-colors" title="إزالة العنوان">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+
+                    <!-- Field: اسم العنوان -->
+                    <div class="mb-4 pr-1">
+                        <label class="custom-input-label">اسم العنوان</label>
+                        <input type="text" name="address_title[]" class="mat-like-input" placeholder="">
+                    </div>
+
+                    <!-- Grid: المنطقة & المنطقة الفرعية -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <!-- المنطقة* -->
+                        <div>
+                            <label class="custom-input-label">
+                                المنطقة <span class="required-star">*</span>
+                            </label>
+                            <select name="address_area[]" class="mat-like-select area-select" required>
+                                <option value="" disabled selected>اختر المنطقة...</option>
+                                {% for gov in governorates %}
+                                    <option value="{{ gov.id }}">{{ gov.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="area-error field-error-text hidden">
+                                <span class="material-symbols-outlined text-sm">error</span>
+                                <span>هذا الحقل مطلوب</span>
+                            </div>
+                        </div>
+
+                        <!-- المنطقة الفرعية* -->
+                        <div>
+                            <label class="custom-input-label">
+                                المنطقة الفرعية <span class="required-star">*</span>
+                            </label>
+                            <select name="address_sub_area[]" class="mat-like-select subarea-select" disabled required>
+                                <option value="" disabled selected>اختر المنطقة أولاً...</option>
+                            </select>
+                            <div class="subarea-error field-error-text hidden">
+                                <span class="material-symbols-outlined text-sm">error</span>
+                                <span>هذا الحقل مطلوب</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Field: العنوان (Street Address) -->
+                    <div class="mb-4">
+                        <label class="custom-input-label">العنوان</label>
+                        <input type="text" name="address_street[]" class="mat-like-input" placeholder="">
+                    </div>
+
+                    <!-- Row: الموقع (GPS) & Red Banner -->
+                    <div class="mb-4 space-y-2">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-semibold text-slate-600">الموقع:</span>
+                            <span class="text-xs font-bold text-rose-500">غير مسجل</span>
+                            <button type="button" onclick="alert('خاصية تحديد الموقع الجغرافي الخريطي متاحة قريباً');" class="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md border border-slate-300 transition-colors">
+                                <span class="material-symbols-outlined text-sm text-brand-600">my_location</span>
+                                <span>حدد الموقع</span>
+                            </button>
+                        </div>
+                        <div>
+                            <span class="location-warning-banner">
+                                <span class="material-symbols-outlined text-sm">warning</span>
+                                <span>هذا الحقل مطلوب</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Field: تعيين كعنوان رئيسى -->
+                    <div class="pt-2 border-t border-slate-100 flex items-center">
+                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="address_is_main[]" value="true" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
+                            <span class="text-sm font-semibold text-slate-700">تعيين كعنوان رئيسى</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Address Card Button -->
+            <button type="button" id="add-address-card-btn" class="w-full mt-3 py-3 border-2 border-dashed border-slate-300 hover:border-brand-500 text-slate-600 hover:text-brand-600 font-bold text-sm rounded-xl flex items-center justify-center gap-2 bg-white hover:bg-brand-50/30 transition-all shadow-sm">
+                <span class="material-symbols-outlined text-lg">add</span>
+                <span>أضف عنوان</span>
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SECTION 3: معلومات أخرى (Other Information) -->
+        <!-- ========================================== -->
+        <div class="card-container p-0 overflow-hidden mb-8">
+            <!-- Accordion Header Button -->
+            <button type="button" id="toggle-other-info-btn" class="w-full px-6 py-4 flex items-center justify-between text-right bg-white hover:bg-slate-50 transition-colors focus:outline-none">
+                <span class="form-section-title mb-0">
+                    <span class="material-symbols-outlined text-brand-500 text-xl">tune</span>
+                    <span>معلومات أخرى</span>
+                </span>
+                <span id="other-info-chevron" class="material-symbols-outlined text-slate-400 text-2xl transition-transform duration-200">
+                    keyboard_arrow_down
+                </span>
+            </button>
+
+            <!-- Accordion Body Content -->
+            <div id="other-info-body" class="p-6 border-t border-slate-100 space-y-5 hidden">
+                <!-- Row 1: Email & Website -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="custom-input-label" for="contact_email">البريد الإلكتروني</label>
+                        <input type="email" name="email" id="contact_email" class="mat-like-input" placeholder="">
+                    </div>
+                    <div>
+                        <label class="custom-input-label" for="contact_website">الموقع الإلكتروني</label>
+                        <input type="text" name="website" id="contact_website" class="mat-like-input" placeholder="">
+                    </div>
+                </div>
+
+                <!-- Row 2: Action Buttons (اضف طرق الاتصال & اضف جهات الاتصال المرتبطة) -->
+                <div class="flex flex-wrap items-center gap-3 pt-1">
+                    <button type="button" onclick="alert('إضافة طرق اتصال متعددة متاحة قريباً');" class="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-300 hover:border-brand-500 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-all">
+                        <span class="material-symbols-outlined text-brand-600 text-base">add</span>
+                        <span>اضف طرق الاتصال</span>
+                    </button>
+                    <button type="button" onclick="alert('إضافة جهات اتصال مرتبطة متاحة قريباً');" class="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-300 hover:border-brand-500 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-all">
+                        <span class="material-symbols-outlined text-brand-600 text-base">add</span>
+                        <span>اضف جهات الاتصال المرتبطة</span>
+                    </button>
+                </div>
+
+                <!-- Row 3: Tax ID & ERP Code -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="custom-input-label" for="contact_tax_id">المعرف الضريبي</label>
+                        <input type="text" name="tax_id" id="contact_tax_id" class="mat-like-input" placeholder="">
+                    </div>
+                    <div>
+                        <label class="custom-input-label" for="contact_code">الكود</label>
+                        <input type="text" name="code" id="contact_code" class="mat-like-input" placeholder="">
+                    </div>
+                </div>
+
+                <!-- Row 4: ملاحظة (Notes) -->
+                <div>
+                    <label class="custom-input-label" for="contact_notes">ملاحظة</label>
+                    <textarea name="notes" id="contact_notes" rows="2" class="mat-like-input h-auto py-2.5 resize-none" placeholder=""></textarea>
+                </div>
+
+                <!-- Row 5: اسم المسؤول & AM/PM -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="custom-input-label" for="contact_person">اسم المسؤول</label>
+                        <input type="text" name="contact_person" id="contact_person" class="mat-like-input" placeholder="">
+                    </div>
+                    <div>
+                        <label class="custom-input-label" for="visit_timing">AM/PM</label>
+                        <select name="visit_timing" id="visit_timing" class="mat-like-select">
+                            <option value="" selected>اختر الوقت...</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 6: المسمي الوظيفي & KOL -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="custom-input-label" for="job_title">المسمي الوظيفي</label>
+                        <input type="text" name="job_title" id="job_title" class="mat-like-input" placeholder="">
+                    </div>
+                    <div>
+                        <label class="custom-input-label" for="is_kol">KOL</label>
+                        <select name="is_kol" id="is_kol" class="mat-like-select">
+                            <option value="" selected>اختر...</option>
+                            <option value="نعم">نعم</option>
+                            <option value="لا">لا</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- FOOTER ACTIONS: حفظ & الغاء                  -->
+        <!-- ========================================== -->
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+            <a href="{% url 'contacts_list' %}" class="px-6 py-2.5 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+                الغاء
+            </a>
+            <button type="submit" id="save-contact-btn" class="px-8 py-2.5 rounded-lg text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 shadow-sm shadow-brand-500/20 transition-all flex items-center gap-1.5">
+                <span>حفظ</span>
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<!-- JAVASCRIPT LOGIC -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // --- 1. RELATION MULTI-SELECT DROPDOWN LOGIC ---
+        const relationTrigger = document.getElementById('relation-trigger');
+        const relationMenu = document.getElementById('relation-menu');
+        const selectedRelationsDisplay = document.getElementById('selected-relations-display');
+        const customerSpecificFields = document.getElementById('customer-specific-fields');
+        const relationCheckboxes = document.querySelectorAll('input[name="relations"]');
+        const relCustomer = document.getElementById('rel_customer');
+
+        relationTrigger.addEventListener('click', function (e) {
+            e.stopPropagation();
+            relationMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!relationTrigger.contains(e.target) && !relationMenu.contains(e.target)) {
+                relationMenu.classList.remove('show');
+            }
+        });
+
+        function updateRelationsDisplay() {
+            const selected = [];
+            relationCheckboxes.forEach(cb => {
+                if (cb.checked) {
+                    selected.push(cb.value);
+                }
+            });
+
+            if (selected.length === 0) {
+                selectedRelationsDisplay.innerHTML = '<span class="text-slate-400 text-sm">اختر علاقة العمل...</span>';
+            } else {
+                selectedRelationsDisplay.innerHTML = selected.map(val => `<span class="relation-tag">${val}</span>`).join('');
+            }
+
+            // Conditional customer fields display
+            if (relCustomer.checked) {
+                customerSpecificFields.classList.remove('hidden');
+            } else {
+                customerSpecificFields.classList.add('hidden');
+            }
+        }
+
+        relationCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateRelationsDisplay);
+        });
+
+        // --- 2. ACCORDION LOGIC FOR معلومات أخرى ---
+        const toggleOtherInfoBtn = document.getElementById('toggle-other-info-btn');
+        const otherInfoBody = document.getElementById('other-info-body');
+        const otherInfoChevron = document.getElementById('other-info-chevron');
+
+        toggleOtherInfoBtn.addEventListener('click', function () {
+            const isHidden = otherInfoBody.classList.contains('hidden');
+            if (isHidden) {
+                otherInfoBody.classList.remove('hidden');
+                otherInfoChevron.textContent = 'keyboard_arrow_up';
+            } else {
+                otherInfoBody.classList.add('hidden');
+                otherInfoChevron.textContent = 'keyboard_arrow_down';
+            }
+        });
+
+        // --- 3. DYNAMIC SUB-AREA LOADING ---
+        function attachSubareaListener(card) {
+            const areaSelect = card.querySelector('.area-select');
+            const subareaSelect = card.querySelector('.subarea-select');
+            const removeBtn = card.querySelector('.remove-address-btn');
+
+            if (areaSelect && subareaSelect) {
+                areaSelect.addEventListener('change', function () {
+                    const areaId = this.value;
+                    if (!areaId) {
+                        subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة أولاً...</option>';
+                        subareaSelect.disabled = true;
+                        return;
+                    }
+
+                    subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
+                    subareaSelect.disabled = true;
+
+                    fetch(`/contacts/api/subareas/?area_id=${areaId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.subareas && data.subareas.length > 0) {
+                                subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة الفرعية...</option>' +
+                                    data.subareas.map(sub => `<option value="${sub.name}">${sub.name}</option>`).join('');
+                                subareaSelect.disabled = false;
+                            } else {
+                                subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                                subareaSelect.disabled = false;
+                            }
+                        })
+                        .catch(() => {
+                            subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                            subareaSelect.disabled = false;
+                        });
+                });
+            }
+
+            if (removeBtn) {
+                removeBtn.addEventListener('click', function () {
+                    const allCards = document.querySelectorAll('.address-card');
+                    if (allCards.length > 1) {
+                        card.remove();
+                    } else {
+                        // Clear inputs instead of deleting only card
+                        card.querySelectorAll('input').forEach(i => { if (i.type !== 'checkbox') i.value = ''; });
+                        if (areaSelect) areaSelect.value = '';
+                        if (subareaSelect) {
+                            subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة أولاً...</option>';
+                            subareaSelect.disabled = true;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Attach listeners to initial address cards
+        document.querySelectorAll('.address-card').forEach(attachSubareaListener);
+
+        // --- 4. ADD NEW ADDRESS CARD ---
+        const addAddressBtn = document.getElementById('add-address-card-btn');
+        const addressWrapper = document.getElementById('address-cards-wrapper');
+
+        addAddressBtn.addEventListener('click', function () {
+            const firstCard = document.querySelector('.address-card');
+            if (!firstCard) return;
+
+            const newCard = firstCard.cloneNode(true);
+            newCard.querySelectorAll('input').forEach(input => {
+                if (input.type === 'checkbox') {
+                    input.checked = false; // additional addresses not main by default
+                } else {
+                    input.value = '';
+                }
+            });
+
+            const areaSelect = newCard.querySelector('.area-select');
+            const subareaSelect = newCard.querySelector('.subarea-select');
+            if (areaSelect) areaSelect.value = '';
+            if (subareaSelect) {
+                subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة أولاً...</option>';
+                subareaSelect.disabled = true;
+            }
+
+            // Hide any errors on clone
+            newCard.querySelectorAll('.field-error-text').forEach(err => err.classList.add('hidden'));
+            newCard.querySelectorAll('.has-error').forEach(el => el.classList.remove('has-error'));
+
+            addressWrapper.appendChild(newCard);
+            attachSubareaListener(newCard);
+        });
+
+        // --- 5. FORM SUBMISSION VALIDATION ---
+        const form = document.getElementById('contact-create-form');
+        const nameInput = document.getElementById('contact_name');
+        const nameError = document.getElementById('name-error');
+        const relationError = document.getElementById('relation-error');
+
+        form.addEventListener('submit', function (e) {
+            let isValid = true;
+
+            // 1. Validate Name
+            if (!nameInput.value.trim()) {
+                nameInput.classList.add('has-error');
+                nameError.classList.remove('hidden');
+                isValid = false;
+            } else {
+                nameInput.classList.remove('has-error');
+                nameError.classList.add('hidden');
+            }
+
+            // 2. Validate Relation
+            let hasRelation = false;
+            relationCheckboxes.forEach(cb => { if (cb.checked) hasRelation = true; });
+            if (!hasRelation) {
+                relationTrigger.classList.add('has-error');
+                relationError.classList.remove('hidden');
+                isValid = false;
+            } else {
+                relationTrigger.classList.remove('has-error');
+                relationError.classList.add('hidden');
+            }
+
+            // 3. Validate Customer Specific Fields if customer checked
+            if (relCustomer.checked) {
+                const cat = document.getElementById('customer_category');
+                const spec = document.getElementById('specialty');
+                const acc = document.getElementById('account_type');
+
+                const catErr = document.getElementById('customer_category-error');
+                const specErr = document.getElementById('specialty-error');
+                const accErr = document.getElementById('account_type-error');
+
+                if (!cat.value) {
+                    cat.classList.add('has-error');
+                    catErr.classList.remove('hidden');
+                    isValid = false;
+                } else {
+                    cat.classList.remove('has-error');
+                    catErr.classList.add('hidden');
+                }
+
+                if (!spec.value) {
+                    spec.classList.add('has-error');
+                    specErr.classList.remove('hidden');
+                    isValid = false;
+                } else {
+                    spec.classList.remove('has-error');
+                    specErr.classList.add('hidden');
+                }
+
+                if (!acc.value) {
+                    acc.classList.add('has-error');
+                    accErr.classList.remove('hidden');
+                    isValid = false;
+                } else {
+                    acc.classList.remove('has-error');
+                    accErr.classList.add('hidden');
+                }
+            }
+
+            // 4. Validate Address Cards (Area & Subarea required)
+            document.querySelectorAll('.address-card').forEach(card => {
+                const areaSel = card.querySelector('.area-select');
+                const subSel = card.querySelector('.subarea-select');
+                const areaErr = card.querySelector('.area-error');
+                const subErr = card.querySelector('.subarea-error');
+
+                if (areaSel && !areaSel.value) {
+                    areaSel.classList.add('has-error');
+                    if (areaErr) areaErr.classList.remove('hidden');
+                    isValid = false;
+                } else if (areaSel) {
+                    areaSel.classList.remove('has-error');
+                    if (areaErr) areaErr.classList.add('hidden');
+                }
+
+                if (subSel && !subSel.value) {
+                    subSel.classList.add('has-error');
+                    if (subErr) subErr.classList.remove('hidden');
+                    isValid = false;
+                } else if (subSel) {
+                    subSel.classList.remove('has-error');
+                    if (subErr) subErr.classList.add('hidden');
+                }
+            });
+
+            if (!isValid) {
+                e.preventDefault();
+                // Scroll to the first error
+                const firstError = document.querySelector('.has-error');
+                if (firstError) {
+                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstError.focus();
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
