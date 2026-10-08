@@ -10,10 +10,10 @@
 {% endblock %}
 
 {% block top_actions %}
-    <button onclick="openModal('add-contact-modal')" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
+    <a href="{% url 'contact_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
         <span class="material-symbols-outlined text-base">person_add</span>
         <span>إضافة جهة اتصال جديدة</span>
-    </button>
+    </a>
 {% endblock %}
 
 {% block content %}
