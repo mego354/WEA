@@ -141,3 +141,48 @@ class Collection(models.Model):
             max_s = Collection.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 3000
             self.serial_num = max_s + 1
         super().save(*args, **kwargs)
+
+
+class SalesReturnOrder(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'قيد الانتظار'),
+        ('approved', 'معتمد'),
+        ('delivered', 'مستلم بالمخزن'),
+        ('settled', 'مرحل بالحسابات'),
+        ('cancelled', 'ملغي'),
+    ]
+
+    serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
+    order_number = models.CharField(max_length=50, unique=True, verbose_name="رقم إشعار المرتجع")
+    customer = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="sales_return_orders", verbose_name="العميل")
+    target_warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, null=True, blank=True, related_name="sales_return_orders", verbose_name="مخزن الاستلام")
+    order_date = models.DateField(default=timezone.now, verbose_name="تاريخ المرتجع")
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
+    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="إجمالي القيمة (ج.م)")
+    notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المنشئ")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "مرتجع مبيعات"
+        verbose_name_plural = "مرتجعات المبيعات"
+        ordering = ['-serial_num']
+
+    def __str__(self):
+        return f"{self.order_number} ({self.customer.name})"
+
+
+class SalesReturnOrderItem(models.Model):
+    order = models.ForeignKey(SalesReturnOrder, on_delete=models.CASCADE, related_name="items", verbose_name="مرتجع المبيعات")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, verbose_name="المنتج")
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="الكمية المرتجعة")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="سعر الوحدة")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الإجمالي")
+    batch_number = models.CharField(max_length=100, blank=True, verbose_name="رقم التشغيل")
+    expiry_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الصلاحية")
+
+    class Meta:
+        verbose_name = "بند مرتجع مبيعات"
+        verbose_name_plural = "بنود مرتجع المبيعات"
+

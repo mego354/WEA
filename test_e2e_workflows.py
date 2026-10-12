@@ -34,8 +34,8 @@ def run_tests():
 
     # 1. Test Login
     print("\n[1] Testing Authentication...")
-    login_success = client.login(username='wea.pharm2020@gmail.com', password='Wea@0000')
-    assert login_success, "Login failed with credentials wea.pharm2020@gmail.com / Wea@0000"
+    login_success = client.login(username='wea.pharm2020@gmail.com', password='Wea@4444')
+    assert login_success, "Login failed with credentials wea.pharm2020@gmail.com / Wea@4444"
     print("  ✓ Authenticated successfully with superadmin credentials.")
 
     resp = client.get('/home/')
