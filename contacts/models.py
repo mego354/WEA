@@ -10,9 +10,10 @@ class Contact(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('lead', 'محتمل (Lead)'),
-        ('active', 'نشط (Active)'),
-        ('inactive', 'غير نشط (Inactive)'),
+        ('lead', 'Lead'),
+        ('customer', 'Customer'),
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
     ]
 
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
@@ -49,8 +50,11 @@ class Contact(models.Model):
     credit_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="حد الائتمان (ج.م)")
     credit_period_days = models.PositiveIntegerField(default=30, verbose_name="فترة الائتمان (أيام)")
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active', verbose_name="الحالة")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='customer', verbose_name="الحالة")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
+
+    parent_org = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='branches', verbose_name="المؤسسة التابعة لها")
+    assigned_team = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="assigned_contacts", verbose_name="المسئولين")
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_contacts", verbose_name="المنشئ")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
@@ -73,6 +77,30 @@ class Contact(models.Model):
     @property
     def formatted_number(self):
         return f"#{self.serial_num}"
+
+    @property
+    def display_tag(self):
+        return f"[#{self.serial_num}] {self.name}"
+
+    @property
+    def initials(self):
+        clean_name = self.name.strip().replace('(', '').replace(')', '').replace('[', '').replace(']', '')
+        parts = clean_name.split()
+        if len(parts) >= 2:
+            return f"{parts[0][0]}{parts[1][0]}"
+        elif parts:
+            return parts[0][:2]
+        return "–"
+
+    @property
+    def status_label(self):
+        if self.status in ['customer', 'active']:
+            return 'Customer'
+        elif self.status == 'lead':
+            return 'Lead'
+        elif self.status == 'inactive':
+            return 'Inactive'
+        return self.status.capitalize()
 
     @property
     def relation_display(self):
@@ -103,3 +131,74 @@ class ContactAddress(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.contact.name}"
+
+
+class ContactComment(models.Model):
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="comments", verbose_name="جهة الاتصال")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="contact_comments", verbose_name="الكاتب")
+    text = models.TextField(verbose_name="نص التعليق")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "تعليق جهة الاتصال"
+        verbose_name_plural = "تعليقات جهات الاتصال"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.contact.name} - {self.author} ({self.created_at})"
+
+
+class ContactAttachment(models.Model):
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="attachments", verbose_name="جهة الاتصال")
+    file = models.FileField(upload_to="contacts/attachments/", verbose_name="الملف")
+    filename = models.CharField(max_length=255, blank=True, verbose_name="اسم الملف")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="تم الرفع بواسطة")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الرفع")
+
+    class Meta:
+        verbose_name = "مرفق جهة الاتصال"
+        verbose_name_plural = "مرفقات جهة الاتصال"
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.filename and self.file:
+            self.filename = self.file.name.split('/')[-1]
+        super().save(*args, **kwargs)
+
+
+class ContactTodo(models.Model):
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="todos", verbose_name="جهة الاتصال")
+    title = models.CharField(max_length=255, verbose_name="المهمة")
+    is_completed = models.BooleanField(default=False, verbose_name="مكتملة")
+    due_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستحقاق")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="أنشئ بواسطة")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "Todo"
+        verbose_name_plural = "Todos"
+        ordering = ['is_completed', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} ({'مكتمل' if self.is_completed else 'معلق'})"
+
+
+class ContactActivity(models.Model):
+    ACTIVITY_TYPES = [
+        ('visit', 'زيارة'),
+        ('call', 'مكالمة'),
+        ('agreement', 'اتفاقية'),
+    ]
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="activities", verbose_name="جهة الاتصال")
+    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPES, default='visit', verbose_name="نوع النشاط")
+    title = models.CharField(max_length=255, verbose_name="العنوان")
+    start_time = models.DateTimeField(null=True, blank=True, verbose_name="بدأ في")
+    end_time = models.DateTimeField(null=True, blank=True, verbose_name="انتهى في")
+    notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المسؤول")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "نشاط"
+        verbose_name_plural = "الأنشطة"
+        ordering = ['-created_at']

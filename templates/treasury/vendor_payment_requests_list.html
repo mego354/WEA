@@ -1,0 +1,70 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}طلبات الدفع - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="relative min-h-[calc(100vh-5rem)]">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">طلبات الدفع</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                0 طلب
+            </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            <button type="button" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير البيانات</span>
+            </button>
+            <button type="button" class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>فلتر</span>
+                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">2</span>
+            </button>
+            <button type="button" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>طلب دفع جديد</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
+                    <tr>
+                        <th class="py-3.5 px-4">رقم المسلسل</th>
+                        <th class="py-3.5 px-4">الاسم</th>
+                        <th class="py-3.5 px-4">المنطقة</th>
+                        <th class="py-3.5 px-4">انشئ فى</th>
+                        <th class="py-3.5 px-4">المنشئ</th>
+                        <th class="py-3.5 px-4">الحالة</th>
+                        <th class="py-3.5 px-4">المبلغ</th>
+                        <th class="py-3.5 px-4">الطريقة</th>
+                        <th class="py-3.5 px-4">المسئول</th>
+                        <th class="py-3.5 px-4">تاريخ التنفيذ</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    <tr>
+                        <td colspan="10" class="py-16 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">request_quote</span>
+                            <p class="font-bold text-slate-500 text-sm">لا توجد طلبات دفع مسجلة</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
+            <span>Items per page: 40</span>
+            <span>0 of 0</span>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

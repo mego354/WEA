@@ -1,0 +1,306 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}#{{ return_order.serial_num }} - أوامر إرجاع المشتريات - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="space-y-6 pb-16">
+
+    <!-- TOP HEADER DOSSIER -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <!-- Identification & Supplier Tag -->
+        <div class="flex items-center gap-3.5 flex-wrap">
+            <span class="text-xs font-bold px-2.5 py-1 bg-teal-50 text-[#27bebe] border border-teal-200 rounded-md">
+                أمر إرجاع مشتريات
+            </span>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-md {{ return_order.status_badge_class }}">
+                {{ return_order.status_label_ar }}
+            </span>
+            <span class="text-xl font-black text-slate-900 font-mono">
+                {{ return_order.order_number }}
+            </span>
+
+            <div class="h-5 w-px bg-slate-200 mx-1"></div>
+
+            <!-- Supplier Initials Badge & Name -->
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 text-[#27bebe] font-bold text-xs flex items-center justify-center">
+                    {{ return_order.supplier.initials|default:"مو" }}
+                </div>
+                <a href="{% url 'contact_detail' return_order.supplier.id %}" class="text-sm font-bold text-slate-900 hover:text-[#27bebe] transition-colors">
+                    [#{{ return_order.supplier.serial_num }}] {{ return_order.supplier.name }}
+                </a>
+            </div>
+        </div>
+
+        <!-- Workflow Action Buttons -->
+        <div class="flex items-center gap-2 flex-wrap">
+            {% if return_order.status == 'pending' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'approve' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">check_circle</span>
+                    <span>اعتماد المرتجع (Approve)</span>
+                </button>
+            </form>
+            {% elif return_order.status == 'approved' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'deliver' %}">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('تأكيد صرف البضاعة من المخزن وإنشاء إذن صرف؟');"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">output</span>
+                    <span>صرف من المخزن (Deliver)</span>
+                </button>
+            </form>
+            {% elif return_order.status == 'delivered' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'settle' %}">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('تأكيد ترحيل إشعار الخصم للحسابات وتخفيض مديونية المورد؟');"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <span>ترحيل للحسابات (Settle)</span>
+                </button>
+            </form>
+            {% endif %}
+
+            {% if return_order.status == 'pending' or return_order.status == 'approved' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'cancel' %}">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع؟');"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">close</span>
+                    <span>إلغاء</span>
+                </button>
+            </form>
+            {% endif %}
+
+            <a href="{% url 'purchase_return_order_print' return_order.id %}" target="_blank"
+               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="طباعة">
+                <span class="material-symbols-outlined text-lg">print</span>
+            </a>
+            <a href="{% url 'purchase_return_orders_list' %}"
+               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="العودة">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- MAIN DOSSIER LAYOUT -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- CENTER 2 COLUMNS: ITEMS & CALCULATIONS -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Line Items Table -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">format_list_bulleted</span>
+                        <span>الأصناف المرتجعة ({{ return_order.items.count }})</span>
+                    </h2>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="py-3 px-4 w-10">#</th>
+                                <th class="py-3 px-4">الصنف</th>
+                                <th class="py-3 px-4">الكود</th>
+                                <th class="py-3 px-4 text-center">الكمية</th>
+                                <th class="py-3 px-4">سعر التكلفة</th>
+                                <th class="py-3 px-4">رقم التشغيل</th>
+                                <th class="py-3 px-4">الصلاحية</th>
+                                <th class="py-3 px-4 text-left">إجمالي القيمة</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for item in return_order.items.all %}
+                            <tr class="hover:bg-slate-50/70">
+                                <td class="py-3 px-4 font-mono text-slate-400">{{ forloop.counter }}</td>
+                                <td class="py-3 px-4 font-bold text-slate-900">
+                                    {{ item.product.name }}
+                                </td>
+                                <td class="py-3 px-4 font-mono font-bold text-slate-600">
+                                    {{ item.product.sku_code }}
+                                </td>
+                                <td class="py-3 px-4 text-center font-mono font-bold text-slate-900">
+                                    {{ item.quantity|intcomma }}
+                                </td>
+                                <td class="py-3 px-4 font-mono text-slate-700">
+                                    {{ item.unit_price|intcomma }} ج.م
+                                </td>
+                                <td class="py-3 px-4 font-mono text-slate-600">
+                                    {{ item.product_batch_number|default:"—" }}
+                                </td>
+                                <td class="py-3 px-4 font-mono text-slate-600">
+                                    {{ item.product_expiry_date|date:"d/m/Y"|default:"—" }}
+                                </td>
+                                <td class="py-3 px-4 text-left font-mono font-bold text-slate-900">
+                                    {{ item.total_price|intcomma }} ج.م
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Financial Summary Box -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 text-xs space-y-3">
+                <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">calculate</span>
+                    <span>الملخص المالي للمرتجع</span>
+                </h3>
+                <div class="space-y-2 max-w-xs mr-auto">
+                    <div class="flex items-center justify-between text-slate-600">
+                        <span>إجمالي الأصناف:</span>
+                        <span class="font-mono font-bold">{{ return_order.subtotal|intcomma }} ج.م</span>
+                    </div>
+                    <div class="flex items-center justify-between text-slate-600">
+                        <span>الضريبة:</span>
+                        <span class="font-mono font-bold">{{ return_order.tax_amount|intcomma }} ج.م</span>
+                    </div>
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between font-black text-slate-900 text-sm">
+                        <span>قيمة المرتجع النهائية:</span>
+                        <span class="font-mono text-[#27bebe] text-base">{{ return_order.grand_total|intcomma }} ج.م</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Linked Warehouse Outward Memo Card -->
+            {% if return_order.memo %}
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 text-xs space-y-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-blue-600 text-base">inventory</span>
+                        <h3 class="font-bold text-slate-900">إذن صرف المخزن المرتبط</h3>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700">
+                        {{ return_order.memo.memo_number }}
+                    </span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-slate-600 pt-1">
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">المخزن المنصرف منه:</span>
+                        <strong class="text-slate-800">{{ return_order.memo.warehouse.name }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">تاريخ الصرف:</span>
+                        <strong class="text-slate-800 font-mono">{{ return_order.dispatched_at|date:"d/m/Y h:i A" }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">البيان:</span>
+                        <span class="text-slate-700">{{ return_order.memo.statement }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Linked Accounting Debit Note Card -->
+            {% if return_order.status == 'settled' %}
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 text-xs space-y-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600 text-base">receipt_long</span>
+                        <h3 class="font-bold text-slate-900">إشعار الخصم وترحيل الحسابات</h3>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700">
+                        تم ترحيل إشعار الخصم
+                    </span>
+                </div>
+                <p class="text-slate-600">
+                    تم إثبات خصم بقيمة <strong class="text-emerald-700 font-mono">{{ return_order.grand_total|intcomma }} ج.م</strong> من مديونية المورد <strong class="text-slate-900">{{ return_order.supplier.name }}</strong> في الحسابات العامة بتاريخ <span class="font-mono">{{ return_order.settled_at|date:"d/m/Y h:i A" }}</span>.
+                </p>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- RIGHT SIDEBAR DETAILS -->
+        <div class="space-y-6">
+
+            <!-- Basic Details Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 space-y-4 text-xs">
+                <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">info</span>
+                    <span>تفاصيل المرتجع</span>
+                </h3>
+
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ الإرجاع:</span>
+                        <span class="font-mono font-bold text-slate-800">{{ return_order.order_date|date:"d/m/Y" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">المخزن:</span>
+                        <span class="font-bold text-slate-800">{{ return_order.warehouse.name }}</span>
+                    </div>
+                    {% if return_order.purchase_order %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">أمر الشراء الأصلي:</span>
+                        <a href="{% url 'purchase_order_detail' return_order.purchase_order.id %}" class="font-mono font-bold text-[#27bebe] hover:underline">
+                            {{ return_order.purchase_order.order_number }}
+                        </a>
+                    </div>
+                    {% endif %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">مسئول الشحن / الاستلام:</span>
+                        <span class="font-medium text-slate-800">{{ return_order.delivery_agent|default:"—" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">وقت الاستلام:</span>
+                        <span class="font-medium text-slate-800">{{ return_order.delivery_time|default:"—" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">المنشئ:</span>
+                        <span class="font-medium text-slate-800">{{ return_order.created_by.get_full_name|default:return_order.created_by.username|default:"المدير" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ الإنشاء:</span>
+                        <span class="font-mono text-slate-600">{{ return_order.created_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                </div>
+
+                {% if return_order.notes %}
+                <div class="pt-3 border-t border-slate-100">
+                    <span class="text-slate-500 block mb-1">ملاحظات:</span>
+                    <p class="text-slate-700 bg-slate-50 p-2.5 rounded-lg text-[11px] leading-relaxed">{{ return_order.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Supplier Profile Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 space-y-4 text-xs">
+                <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">store</span>
+                    <span>بيانات المورد</span>
+                </h3>
+                <div class="space-y-2">
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">اسم المورد:</span>
+                        <strong class="text-slate-800 text-sm">{{ return_order.supplier.name }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">المنطقة / المحافظة:</span>
+                        <span class="text-slate-700">{{ return_order.supplier.area.name|default:"غير محدد" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">الهاتف:</span>
+                        <span class="text-slate-700 font-mono">{{ return_order.supplier.mobile|default:return_order.supplier.phone|default:"—" }}</span>
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <a href="{% url 'accounting_vendors_list' %}" class="text-[#27bebe] hover:underline font-bold text-xs inline-flex items-center gap-1">
+                        <span>معاينة كشف حساب المورد</span>
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

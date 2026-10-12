@@ -115,3 +115,10 @@ def vault_transactions_list(request):
         'selected_vault_id': vault_id,
     }
     return render(request, 'treasury/vault_transactions_list.html', context)
+
+
+@login_required
+def vendor_payment_requests_list(request):
+    """View matching /vendor-payment-requests in reference ERP."""
+    return render(request, 'treasury/vendor_payment_requests_list.html')
+

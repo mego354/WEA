@@ -103,39 +103,64 @@
             <!-- Contacts -->
             <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
                 <span class="material-symbols-outlined text-xl {% if 'contacts' in request.path %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
-                <span>جهات الاتصال (الموردين والعملاء)</span>
+                <span>جهات الاتصال</span>
             </a>
 
-            <!-- Products / Catalog -->
+            <!-- Products (المنتجات) -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'catalog' in request.path or 'products' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl">store</span>
-                        <span>المنتجات والكتالوج</span>
+                        <span class="material-symbols-outlined text-xl {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 material-symbols-fill{% endif %}">store</span>
+                        <span>المنتجات</span>
                     </div>
                     <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if 'catalog' in request.path or 'products' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'products_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">قائمة المنتجات</a>
-                    <a href="{% url 'categories_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">التصنيفات</a>
+                    <a href="{% url 'products_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">store</span>
+                        <span>المنتجات</span>
+                    </a>
+                    <a href="{% url 'categories_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">category</span>
+                        <span>التصنيفات</span>
+                    </a>
                 </div>
             </div>
 
-            <!-- Purchases (P0 Core) -->
+            <!-- Purchases (المشتريات) -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'purchase' in request.path or 'vendor' in request.path %}text-brand-600 material-symbols-fill{% endif %}">shopping_cart</span>
+                        <span class="material-symbols-outlined text-xl {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
                         <span>المشتريات</span>
                     </div>
                     <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
-                <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'purchase_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium">أوامر المشتريات</a>
-                    <a href="{% url 'purchase_order_create' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أمر مشتريات جديد</a>
-                    <a href="{% url 'vendor_payments_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">المدفوعات وسندات الصرف</a>
-                    <a href="{% url 'accounting_vendors_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حسابات وأرصدة الموردين</a>
-                    <a href="{% url 'vendor_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">دفتر عمليات الموردين</a>
+                <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'purchase_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium">
+                        <span class="material-symbols-outlined text-base">shopping_cart</span>
+                        <span>الطلبات</span>
+                    </a>
+                    <a href="{% url 'purchase_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                        <span>المرتجعات</span>
+                    </a>
+                    <a href="{% url 'vendor_payments_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">receipt</span>
+                        <span>المدفوعات</span>
+                    </a>
+                    <a href="{% url 'vendor_payment_requests_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">request_quote</span>
+                        <span>طلبات الدفع</span>
+                    </a>
+                    <a href="{% url 'accounting_vendors_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">attach_money</span>
+                        <span>حسابات الموردين</span>
+                    </a>
+                    <a href="{% url 'vendor_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">receipt_long</span>
+                        <span>عمليات الموردين</span>
+                    </a>
                 </div>
             </div>
 

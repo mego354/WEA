@@ -1,0 +1,969 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}[{{ contact.formatted_number }}] {{ contact.name }} - تفاصيل جهة الاتصال{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* 100% Faithful styling matching reference ERP Bricks / Angular UI */
+    .erp-teal {
+        color: #27bebe;
+    }
+    .erp-bg-teal {
+        background-color: #27bebe;
+    }
+    .erp-bg-teal:hover {
+        background-color: #1fa8a8;
+    }
+    .erp-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.65rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid #ccfbfb;
+        background-color: #f0fdfd;
+        color: #1a8b8b;
+    }
+    .erp-tab-btn {
+        padding: 0.85rem 1.25rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #64748b;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+    }
+    .erp-tab-btn.active {
+        color: #27bebe;
+        border-bottom-color: #27bebe;
+        font-weight: 700;
+    }
+    .erp-accordion-header {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.85rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: #334155;
+        background: #ffffff;
+        border-bottom: 1px solid #f1f5f9;
+        cursor: pointer;
+        user-select: none;
+    }
+    .erp-accordion-header:hover {
+        background-color: #f8fafc;
+    }
+    .erp-detail-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 1rem;
+        font-size: 0.8125rem;
+        border-bottom: 1px solid #f8fafc;
+    }
+    .erp-detail-label {
+        color: #64748b;
+        font-weight: 500;
+    }
+    .erp-detail-val {
+        color: #1e293b;
+        font-weight: 600;
+        text-align: left;
+    }
+    .erp-detail-action-link {
+        color: #94a3b8;
+        font-size: 0.75rem;
+        cursor: pointer;
+    }
+    .erp-detail-action-link:hover {
+        color: #27bebe;
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- 1. HEADER SECTION (Matching 04_contact_detail_full.png) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            
+            <!-- Right Side (in RTL): Avatar, Name, Chips -->
+            <div class="flex items-center gap-4">
+                <div class="relative group">
+                    <div class="w-16 h-16 rounded-full bg-[#27bebe] text-white flex items-center justify-center font-bold text-2xl shadow-md">
+                        {{ contact.initials }}
+                    </div>
+                    <span class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-white text-slate-500 shadow border border-slate-200 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title="تغيير الصورة">
+                        <span class="material-symbols-outlined text-sm">add_a_photo</span>
+                    </span>
+                </div>
+
+                <div>
+                    <!-- Parent Org link -->
+                    <div class="text-xs text-slate-400 mb-1">
+                        {% if contact.parent_org %}
+                        <span>تابع لـ: </span>
+                        <a href="{% url 'contact_detail_overview' contact.parent_org.id %}" class="text-brand-600 hover:underline font-semibold">{{ contact.parent_org.name }}</a>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="hover:text-brand-600 hover:underline">اضف مؤسسة</a>
+                        {% endif %}
+                    </div>
+
+                    <!-- Contact Name & Serial -->
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
+                        <span>[{{ contact.formatted_number }}]</span>
+                        <span>{{ contact.name }}</span>
+                    </h1>
+
+                    <!-- Badges / Chips Row -->
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
+                        <!-- Contact Type -->
+                        <span class="erp-chip">
+                            {{ contact.get_contact_type_display }}
+                        </span>
+
+                        <!-- Business Relation -->
+                        <span class="erp-chip">
+                            {{ contact.relation_display }}
+                        </span>
+
+                        <!-- Customer Specific Badges -->
+                        {% if contact.is_customer %}
+                            {% if contact.customer_category %}
+                            <span class="erp-chip font-bold">
+                                {{ contact.customer_category }}
+                            </span>
+                            {% endif %}
+                            {% if contact.specialty %}
+                            <span class="erp-chip">
+                                {{ contact.specialty }}
+                            </span>
+                            {% endif %}
+                            {% if contact.account_type %}
+                            <span class="erp-chip">
+                                {{ contact.account_type }}
+                            </span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Left Side (in RTL): Controls (FAB, Status Dropdown, Eye, 3-dots) -->
+            <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+                <!-- Quick Create '+' -->
+                <a href="{% url 'contact_create' %}" class="w-9 h-9 rounded-full bg-[#27bebe] hover:bg-[#1fa8a8] text-white flex items-center justify-center shadow-md transition-transform hover:scale-105" title="انشئ جهة اتصال">
+                    <span class="material-symbols-outlined text-xl">add</span>
+                </a>
+
+                <!-- Status Dropdown (Customer, Lead, Inactive) -->
+                <div class="relative" x-data="{ open: false }">
+                    <button type="button" onclick="toggleStatusDropdown()" id="statusDropdownBtn" class="px-3.5 py-1.5 rounded-lg bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-colors">
+                        <span>{{ contact.status_label }}</span>
+                        <span class="material-symbols-outlined text-sm">expand_more</span>
+                    </button>
+                    <!-- Status Menu -->
+                    <div id="statusDropdownMenu" class="hidden absolute left-0 mt-1.5 w-36 bg-white rounded-lg shadow-xl border border-slate-100 py-1.5 z-40 text-right">
+                        <form method="POST" action="{% url 'contact_update_status' contact.id %}">
+                            {% csrf_token %}
+                            <button type="submit" name="status" value="customer" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>Customer</span>
+                                {% if contact.status == 'customer' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
+                            </button>
+                            <button type="submit" name="status" value="lead" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>Lead</span>
+                                {% if contact.status == 'lead' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
+                            </button>
+                            <button type="submit" name="status" value="inactive" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>Inactive</span>
+                                {% if contact.status == 'inactive' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Eye icon (Visibility) -->
+                <button type="button" class="p-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-slate-100 transition-colors" title="معاينة">
+                    <span class="material-symbols-outlined text-xl">visibility</span>
+                </button>
+
+                <!-- 3-Dots Vertical Action Menu -->
+                <div class="relative">
+                    <button type="button" onclick="toggleHeaderActionsMenu()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
+                        <span class="material-symbols-outlined text-xl">more_vert</span>
+                    </button>
+                    <div id="headerActionsMenu" class="hidden absolute left-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-40 text-right">
+                        <!-- Timeline -->
+                        <a href="?tab=overview#timeline" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                            <span class="material-symbols-outlined text-base text-brand-600">timeline</span>
+                            <span>تسلسل الأحداث</span>
+                        </a>
+                        <!-- Edit -->
+                        <a href="{% url 'contact_edit' contact.id %}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                            <span class="material-symbols-outlined text-base text-brand-600">edit</span>
+                            <span>تعديل</span>
+                        </a>
+                        <!-- Delete modal trigger -->
+                        <button type="button" onclick="openDeleteModal()" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 text-right">
+                            <span class="material-symbols-outlined text-base text-red-500">delete</span>
+                            <span>مسح</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- 2. NAVIGATION TABS BAR (Matching Reference ERP Tabs) -->
+        <div class="flex items-center gap-2 border-b border-slate-200 mt-6 overflow-x-auto select-none">
+            <a href="?tab=overview" class="erp-tab-btn {% if active_tab == 'overview' %}active{% endif %}">
+                نظرة عامة
+            </a>
+            <a href="?tab=activities" class="erp-tab-btn {% if active_tab == 'activities' %}active{% endif %}">
+                الأنشطة
+            </a>
+            {% if contact.is_customer %}
+            <a href="?tab=sales" class="erp-tab-btn {% if active_tab == 'sales' %}active{% endif %}">
+                المبيعات
+            </a>
+            {% endif %}
+            {% if contact.is_supplier %}
+            <a href="?tab=purchases" class="erp-tab-btn {% if active_tab == 'purchases' %}active{% endif %}">
+                المشتريات
+            </a>
+            {% endif %}
+            <a href="?tab=attachments" class="erp-tab-btn {% if active_tab == 'attachments' %}active{% endif %}">
+                المرفقات
+            </a>
+            <a href="?tab=todos" class="erp-tab-btn {% if active_tab == 'todos' %}active{% endif %}">
+                Todos
+            </a>
+            <a href="?tab=tasks" class="erp-tab-btn {% if active_tab == 'tasks' %}active{% endif %}">
+                المهام
+            </a>
+        </div>
+    </div>
+
+    <!-- 3. TAB CONTENT -->
+
+    <!-- TAB 1: OVERVIEW (نظرة عامة) -->
+    {% if active_tab == 'overview' %}
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- RIGHT COLUMN: Accordion Information Sidebar (lg:col-span-4) -->
+        <div class="lg:col-span-5 space-y-3">
+
+            <!-- 1. المعلومات الأساسية -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-basic')">
+                    <span>المعلومات الأساسية</span>
+                    <span id="icon-sec-basic" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-basic" class="divide-y divide-slate-50">
+                    <!-- Code -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الكود</span>
+                        {% if contact.code %}
+                        <span class="erp-detail-val font-mono">{{ contact.code }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضف</a>
+                        {% endif %}
+                    </div>
+                    <!-- Telephone -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">التليفون</span>
+                        {% if contact.phone %}
+                        <span class="erp-detail-val font-mono">{{ contact.phone }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضغط لإضافة رقم الهاتف</a>
+                        {% endif %}
+                    </div>
+                    <!-- Mobile -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الموبايل</span>
+                        {% if contact.mobile %}
+                        <span class="erp-detail-val font-mono">{{ contact.mobile }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضغط لإضافة رقم الجوال</a>
+                        {% endif %}
+                    </div>
+                    <!-- Email -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">البريد الإلكتروني</span>
+                        {% if contact.email %}
+                        <span class="erp-detail-val font-mono">{{ contact.email }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضغط لإضافة البريد الإلكتروني</a>
+                        {% endif %}
+                    </div>
+                    <!-- Website -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الموقع الإلكتروني</span>
+                        {% if contact.website %}
+                        <a href="{{ contact.website }}" target="_blank" class="erp-detail-val text-brand-600 hover:underline">{{ contact.website }}</a>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضغط لإضافة رابط</a>
+                        {% endif %}
+                    </div>
+                    <!-- AM/PM -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">AM/PM</span>
+                        {% if contact.visit_timing %}
+                        <span class="erp-detail-val font-bold">{{ contact.visit_timing }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اختر...</a>
+                        {% endif %}
+                    </div>
+                    <!-- KOL -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">KOL</span>
+                        {% if contact.is_kol %}
+                        <span class="erp-detail-val text-emerald-600 font-bold">نعم</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اختر...</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. المعلومات الإضافية -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-additional')">
+                    <span>المعلومات الإضافية</span>
+                    <span id="icon-sec-additional" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-additional" class="divide-y divide-slate-50">
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">ملاحظة</span>
+                        {% if contact.notes %}
+                        <span class="erp-detail-val max-w-xs">{{ contact.notes }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضف</a>
+                        {% endif %}
+                    </div>
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">المعرف الضريبي</span>
+                        {% if contact.tax_id %}
+                        <span class="erp-detail-val font-mono">{{ contact.tax_id }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضف</a>
+                        {% endif %}
+                    </div>
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الوظيفة / المسمى</span>
+                        {% if contact.job_title %}
+                        <span class="erp-detail-val">{{ contact.job_title }}</span>
+                        {% else %}
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضف</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. حساب العميل / حساب المورد -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-account')">
+                    <span>{% if contact.is_customer %}حساب العميل{% elif contact.is_supplier %}حساب المورد{% else %}الحساب المالي{% endif %}</span>
+                    <span id="icon-sec-account" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-account" class="p-3 space-y-2">
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">حد الائتمان</span>
+                        <span class="erp-detail-val font-bold text-slate-900">{{ contact.credit_limit|intcomma }} ج.م</span>
+                    </div>
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">فترة الائتمان</span>
+                        <span class="erp-detail-val font-bold">{{ contact.credit_period_days }} يوم</span>
+                    </div>
+                    {% if vendor_account %}
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الرصيد القائم</span>
+                        <span class="erp-detail-val font-bold text-rose-600">{{ vendor_account.current_balance|intcomma }} ج.م</span>
+                    </div>
+                    <div class="pt-2 text-center">
+                        <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ contact.id }}" class="inline-flex items-center gap-1.5 text-xs text-brand-600 font-bold hover:underline">
+                            <span class="material-symbols-outlined text-sm">receipt_long</span>
+                            <span>عرض كشف حساب المورد</span>
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 4. العناوين (Addresses) -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-addresses')">
+                    <span>العناوين</span>
+                    <span id="icon-sec-addresses" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-addresses" class="p-3 space-y-3">
+                    {% for addr in addresses %}
+                    <div class="p-3 rounded-lg border border-slate-200 bg-slate-50/50 relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm text-brand-600">home</span>
+                                <span class="font-bold text-xs text-slate-800">{{ addr.title|default:"العنوان" }}</span>
+                                {% if addr.is_main %}
+                                <span class="material-symbols-outlined text-xs text-emerald-600" title="العنوان الرئيسي">check_circle</span>
+                                {% endif %}
+                            </div>
+                            <!-- Delete action -->
+                            <form method="POST" action="{% url 'contact_delete_address' contact.id addr.id %}" onsubmit="return confirm('حذف هذا العنوان؟');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-slate-400 hover:text-red-500" title="حذف الموقع">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                </button>
+                            </form>
+                        </div>
+                        <p class="text-xs text-slate-600">
+                            {% if addr.area %}{{ addr.area.name }} | {% endif %}{{ addr.sub_area }}
+                        </p>
+                        {% if addr.street_address %}
+                        <p class="text-[11px] text-slate-500 mt-1">{{ addr.street_address }}</p>
+                        {% endif %}
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-2">لا توجد عناوين مسجلة</p>
+                    {% endfor %}
+
+                    <div class="pt-1 text-center">
+                        <button type="button" onclick="openAddAddressModal()" class="inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
+                            <span class="material-symbols-outlined text-sm">add</span>
+                            <span>اضف عنوان جديد</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. المسئولين (Assigned Team) -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-team')">
+                    <span>المسئولين</span>
+                    <span id="icon-sec-team" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-team" class="p-3 space-y-2">
+                    {% for member in assigned_team %}
+                    <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                        <div class="w-8 h-8 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center">
+                            {{ member.name|slice:":2" }}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-800">{{ member.name }}</p>
+                            <span class="text-[10px] text-slate-500">{{ member.role_name }}</span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                        <div class="w-8 h-8 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center">
+                            {{ contact.created_by.name|slice:":2"|default:"WA" }}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-800">{{ contact.created_by.name|default:"SuperAdmin" }}</p>
+                            <span class="text-[10px] text-slate-500">{{ contact.created_by.role_name|default:"مسؤول الحساب" }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- 6. طرق الاتصال -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-comms')">
+                    <span>طرق الاتصال</span>
+                    <span id="icon-sec-comms" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-comms" class="p-4 text-center text-xs text-slate-400">
+                    لا يوجد طرق اتصال
+                </div>
+            </div>
+
+            <!-- 7. الشركاء -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-partners')">
+                    <span>الشركاء</span>
+                    <span id="icon-sec-partners" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-partners" class="p-4 text-center text-xs text-slate-400">
+                    لا يوجد جهات اتصال مرتبطة
+                </div>
+            </div>
+
+            <!-- 8. الفروع -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-branches')">
+                    <span>الفروع</span>
+                    <span id="icon-sec-branches" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-branches" class="p-3">
+                    {% for branch in branches %}
+                    <a href="{% url 'contact_detail_overview' branch.id %}" class="block p-2 rounded hover:bg-slate-50 text-xs font-bold text-slate-700">
+                        [{{ branch.formatted_number }}] {{ branch.name }}
+                    </a>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-2">لا يوجد جهات اتصال مرتبطة</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- 9. AUDIT TIMESTAMPS (Matching Reference ERP bottom sidebar) -->
+            <div class="bg-white rounded-xl border border-slate-200 p-4 text-xs text-slate-500 space-y-2">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-slate-400">schedule</span>
+                    <div>
+                        <span>انشئ بواسطة </span>
+                        <span class="font-bold text-slate-700">{{ contact.created_by.name|default:"SuperAdmin" }}</span>
+                        <span class="text-slate-400 block text-[11px]">{{ contact.created_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <span class="material-symbols-outlined text-base text-slate-400">history</span>
+                    <div>
+                        <span>تم التعديل بواسطة </span>
+                        <span class="font-bold text-slate-700">{{ contact.created_by.name|default:"SuperAdmin" }}</span>
+                        <span class="text-slate-400 block text-[11px]">{{ contact.updated_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- LEFT COLUMN: Comments & Timeline (lg:col-span-7) -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- Comments Container (Matching 04_contact_detail_full.png) -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 class="text-base font-bold text-[#27bebe] mb-4">التعليقات</h3>
+
+                <!-- Add Comment Form -->
+                <form method="POST" action="{% url 'contact_add_comment' contact.id %}" class="mb-6">
+                    {% csrf_token %}
+                    <div class="relative">
+                        <textarea name="comment" rows="3" placeholder="أضف تعليق..." required
+                                  class="w-full p-4 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-slate-800 placeholder-slate-400 resize-none"></textarea>
+                        <div class="flex justify-end mt-2">
+                            <button type="submit" class="erp-btn-teal inline-flex items-center gap-1.5 px-4 py-2 text-xs">
+                                <span class="material-symbols-outlined text-base">send</span>
+                                <span>إرسال التعليق</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Comments List -->
+                <div class="space-y-4">
+                    {% for cm in comments %}
+                    <div class="flex items-start gap-3 p-4 rounded-xl bg-slate-50/80 border border-slate-100">
+                        <div class="w-8 h-8 rounded-full bg-brand-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                            {{ cm.author.name|slice:":2"|default:"US" }}
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold text-xs text-slate-800">{{ cm.author.name|default:"مستخدم" }}</span>
+                                <span class="text-[11px] text-slate-400 font-mono">{{ cm.created_at|date:"d/m/Y h:i A" }}</span>
+                            </div>
+                            <p class="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{{ cm.text }}</p>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="py-12 text-center text-slate-400">
+                        <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">chat_bubble_outline</span>
+                        <p class="text-xs">لا توجد تعليقات سابقة. كن أول من يضيف تعليقاً.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+    {% endif %}
+
+    <!-- TAB 2: ACTIVITIES (الأنشطة) -->
+    {% if active_tab == 'activities' %}
+    <div class="space-y-4">
+        <!-- الزيارات (Visits) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 bg-slate-50/50 border-b border-slate-200 flex items-center gap-2 font-bold text-sm text-slate-800">
+                <span class="material-symbols-outlined text-brand-600">location_on</span>
+                <span>الزيارات</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs">
+                    <thead class="bg-[#fafbfc] text-slate-500 border-b border-slate-200">
+                        <tr>
+                            <th class="py-3 px-4">زيارة</th>
+                            <th class="py-3 px-4">التاريخ</th>
+                            <th class="py-3 px-4">بدأ في</th>
+                            <th class="py-3 px-4">انتهى في</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        {% for act in activities %}
+                            {% if act.activity_type == 'visit' %}
+                            <tr>
+                                <td class="py-3 px-4 font-bold">{{ act.title }}</td>
+                                <td class="py-3 px-4">{{ act.created_at|date:"d/m/Y" }}</td>
+                                <td class="py-3 px-4">{{ act.start_time|default:"-" }}</td>
+                                <td class="py-3 px-4">{{ act.end_time|default:"-" }}</td>
+                            </tr>
+                            {% endif %}
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="py-8 text-center text-slate-400">لا توجد زيارات مسجلة.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- المكالمات (Calls) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center gap-2 font-bold text-sm text-slate-800 mb-3">
+                <span class="material-symbols-outlined text-brand-600">call</span>
+                <span>المكالمات</span>
+            </div>
+            <p class="text-xs text-slate-400 text-center py-4">لا توجد مكالمات مسجلة.</p>
+        </div>
+
+        <!-- الاتفاقيات (Agreements) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center gap-2 font-bold text-sm text-slate-800 mb-3">
+                <span class="material-symbols-outlined text-brand-600">handshake</span>
+                <span>الاتفاقيات</span>
+            </div>
+            <p class="text-xs text-slate-400 text-center py-4">لا توجد اتفاقيات مسجلة.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TAB 3: SALES (المبيعات) / PURCHASES (المشتريات) -->
+    {% if active_tab == 'sales' %}
+    <div class="space-y-4">
+        <!-- اوامر البيع -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
+                <div class="flex items-center gap-2 font-bold text-sm text-slate-800">
+                    <span class="material-symbols-outlined text-brand-600">shopping_cart</span>
+                    <span>اوامر البيع</span>
+                </div>
+                <button type="button" class="erp-btn-teal text-xs">تصدير البيانات</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs">
+                    <thead class="bg-[#fafbfc] text-slate-500 border-b border-slate-200">
+                        <tr>
+                            <th class="py-3 px-4">رقم المسلسل</th>
+                            <th class="py-3 px-4">انشئ في</th>
+                            <th class="py-3 px-4">المنشئ</th>
+                            <th class="py-3 px-4">الحالة</th>
+                            <th class="py-3 px-4">اجمالي القيمة</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        {% for so in sales_orders %}
+                        <tr>
+                            <td class="py-3 px-4 font-bold text-brand-700">#{{ so.order_number }}</td>
+                            <td class="py-3 px-4 font-mono">{{ so.created_at|date:"d/m/Y h:i A" }}</td>
+                            <td class="py-3 px-4">{{ so.created_by.name }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100">{{ so.status }}</span>
+                            </td>
+                            <td class="py-3 px-4 font-bold">{{ so.total_amount|intcomma }} ج.م</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="py-8 text-center text-slate-400">لا توجد أوامر بيع مسجلة لهذا العميل.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- التحصيلات -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center gap-2 font-bold text-sm text-slate-800 mb-3">
+                <span class="material-symbols-outlined text-brand-600">payments</span>
+                <span>التحصيلات</span>
+            </div>
+            {% if collections %}
+            <div class="space-y-2">
+                {% for col in collections %}
+                <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                    <span class="font-bold text-slate-800">#{{ col.id }} - {{ col.payment_method }}</span>
+                    <span class="font-mono text-emerald-600 font-bold">{{ col.amount|intcomma }} ج.م</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 text-center py-4">لا توجد تحصيلات مسجلة.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if active_tab == 'purchases' %}
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
+            <div class="flex items-center gap-2 font-bold text-sm text-slate-800">
+                <span class="material-symbols-outlined text-brand-600">storefront</span>
+                <span>اوامر الشراء</span>
+            </div>
+            <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ contact.id }}" class="erp-btn-teal text-xs">كشف حساب المورد</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-[#fafbfc] text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">رقم المسلسل</th>
+                        <th class="py-3 px-4">تاريخ الطلب</th>
+                        <th class="py-3 px-4">المنشئ</th>
+                        <th class="py-3 px-4">الحالة</th>
+                        <th class="py-3 px-4">اجمالي القيمة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for po in purchase_orders %}
+                    <tr>
+                        <td class="py-3 px-4 font-bold text-brand-700">
+                            <a href="{% url 'purchase_order_detail' po.id %}">#{{ po.order_number }}</a>
+                        </td>
+                        <td class="py-3 px-4 font-mono">{{ po.created_at|date:"d/m/Y" }}</td>
+                        <td class="py-3 px-4">{{ po.created_by.name }}</td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100">{{ po.get_status_display }}</span>
+                        </td>
+                        <td class="py-3 px-4 font-bold">{{ po.total_amount|intcomma }} ج.م</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="py-8 text-center text-slate-400">لا توجد أوامر شراء مسجلة لهذا المورد.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TAB 4: ATTACHMENTS (المرفقات) -->
+    {% if active_tab == 'attachments' %}
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-[#27bebe]">المرفقات</h3>
+            <div class="flex items-center gap-2 text-slate-400">
+                <span class="material-symbols-outlined text-lg">attach_file</span>
+                <span class="material-symbols-outlined text-lg">mic</span>
+            </div>
+        </div>
+
+        <!-- Drag & Drop Upload Zone -->
+        <form method="POST" action="{% url 'contact_upload_attachment' contact.id %}" enctype="multipart/form-data" class="mb-6">
+            {% csrf_token %}
+            <label class="border-2 border-dashed border-slate-200 hover:border-brand-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors block text-center">
+                <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">cloud_upload</span>
+                <span class="text-xs font-semibold text-slate-600">Drag&Drop files here</span>
+                <span class="text-[11px] text-slate-400 mt-1">أو انقر لاختيار ملف من جهازك</span>
+                <input type="file" name="file" onchange="this.form.submit()" class="hidden">
+            </label>
+        </form>
+
+        <!-- Attachments List -->
+        <div class="divide-y divide-slate-100">
+            {% for att in attachments %}
+            <div class="py-3 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600">description</span>
+                    <a href="{{ att.file.url }}" target="_blank" class="font-bold text-slate-800 hover:underline">{{ att.filename }}</a>
+                    <span class="text-[10px] text-slate-400">({{ att.created_at|date:"d/m/Y" }})</span>
+                </div>
+                <a href="{{ att.file.url }}" download class="erp-btn-outline text-xs">تحميل</a>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400 text-center py-6">لا توجد مرفقات حالياً.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TAB 5: TODOS -->
+    {% if active_tab == 'todos' %}
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-base font-bold text-[#27bebe]">Todos</h3>
+            <div class="flex items-center gap-4">
+                <!-- Toggle show completed -->
+                <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-600">
+                    <input type="checkbox" id="showCompletedToggle" class="rounded text-brand-500">
+                    <span>اظهر المنتهي</span>
+                </label>
+                <!-- Add Todo Button -->
+                <button type="button" onclick="document.getElementById('newTodoBox').classList.toggle('hidden')" class="erp-btn-outline text-xs text-brand-600 border-brand-300">
+                    اضف Todo جديد
+                </button>
+            </div>
+        </div>
+
+        <!-- New Todo Input (Collapsible) -->
+        <div id="newTodoBox" class="hidden mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <form method="POST" action="{% url 'contact_create_todo' contact.id %}" class="flex gap-2">
+                {% csrf_token %}
+                <input type="text" name="title" placeholder="عنوان المهمة..." required class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg">
+                <button type="submit" class="erp-btn-teal text-xs">إضافة</button>
+            </form>
+        </div>
+
+        <!-- Todos Checklist -->
+        <div class="space-y-2">
+            {% for todo in todos %}
+            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors {% if todo.is_completed %}opacity-60 bg-slate-50{% endif %}">
+                <div class="flex items-center gap-3">
+                    <form method="POST" action="{% url 'contact_toggle_todo' contact.id todo.id %}">
+                        {% csrf_token %}
+                        <input type="checkbox" onchange="this.form.submit()" {% if todo.is_completed %}checked{% endif %} class="rounded text-brand-500 cursor-pointer">
+                    </form>
+                    <span class="text-xs font-semibold text-slate-800 {% if todo.is_completed %}line-through text-slate-400{% endif %}">{{ todo.title }}</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-mono">{{ todo.created_at|date:"d/m/Y" }}</span>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TAB 6: TASKS (المهام) -->
+    {% if active_tab == 'tasks' %}
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center">
+        <h3 class="text-base font-bold text-[#27bebe] mb-6 text-right">المهام</h3>
+        <p class="text-xs text-slate-400 py-12">لا يوجد مهام</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- MODAL: ADD ADDRESS -->
+<div id="addAddressModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <h3 class="font-bold text-slate-800 text-base">إضافة عنوان جديد</h3>
+            <button type="button" onclick="closeAddAddressModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <form method="POST" action="{% url 'contact_add_address' contact.id %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">اسم العنوان (مثل: المقر الرئيسي)</label>
+                <input type="text" name="title" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">المنطقة الرئيسية</label>
+                    <select name="area_id" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
+                        <option value="">اختر...</option>
+                        {% for gov in governorates %}
+                        <option value="{{ gov.id }}">{{ gov.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">المنطقة الفرعية</label>
+                    <input type="text" name="sub_area" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">العنوان التفصيلي</label>
+                <textarea name="street_address" rows="2" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg"></textarea>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_main" id="modal_is_main" class="rounded text-brand-500">
+                <label for="modal_is_main" class="text-xs text-slate-700 font-medium">تعيين كعنوان رئيسي</label>
+            </div>
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button type="button" onclick="closeAddAddressModal()" class="erp-btn-outline">إلغاء</button>
+                <button type="submit" class="erp-btn-teal">حفظ العنوان</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: DELETE CONFIRMATION -->
+<div id="deleteModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center">
+        <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+            <span class="material-symbols-outlined text-2xl">delete</span>
+        </div>
+        <h3 class="font-bold text-slate-900 text-lg mb-2">تأكيد مسح جهة الاتصال</h3>
+        <p class="text-xs text-slate-500 mb-6">
+            هل أنت متأكد من مسح جهة الاتصال <span class="font-bold text-slate-800">"{{ contact.name }}"</span>؟
+        </p>
+        <div class="flex items-center justify-center gap-3">
+            <button type="button" onclick="closeDeleteModal()" class="erp-btn-outline px-6">إلغاء</button>
+            <form method="POST" action="{% url 'contact_delete' contact.id %}">
+                {% csrf_token %}
+                <button type="submit" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs">
+                    تأكيد المسح
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleAccordion(id) {
+        const sec = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        if (sec.classList.contains('hidden')) {
+            sec.classList.remove('hidden');
+            if (icon) icon.innerText = 'expand_less';
+        } else {
+            sec.classList.add('hidden');
+            if (icon) icon.innerText = 'expand_more';
+        }
+    }
+
+    function toggleStatusDropdown() {
+        document.getElementById('statusDropdownMenu').classList.toggle('hidden');
+    }
+
+    function toggleHeaderActionsMenu() {
+        document.getElementById('headerActionsMenu').classList.toggle('hidden');
+    }
+
+    function openAddAddressModal() {
+        document.getElementById('addAddressModal').classList.remove('hidden');
+    }
+    function closeAddAddressModal() {
+        document.getElementById('addAddressModal').classList.add('hidden');
+    }
+
+    function openDeleteModal() {
+        document.getElementById('headerActionsMenu').classList.add('hidden');
+        document.getElementById('deleteModal').classList.remove('hidden');
+    }
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.add('hidden');
+    }
+
+    // Close menus on outside click
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#statusDropdownBtn') && !e.target.closest('#statusDropdownMenu')) {
+            const el = document.getElementById('statusDropdownMenu');
+            if (el) el.classList.add('hidden');
+        }
+        if (!e.target.closest('[onclick*="toggleHeaderActionsMenu"]') && !e.target.closest('#headerActionsMenu')) {
+            const el = document.getElementById('headerActionsMenu');
+            if (el) el.classList.add('hidden');
+        }
+    });
+</script>
+{% endblock %}
