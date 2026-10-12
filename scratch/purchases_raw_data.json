@@ -1,0 +1,1074 @@
+{
+  "po_list_get": "HTTP 405",
+  "po_list_post": {
+    "orders": [
+      {
+        "serial_num": 16,
+        "order_number": "#16",
+        "contact": null,
+        "contact_id": "61692faa-89e0-4cbe-ad6a-8126382fa2e0",
+        "address_id": "d7086125-52d8-458d-af53-824228686cc1",
+        "items_count": 1,
+        "items_quantity": 3109,
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "a77a7202-882c-4ea1-bd44-e98f4c1cd5f5",
+        "items": [],
+        "price": {
+          "subtotal": 58449.2,
+          "grand": 58849.2,
+          "taxable": false,
+          "before_tax": 58449.2,
+          "tax_amount": 0,
+          "after_tax": 58449.2,
+          "before_all_discounts": 58449.2,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 58449.2,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 400,
+          "after_shipping_fees": 58849.2
+        },
+        "stocked_at": "2026-10-04T07:54:06Z",
+        "acc_tx_id": "356f07ae-9f0d-4cd8-ba74-3534ef4b0f44",
+        "invoiced_at": "2026-10-04T07:54:06Z",
+        "acc_info_payload": {
+          "due_date": "2026-10-04",
+          "date": "2026-10-04",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-10-04",
+        "acc_tx_due_date": "2026-10-04",
+        "id": "a571c874-33bf-4923-afd5-e5cc8fdfffd1",
+        "created_at": "2026-10-04T07:51:12Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-10-04T07:54:06Z",
+        "updated_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_by": {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "name": "System user",
+          "role_id": "00000000-0000-0000-0000-000000000000",
+          "role": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "sys user",
+            "display_name": "sys user"
+          }
+        }
+      },
+      {
+        "serial_num": 15,
+        "order_number": "#15",
+        "contact": null,
+        "contact_id": "170d68f6-2eea-404f-b3ec-845f229e0ebf",
+        "address_id": "c0da15b8-ddb6-44dd-9177-92d0ab59df33",
+        "items_count": 1,
+        "items_quantity": 6164,
+        "note": "891 سعر الكراتين ",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "feb9d769-226b-436f-98a7-3b750a482869",
+        "items": [],
+        "price": {
+          "subtotal": 61640,
+          "grand": 62531,
+          "taxable": false,
+          "before_tax": 61640,
+          "tax_amount": 0,
+          "after_tax": 61640,
+          "before_all_discounts": 61640,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 61640,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 891,
+          "after_shipping_fees": 62531
+        },
+        "stocked_at": "2026-09-07T09:13:13Z",
+        "acc_tx_id": "4048a452-96a6-4d13-b773-72fb1d2a78ab",
+        "invoiced_at": "2026-09-07T09:13:13Z",
+        "acc_info_payload": {
+          "due_date": "2026-09-07",
+          "date": "2026-09-07",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-09-07",
+        "acc_tx_due_date": "2026-09-07",
+        "id": "5039a368-7ce1-4e73-8c10-824df985dbcf",
+        "created_at": "2026-09-07T09:13:07Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-09-07T09:13:13Z",
+        "updated_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_by": {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "name": "System user",
+          "role_id": "00000000-0000-0000-0000-000000000000",
+          "role": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "sys user",
+            "display_name": "sys user"
+          }
+        }
+      },
+      {
+        "serial_num": 14,
+        "order_number": "#14",
+        "contact": null,
+        "contact_id": "61692faa-89e0-4cbe-ad6a-8126382fa2e0",
+        "address_id": "d7086125-52d8-458d-af53-824228686cc1",
+        "items_count": 1,
+        "items_quantity": 910,
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "f73d7521-2d22-4cb0-a633-c2a147441016",
+        "items": [],
+        "price": {
+          "subtotal": 16562,
+          "grand": 15733.9,
+          "taxable": false,
+          "before_tax": 15733.9,
+          "tax_amount": 0,
+          "after_tax": 15733.9,
+          "before_all_discounts": 16562,
+          "all_discounts_percentage": 5,
+          "all_discounts_amount": 828.1,
+          "after_all_discounts": 15733.9,
+          "custom_discount_percentage": 5,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 15733.9,
+          "custom_discount_value": 828.1,
+          "items_custom_discounts": 0,
+          "shipping_fees": 0,
+          "after_shipping_fees": 15733.9
+        },
+        "stocked_at": "2026-08-27T22:37:49Z",
+        "acc_tx_id": "f0d015a4-5ff0-40c9-a2c3-fb35379427c0",
+        "invoiced_at": "2026-08-27T22:37:49Z",
+        "acc_info_payload": {
+          "due_date": "2026-08-28",
+          "date": "2026-08-28",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-08-28",
+        "acc_tx_due_date": "2026-08-28",
+        "id": "b2914c5d-41fa-4759-a619-36f2c0dae9a4",
+        "created_at": "2026-08-27T16:17:57Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-08-27T22:37:49Z",
+        "updated_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_by": {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "name": "System user",
+          "role_id": "00000000-0000-0000-0000-000000000000",
+          "role": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "sys user",
+            "display_name": "sys user"
+          }
+        }
+      },
+      {
+        "serial_num": 13,
+        "order_number": "#13",
+        "contact": null,
+        "contact_id": "61692faa-89e0-4cbe-ad6a-8126382fa2e0",
+        "address_id": "d7086125-52d8-458d-af53-824228686cc1",
+        "items_count": 1,
+        "items_quantity": 632,
+        "note": "220 كراتين",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "dfc47b3a-6bcc-4b59-968b-db7bd2c31551",
+        "items": [],
+        "price": {
+          "subtotal": 11881.6,
+          "grand": 11507.52,
+          "taxable": false,
+          "before_tax": 11287.52,
+          "tax_amount": 0,
+          "after_tax": 11287.52,
+          "before_all_discounts": 11881.6,
+          "all_discounts_percentage": 5,
+          "all_discounts_amount": 594.08,
+          "after_all_discounts": 11287.52,
+          "custom_discount_percentage": 5,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 11287.52,
+          "custom_discount_value": 594.08,
+          "items_custom_discounts": 0,
+          "shipping_fees": 220,
+          "after_shipping_fees": 11507.52
+        },
+        "stocked_at": "2026-08-17T14:36:46Z",
+        "acc_tx_id": "06e0c317-ca36-4b48-a939-8230a6c6e10f",
+        "invoiced_at": "2026-08-27T10:12:03Z",
+        "acc_info_payload": {
+          "due_date": "2026-08-17",
+          "date": "2026-08-17",
+          "note": "220 كراتين",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-08-17",
+        "acc_tx_due_date": "2026-08-17",
+        "id": "9b59522c-b02d-41c9-b89a-5d9878a2828a",
+        "created_at": "2026-08-17T14:36:28Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-08-27T10:12:03Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 12,
+        "order_number": "#12",
+        "contact": null,
+        "contact_id": "0c25bcad-05b8-4129-9669-d92082c018b4",
+        "address_id": "28b903d8-bd3d-4ba7-97f5-ff950e85b6fc",
+        "items_count": 1,
+        "items_quantity": 18200,
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 11830,
+          "grand": 11830,
+          "taxable": false,
+          "before_tax": 11830,
+          "tax_amount": 0,
+          "after_tax": 11830,
+          "before_all_discounts": 11830,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 11830,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 106470,
+          "shipping_fees": 0,
+          "after_shipping_fees": 11830
+        },
+        "acc_tx_id": "d669d64d-9396-4bb7-b144-7bb8d9ef645b",
+        "invoiced_at": "2026-08-13T12:55:21Z",
+        "acc_info_payload": {
+          "due_date": "2026-08-13",
+          "date": "2026-08-13",
+          "note": "",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-08-13",
+        "acc_tx_due_date": "2026-08-13",
+        "id": "b8a3f3f8-0bd4-4978-ad7a-374535571701",
+        "created_at": "2026-08-12T13:04:20Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-08-13T12:55:22Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 10,
+        "order_number": "#10",
+        "contact": null,
+        "contact_id": "44263ce2-5b41-49a1-98bd-12a0103c600c",
+        "address_id": "1c7e7160-6b9d-4a2d-9223-356179fd4a57",
+        "items_count": 1,
+        "items_quantity": 3434,
+        "note": "كراتين ",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "80b527e7-5529-4523-b17f-e89e6f071797",
+        "items": [],
+        "price": {
+          "subtotal": 24038,
+          "grand": 24378,
+          "taxable": false,
+          "before_tax": 24038,
+          "tax_amount": 0,
+          "after_tax": 24038,
+          "before_all_discounts": 24038,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 24038,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 340,
+          "after_shipping_fees": 24378
+        },
+        "stocked_at": "2026-08-02T11:53:52Z",
+        "acc_tx_id": "6edf58f0-934c-4a46-9ee0-94d881e80e67",
+        "invoiced_at": "2026-08-03T09:39:53Z",
+        "acc_info_payload": {
+          "due_date": "2026-08-02",
+          "date": "2026-08-02",
+          "note": "كراتين ",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-08-02",
+        "acc_tx_due_date": "2026-08-02",
+        "id": "ac2828e5-ce12-442b-aba5-c0dffc496fd4",
+        "created_at": "2026-08-02T11:52:54Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-08-03T09:39:53Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 9,
+        "order_number": "#9",
+        "contact": null,
+        "contact_id": "8200fbbf-5dd9-4432-82f5-7f8890704543",
+        "address_id": "4a202afc-0c65-4d2d-9289-ce2f7dde266c",
+        "items_count": 1,
+        "items_quantity": 3420,
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 10260,
+          "grand": 10260,
+          "taxable": false,
+          "before_tax": 10260,
+          "tax_amount": 0,
+          "after_tax": 10260,
+          "before_all_discounts": 10260,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 10260,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 0,
+          "after_shipping_fees": 10260
+        },
+        "acc_tx_id": "c37e9fd5-2303-4a56-a595-806c31d86a94",
+        "invoiced_at": "2026-07-19T16:36:20Z",
+        "acc_info_payload": {
+          "due_date": "2026-07-19",
+          "date": "2026-07-19",
+          "note": "",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-07-19",
+        "acc_tx_due_date": "2026-07-19",
+        "id": "ec4597fb-7d30-4301-bb41-301e64a9287b",
+        "created_at": "2026-07-19T16:29:04Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-07-19T16:36:20Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 8,
+        "order_number": "#8",
+        "contact": null,
+        "contact_id": "44263ce2-5b41-49a1-98bd-12a0103c600c",
+        "address_id": "1c7e7160-6b9d-4a2d-9223-356179fd4a57",
+        "items_count": 3,
+        "items_quantity": 4324,
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 30596,
+          "grand": 31436,
+          "taxable": false,
+          "before_tax": 30596,
+          "tax_amount": 0,
+          "after_tax": 30596,
+          "before_all_discounts": 30596,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 30596,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 840,
+          "after_shipping_fees": 31436
+        },
+        "acc_tx_id": "62e2a710-5578-41b5-8307-e88b18052329",
+        "invoiced_at": "2026-06-18T09:57:21Z",
+        "acc_info_payload": {
+          "due_date": "2026-06-18",
+          "date": "2026-06-18",
+          "note": "",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-06-18",
+        "acc_tx_due_date": "2026-06-18",
+        "id": "3e565547-8d4e-4fc2-a57b-44d97e20f7b9",
+        "created_at": "2026-06-18T08:45:34Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "created_by": {
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "name": "Accountant ",
+          "role_id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "role": {
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "name": "Accountant",
+            "display_name": "Accountant"
+          }
+        },
+        "updated_at": "2026-06-18T09:57:21Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 7,
+        "order_number": "#7",
+        "contact": null,
+        "contact_id": "61692faa-89e0-4cbe-ad6a-8126382fa2e0",
+        "address_id": "d7086125-52d8-458d-af53-824228686cc1",
+        "items_count": 1,
+        "items_quantity": 2194,
+        "note": "خصم 5%\n+ 280 ج كراتين تعبئة ",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 27973.5,
+          "grand": 26553.5,
+          "taxable": false,
+          "before_tax": 26273.5,
+          "tax_amount": 0,
+          "after_tax": 26273.5,
+          "before_all_discounts": 27973.5,
+          "all_discounts_percentage": 6.077,
+          "all_discounts_amount": 1700,
+          "after_all_discounts": 26273.5,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 1700,
+          "after_custom_discount": 26273.5,
+          "custom_discount_value": 1700,
+          "items_custom_discounts": 0,
+          "shipping_fees": 280,
+          "after_shipping_fees": 26553.5
+        },
+        "acc_tx_id": "eb226685-9a80-429b-a46a-45ebada8d61c",
+        "invoiced_at": "2026-06-16T09:35:48Z",
+        "acc_info_payload": {
+          "due_date": "2026-06-10",
+          "date": "2026-06-10",
+          "note": "خصم 5%\n+ 280 ج كراتين تعبئة ",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-06-10",
+        "acc_tx_due_date": "2026-06-10",
+        "id": "0b28a0f3-fdae-41ea-9f84-11bf5587b6ad",
+        "created_at": "2026-06-10T18:23:29Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-06-16T09:35:48Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 6,
+        "order_number": "#6",
+        "contact": null,
+        "contact_id": "e09ba7e6-a6f9-4abc-9e3f-998609f76170",
+        "address_id": "87ec386d-3932-4538-bf71-006237e75dd8",
+        "items_count": 2,
+        "items_quantity": 14437,
+        "note": "تم استلام الاوردر يوم 22/2/2026",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 176423,
+          "grand": 176423,
+          "taxable": false,
+          "before_tax": 176423,
+          "tax_amount": 0,
+          "after_tax": 176423,
+          "before_all_discounts": 176423,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 176423,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "after_shipping_fees": 176423
+        },
+        "acc_tx_id": "d7593d8c-5e2d-43e5-96eb-f36a935434b3",
+        "invoiced_at": "2026-05-20T10:29:49Z",
+        "acc_info_payload": {
+          "due_date": "2026-05-20",
+          "date": "2026-05-20",
+          "note": "تم استلام الاوردر يوم 22/2/2026",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-05-20",
+        "acc_tx_due_date": "2026-05-20",
+        "id": "4a0063c3-0f4b-41d6-b753-e1245e95d92c",
+        "created_at": "2026-05-20T10:29:37Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-05-20T10:29:49Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 5,
+        "order_number": "#5",
+        "contact": null,
+        "contact_id": "0c25bcad-05b8-4129-9669-d92082c018b4",
+        "address_id": "28b903d8-bd3d-4ba7-97f5-ff950e85b6fc",
+        "items_count": 3,
+        "items_quantity": 44,
+        "note": "اوردر بتاريخ 1/1/2026 \n21200 ك ستيبس +21800 ك جيرون الومنيوم * 580 + 1500 تجهيزات",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 26440,
+          "grand": 26440,
+          "taxable": false,
+          "before_tax": 26440,
+          "tax_amount": 0,
+          "after_tax": 26440,
+          "before_all_discounts": 26440,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 26440,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "after_shipping_fees": 26440
+        },
+        "acc_tx_id": "3f638cb0-09d6-435c-a848-d5e962b45125",
+        "invoiced_at": "2026-05-19T23:17:02Z",
+        "acc_info_payload": {
+          "due_date": "2026-05-19",
+          "date": "2026-05-19",
+          "note": "21200 ك ستيبس +21800 ك جيرون الومنيوم * 580 + 1500 تجهيزات",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-05-19",
+        "acc_tx_due_date": "2026-05-19",
+        "id": "0ba6535a-1ffb-4485-9a43-37119a98fc03",
+        "created_at": "2026-05-19T10:09:12Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-05-19T23:17:02Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 4,
+        "order_number": "#4",
+        "contact": null,
+        "contact_id": "44263ce2-5b41-49a1-98bd-12a0103c600c",
+        "address_id": "1c7e7160-6b9d-4a2d-9223-356179fd4a57",
+        "items_count": 2,
+        "items_quantity": 3163,
+        "note": "+ 1100 كراتين نقل",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 23990.5,
+          "grand": 25090.5,
+          "taxable": false,
+          "before_tax": 23990.5,
+          "tax_amount": 0,
+          "after_tax": 23990.5,
+          "before_all_discounts": 23990.5,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 23990.5,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "shipping_fees": 1100,
+          "after_shipping_fees": 25090.5
+        },
+        "acc_tx_id": "e9bd6075-e3cc-4817-8d85-238d3273974d",
+        "invoiced_at": "2026-06-03T09:50:18Z",
+        "acc_info_payload": {
+          "due_date": "2026-05-19",
+          "date": "2026-05-19",
+          "note": "+ 1100 كراتين نقل",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-05-19",
+        "acc_tx_due_date": "2026-05-19",
+        "id": "9e361e85-f2cd-47ab-990c-4a68e9b75ecf",
+        "created_at": "2026-05-19T09:49:44Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-06-03T09:50:18Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 3,
+        "order_number": "#3",
+        "contact": null,
+        "contact_id": "568e5c5c-ae59-4b8e-8fca-10d51f43d1da",
+        "address_id": "0f43ed09-f6d6-4420-8bce-f18020dbab25",
+        "items_count": 1,
+        "items_quantity": 1000,
+        "note": "1000 بخاخ أنف\nحجم 30 ملي نك 18 بالبامب كامل",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "items": [],
+        "price": {
+          "subtotal": 6500,
+          "grand": 6500,
+          "taxable": false,
+          "before_tax": 6500,
+          "tax_amount": 0,
+          "after_tax": 6500,
+          "before_all_discounts": 6500,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 6500,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "after_shipping_fees": 6500
+        },
+        "id": "c44aa165-0f12-4b8f-8562-64ec120df737",
+        "created_at": "2026-05-18T20:49:55Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-05-18T21:21:41Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      },
+      {
+        "serial_num": 2,
+        "order_number": "#2",
+        "contact": null,
+        "contact_id": "c8eb4fbb-c4e6-43ca-a6f3-d7513a2681af",
+        "address_id": "b160f1f8-69be-41a7-9a6f-bc38d7bd53e7",
+        "items_count": 9,
+        "items_quantity": 95500,
+        "note": "تم الاستلام 20/1/2026",
+        "status_state_id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "974fc2e4-7453-4d51-8f01-0e5c9bc07e09",
+        "items": [],
+        "price": {
+          "subtotal": 140830,
+          "grand": 140830,
+          "taxable": false,
+          "before_tax": 140830,
+          "tax_amount": 0,
+          "after_tax": 140830,
+          "before_all_discounts": 140830,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 140830,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "after_shipping_fees": 140830
+        },
+        "stocked_at": "2026-05-18T21:13:39Z",
+        "acc_tx_id": "7b684530-f962-47d9-a3dc-4438b15711e8",
+        "invoiced_at": "2026-05-18T21:13:39Z",
+        "acc_info_payload": {
+          "due_date": "2026-05-19",
+          "date": "2026-05-19",
+          "custom_dates": true
+        },
+        "acc_tx_date": "2026-05-19",
+        "acc_tx_due_date": "2026-05-19",
+        "id": "7417a06f-e73f-474c-950c-8b28ff653493",
+        "created_at": "2026-05-18T19:44:59Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-05-18T21:13:39Z",
+        "updated_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_by": {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "name": "System user",
+          "role_id": "00000000-0000-0000-0000-000000000000",
+          "role": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "sys user",
+            "display_name": "sys user"
+          }
+        }
+      },
+      {
+        "serial_num": 1,
+        "order_number": "#1",
+        "contact": null,
+        "contact_id": "e09ba7e6-a6f9-4abc-9e3f-998609f76170",
+        "address_id": "87ec386d-3932-4538-bf71-006237e75dd8",
+        "items_count": 2,
+        "items_quantity": 14290,
+        "note": "",
+        "status_state_id": "c5117f39-8b8d-46ac-9ac4-3abb27b36578",
+        "status_state": null,
+        "is_hold": false,
+        "is_canceled": false,
+        "is_split": false,
+        "memo_id": "5dea9e7e-6bfa-4c1f-9b70-c1e0c7147bbe",
+        "items": [],
+        "price": {
+          "subtotal": 0,
+          "grand": 0,
+          "taxable": false,
+          "before_tax": 0,
+          "tax_amount": 0,
+          "after_tax": 0,
+          "before_all_discounts": 0,
+          "all_discounts_percentage": 0,
+          "all_discounts_amount": 0,
+          "after_all_discounts": 0,
+          "custom_discount_percentage": 0,
+          "custom_discount_amount": 0,
+          "after_custom_discount": 0,
+          "custom_discount_value": 0,
+          "items_custom_discounts": 0,
+          "after_shipping_fees": 0
+        },
+        "stocked_at": "2026-05-19T09:06:27Z",
+        "acc_info_payload": {
+          "due_date": "2026-05-19",
+          "date": "2026-05-19",
+          "note": "تم استلام الاوردر يوم 22/2/2026",
+          "custom_dates": true
+        },
+        "id": "fe7295d8-bd7f-408a-9af2-35260c02b9da",
+        "created_at": "2026-05-18T19:25:07Z",
+        "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "created_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        },
+        "updated_at": "2026-05-20T10:28:11Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "updated_by": {
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "name": "Dr.wael Atta (CEO)",
+          "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "role": {
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin"
+          }
+        }
+      }
+    ]
+  },
+  "po_returns": "HTTP 405",
+  "categories": "HTTP 404",
+  "payments": "HTTP 404",
+  "payment_requests": "HTTP 404",
+  "vendor_accounts": "HTTP 404"
+}

@@ -1,0 +1,17 @@
+{
+  "url": "https://weapharma.bricks-rep.com/purchase-orders/create",
+  "title": null,
+  "fields": [
+    {
+      "label": "جهة الاتصال",
+      "inputTag": "MAT-SELECT",
+      "placeholder": null
+    }
+  ],
+  "buttons": [
+    "notifications_active\n177",
+    "logout",
+    "add"
+  ],
+  "bodyText": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nadd\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nremove\nshopping_cart\nالطلبات\nrefresh\nالمرتجعات\nreceipt\nالمدفوعات\nrequest_quote\nطلبات الدفع\nattach_money\nحسابات الموردين\nreceipt_long\nعمليات الموردين\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع الموقع\ngroup\nالآداء\ntext_snippet\nالتقارير\nbug_report\nمشاكل تتبع الموقع\nsettings\nإعدادات\nadd\nDr.wael Atta (CEO)\nSuperAdmin\nnotifications_active\n177\nlogout\nworkspace: weapharma\nversion: 26.10.07-9f7548b\nأمر مشتريات جديد\nجهة الاتصال\nبحث...\nadd"
+}

@@ -1,0 +1,200 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}أوامر إرجاع المشتريات - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="relative min-h-[calc(100vh-5rem)]">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">أوامر إرجاع المشتريات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ total_count }} أمر
+            </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            <!-- Search Bar -->
+            <form method="GET" class="relative">
+                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
+                <div class="relative">
+                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالرقم أو المورد..."
+                           class="w-52 sm:w-60 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                </div>
+            </form>
+
+            <a href="{% url 'purchase_return_orders_export' %}?status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden md:inline">تصدير البيانات</span>
+            </a>
+
+            <!-- Slide-out Filter Drawer Button -->
+            <button type="button" onclick="openFilterDrawer()"
+                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>فلتر</span>
+                {% if active_filters_count > 0 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
+                    {{ active_filters_count }}
+                </span>
+                {% endif %}
+            </button>
+
+            <!-- New Return Order Button -->
+            <a href="{% url 'purchase_return_order_create' %}"
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>أمر إرجاع مشتريات جديد</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
+                    <tr>
+                        <th class="py-3.5 px-4">رقم المسلسل</th>
+                        <th class="py-3.5 px-4">الاسم</th>
+                        <th class="py-3.5 px-4">المنطقة</th>
+                        <th class="py-3.5 px-4">انشئ فى</th>
+                        <th class="py-3.5 px-4">المنشئ</th>
+                        <th class="py-3.5 px-4">الحالة</th>
+                        <th class="py-3.5 px-4">اجمالى القيمة</th>
+                        <th class="py-3.5 px-4">مسئول الاستلام</th>
+                        <th class="py-3.5 px-4">وقت الاستلام</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for r in returns %}
+                    <tr class="hover:bg-slate-50/80 transition-colors cursor-pointer" onclick="window.location='{% url 'purchase_return_order_detail' r.id %}'">
+                        <td class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
+                            {{ r.order_number }}
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ r.supplier.name }}
+                            {% if r.purchase_order %}
+                            <span class="text-[10px] text-slate-400 block font-normal">عائد على أمر الشراء {{ r.purchase_order.order_number }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600">
+                            {{ r.supplier.area.name|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                            {{ r.created_at|date:"d/m/Y h:i A" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-700">
+                            {{ r.created_by.get_full_name|default:r.created_by.username|default:"المدير" }}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ r.status_badge_class }}">
+                                {{ r.status_label_ar }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900 font-mono">
+                            {{ r.grand_total|intcomma }} جنيه
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600">
+                            {{ r.delivery_agent|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500">
+                            {{ r.delivery_time|default:"—" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-16 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">refresh</span>
+                            <p class="font-bold text-slate-500 text-sm">لا توجد أوامر إرجاع مسجلة</p>
+                            <p class="text-xs text-slate-400 mt-1">اضغط على زر "أمر إرجاع مشتريات جديد" لإنشاء أول مرتجع</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
+            <span>Items per page: 40</span>
+            <span>{% if total_count > 0 %}1 – {{ returns|length }} of {{ total_count }}{% else %}0 of 0{% endif %}</span>
+        </div>
+    </div>
+
+    <!-- Slide-out Filter Drawer -->
+    <div id="filter-drawer" class="hidden fixed inset-0 z-50 overflow-hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onclick="closeFilterDrawer()"></div>
+        <div class="absolute inset-y-0 left-0 max-w-full flex pl-10">
+            <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">filter_list</span>
+                        <h2 class="font-bold text-slate-900 text-base">تصفية أوامر الإرجاع</h2>
+                    </div>
+                    <button type="button" onclick="closeFilterDrawer()" class="p-1 text-slate-400 hover:text-slate-600">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <form method="GET" class="p-6 flex-1 overflow-y-auto space-y-6 text-xs">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-2">حالة الطلب</label>
+                        <select name="status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">
+                            <option value="all" {% if current_status == 'all' %}selected{% endif %}>جميع الحالات</option>
+                            <option value="pending" {% if current_status == 'pending' %}selected{% endif %}>قيد الانتظار (Pending)</option>
+                            <option value="approved" {% if current_status == 'approved' %}selected{% endif %}>معتمد (Approved)</option>
+                            <option value="delivered" {% if current_status == 'delivered' %}selected{% endif %}>خرج من المخزن (Delivered)</option>
+                            <option value="settled" {% if current_status == 'settled' %}selected{% endif %}>تم الترحيل للحسابات (Settled)</option>
+                            <option value="cancelled" {% if current_status == 'cancelled' %}selected{% endif %}>ملغي (Cancelled)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-2">المورد</label>
+                        <select name="supplier" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">
+                            <option value="">جميع الموردين</option>
+                            {% for sup in suppliers %}
+                            <option value="{{ sup.id }}" {% if selected_supplier == sup.id|stringformat:'i' %}selected{% endif %}>{{ sup.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">من تاريخ</label>
+                            <input type="date" name="date_from" value="{{ date_from|default:'' }}" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">إلى تاريخ</label>
+                            <input type="date" name="date_to" value="{{ date_to|default:'' }}" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-100 flex items-center justify-end gap-2">
+                        <a href="{% url 'purchase_return_orders_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                            مسح الفلاتر
+                        </a>
+                        <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                            تطبيق
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function openFilterDrawer() {
+    document.getElementById('filter-drawer').classList.remove('hidden');
+}
+function closeFilterDrawer() {
+    document.getElementById('filter-drawer').classList.add('hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,434 @@
+{
+  "po_states": {
+    "states": [
+      {
+        "id": "a2958577-185f-4cd9-95c4-3769f639aaab",
+        "name": "PurchaseOrders:status:pending",
+        "display_name": "Pending",
+        "active": true,
+        "order": 12,
+        "progress_state": "todo",
+        "attributes": null
+      },
+      {
+        "id": "c038e83d-5e3d-421c-9b8e-2c65fd1fe8c2",
+        "name": "PurchaseOrders:status:approved",
+        "display_name": "Approved",
+        "active": true,
+        "order": 17,
+        "progress_state": "in_progress",
+        "attributes": null
+      },
+      {
+        "id": "c5117f39-8b8d-46ac-9ac4-3abb27b36578",
+        "name": "PurchaseOrders:status:picked",
+        "display_name": "Picked",
+        "active": true,
+        "order": 22,
+        "progress_state": "in_progress",
+        "attributes": null
+      },
+      {
+        "id": "2718f971-a834-4375-8f82-23e74b11c688",
+        "name": "PurchaseOrders:status:settled",
+        "display_name": "Settled",
+        "active": true,
+        "order": 27,
+        "progress_state": "done",
+        "attributes": {
+          "is_settled_state": "true"
+        }
+      },
+      {
+        "id": "e7503967-f919-4018-b24e-eaab5de3773b",
+        "name": "PurchaseOrders:status:rejected",
+        "display_name": "Rejected",
+        "active": true,
+        "order": 32,
+        "progress_state": "cancelled",
+        "attributes": null
+      },
+      {
+        "id": "3aa550c6-8375-4d8c-8dd3-ded9f2691c4a",
+        "name": "PurchaseOrders:status:split",
+        "display_name": "Split",
+        "active": true,
+        "order": 4,
+        "progress_state": "cancelled",
+        "attributes": {
+          "is_split": "true"
+        }
+      }
+    ]
+  },
+  "products_list": {
+    "products": [
+      {
+        "code": "GE1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Geron",
+        "quantity": 0,
+        "item_price": 140,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "e749b5cd-a757-45ae-9207-84aed8c44f8e"
+        ],
+        "main_image_id": "e749b5cd-a757-45ae-9207-84aed8c44f8e",
+        "thumbnail_image_id": "e818518d-1c5e-4428-b106-68af05dc08a4",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "85adb354-9714-48d7-8fab-cd9fcdc91162",
+        "created_at": "2023-04-30T18:04:21Z",
+        "created_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+        "updated_at": "2026-09-29T20:57:50Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "LE1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Legatonexx Spray",
+        "quantity": 0,
+        "item_price": 120,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "14ecc515-1a91-4bbb-91e4-a128e93662c2"
+        ],
+        "main_image_id": "14ecc515-1a91-4bbb-91e4-a128e93662c2",
+        "thumbnail_image_id": "a1df74c0-aad3-4006-b9c4-fb42a1339561",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "9f6a7256-db83-42d3-a6ac-d4499747bd0a",
+        "created_at": "2024-09-14T00:02:41Z",
+        "created_by_id": "a266a750-8ad9-4438-a912-c3be6078e1fe",
+        "updated_at": "2026-09-29T20:52:25Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "PU1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Putalaxy gel",
+        "quantity": 0,
+        "item_price": 75,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "8be71918-758f-4e49-82d7-9753eb9f17a8"
+        ],
+        "main_image_id": "8be71918-758f-4e49-82d7-9753eb9f17a8",
+        "thumbnail_image_id": "dc7aed53-a04a-4f12-95af-113af6d2150d",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "bb696d36-089c-4493-945f-a9c08e0739d4",
+        "created_at": "2023-04-30T18:04:21Z",
+        "created_by_id": "a266a750-8ad9-4438-a912-c3be6078e1fe",
+        "updated_at": "2026-09-29T20:55:38Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "SO1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Soriana V.D",
+        "quantity": 0,
+        "item_price": 75,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "b3dfbaf7-10b4-401b-ba1f-9ad17df3f796"
+        ],
+        "main_image_id": "b3dfbaf7-10b4-401b-ba1f-9ad17df3f796",
+        "thumbnail_image_id": "987da995-a232-411a-a431-0876d9c05121",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "899558f0-5b41-4738-80ea-c4ed60a66afd",
+        "created_at": "2023-04-30T18:04:21Z",
+        "created_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+        "updated_at": "2026-09-29T20:53:40Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "ST1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Steps ",
+        "quantity": 0,
+        "item_price": 140,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "4caf44aa-c13e-4903-99ce-f30bcc97e57b"
+        ],
+        "main_image_id": "4caf44aa-c13e-4903-99ce-f30bcc97e57b",
+        "thumbnail_image_id": "8b0873c5-a007-40bd-97dc-e72aaeb836b0",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "5d342b7a-ab5e-4109-87e0-20e549594930",
+        "created_at": "2023-04-30T18:04:21Z",
+        "created_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+        "updated_at": "2026-09-29T20:55:00Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "UL1",
+        "category_id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+        "name": "Ultrahumudin Cream",
+        "quantity": 0,
+        "item_price": 105,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": true,
+        "description": "",
+        "image_ids": [
+          "2d9387a3-c539-4d2f-aa78-8c99261037fc"
+        ],
+        "main_image_id": "2d9387a3-c539-4d2f-aa78-8c99261037fc",
+        "thumbnail_image_id": "73045faa-06c6-4c7a-8fcd-8a96f2a24f14",
+        "category": {
+          "name": "WEA",
+          "description": "WEA products without specific categorization",
+          "id": "d3c1e167-53dd-4b76-a9e3-c8172f8ae5a8",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:32:18Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "4a11b3c5-6b49-4a08-adef-0f46c93b4635",
+        "created_at": "2024-09-14T00:02:41Z",
+        "created_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+        "updated_at": "2026-09-29T20:56:17Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      {
+        "code": "7000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "تيوب الالترا هيوميدين",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "8583527c-435a-4a1d-b004-6e3c481e8e6c",
+        "created_at": "2026-09-20T13:38:55Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:38:55Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "4000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون الترا هيوميدين",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "3cbedf0a-481c-40d8-8cc5-923a3478b1d7",
+        "created_at": "2026-09-20T13:32:29Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:32:29Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "3000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون بيوتالاكسي ",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "e4dc26e1-6a25-469b-bff2-c543334d957b",
+        "created_at": "2026-09-20T13:25:26Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:25:26Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "6000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون جيرون",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "932797a7-baf9-4ed4-a1b3-6f9ac5dfaa53",
+        "created_at": "2026-09-20T13:33:50Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:33:50Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "5000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون ستيبس",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "93859a19-5f52-446d-8932-df7845bf7ccd",
+        "created_at": "2026-09-20T13:32:53Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:32:53Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "1000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون سوريانا",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "barcode": "1000",
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "7eac596a-0e25-43dc-b39a-63b1605040d5",
+        "created_at": "2026-09-20T13:00:53Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:13:14Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      },
+      {
+        "code": "2000",
+        "category_id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+        "name": "كرتون ليجاتونيكس ",
+        "quantity": 0,
+        "item_price": 0,
+        "tax_percentage": 0,
+        "in_stock": false,
+        "sellable": false,
+        "description": "",
+        "category": {
+          "name": "Packing materials",
+          "description": "Packing materials for production ",
+          "id": "bd17d2a9-a926-43c3-92b2-0a20310db1a6",
+          "created_at": "2025-09-03T12:21:03Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-01-24T04:34:15Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        "id": "e0b718b1-5e3e-42e1-80a9-d72a0bdcea83",
+        "created_at": "2026-09-20T13:24:33Z",
+        "created_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+        "updated_at": "2026-09-20T13:24:33Z",
+        "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+      }
+    ],
+    "count": 13
+  },
+  "product_categories": "HTTP 404",
+  "products_filters": {
+    "filters": [],
+    "count": 0
+  },
+  "po_filters": {
+    "filters": [],
+    "count": 0
+  }
+}

@@ -1,0 +1,157 @@
+[
+  {
+    "text": "home الرئيسية",
+    "href": "/home",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted navigation-item--active"
+  },
+  {
+    "text": "view_agenda جدول الاعمال",
+    "href": "/agenda",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "calendar_month التقويم",
+    "href": "/calendar",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "checklist Todos",
+    "href": "/todos",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "contacts جهات الاتصال",
+    "href": "/contacts",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "confirmation_number المهام",
+    "href": "/tickets",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "store المنتجات remove",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "store المنتجات",
+    "href": "/products",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "category التصنيفات",
+    "href": "/product-categories",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "timeline الأنشطة add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "storefront المبيعات add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "storefront المشتريات remove",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "shopping_cart الطلبات",
+    "href": "/purchase-orders",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "refresh المرتجعات",
+    "href": "/purchase-return-orders",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "receipt المدفوعات",
+    "href": "/vendor-payments",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "request_quote طلبات الدفع",
+    "href": "/vendor-payment-requests",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "attach_money حسابات الموردين",
+    "href": "/accounting/vendors",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "receipt_long عمليات الموردين",
+    "href": "/accounting/vendor-transactions",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "inventory المخازن add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "account_balance_wallet الخزن add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "approval الموافقات",
+    "href": "/requests",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "assessment التقييمات",
+    "href": "/assessments",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "attach_money المصروفات",
+    "href": "/expenses",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "menu_book المصادر",
+    "href": "/resources",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "score الأهداف add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "event_busy خطة أيام العمل",
+    "href": "/yearly-off-days",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "track_changes تتبع الموقع",
+    "href": "/location-tracking",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "group الآداء",
+    "href": "/performance",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "text_snippet التقارير",
+    "href": "/reports",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "bug_report مشاكل تتبع الموقع",
+    "href": "/location-tracking-troubleshoot",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "settings إعدادات add",
+    "href": "",
+    "classes": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  }
+]

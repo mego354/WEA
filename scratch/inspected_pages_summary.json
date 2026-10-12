@@ -1,0 +1,253 @@
+{
+  "products_list": {
+    "url": "https://weapharma.bricks-rep.com/products?tableStateQ=pageIndex__0&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=",
+    "title": "المنتجات",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "filter_list",
+      "انشئ منتج",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "باركود",
+      "متاح للبيع",
+      "قيمة الضريبة",
+      "السعر",
+      "التصنيف",
+      "الكود",
+      "الاسم"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث",
+      "بحث...",
+      "hey-browser-enough-autofill"
+    ],
+    "screenshot": "scratch/screenshots/products/products_list.png"
+  },
+  "product_categories": {
+    "url": "https://weapharma.bricks-rep.com/product-categories?tableStateQ=pageIndex__0&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=",
+    "title": "التصنيفات",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "filter_list",
+      "إنشاء تصنيف",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "انشئ فى",
+      "التوصيف",
+      "الكود",
+      "الاسم"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث"
+    ],
+    "screenshot": "scratch/screenshots/products/product_categories.png"
+  },
+  "purchase_orders": {
+    "url": "https://weapharma.bricks-rep.com/purchase-orders",
+    "title": "Bricks Rep",
+    "buttons": [],
+    "tableHeaders": [],
+    "firstRowSample": [],
+    "filterInputs": [],
+    "screenshot": "scratch/screenshots/purchases/purchase_orders.png"
+  },
+  "purchase_return_orders": {
+    "url": "https://weapharma.bricks-rep.com/purchase-return-orders?tableStateQ=pageIndex__0,sortDirection__desc,sortKey__serial_num&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_inactive__true,is_canceled__false,is_split__false",
+    "title": "أوامر إرجاع المشتريات",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "اطبع",
+      "تصدير البيانات",
+      "filter_list 3",
+      "أمر إرجاع مشتريات جديد",
+      "view_agenda",
+      "table_chart",
+      "settings",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "وقت الاستلام",
+      "مسئول الاستلام",
+      "اجمالى القيمة",
+      "الحالة",
+      "المنشئ",
+      "انشئ فى",
+      "المنطقة",
+      "الاسم",
+      "رقم المسلسل"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث",
+      "Column with Header Selection",
+      "hey-browser-enough-autofill",
+      "بحث..."
+    ],
+    "screenshot": "scratch/screenshots/purchases/purchase_return_orders.png"
+  },
+  "vendor_payments": {
+    "url": "https://weapharma.bricks-rep.com/vendor-payments?tableStateQ=pageIndex__0,sortDirection__desc,sortKey__created_at&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_business_relation%5B%5D__vendor,contact_inactive__true",
+    "title": "المدفوعات",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "تصدير البيانات",
+      "filter_list 2",
+      "مدفوعة جديدة",
+      "settings",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "المنشئ",
+      "المبلغ",
+      "انشئ فى",
+      "المنطقة",
+      "الاسم",
+      "رقم المسلسل"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث",
+      "Column with Header Selection",
+      "Press Space to toggle row selection (unchecked)",
+      "hey-browser-enough-autofill",
+      "بحث..."
+    ],
+    "screenshot": "scratch/screenshots/purchases/vendor_payments.png"
+  },
+  "vendor_payment_requests": {
+    "url": "https://weapharma.bricks-rep.com/vendor-payment-requests?tableStateQ=pageIndex__0,sortDirection__desc,sortKey__serial_num&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_business_relation%5B%5D__vendor,contact_inactive__true",
+    "title": "طلبات الدفع",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "تصدير البيانات",
+      "filter_list 2",
+      "طلب دفع جديد",
+      "settings",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "تاريخ التنفيذ",
+      "المسئول",
+      "الطريقة",
+      "المبلغ",
+      "الحالة",
+      "المنشئ",
+      "انشئ فى",
+      "المنطقة",
+      "الاسم",
+      "رقم المسلسل"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث",
+      "Column with Header Selection",
+      "hey-browser-enough-autofill",
+      "بحث..."
+    ],
+    "screenshot": "scratch/screenshots/purchases/vendor_payment_requests.png"
+  },
+  "vendor_accounts": {
+    "url": "https://weapharma.bricks-rep.com/accounting/vendors?tableStateQ=pageIndex__0&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_inactive__true",
+    "title": "حسابات الموردين",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "تصدير البيانات",
+      "filter_list 1",
+      "إنشاء عملية جديدة",
+      "view_agenda",
+      "table_chart",
+      "settings",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح",
+      "add"
+    ],
+    "tableHeaders": [
+      "أيام المبيعات المعلّقة",
+      "تاريخ اخر عملية",
+      "تاريخ المديونية المتأخرة",
+      "قيمة المديونية المتأخرة",
+      "تاريخ أقدم مديونية",
+      "قيمة أقدم مديونية",
+      "الرصيد",
+      "مدة الائتمان",
+      "حد الائتمان",
+      "اسم الحساب"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث",
+      "Column with Header Selection",
+      "Press Space to toggle row selection (unchecked)",
+      "بحث...",
+      "hey-browser-enough-autofill"
+    ],
+    "screenshot": "scratch/screenshots/purchases/vendor_accounts.png"
+  },
+  "vendor_transactions": {
+    "url": "https://weapharma.bricks-rep.com/accounting/vendor-transactions?tableStateQ=pageIndex__0&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_inactive__true",
+    "title": "عمليات الموردين",
+    "buttons": [
+      "notifications_active 177",
+      "logout",
+      "تصدير البيانات",
+      "filter_list 1",
+      "settings",
+      "more_vert",
+      "فلتر",
+      "اعادة تعيين",
+      "مسح"
+    ],
+    "tableHeaders": [
+      "الأيام المعلّقة",
+      "المديونية",
+      "انشئ بواسطة",
+      "انشئ فى",
+      "ملاحظة",
+      "الرصيد",
+      "مدين",
+      "دائن",
+      "تاريخ الاستحقاق",
+      "مديونية متأخرة؟",
+      "توصيف",
+      "التاريخ",
+      "اسم الحساب"
+    ],
+    "firstRowSample": [],
+    "filterInputs": [
+      "بحث في الموردين"
+    ],
+    "screenshot": "scratch/screenshots/purchases/vendor_transactions.png"
+  }
+}

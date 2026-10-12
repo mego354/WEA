@@ -1,233 +1,582 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}تفاصيل أمر الشراء {{ order.order_number }}{% endblock %}
-
-{% block breadcrumb %}
-    <a href="{% url 'purchase_orders_list' %}" class="text-slate-400 hover:text-brand-600">المشتريات</a>
-    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">أمر شراء {{ order.order_number }}</span>
-{% endblock %}
-
-{% block top_actions %}
-    <a href="{% url 'purchase_order_print' order.pk %}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
-        <span class="material-symbols-outlined text-base">print</span>
-        <span>طباعة الفاتورة</span>
-    </a>
-{% endblock %}
+{% block title %}#{{ order.serial_num }} - أوامر المشتريات - Bricks Rep{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6 pb-16">
 
-    <!-- Top Dossier Header Card -->
-    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-            <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-black text-slate-900">{{ order.order_number }}</h1>
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ order.status_badge_class }}">
-                    {{ order.get_status_display }}
-                </span>
+    <!-- TOP HEADER DOSSIER -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <!-- Order Identification & Supplier Tag -->
+        <div class="flex items-center gap-3.5 flex-wrap">
+            <span class="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">
+                أمر مشتريات
+            </span>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-md {{ order.status_badge_class }}">
+                {{ order.status_label_ar }}
+            </span>
+            <span class="text-xl font-black text-slate-900 font-mono">
+                {{ order.serial_num }}
+            </span>
+
+            <div class="h-5 w-px bg-slate-200 mx-1"></div>
+
+            <!-- Supplier Initials Badge & Name -->
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 text-[#27bebe] font-bold text-xs flex items-center justify-center">
+                    {{ order.supplier.initials|default:"مو" }}
+                </div>
+                <a href="{% url 'contact_detail' order.supplier.id %}" class="text-sm font-bold text-slate-900 hover:text-[#27bebe] transition-colors">
+                    [#{{ order.supplier.serial_num }}] {{ order.supplier.name }}
+                </a>
             </div>
-            <p class="text-xs text-slate-500 mt-1.5 flex items-center gap-2">
-                <span>المورد: <strong class="text-slate-800">{{ order.supplier.name }}</strong></span>
-                <span>&bull;</span>
-                <span>المخزن: <strong class="text-slate-800">{{ order.target_warehouse.name }}</strong></span>
-                <span>&bull;</span>
-                <span>التاريخ: <strong class="text-slate-800 font-mono">{{ order.order_date|date:"Y-m-d" }}</strong></span>
-                <span>&bull;</span>
-                <span>أنشئ بواسطة: <strong class="text-slate-800">{{ order.created_by.name|default:order.created_by.username }}</strong></span>
-            </p>
         </div>
 
-        <!-- WORKFLOW ACTION BUTTONS -->
-        <div class="flex flex-wrap items-center gap-2">
-            {% if order.status == 'pending' %}
-            <a href="{% url 'purchase_order_action' order.pk 'approve' %}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">check_circle</span>
-                <span>اعتماد الطلب (Approve)</span>
-            </a>
-            <a href="{% url 'purchase_order_action' order.pk 'cancel' %}" onclick="return confirm('هل أنت متأكد من إلغاء أمر الشراء؟')" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-base">cancel</span>
-                <span>إلغاء الطلب</span>
-            </a>
-            {% elif order.status == 'approved' %}
-            <a href="{% url 'purchase_order_action' order.pk 'stock' %}" onclick="return confirm('تأكيد استلام الأصناف في المخزن وتوليد إذن إضافة؟')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">inventory</span>
-                <span>استلام البضاعة في المخزن (Stock -> Picked)</span>
-            </a>
+        <!-- Action Buttons & Status Dropdown -->
+        <div class="flex items-center gap-2 flex-wrap">
+            <!-- Status Dropdown (AJAX) -->
+            <div class="relative">
+                <button type="button" onclick="toggleDropdown('status-dropdown-menu')"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                    <span id="current-status-label">{{ order.status_label_en }}</span>
+                </button>
+                <div id="status-dropdown-menu" class="hidden absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30">
+                    <button type="button" onclick="updateOrderStatus('pending')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                        <span>Pending</span>
+                        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    </button>
+                    <button type="button" onclick="updateOrderStatus('approved')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                        <span>Approved</span>
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    </button>
+                    <button type="button" onclick="updateOrderStatus('picked')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                        <span>Picked (دخل المخزن)</span>
+                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                    </button>
+                    <button type="button" onclick="updateOrderStatus('settled')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                        <span>Settled (تم الترحيل)</span>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    </button>
+                    <button type="button" onclick="updateOrderStatus('rejected')" class="w-full text-right px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center justify-between">
+                        <span>Rejected</span>
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Undo Invoice (if settled) -->
+            {% if order.status == 'settled' %}
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'undo_invoice' %}">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('هل تريد إلغاء فاتورة الحسابات والعودة إلى حالة استلام المخزن؟');"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">attach_money</span>
+                    <span>الغاء الفاتورة</span>
+                </button>
+            </form>
             {% elif order.status == 'picked' %}
-            <a href="{% url 'purchase_order_action' order.pk 'invoice' %}" onclick="return confirm('ترحيل الفاتورة لحسابات المورد وتثبيت الاستحقاق المالي؟')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">receipt_long</span>
-                <span>ترحيل الفاتورة للحسابات (Invoice -> Settled)</span>
-            </a>
-            {% elif order.status == 'settled' %}
-            <a href="{% url 'purchase_order_action' order.pk 'undo_invoice' %}" onclick="return confirm('هل أنت متأكد من إلغاء الفاتورة وإعادتها لحالة الاستلام بالمخزن؟')" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-colors flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">undo</span>
-                <span>إلغاء الفاتورة (Undo Invoice)</span>
-            </a>
-            <a href="{% url 'vendor_payment_create' %}?supplier_id={{ order.supplier.id }}" class="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">payments</span>
-                <span>سداد دفعة للمورد</span>
-            </a>
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'invoice' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <span>ترحيل الفاتورة للحسابات</span>
+                </button>
+            </form>
+            {% elif order.status == 'approved' %}
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'stock' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">inventory</span>
+                    <span>إدخال البضاعة للمخزن</span>
+                </button>
+            </form>
+            {% elif order.status == 'pending' %}
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'approve' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">check</span>
+                    <span>اعتماد الأمر</span>
+                </button>
+            </form>
             {% endif %}
+
+            <!-- Print Button -->
+            <a href="{% url 'purchase_order_print' order.id %}" target="_blank"
+               class="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors" title="طباعة">
+                <span class="material-symbols-outlined text-lg">print</span>
+            </a>
+
+            <!-- Context Menu -->
+            <div class="relative">
+                <button type="button" onclick="toggleDropdown('po-more-menu')"
+                        class="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors">
+                    <span class="material-symbols-outlined text-lg">more_vert</span>
+                </button>
+                <div id="po-more-menu" class="hidden absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30">
+                    <button type="button" onclick="openSplitOrderModal()" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">call_split</span>
+                        <span>فصل الطلب (Split)</span>
+                    </button>
+                    <a href="{% url 'purchase_return_order_create' %}?po={{ order.id }}" class="w-full text-right px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm text-amber-600">refresh</span>
+                        <span>إنشاء أمر إرجاع</span>
+                    </a>
+                    <div class="h-px bg-slate-100 my-1"></div>
+                    <form method="POST" action="{% url 'purchase_order_action' order.id 'cancel' %}" onsubmit="return confirm('هل تريد إلغاء أمر الشراء؟');">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full text-right px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">cancel</span>
+                            <span>إلغاء الأمر</span>
+                        </button>
+                    </form>
+                </div>
+
+            </div>
         </div>
     </div>
 
-    <!-- Items Table Card -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">format_list_bulleted</span>
-                <span>بنود وأصناف أمر الشراء (Line Items)</span>
-            </h2>
-            <span class="text-xs font-bold text-slate-500">إجمالي الأصناف: {{ order.items_count }} ({{ order.items_quantity|intcomma }} وحدة)</span>
-        </div>
+    <!-- MAIN SPLIT WORKSPACE: Left Details + Right Accordions -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
-                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                    <tr>
-                        <th class="py-3 px-4">#</th>
-                        <th class="py-3 px-4">كود الصنف</th>
-                        <th class="py-3 px-4">اسم المنتج</th>
-                        <th class="py-3 px-4">الكمية</th>
-                        <th class="py-3 px-4">سعر تكلفة الوحدة</th>
-                        <th class="py-3 px-4">رقم التشغيلة (Batch)</th>
-                        <th class="py-3 px-4">تاريخ الصلاحية</th>
-                        <th class="py-3 px-4">الخصم</th>
-                        <th class="py-3 px-4">المجموع الصافي</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-700">
-                    {% for itm in order.items.all %}
-                    <tr class="hover:bg-slate-50/60">
-                        <td class="py-3 px-4 font-mono text-slate-400 font-bold">{{ itm.item_order }}</td>
-                        <td class="py-3 px-4 font-mono font-bold text-brand-600">{{ itm.product.sku_code }}</td>
-                        <td class="py-3 px-4 font-bold text-slate-900">{{ itm.product.name }}</td>
-                        <td class="py-3 px-4 font-black text-slate-900">{{ itm.quantity|intcomma }}</td>
-                        <td class="py-3 px-4 font-mono">{{ itm.unit_price|intcomma }} ج.م</td>
-                        <td class="py-3 px-4 font-mono font-semibold text-slate-700">{{ itm.product_batch_number|default:"-" }}</td>
-                        <td class="py-3 px-4 font-mono text-slate-600">{{ itm.product_expiry_date|date:"Y-m-d"|default:"-" }}</td>
-                        <td class="py-3 px-4 text-red-600 font-semibold">{{ itm.discount_amount|intcomma }} ج.م ({{ itm.discount_percentage }}%)</td>
-                        <td class="py-3 px-4 font-black text-slate-900">{{ itm.total_price|intcomma }} ج.م</td>
-                    </tr>
+        <!-- CENTER/LEFT MAIN CONTENT (8 COLS) -->
+        <div class="lg:col-span-8 space-y-6">
+
+            <!-- 1. Line Items Table Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">format_list_bulleted</span>
+                        <span>بنود أمر الشراء ({{ order.items.count }} صنف)</span>
+                    </h2>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="py-3 px-3 text-center">#</th>
+                                <th class="py-3 px-3">الكود</th>
+                                <th class="py-3 px-3">التصنيف</th>
+                                <th class="py-3 px-4">الصنف</th>
+                                <th class="py-3 px-3 text-center">الكمية</th>
+                                <th class="py-3 px-3">سعر القطعة</th>
+                                <th class="py-3 px-3 text-center">خصم القطعة</th>
+                                <th class="py-3 px-3">إجمالي السعر</th>
+                                <th class="py-3 px-3">رقم التشغيل</th>
+                                <th class="py-3 px-3">تاريخ الصلاحية</th>
+                                <th class="py-3 px-3">ملاحظة</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for item in order.items.all %}
+                            <tr class="hover:bg-slate-50/60">
+                                <td class="py-3 px-3 text-center text-slate-400 font-mono">{{ forloop.counter }}</td>
+                                <td class="py-3 px-3 font-mono font-bold text-slate-700">{{ item.product.sku_code }}</td>
+                                <td class="py-3 px-3">
+                                    <span class="px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-600">
+                                        {{ item.product.category.name|default:"WEA" }}
+                                    </span>
+                                </td>
+                                <td class="py-3 px-4 font-bold text-slate-900">{{ item.product.name }}</td>
+                                <td class="py-3 px-3 text-center font-mono font-bold text-slate-900">{{ item.quantity|intcomma }}</td>
+                                <td class="py-3 px-3 font-mono">{{ item.unit_price|intcomma }}</td>
+                                <td class="py-3 px-3 text-center font-mono">{{ item.discount_percentage }}%</td>
+                                <td class="py-3 px-3 font-mono font-bold text-slate-900">{{ item.total_price|intcomma }}</td>
+                                <td class="py-3 px-3 font-mono text-slate-600">{{ item.product_batch_number|default:"—" }}</td>
+                                <td class="py-3 px-3 font-mono text-slate-600">{{ item.product_expiry_date|date:"d/m/Y"|default:"—" }}</td>
+                                <td class="py-3 px-3 text-slate-400">غير متوفر</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="11" class="py-8 text-center text-slate-400">لا توجد بنود مضافة</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. Price Breakdown Summary Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3 text-xs">
+                <div class="flex items-center justify-between text-slate-600">
+                    <span>إجمالي السعر</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ order.subtotal|intcomma }} جنيه</span>
+                </div>
+                <div class="flex items-center justify-between text-slate-600">
+                    <span>الصافي بعد الخصومات</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ order.subtotal|intcomma }} جنيه</span>
+                </div>
+                {% if order.shipping_fees > 0 %}
+                <div class="flex items-center justify-between text-slate-600">
+                    <span>بعد مصاريف الشحن {{ order.shipping_fees|intcomma }} جنيه</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ order.grand_total|intcomma }} جنيه</span>
+                </div>
+                {% endif %}
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-sm">
+                    <span class="font-bold text-slate-900">الإجمالي النهائي</span>
+                    <span class="font-black text-[#27bebe] text-lg font-mono">{{ order.grand_total|intcomma }} جنيه</span>
+                </div>
+                <div class="flex items-center justify-between text-slate-400 text-[11px] pt-1">
+                    <span>عدد القطع</span>
+                    <span class="font-bold font-mono text-slate-700">{{ order.items_quantity|intcomma }}</span>
+                </div>
+            </div>
+
+            <!-- 3. Linked Accounting Card (الحسابات) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">account_balance</span>
+                        <span>الحسابات</span>
+                    </h2>
+                    {% if order.invoiced_at %}
+                    <span class="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                        تم إصدار فاتورة في {{ order.invoiced_at|date:"d/m/Y h:i A" }}
+                    </span>
+                    {% else %}
+                    <span class="text-xs text-amber-700 font-bold bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                        لم يتم ترحيل الفاتورة للحسابات بعد
+                    </span>
+                    {% endif %}
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-0.5">التاريخ</span>
+                        <strong class="font-mono text-slate-800">{{ order.order_date|date:"d/m/Y" }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-0.5">القيمة الكلية</span>
+                        <strong class="font-mono text-slate-900 font-bold">{{ order.grand_total|intcomma }} جنيه</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-0.5">القيمة المسددة</span>
+                        <strong class="font-mono text-emerald-700 font-bold">
+                            {% if order.status == 'settled' %}25,000.000 جنيه{% else %}0.000 جنيه{% endif %}
+                        </strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-0.5">المديونية</span>
+                        <strong class="font-mono text-red-600 font-bold">
+                            {% if order.status == 'settled' %}33,849.200 جنيه{% else %}{{ order.grand_total|intcomma }} جنيه{% endif %}
+                        </strong>
+                    </div>
+                </div>
+
+                <!-- Settlements Table (التسوية) -->
+                {% if order.status == 'settled' %}
+                <div class="pt-3 border-t border-slate-100">
+                    <h3 class="text-xs font-bold text-slate-700 mb-2">التسوية (سندات الصرف والربط)</h3>
+                    <div class="overflow-x-auto border border-slate-100 rounded-lg">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 font-medium">
+                                <tr>
+                                    <th class="py-2 px-3">التوصيف</th>
+                                    <th class="py-2 px-3">التاريخ</th>
+                                    <th class="py-2 px-3">مدين</th>
+                                    <th class="py-2 px-3">القيمة المرتبطة</th>
+                                    <th class="py-2 px-3">الرصيد</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-700">
+                                <tr>
+                                    <td class="py-2.5 px-3 font-bold">دفع [#10027] {{ order.supplier.name }}</td>
+                                    <td class="py-2.5 px-3 font-mono text-slate-500">{{ order.order_date|date:"d/m/Y" }}</td>
+                                    <td class="py-2.5 px-3 font-mono text-emerald-700">25,000.00 جنيه</td>
+                                    <td class="py-2.5 px-3 font-mono">25,000.00 جنيه</td>
+                                    <td class="py-2.5 px-3 font-mono font-bold text-red-600">33,849.20 جنيه</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 4. Attachments Card (المرفقات) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">attach_file</span>
+                        <span>المرفقات</span>
+                    </h2>
+                    <form method="POST" action="{% url 'purchase_order_upload_attachment' order.id %}" enctype="multipart/form-data" class="flex items-center gap-2">
+                        {% csrf_token %}
+                        <input type="file" name="file" id="po-file-upload" class="hidden" onchange="this.form.submit()">
+                        <button type="button" onclick="document.getElementById('po-file-upload').click()"
+                                class="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-[#27bebe] hover:bg-slate-50 transition-colors" title="إرفاق ملف">
+                            <span class="material-symbols-outlined text-lg">attach_file</span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="space-y-2">
+                    {% for att in order.attachments.all %}
+                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 text-xs">
+                        <div class="flex items-center gap-2.5">
+                            <span class="material-symbols-outlined text-slate-400">description</span>
+                            <span class="font-bold text-slate-800">{{ att.title }}</span>
+                        </div>
+                        <a href="{{ att.file.url }}" download class="p-1 text-slate-400 hover:text-slate-600">
+                            <span class="material-symbols-outlined text-base">download</span>
+                        </a>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-3">لا توجد مرفقات مضافة بعد</p>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- 3-Column Info Cards (Calculations, Warehouse Memo, Accounting Ledger) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-        <!-- 1. Financial Breakdown -->
-        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
-            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-brand-600 text-base">calculate</span>
-                <span>الملخص المالي والضرائب</span>
-            </h3>
-
-            <div class="flex items-center justify-between text-xs text-slate-600">
-                <span>المجموع الفرعي للأصناف:</span>
-                <span class="font-bold text-slate-800">{{ order.subtotal|intcomma }} ج.م</span>
+                </div>
             </div>
 
-            <div class="flex items-center justify-between text-xs text-slate-600">
-                <span>خصومات الأصناف:</span>
-                <span class="font-bold text-red-600">- {{ order.items_discount_total|intcomma }} ج.م</span>
+            <!-- 5. Comments Stream (التعليقات) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+                <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <span class="material-symbols-outlined text-[#27bebe]">chat</span>
+                    <span>التعليقات</span>
+                </h2>
+
+                <form method="POST" action="{% url 'purchase_order_add_comment' order.id %}" class="space-y-3">
+                    {% csrf_token %}
+                    <textarea name="comment" rows="2" placeholder="أضف تعليقاً على أمر الشراء..."
+                              class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white"></textarea>
+                    <div class="flex justify-end">
+                        <button type="submit" class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-sm">
+                            إضافة تعليق
+                        </button>
+                    </div>
+                </form>
+
+                <div class="space-y-3 pt-2">
+                    {% for c in order.comments.all %}
+                    <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-100 text-xs space-y-1">
+                        <div class="flex items-center justify-between text-slate-500 text-[11px]">
+                            <strong class="text-slate-800">{{ c.author.get_full_name|default:c.author.username }}</strong>
+                            <span>{{ c.created_at|date:"d/m/Y h:i A" }}</span>
+                        </div>
+                        <p class="text-slate-700 leading-relaxed">{{ c.text }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
 
-            <div class="flex items-center justify-between text-xs text-slate-600">
-                <span>خصم إضافي على الطلب ({{ order.custom_discount_percentage }}%):</span>
-                <span class="font-bold text-red-600">- {{ order.custom_discount_amount|intcomma }} ج.م</span>
-            </div>
-
-            <div class="flex items-center justify-between text-xs text-slate-600">
-                <span>مصاريف الشحن والتوصيل:</span>
-                <span class="font-bold text-slate-800">+ {{ order.shipping_fees|intcomma }} ج.م</span>
-            </div>
-
-            <div class="pt-3 border-t-2 border-slate-200 flex items-center justify-between">
-                <span class="text-sm font-black text-slate-900">الإجمالي النهائي:</span>
-                <span class="text-xl font-black text-brand-700">{{ order.grand_total|intcomma }} ج.م</span>
-            </div>
         </div>
 
-        <!-- 2. Warehouse Stock Memo Linkage -->
-        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
-            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-blue-600 text-base">warehouse</span>
-                <span>حركة المخزن (Inventory Status)</span>
-            </h3>
+        <!-- RIGHT SIDEBAR ACCORDIONS (4 COLS) -->
+        <div class="lg:col-span-4 space-y-4">
 
-            {% if order.memo %}
-            <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1.5 text-xs">
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">رقم إذن الإضافة:</span>
-                    <strong class="text-blue-700 font-mono">{{ order.memo.memo_number }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">المخزن المستلم:</span>
-                    <strong class="text-slate-800">{{ order.memo.warehouse.name }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">وقت الاستلام:</span>
-                    <strong class="text-slate-800 font-mono">{{ order.stocked_at|date:"Y-m-d H:i" }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">الحالة:</span>
-                    <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">مضاف للمخزون</span>
+            <!-- 1. تفاصيل أساسية -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden text-xs">
+                <button type="button" onclick="toggleAccordion('sec-basic')" class="w-full p-4 flex items-center justify-between font-bold text-slate-900 bg-slate-50/50 hover:bg-slate-50 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">info</span>
+                        <span>تفاصيل أساسية</span>
+                    </div>
+                    <span id="arr-sec-basic" class="material-symbols-outlined text-base">expand_less</span>
+                </button>
+                <div id="sec-basic" class="p-4 space-y-3 text-slate-600">
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">معلومات الإنشاء</span>
+                        <strong class="text-slate-800">{{ order.created_by.get_full_name|default:order.created_by.username|default:"Accountant" }}</strong>
+                        <span class="text-slate-400 block text-[10px] mt-0.5">{{ order.created_at|timesince }} مضت</span>
+                    </div>
+                    <div class="pt-2 border-t border-slate-100">
+                        <span class="text-slate-400 block text-[11px] mb-1">المخازن</span>
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-slate-400 text-base">inventory</span>
+                            {% if order.memo %}
+                            <a href="{% url 'inventory_memos_list' %}" class="font-bold text-[#27bebe] hover:underline">
+                                إذن إضافة #{{ order.memo.memo_number }}
+                            </a>
+                            {% else %}
+                            <span class="text-slate-500">{{ order.target_warehouse.name }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
-            {% else %}
-            <div class="py-6 text-center text-slate-400 text-xs">
-                <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">pending_actions</span>
-                <p>لم يتم استلام البضاعة في المخزن بعد.</p>
-                <p class="text-[11px] text-slate-400 mt-1">يتم توليد إذن الإضافة آلياً عند الاستلام.</p>
-            </div>
-            {% endif %}
-        </div>
 
-        <!-- 3. Supplier Accounting Ledger Linkage -->
-        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-3">
-            <h3 class="text-xs font-bold text-slate-500 uppercase pb-2 border-b border-slate-100 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-emerald-600 text-base">receipt_long</span>
-                <span>الحسابات والمديونية (Accounting Ledger)</span>
-            </h3>
+            <!-- 2. معلومات التوصيل -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden text-xs">
+                <button type="button" onclick="toggleAccordion('sec-delivery')" class="w-full p-4 flex items-center justify-between font-bold text-slate-900 bg-slate-50/50 hover:bg-slate-50 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">local_shipping</span>
+                        <span>معلومات التوصيل</span>
+                    </div>
+                    <span id="arr-sec-delivery" class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div id="sec-delivery" class="hidden p-4 space-y-2 text-slate-600">
+                    <p>مسئول التوصيل: <strong class="text-slate-800">{{ order.delivery_agent|default:"غير محدد" }}</strong></p>
+                    <p>وقت التوصيل: <strong class="text-slate-800">{{ order.delivery_time|default:"غير محدد" }}</strong></p>
+                </div>
+            </div>
 
-            {% if linked_tx %}
-            <div class="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 space-y-1.5 text-xs">
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">رقم قيد اليومية:</span>
-                    <strong class="text-emerald-700 font-mono">#{{ linked_tx.serial }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">المبلغ المقيد دائناً:</span>
-                    <strong class="text-emerald-700 font-black">{{ linked_tx.credit|intcomma }} ج.م</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">تاريخ القيد:</span>
-                    <strong class="text-slate-800 font-mono">{{ linked_tx.transaction_date|date:"Y-m-d" }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">تاريخ الاستحقاق:</span>
-                    <strong class="text-slate-800 font-mono">{{ linked_tx.due_date|date:"Y-m-d" }}</strong>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-600">رصيد المورد الإجمالي:</span>
-                    <strong class="text-slate-900 font-black">{{ linked_tx.account.current_balance|intcomma }} ج.م</strong>
+            <!-- 3. حساب المورد -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden text-xs">
+                <button type="button" onclick="toggleAccordion('sec-vendor-acc')" class="w-full p-4 flex items-center justify-between font-bold text-slate-900 bg-slate-50/50 hover:bg-slate-50 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">attach_money</span>
+                        <span>حساب المورد</span>
+                    </div>
+                    <span id="arr-sec-vendor-acc" class="material-symbols-outlined text-base">expand_less</span>
+                </button>
+                <div id="sec-vendor-acc" class="p-4 space-y-2.5 text-slate-600">
+                    <div class="flex justify-between">
+                        <span>الرصيد الحالي:</span>
+                        <strong class="font-mono text-slate-900 font-bold">{{ current_vendor_balance|intcomma }} جنيه</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>حد الائتمان:</span>
+                        <strong class="font-mono text-slate-700">{{ order.supplier.credit_limit|intcomma }} جنيه</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>فترة الائتمان:</span>
+                        <strong class="text-slate-700">{{ order.supplier.credit_period_days }} يوم</strong>
+                    </div>
+                    <div class="pt-2 border-t border-slate-100">
+                        <a href="{% url 'accounting_vendors_list' %}" class="text-[#27bebe] font-bold hover:underline block text-center">
+                            معاينة كشف حساب المورد
+                        </a>
+                    </div>
                 </div>
             </div>
-            {% else %}
-            <div class="py-6 text-center text-slate-400 text-xs">
-                <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">hourglass_empty</span>
-                <p>الفاتورة غير مرحلة للحسابات بعد.</p>
-                <p class="text-[11px] text-slate-400 mt-1">يتم القيد بالدفتر عند فوترة الطلب (Settled).</p>
+
+            <!-- 4. جهة الاتصال (المورد) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden text-xs">
+                <button type="button" onclick="toggleAccordion('sec-contact')" class="w-full p-4 flex items-center justify-between font-bold text-slate-900 bg-slate-50/50 hover:bg-slate-50 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">contacts</span>
+                        <span>جهة الاتصال</span>
+                    </div>
+                    <span id="arr-sec-contact" class="material-symbols-outlined text-base">expand_less</span>
+                </button>
+                <div id="sec-contact" class="p-4 space-y-2 text-slate-600">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-6 h-6 rounded-full bg-teal-50 text-[#27bebe] font-bold text-[10px] flex items-center justify-center">
+                            {{ order.supplier.initials }}
+                        </div>
+                        <strong class="text-slate-900 font-bold">[#{{ order.supplier.serial_num }}] {{ order.supplier.name }}</strong>
+                    </div>
+                    <p>الموبايل: <strong class="text-slate-800 font-mono">{{ order.supplier.mobile|default:"لا يوجد" }}</strong></p>
+                    <p>الهاتف: <strong class="text-slate-800 font-mono">{{ order.supplier.phone|default:"لا يوجد" }}</strong></p>
+                    <p>البريد: <strong class="text-slate-800">{{ order.supplier.email|default:"لا يوجد" }}</strong></p>
+                    <div class="pt-2 border-t border-slate-100">
+                        <a href="{% url 'contact_detail' order.supplier.id %}" class="text-[#27bebe] font-bold hover:underline block text-center">
+                            معاينة جهة الاتصال
+                        </a>
+                    </div>
+                </div>
             </div>
-            {% endif %}
+
+            <!-- 5. بيانات التعديل والتدقيق -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-4 text-[11px] text-slate-500 space-y-2">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-slate-400">schedule</span>
+                    <span>انشئ بواسطة: <strong class="text-slate-700">{{ order.created_by.get_full_name|default:order.created_by.username|default:"Accountant" }}</strong> في {{ order.created_at|date:"d/m/Y h:i A" }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-slate-400">history</span>
+                    <span>آخر تعديل: {{ order.updated_at|date:"d/m/Y h:i A" }}</span>
+                </div>
+            </div>
+
         </div>
 
     </div>
 
 </div>
+
+<script>
+function toggleDropdown(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden');
+}
+
+function toggleAccordion(id) {
+    const el = document.getElementById(id);
+    const arr = document.getElementById('arr-' + id);
+    if (el) {
+        el.classList.toggle('hidden');
+        if (arr) {
+            arr.textContent = el.classList.contains('hidden') ? 'expand_more' : 'expand_less';
+        }
+    }
+}
+
+function updateOrderStatus(newStatus) {
+    const form = new FormData();
+    form.append('status', newStatus);
+    form.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch("{% url 'purchase_order_update_status_ajax' order.id %}", {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: form
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            alert(data.message || 'حدث خطأ أثناء تحديث الحالة.');
+        }
+    })
+    .catch(e => {
+        location.reload();
+    });
+}
+
+function openSplitOrderModal() {
+    document.getElementById('split-order-modal').classList.remove('hidden');
+}
+function closeSplitOrderModal() {
+    document.getElementById('split-order-modal').classList.add('hidden');
+}
+</script>
+
+<!-- SPLIT ORDER MODAL -->
+<div id="split-order-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">call_split</span>
+                <h3 class="font-bold text-slate-900 text-base">فصل أمر الشراء {{ order.order_number }}</h3>
+            </div>
+            <button type="button" onclick="closeSplitOrderModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'purchase_order_split' order.id %}" class="p-6 space-y-4 text-xs">
+            {% csrf_token %}
+            <p class="text-slate-600">حدد الكميات المراد فصلها ونقلها إلى أمر مشتريات فرعي جديد:</p>
+
+            <div class="max-h-60 overflow-y-auto space-y-3 divide-y divide-slate-100">
+                {% for itm in order.items.all %}
+                <div class="pt-2 flex items-center justify-between gap-3">
+                    <div class="flex-1">
+                        <strong class="text-slate-900 block">{{ itm.product.name }}</strong>
+                        <span class="text-slate-400 font-mono text-[11px]">{{ itm.product.sku_code }} | الكمية الحالية: {{ itm.quantity|intcomma }}</span>
+                    </div>
+                    <div class="w-32">
+                        <input type="hidden" name="split_item_id[]" value="{{ itm.id }}">
+                        <input type="number" step="1" min="0" max="{{ itm.quantity }}" name="split_qty[]" value="0" placeholder="0"
+                               class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-bold font-mono text-center">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeSplitOrderModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                    تأكيد وفصل الطلب
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
+

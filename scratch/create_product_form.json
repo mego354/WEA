@@ -1,0 +1,50 @@
+{
+  "fields": [
+    {
+      "label": "الاسم",
+      "type": "INPUT",
+      "placeholder": "",
+      "required": true
+    },
+    {
+      "label": "التصنيف",
+      "type": "MAT-SELECT",
+      "placeholder": "",
+      "required": false
+    },
+    {
+      "label": "الكود",
+      "type": "INPUT",
+      "placeholder": "",
+      "required": true
+    },
+    {
+      "label": "باركود",
+      "type": "INPUT",
+      "placeholder": "",
+      "required": false
+    },
+    {
+      "label": "السعر",
+      "type": "INPUT",
+      "placeholder": "",
+      "required": true
+    },
+    {
+      "label": "قيمة الضريبة",
+      "type": "INPUT",
+      "placeholder": "",
+      "required": true
+    }
+  ],
+  "buttons": [
+    "notifications_active\n177",
+    "logout",
+    "add\nإضافة قائمة أسعار",
+    "add\nإضافة علبة",
+    "add\nإضافة كرتونة",
+    "حفظ",
+    "add"
+  ],
+  "bodyText": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nremove\nstore\nالمنتجات\ncategory\nالتصنيفات\ntimeline\nالأنشطة\nadd\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع الموقع\ngroup\nالآداء\ntext_snippet\nالتقارير\nbug_report\nمشاكل تتبع الموقع\nsettings\nإعدادات\nadd\nDr.wael Atta (CEO)\nSuperAdmin\nnotifications_active\n177\nlogout\nworkspace: weapharma\nversion: 26.10.07-9f7548b\nانشئ منتج\nالاسم\nالتصنيف\nالكود\nباركود\nالسعر\nقيمة الضريبة\nمتاح للبيع\nخصومات الكمية\nتفعيل خصومات الكمية\n\nقم بتفعيل الخيار لإضافة شرائح خصم بناءً على الكمية لهذا المنتج.\n\nقوائم الأسعار\nsell\nلم يتم تعيين أي قوائم أسعار بعد\nadd\nإضافة قائمة أسعار\nالتعبئة\nالعلب\ninventory_2\nلم يتم تحديد تعبئة بعد.\nadd\nإضافة علبة\nالكراتين\ninventory_2\nلم يتم تحديد تعبئة بعد.\nadd\nإضافة كرتونة\nصور المنتج\nimage\nلم يتم رفع صور بعد\ncloud_upload\nاسحب الصور هنا أو تصفح\n\n\n\n\nحفظ\nadd"
+}

@@ -1,0 +1,563 @@
+[
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/auth/refresh",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "jwt"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/users/current",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "id",
+      "name",
+      "email",
+      "profile_image_id",
+      "mobile",
+      "lang",
+      "workspace",
+      "role_id",
+      "role"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/fg",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "flags"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/geofence/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/inventory/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "use_expiry_date",
+      "is_expiry_date_mandatory",
+      "use_batch_number",
+      "is_batch_number_mandatory"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/sales/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "auto_invoice_after_unstock",
+      "auto_invoice_after_stock",
+      "auto_link_after_collection_create",
+      "enable_zatca_phase1",
+      "use_collections_receipt_book",
+      "collection_request_auto_close_cash",
+      "collection_request_auto_close_on_total_collected",
+      "require_achievement_owner",
+      "pay_on_invoice",
+      "tax_mode",
+      "default_packaging_size",
+      "printing"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/contacts/udf",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entity_name",
+      "fields",
+      "sections",
+      "views"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/geofence/verify/resolvedSettings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entities"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/branding",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "branding"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/collections/methods",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "methods"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/templates/list",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "templates"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/filters/view/products-listing",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "filters",
+      "count"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/blobs/Users:profileImages/bulkGetDownloadURL",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "blobs"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/products/count",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "count"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/notifications/unread/count?unread_only=true",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "count"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/started?preload.contact=true&preload.contact_main_address=true&preload.contact_addresses=true&preload.template=true&preload.template_questionnaire=true&preload.template_questionnaire_questions=true",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "visit"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/products?offset=0&limit=40",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "products",
+      "count"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/auth/refresh",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "jwt"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/users/current",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "id",
+      "name",
+      "email",
+      "profile_image_id",
+      "mobile",
+      "lang",
+      "workspace",
+      "role_id",
+      "role"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/fg",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "flags"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/geofence/verify/resolvedSettings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entities"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/sales/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "auto_invoice_after_unstock",
+      "auto_invoice_after_stock",
+      "auto_link_after_collection_create",
+      "enable_zatca_phase1",
+      "use_collections_receipt_book",
+      "collection_request_auto_close_cash",
+      "collection_request_auto_close_on_total_collected",
+      "require_achievement_owner",
+      "pay_on_invoice",
+      "tax_mode",
+      "default_packaging_size",
+      "printing"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/inventory/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "use_expiry_date",
+      "is_expiry_date_mandatory",
+      "use_batch_number",
+      "is_batch_number_mandatory"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/geofence/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/collections/methods",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "methods"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/filters/view/purchase-orders-listing",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "filters",
+      "count"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/branding",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "branding"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/contacts/udf",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entity_name",
+      "fields",
+      "sections",
+      "views"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/templates/list",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "templates"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/wf/states",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "states"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/notifications/unread/count?unread_only=true",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "count"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/started?preload.contact=true&preload.contact_main_address=true&preload.contact_addresses=true&preload.template=true&preload.template_questionnaire=true&preload.template_questionnaire_questions=true",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "visit"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/contacts/udf",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entity_name",
+      "fields",
+      "sections",
+      "views"
+    ]
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/contacts/udf",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "entity_name",
+      "fields",
+      "sections",
+      "views"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/visits/settings",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "settings"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/ui-preferences/purchase-orders-listing",
+    "status": 200,
+    "method": "GET",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "status": 200,
+    "method": "POST",
+    "data_preview": []
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/wf/states",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "states"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/contacts/wf/states",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "states"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/wf/states",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "states"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/count",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "count"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/aggregate",
+    "status": 200,
+    "method": "POST",
+    "data_preview": [
+      "values"
+    ]
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/purchaseOrders/wf/states",
+    "status": 200,
+    "method": "GET",
+    "data_preview": [
+      "states"
+    ]
+  }
+]

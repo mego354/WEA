@@ -16,8 +16,8 @@ from django.contrib.auth import get_user_model
 from contacts.models import Contact
 from catalog.models import Product, ProductCategory
 from inventory.models import Warehouse, InventoryStock, InventoryMemo
-from purchases.models import PurchaseOrder, PurchaseOrderItem
-from purchases.services import PurchaseOrderService
+from purchases.models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
+from purchases.services import PurchaseOrderService, PurchaseReturnOrderService
 from treasury.models import Vault, VendorAccount, VendorTransaction, VendorPayment
 from treasury.services import TreasuryService
 from sales.models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
@@ -215,16 +215,105 @@ def run_tests():
     print(f"    - Customer Remaining Debt: {c_acc.current_balance:,.2f} EGP")
     assert c_acc.current_balance == initial_customer_bal + Decimal('500.00'), f"Customer remaining debt expected {initial_customer_bal + 500.00}, got {c_acc.current_balance}"
 
-    # 7. Test Web Views & Templates via Client
-    print("\n[7] Verifying all Web Views & Templates (HTTP 200)...")
+    # 7. Purchase Returns Lifecycle Workflow & Order Splitting (P0/P1 Parity)
+    print("\n[7] Testing Purchase Return Workflow & Order Splitting...")
+    # Order Splitting
+    split_po = PurchaseOrderService.create_order(
+        supplier=supplier,
+        target_warehouse=wh,
+        order_date="2026-10-09",
+        items_data=[{
+            'product': prod,
+            'quantity': Decimal('30'),
+            'unit_price': Decimal('50.00'),
+            'batch_number': 'SPLIT-01',
+            'expiry_date': '2028-12-31',
+        }],
+        user=user,
+        notes="Order to test splitting"
+    )
+    first_item = split_po.items.first()
+    child_po = PurchaseOrderService.split_order(split_po, {first_item.id: Decimal('10')}, user)
+    print(f"  ✓ Split PO #{split_po.order_number}: Created Child PO #{child_po.order_number}")
+    assert child_po.is_split is True
+    assert child_po.items.first().quantity == Decimal('10')
+    assert child_po.grand_total == Decimal('500.00')
+    split_po.refresh_from_db()
+    assert split_po.is_split is True
+    assert split_po.items.first().quantity == Decimal('20')
+    assert split_po.grand_total == Decimal('1000.00')
+
+    # Purchase Return Order Lifecycle
+    stock.refresh_from_db()
+    pre_return_stock = stock.qty_on_hand
+    v_acc.refresh_from_db()
+    pre_return_debt = v_acc.current_balance
+    print(f"    - Current Stock before Return: {pre_return_stock} {prod.unit}")
+    print(f"    - Current Supplier Debt before Return: {pre_return_debt:,.2f} EGP")
+
+    return_qty = Decimal('10.00')
+    return_unit_price = Decimal('50.00')
+    expected_return_total = return_qty * return_unit_price  # 500.00 EGP
+
+    ro = PurchaseReturnOrderService.create_return_order(
+        supplier=supplier,
+        warehouse=wh,
+        order_date="2026-10-10",
+        items_data=[{
+            'product': prod,
+            'quantity': return_qty,
+            'unit_price': return_unit_price,
+            'batch_number': 'BATCH-001',
+            'expiry_date': '2028-12-31'
+        }],
+        user=user,
+        purchase_order=po,
+        delivery_agent="مندوب إرجاع البضائع",
+        notes="E2E Automated Purchase Return Workflow Test"
+    )
+    print(f"  ✓ Created Return Order #{ro.order_number} for {ro.grand_total:,.2f} EGP (Status: {ro.status})")
+    assert ro.status == 'pending'
+    assert ro.grand_total == expected_return_total
+
+    # Approve
+    ro = PurchaseReturnOrderService.approve_return_order(ro, user)
+    print(f"  ✓ Approved Return Order #{ro.order_number} (Status: {ro.status})")
+    assert ro.status == 'approved'
+
+    # Deliver (Unstocking goods outward)
+    ro = PurchaseReturnOrderService.deliver_return_order(ro, user)
+    stock.refresh_from_db()
+    print(f"  ✓ Delivered Return Order #{ro.order_number} (Status: {ro.status})")
+    print(f"    - Generated Outward Return Memo: {ro.memo.memo_number}")
+    print(f"    - Warehouse Stock after Return: {stock.qty_on_hand} {prod.unit} (Decremented by {return_qty})")
+    assert ro.status == 'delivered'
+    assert stock.qty_on_hand == pre_return_stock - return_qty, f"Stock expected {pre_return_stock - return_qty}, got {stock.qty_on_hand}"
+
+    # Settle (Double-entry Debit Note posted to supplier ledger)
+    ro = PurchaseReturnOrderService.settle_return_order(ro, user)
+    v_acc.refresh_from_db()
+    print(f"  ✓ Settled Return Order #{ro.order_number} (Status: {ro.status})")
+    print(f"    - Supplier Debt after Debit Note: {v_acc.current_balance:,.2f} EGP (Decremented by {expected_return_total:,.2f})")
+    assert ro.status == 'settled'
+    assert v_acc.current_balance == pre_return_debt - expected_return_total, f"Supplier balance expected {pre_return_debt - expected_return_total}, got {v_acc.current_balance}"
+
+    # 8. Test Web Views & Templates via Client
+    print("\n[8] Verifying all Web Views & Templates (HTTP 200)...")
     urls_to_test = [
         '/home/',
         '/contacts/',
         '/catalog/',
         '/catalog/categories/',
+        f'/catalog/{prod.pk}/',
         '/purchases/',
         f'/purchases/{po.pk}/',
         f'/purchases/{po.pk}/print/',
+        '/purchases/returns/',
+        '/purchase-return-orders/',
+        '/purchases/returns/create/',
+        f'/purchases/returns/{ro.pk}/',
+        f'/purchases/returns/{ro.pk}/print/',
+        '/purchases/returns/export/',
         '/inventory/',
         '/inventory/warehouses/',
         '/inventory/memos/',
@@ -254,3 +343,4 @@ def run_tests():
 
 if __name__ == '__main__':
     run_tests()
+

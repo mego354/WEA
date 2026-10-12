@@ -1,75 +1,204 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}تصنيفات المنتجات{% endblock %}
-
-{% block breadcrumb %}
-    <span class="text-slate-400">المنتجات</span>
-    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">التصنيفات (Categories)</span>
-{% endblock %}
+{% block title %}التصنيفات - Bricks Rep{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Header & Add Category Box -->
-    <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
-        <h2 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-brand-600">category</span>
-            <span>إضافة تصنيف جديد (New Category)</span>
-        </h2>
-        <form method="POST" action="{% url 'categories_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            {% csrf_token %}
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">اسم التصنيف *</label>
-                <input type="text" name="name" required placeholder="مثال: أدوية بيطرية" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">كود التصنيف *</label>
-                <input type="text" name="code" required placeholder="مثال: VET" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900 font-mono">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">الوصف</label>
-                <input type="text" name="description" placeholder="وصف التصنيف..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-            </div>
-            <div>
-                <button type="submit" class="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center justify-center gap-1.5">
-                    <span class="material-symbols-outlined text-base">add</span>
-                    <span>إنشاء التصنيف</span>
-                </button>
-            </div>
-        </form>
+    <!-- Header Bar -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">التصنيفات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ categories.count }} تصنيف
+            </span>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button onclick="openModal('create-cat-modal')"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>إنشاء تصنيف</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Categories List Table -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 class="text-sm font-bold text-slate-800">التصنيفات المسجلة</h3>
+    <!-- Categories Table -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
+                    <tr>
+                        <th class="py-3.5 px-4">الاسم</th>
+                        <th class="py-3.5 px-4">الكود</th>
+                        <th class="py-3.5 px-4">التوصيف</th>
+                        <th class="py-3.5 px-4">انشئ فى</th>
+                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for c in categories %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ c.name }}
+                        </td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-slate-700">
+                            {{ c.code }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500">
+                            {{ c.description|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                            {{ c.created_at|date:"d/m/Y h:i A" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <div class="inline-flex items-center gap-1">
+                                <button type="button"
+                                        onclick="openEditCategoryModal('{{ c.id }}', '{{ c.name|escapejs }}', '{{ c.code|escapejs }}', '{{ c.description|escapejs }}')"
+                                        class="p-1 rounded-lg text-slate-400 hover:text-[#27bebe] hover:bg-teal-50 transition-colors"
+                                        title="تعديل التصنيف">
+                                    <span class="material-symbols-outlined text-base">edit</span>
+                                </button>
+                                <button type="button"
+                                        onclick="openDeleteCategoryModal('{{ c.id }}', '{{ c.name|escapejs }}')"
+                                        class="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        title="حذف التصنيف">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="py-12 text-center text-slate-400">
+                            لا توجد تصنيفات مضافة بعد
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        <table class="w-full text-right text-sm">
-            <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
-                <tr>
-                    <th class="py-3 px-4">كود التصنيف</th>
-                    <th class="py-3 px-4">اسم التصنيف</th>
-                    <th class="py-3 px-4">الوصف</th>
-                    <th class="py-3 px-4">تاريخ الإنشاء</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 text-slate-700">
-                {% for cat in categories %}
-                <tr class="hover:bg-slate-50/70">
-                    <td class="py-3.5 px-4 font-mono font-bold text-brand-600">{{ cat.code }}</td>
-                    <td class="py-3.5 px-4 font-bold text-slate-900">{{ cat.name }}</td>
-                    <td class="py-3.5 px-4 text-xs text-slate-500">{{ cat.description|default:"-" }}</td>
-                    <td class="py-3.5 px-4 text-xs text-slate-400 font-mono">{{ cat.created_at|date:"Y-m-d" }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" class="py-8 text-center text-slate-400">لا توجد تصنيفات بعد.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    </div>
+
+    <!-- CREATE CATEGORY MODAL -->
+    <div id="create-cat-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="font-bold text-slate-900 text-base">إنشاء تصنيف</h3>
+                <button type="button" onclick="closeModal('create-cat-modal')" class="text-slate-400 hover:text-slate-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <form method="POST" action="{% url 'categories_list' %}" class="p-6 space-y-4 text-xs">
+                {% csrf_token %}
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">اسم التصنيف <span class="text-red-500">*</span></label>
+                    <input type="text" name="name" required placeholder="مثال: أدوية بشرية أو مستلزمات"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">الكود <span class="text-red-500">*</span></label>
+                    <input type="text" name="code" required placeholder="مثال: MED أو PACK"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">التوصيف</label>
+                    <textarea name="description" rows="3" placeholder="وصف التصنيف والمنتجات التابعة له..."
+                              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900"></textarea>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('create-cat-modal')" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                        إلغاء
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                        حفظ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- EDIT CATEGORY MODAL -->
+    <div id="edit-cat-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="font-bold text-slate-900 text-base">تعديل التصنيف</h3>
+                <button type="button" onclick="closeModal('edit-cat-modal')" class="text-slate-400 hover:text-slate-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <form id="edit-cat-form" method="POST" action="" class="p-6 space-y-4 text-xs">
+                {% csrf_token %}
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">اسم التصنيف <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-cat-name" name="name" required
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">الكود <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-cat-code" name="code" required
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">التوصيف</label>
+                    <textarea id="edit-cat-desc" name="description" rows="3"
+                              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#27bebe] focus:bg-white text-slate-900"></textarea>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('edit-cat-modal')" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                        إلغاء
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                        تحديث
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- DELETE CATEGORY MODAL -->
+    <div id="delete-cat-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden p-6 text-center text-xs">
+            <span class="material-symbols-outlined text-4xl text-red-500 mb-3 block">warning</span>
+            <h3 class="font-bold text-slate-900 text-base mb-2">تأكيد حذف التصنيف</h3>
+            <p class="text-slate-500 mb-6">هل أنت متأكد من رغبتك في حذف التصنيف <span id="delete-cat-name" class="font-bold text-slate-800"></span>؟ لا يمكن التراجع عن هذا الإجراء.</p>
+
+            <form id="delete-cat-form" method="POST" action="" class="flex items-center justify-center gap-3">
+                {% csrf_token %}
+                <button type="button" onclick="closeModal('delete-cat-modal')" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-sm">
+                    نعم، حذف
+                </button>
+            </form>
+        </div>
     </div>
 
 </div>
+
+<script>
+function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+}
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+function openEditCategoryModal(id, name, code, desc) {
+    document.getElementById('edit-cat-form').action = `/catalog/categories/${id}/edit/`;
+    document.getElementById('edit-cat-name').value = name;
+    document.getElementById('edit-cat-code').value = code;
+    document.getElementById('edit-cat-desc').value = desc;
+    openModal('edit-cat-modal');
+}
+function openDeleteCategoryModal(id, name) {
+    document.getElementById('delete-cat-form').action = `/catalog/categories/${id}/delete/`;
+    document.getElementById('delete-cat-name').textContent = `"${name}"`;
+    openModal('delete-cat-modal');
+}
+</script>
 {% endblock %}

@@ -1,0 +1,158 @@
+[
+  {
+    "text": "home الرئيسية",
+    "href": "/home",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted navigation-item--active"
+  },
+  {
+    "text": "view_agenda جدول الاعمال",
+    "href": "/agenda",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "calendar_month التقويم",
+    "href": "/calendar",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "checklist Todos",
+    "href": "/todos",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "contacts جهات الاتصال",
+    "href": "/contacts",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "confirmation_number المهام",
+    "href": "/tickets",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "store المنتجات add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "timeline الأنشطة add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "storefront المبيعات add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "storefront المشتريات add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "inventory المخازن add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "account_balance_wallet الخزن add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "approval الموافقات",
+    "href": "/requests",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "assessment التقييمات",
+    "href": "/assessments",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "attach_money المصروفات",
+    "href": "/expenses",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "menu_book المصادر",
+    "href": "/resources",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "score الأهداف add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "event_busy خطة أيام العمل",
+    "href": "/yearly-off-days",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "track_changes تتبع الموقع",
+    "href": "/location-tracking",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "group الآداء",
+    "href": "/performance",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "text_snippet التقارير",
+    "href": "/reports",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "bug_report مشاكل تتبع الموقع",
+    "href": "/location-tracking-troubleshoot",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "settings إعدادات add",
+    "href": "",
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted"
+  },
+  {
+    "text": "notifications_active 177",
+    "href": "",
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+  },
+  {
+    "text": "logout",
+    "href": "",
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+  },
+  {
+    "text": "add",
+    "href": "",
+    "tag": "BUTTON",
+    "class": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary"
+  }
+]

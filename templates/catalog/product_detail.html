@@ -1,0 +1,214 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}{{ product.name }} ({{ product.sku_code }}) - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto pb-16 space-y-6">
+
+    <!-- Header -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+            {% if product.thumbnail %}
+            <img src="{{ product.thumbnail.url }}" alt="{{ product.name }}" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shadow-sm">
+            {% else %}
+            <div class="w-16 h-16 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] font-bold text-xl shadow-sm">
+                {{ product.name|slice:":2" }}
+            </div>
+            {% endif %}
+
+            <div>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-2xl font-black text-slate-900 tracking-tight">{{ product.name }}</h1>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700">
+                        {{ product.sku_code }}
+                    </span>
+                    {% if product.sellable %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        متاح للبيع
+                    </span>
+                    {% else %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                        غير متاح للبيع
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 mt-1">التصنيف: <strong class="text-slate-700">{{ product.category.name }}</strong> | وحدة القياس: <strong class="text-slate-700">{{ product.unit }}</strong> | باركود: <strong class="text-slate-700 font-mono">{{ product.barcode|default:"—" }}</strong></p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <a href="{% url 'product_edit' product.id %}" class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل</span>
+            </a>
+            <a href="{% url 'products_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                <span>العودة للقائمة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Overview Metrics Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Retail Price -->
+        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
+            <span class="text-xs font-bold text-slate-400 block mb-1">سعر البيع للجمهور</span>
+            <span class="text-2xl font-black text-slate-900">{{ product.retail_price|intcomma }}</span>
+            <span class="text-xs text-slate-500 mr-1 font-bold">جنيه</span>
+        </div>
+
+        <!-- Purchase Cost -->
+        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
+            <span class="text-xs font-bold text-slate-400 block mb-1">تكلفة الشراء الافتراضية</span>
+            <span class="text-2xl font-black text-slate-700">{{ product.default_purchase_cost|intcomma }}</span>
+            <span class="text-xs text-slate-500 mr-1 font-bold">جنيه</span>
+        </div>
+
+        <!-- Tax Rate -->
+        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
+            <span class="text-xs font-bold text-slate-400 block mb-1">نسبة الضريبة</span>
+            <span class="text-2xl font-black text-[#27bebe] font-mono">{{ product.tax_percentage }}%</span>
+        </div>
+
+        <!-- Total Stock -->
+        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
+            <span class="text-xs font-bold text-slate-400 block mb-1">إجمالي المخزون الحالي</span>
+            <span class="text-2xl font-black text-slate-900 font-mono">{{ total_stock|intcomma }}</span>
+            <span class="text-xs text-slate-500 mr-1 font-bold">{{ product.unit }}</span>
+        </div>
+    </div>
+
+    <!-- Packaging, Volume Discounts & Price Lists Details -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Packaging Spec -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3">
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">inventory</span>
+                <span>بيانات التعبئة والوحدات</span>
+            </h2>
+            <div class="space-y-2 text-xs">
+                <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span class="text-slate-500">الوحدة الأساسية:</span>
+                    <span class="font-bold text-slate-800">{{ product.unit }}</span>
+                </div>
+                <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span class="text-slate-500">تعبئة العلب (Boxes):</span>
+                    <span class="font-bold text-slate-800">{{ product.packing_boxes|default:"غير محددة" }}</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-slate-500">تعبئة الكراتين (Cartons):</span>
+                    <span class="font-bold text-slate-800">{{ product.packing_cartons|default:"غير محددة" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Volume Discounts Spec -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3">
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">percent</span>
+                <span>شرائح خصم الكمية</span>
+            </h2>
+            {% if product.has_volume_discounts %}
+            <div class="overflow-x-auto text-xs">
+                <table class="w-full text-right">
+                    <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                            <th class="py-2 px-3">الحد الأدنى للكمية</th>
+                            <th class="py-2 px-3">نسبة الخصم</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700 font-mono">
+                        {% for tier in volume_discounts %}
+                        <tr>
+                            <td class="py-2 px-3">{{ tier.min_quantity|intcomma }} وحدة</td>
+                            <td class="py-2 px-3 text-[#27bebe] font-bold">{{ tier.discount_percentage }}%</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="py-3 text-center text-slate-400">
+                                الخصم مفعل ولكن لم يتم تحديد شرائح بعد
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 py-3">خصومات الكمية غير مفعلة لهذا الصنف.</p>
+            {% endif %}
+        </div>
+
+        <!-- Price Lists Spec -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3">
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">sell</span>
+                <span>قوائم الأسعار المخصصة</span>
+            </h2>
+            <div class="overflow-x-auto text-xs">
+                <table class="w-full text-right">
+                    <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                            <th class="py-2 px-3">اسم القائمة</th>
+                            <th class="py-2 px-3">سعر البيع</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        {% for pl in price_lists %}
+                        <tr>
+                            <td class="py-2 px-3 font-bold">{{ pl.name }}</td>
+                            <td class="py-2 px-3 font-mono font-bold text-teal-700">{{ pl.price|intcomma }} ج.م</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="py-3 text-center text-slate-400">
+                                لا توجد قوائم أسعار خاصة مسجلة لهذا الصنف
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock by Warehouse Table -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#27bebe]">warehouse</span>
+            <span>الأرصدة في المخازن</span>
+        </h2>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4">المخزن</th>
+                        <th class="py-3 px-4">الكمية الإجمالية</th>
+                        <th class="py-3 px-4">الكمية المحجوزة</th>
+                        <th class="py-3 px-4">الكمية المتاحة للصرف</th>
+                        <th class="py-3 px-4">متوسط تكلفة الوحدة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for s in stocks %}
+                    <tr class="hover:bg-slate-50/70">
+                        <td class="py-3 px-4 font-bold text-slate-900">{{ s.warehouse.name }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-800">{{ s.qty_on_hand|intcomma }}</td>
+                        <td class="py-3 px-4 font-mono text-amber-700">{{ s.qty_reserved|intcomma }}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-emerald-700">{{ s.qty_available|intcomma }}</td>
+                        <td class="py-3 px-4 font-mono text-slate-600">{{ s.product_cost|intcomma }} ج.م</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="py-8 text-center text-slate-400">
+                            لا يوجد رصيد حالي مسجل لهذا المنتج في المخازن
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

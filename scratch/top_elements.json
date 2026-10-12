@@ -1,0 +1,2722 @@
+[
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "home\nالرئيسية",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 122.515625,
+      "width": 300,
+      "height": 48,
+      "top": 122.515625,
+      "right": 1600,
+      "bottom": 170.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "view_agenda\nجدول الاعمال",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 170.515625,
+      "width": 300,
+      "height": 48,
+      "top": 170.515625,
+      "right": 1600,
+      "bottom": 218.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "calendar_month\nالتقويم",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 218.515625,
+      "width": 300,
+      "height": 48,
+      "top": 218.515625,
+      "right": 1600,
+      "bottom": 266.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "checklist\nTodos",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 266.515625,
+      "width": 300,
+      "height": 48,
+      "top": 266.515625,
+      "right": 1600,
+      "bottom": 314.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted navigation-item--active",
+    "text": "contacts\nجهات الاتصال",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 314.515625,
+      "width": 300,
+      "height": 48,
+      "top": 314.515625,
+      "right": 1600,
+      "bottom": 362.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "confirmation_number\nالمهام",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 362.515625,
+      "width": 300,
+      "height": 48,
+      "top": 362.515625,
+      "right": 1600,
+      "bottom": 410.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "store\nالمنتجات\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 410.515625,
+      "width": 300,
+      "height": 48,
+      "top": 410.515625,
+      "right": 1600,
+      "bottom": 458.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "timeline\nالأنشطة\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 458.515625,
+      "width": 300,
+      "height": 48,
+      "top": 458.515625,
+      "right": 1600,
+      "bottom": 506.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "storefront\nالمبيعات\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 506.515625,
+      "width": 300,
+      "height": 48,
+      "top": 506.515625,
+      "right": 1600,
+      "bottom": 554.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "storefront\nالمشتريات\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 554.515625,
+      "width": 300,
+      "height": 48,
+      "top": 554.515625,
+      "right": 1600,
+      "bottom": 602.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "inventory\nالمخازن\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 602.515625,
+      "width": 300,
+      "height": 48,
+      "top": 602.515625,
+      "right": 1600,
+      "bottom": 650.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "account_balance_wallet\nالخزن\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 650.515625,
+      "width": 300,
+      "height": 48,
+      "top": 650.515625,
+      "right": 1600,
+      "bottom": 698.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "approval\nالموافقات",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 698.515625,
+      "width": 300,
+      "height": 48,
+      "top": 698.515625,
+      "right": 1600,
+      "bottom": 746.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "assessment\nالتقييمات",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 746.515625,
+      "width": 300,
+      "height": 48,
+      "top": 746.515625,
+      "right": 1600,
+      "bottom": 794.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "attach_money\nالمصروفات",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 794.515625,
+      "width": 300,
+      "height": 48,
+      "top": 794.515625,
+      "right": 1600,
+      "bottom": 842.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "menu_book\nالمصادر",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 842.515625,
+      "width": 300,
+      "height": 48,
+      "top": 842.515625,
+      "right": 1600,
+      "bottom": 890.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "score\nالأهداف\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 890.515625,
+      "width": 300,
+      "height": 48,
+      "top": 890.515625,
+      "right": 1600,
+      "bottom": 938.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "event_busy\nخطة أيام العمل",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 938.515625,
+      "width": 300,
+      "height": 48,
+      "top": 938.515625,
+      "right": 1600,
+      "bottom": 986.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "track_changes\nتتبع الموقع",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 986.515625,
+      "width": 300,
+      "height": 48,
+      "top": 986.515625,
+      "right": 1600,
+      "bottom": 1034.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "group\nالآداء",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 1034.515625,
+      "width": 300,
+      "height": 48,
+      "top": 1034.515625,
+      "right": 1600,
+      "bottom": 1082.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "text_snippet\nالتقارير",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 1082.515625,
+      "width": 300,
+      "height": 48,
+      "top": 1082.515625,
+      "right": 1600,
+      "bottom": 1130.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "bug_report\nمشاكل تتبع الموقع",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 1130.515625,
+      "width": 300,
+      "height": 48,
+      "top": 1130.515625,
+      "right": 1600,
+      "bottom": 1178.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "text": "settings\nإعدادات\nadd",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1300,
+      "y": 1178.515625,
+      "width": 300,
+      "height": 48,
+      "top": 1178.515625,
+      "right": 1600,
+      "bottom": 1226.515625,
+      "left": 1300
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted",
+    "text": "notifications_active\n141",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1365.59375,
+      "y": 875,
+      "width": 48,
+      "height": 48,
+      "top": 875,
+      "right": 1413.59375,
+      "bottom": 923,
+      "left": 1365.59375
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed",
+    "text": "logout",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1308,
+      "y": 875,
+      "width": 48,
+      "height": 48,
+      "top": 875,
+      "right": 1356,
+      "bottom": 923,
+      "left": 1308
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-primary",
+    "text": "filter_list\n1",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 16,
+      "y": 32,
+      "width": 48,
+      "height": 48,
+      "top": 32,
+      "right": 64,
+      "bottom": 80,
+      "left": 16
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-button mat-mdc-button-base u-margin-bottom--normal mdc-button--raised mat-mdc-raised-button mat-unthemed ng-star-inserted",
+    "text": "انشئ جهة اتصال",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1152.640625,
+      "y": 96,
+      "width": 130.359375,
+      "height": 36,
+      "top": 96,
+      "right": 1283,
+      "bottom": 132,
+      "left": 1152.640625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "mat-mdc-input-element mat-mdc-form-field-input-control mdc-text-field__input ng-untouched ng-pristine ng-valid cdk-text-field-autofill-monitored",
+    "text": "",
+    "title": "",
+    "id": "mat-input-0",
+    "rect": {
+      "x": 32,
+      "y": 112,
+      "width": 180,
+      "height": 24,
+      "top": 112,
+      "right": 212,
+      "bottom": 136,
+      "left": 32
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mat-button-toggle-button mat-focus-indicator",
+    "text": "view_agenda",
+    "title": "",
+    "id": "mat-button-toggle-0-button",
+    "rect": {
+      "x": 1234,
+      "y": 175,
+      "width": 48,
+      "height": 48,
+      "top": 175,
+      "right": 1282,
+      "bottom": 223,
+      "left": 1234
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mat-button-toggle-button mat-focus-indicator",
+    "text": "table_chart",
+    "title": "",
+    "id": "mat-button-toggle-1-button",
+    "rect": {
+      "x": 1185,
+      "y": 175,
+      "width": 48,
+      "height": 48,
+      "top": 175,
+      "right": 1233,
+      "bottom": 223,
+      "left": 1185
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mat-button-toggle-button mat-focus-indicator",
+    "text": "view_kanban",
+    "title": "",
+    "id": "mat-button-toggle-2-button",
+    "rect": {
+      "x": 1136,
+      "y": 175,
+      "width": 48,
+      "height": 48,
+      "top": 175,
+      "right": 1184,
+      "bottom": 223,
+      "left": 1136
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary",
+    "text": "تصدير البيانات",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 64,
+      "y": 246,
+      "width": 107.796875,
+      "height": 36,
+      "top": 246,
+      "right": 171.796875,
+      "bottom": 282,
+      "left": 64
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed",
+    "text": "settings",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 16,
+      "y": 240,
+      "width": 48,
+      "height": 48,
+      "top": 240,
+      "right": 64,
+      "bottom": 288,
+      "left": 16
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-34-input",
+    "rect": {
+      "x": 1241,
+      "y": 315,
+      "width": 18,
+      "height": 18,
+      "top": 315,
+      "right": 1259,
+      "bottom": 333,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "mat-mdc-tooltip-trigger actionable-contact-field ng-star-inserted",
+    "text": "+201119992761",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 323.78125,
+      "y": 436.09375,
+      "width": 97.21875,
+      "height": 32,
+      "top": 436.09375,
+      "right": 421,
+      "bottom": 468.09375,
+      "left": 323.78125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-427-input",
+    "rect": {
+      "x": 1241,
+      "y": 376.5,
+      "width": 18,
+      "height": 18,
+      "top": 376.5,
+      "right": 1259,
+      "bottom": 394.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صس\n[#16456] صيدلية سامي هلال",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 368,
+      "width": 204,
+      "height": 35,
+      "top": 368,
+      "right": 1217,
+      "bottom": 403,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16456] صيدلية سامي هلال",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1037.65625,
+      "y": 364.90625,
+      "width": 136.34375,
+      "height": 39.59375,
+      "top": 364.90625,
+      "right": 1174,
+      "bottom": 404.5,
+      "left": 1037.65625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-431-input",
+    "rect": {
+      "x": 1241,
+      "y": 443.5,
+      "width": 18,
+      "height": 18,
+      "top": 443.5,
+      "right": 1259,
+      "bottom": 461.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "شد\n[#16455] شركة دراج هاوس (صيدليات المصطفى)",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 435,
+      "width": 204,
+      "height": 35,
+      "top": 435,
+      "right": 1217,
+      "bottom": 470,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16455] شركة دراج هاوس (صيدليات المصطفى)",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1017.921875,
+      "y": 431.90625,
+      "width": 156.078125,
+      "height": 39.59375,
+      "top": 431.90625,
+      "right": 1174,
+      "bottom": 471.5,
+      "left": 1017.921875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-435-input",
+    "rect": {
+      "x": 1241,
+      "y": 555.5,
+      "width": 18,
+      "height": 18,
+      "top": 555.5,
+      "right": 1259,
+      "bottom": 573.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "مم\n[#16454] محمد محمود مصطفي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 547,
+      "width": 204,
+      "height": 35,
+      "top": 547,
+      "right": 1217,
+      "bottom": 582,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16454] محمد محمود مصطفي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1042.578125,
+      "y": 543.90625,
+      "width": 131.421875,
+      "height": 39.59375,
+      "top": 543.90625,
+      "right": 1174,
+      "bottom": 583.5,
+      "left": 1042.578125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-439-input",
+    "rect": {
+      "x": 1241,
+      "y": 622.5,
+      "width": 18,
+      "height": 18,
+      "top": 622.5,
+      "right": 1259,
+      "bottom": 640.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "لم\n[#16453] لطيف مصطفي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 614,
+      "width": 204,
+      "height": 35,
+      "top": 614,
+      "right": 1217,
+      "bottom": 649,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16453] لطيف مصطفي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1030.53125,
+      "y": 610.90625,
+      "width": 143.46875,
+      "height": 39.59375,
+      "top": 610.90625,
+      "right": 1174,
+      "bottom": 650.5,
+      "left": 1030.53125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-443-input",
+    "rect": {
+      "x": 1241,
+      "y": 689.5,
+      "width": 18,
+      "height": 18,
+      "top": 689.5,
+      "right": 1259,
+      "bottom": 707.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اع\n[#16452] احمد عبد التواب",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 681,
+      "width": 204,
+      "height": 35,
+      "top": 681,
+      "right": 1217,
+      "bottom": 716,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16452] احمد عبد التواب",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1029.109375,
+      "y": 685.703125,
+      "width": 144.890625,
+      "height": 24,
+      "top": 685.703125,
+      "right": 1174,
+      "bottom": 709.703125,
+      "left": 1029.109375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-447-input",
+    "rect": {
+      "x": 1241,
+      "y": 756.5,
+      "width": 18,
+      "height": 18,
+      "top": 756.5,
+      "right": 1259,
+      "bottom": 774.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "أح\n[#16451] أحمد حمدي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 748,
+      "width": 204,
+      "height": 35,
+      "top": 748,
+      "right": 1217,
+      "bottom": 783,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16451] أحمد حمدي الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1015.359375,
+      "y": 752.703125,
+      "width": 158.640625,
+      "height": 24,
+      "top": 752.703125,
+      "right": 1174,
+      "bottom": 776.703125,
+      "left": 1015.359375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-451-input",
+    "rect": {
+      "x": 1241,
+      "y": 823.5,
+      "width": 18,
+      "height": 18,
+      "top": 823.5,
+      "right": 1259,
+      "bottom": 841.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "ام\n[#16450] ايليا مجدي",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 815,
+      "width": 204,
+      "height": 35,
+      "top": 815,
+      "right": 1217,
+      "bottom": 850,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16450] ايليا مجدي",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1056.359375,
+      "y": 819.703125,
+      "width": 117.640625,
+      "height": 24,
+      "top": 819.703125,
+      "right": 1174,
+      "bottom": 843.703125,
+      "left": 1056.359375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-455-input",
+    "rect": {
+      "x": 1241,
+      "y": 890.5,
+      "width": 18,
+      "height": 18,
+      "top": 890.5,
+      "right": 1259,
+      "bottom": 908.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صم\n[#16449] صيدليه مينا عياد الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 882,
+      "width": 204,
+      "height": 35,
+      "top": 882,
+      "right": 1217,
+      "bottom": 917,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16449] صيدليه مينا عياد الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1024.875,
+      "y": 878.90625,
+      "width": 149.125,
+      "height": 39.59375,
+      "top": 878.90625,
+      "right": 1174,
+      "bottom": 918.5,
+      "left": 1024.875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-459-input",
+    "rect": {
+      "x": 1241,
+      "y": 957.5,
+      "width": 18,
+      "height": 18,
+      "top": 957.5,
+      "right": 1259,
+      "bottom": 975.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اس\n[#16448] امل سعد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 949,
+      "width": 204,
+      "height": 35,
+      "top": 949,
+      "right": 1217,
+      "bottom": 984,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16448] امل سعد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1065.875,
+      "y": 953.703125,
+      "width": 108.125,
+      "height": 24,
+      "top": 953.703125,
+      "right": 1174,
+      "bottom": 977.703125,
+      "left": 1065.875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-463-input",
+    "rect": {
+      "x": 1241,
+      "y": 1024.5,
+      "width": 18,
+      "height": 18,
+      "top": 1024.5,
+      "right": 1259,
+      "bottom": 1042.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صو\n[#16447] صيدليه وائل عبد الستار الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1016,
+      "width": 204,
+      "height": 35,
+      "top": 1016,
+      "right": 1217,
+      "bottom": 1051,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16447] صيدليه وائل عبد الستار الغرق",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1027.09375,
+      "y": 1012.90625,
+      "width": 146.90625,
+      "height": 39.59375,
+      "top": 1012.90625,
+      "right": 1174,
+      "bottom": 1052.5,
+      "left": 1027.09375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-467-input",
+    "rect": {
+      "x": 1241,
+      "y": 1091.5,
+      "width": 18,
+      "height": 18,
+      "top": 1091.5,
+      "right": 1259,
+      "bottom": 1109.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صا\n[#16446] صيدليه اسراء عادل بني مزار",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1083,
+      "width": 204,
+      "height": 35,
+      "top": 1083,
+      "right": 1217,
+      "bottom": 1118,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16446] صيدليه اسراء عادل بني مزار",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1042.578125,
+      "y": 1079.90625,
+      "width": 131.421875,
+      "height": 39.59375,
+      "top": 1079.90625,
+      "right": 1174,
+      "bottom": 1119.5,
+      "left": 1042.578125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-471-input",
+    "rect": {
+      "x": 1241,
+      "y": 1203.5,
+      "width": 18,
+      "height": 18,
+      "top": 1203.5,
+      "right": 1259,
+      "bottom": 1221.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اج\n[#16445] ايمان جمعه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1195,
+      "width": 204,
+      "height": 35,
+      "top": 1195,
+      "right": 1217,
+      "bottom": 1230,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16445] ايمان جمعه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1051.109375,
+      "y": 1199.703125,
+      "width": 122.890625,
+      "height": 24,
+      "top": 1199.703125,
+      "right": 1174,
+      "bottom": 1223.703125,
+      "left": 1051.109375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-475-input",
+    "rect": {
+      "x": 1241,
+      "y": 1270.5,
+      "width": 18,
+      "height": 18,
+      "top": 1270.5,
+      "right": 1259,
+      "bottom": 1288.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صا\n[#16444] صيدليه احمد اسماعيل الوابور",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1262,
+      "width": 204,
+      "height": 35,
+      "top": 1262,
+      "right": 1217,
+      "bottom": 1297,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16444] صيدليه احمد اسماعيل الوابور",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1046.78125,
+      "y": 1258.90625,
+      "width": 127.21875,
+      "height": 39.59375,
+      "top": 1258.90625,
+      "right": 1174,
+      "bottom": 1298.5,
+      "left": 1046.78125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-479-input",
+    "rect": {
+      "x": 1241,
+      "y": 1337.5,
+      "width": 18,
+      "height": 18,
+      "top": 1337.5,
+      "right": 1259,
+      "bottom": 1355.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صد\n[#16443] صيدليه دعاء محمد عاشور",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1329,
+      "width": 204,
+      "height": 35,
+      "top": 1329,
+      "right": 1217,
+      "bottom": 1364,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16443] صيدليه دعاء محمد عاشور",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1048.734375,
+      "y": 1325.90625,
+      "width": 125.265625,
+      "height": 39.59375,
+      "top": 1325.90625,
+      "right": 1174,
+      "bottom": 1365.5,
+      "left": 1048.734375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-483-input",
+    "rect": {
+      "x": 1241,
+      "y": 1449.5,
+      "width": 18,
+      "height": 18,
+      "top": 1449.5,
+      "right": 1259,
+      "bottom": 1467.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صا\n[#16442] صيدليه احمد وائل ابشواي",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1441,
+      "width": 204,
+      "height": 35,
+      "top": 1441,
+      "right": 1217,
+      "bottom": 1476,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16442] صيدليه احمد وائل ابشواي",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1018.4375,
+      "y": 1437.90625,
+      "width": 155.5625,
+      "height": 39.59375,
+      "top": 1437.90625,
+      "right": 1174,
+      "bottom": 1477.5,
+      "left": 1018.4375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-487-input",
+    "rect": {
+      "x": 1241,
+      "y": 1516.5,
+      "width": 18,
+      "height": 18,
+      "top": 1516.5,
+      "right": 1259,
+      "bottom": 1534.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صح\n[#16441] صيدلية حازم",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1508,
+      "width": 204,
+      "height": 35,
+      "top": 1508,
+      "right": 1217,
+      "bottom": 1543,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16441] صيدلية حازم",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1049.859375,
+      "y": 1512.703125,
+      "width": 124.140625,
+      "height": 24,
+      "top": 1512.703125,
+      "right": 1174,
+      "bottom": 1536.703125,
+      "left": 1049.859375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-491-input",
+    "rect": {
+      "x": 1241,
+      "y": 1628.5,
+      "width": 18,
+      "height": 18,
+      "top": 1628.5,
+      "right": 1259,
+      "bottom": 1646.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "طا\n[#16440] طه احمد عطيه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1620,
+      "width": 204,
+      "height": 35,
+      "top": 1620,
+      "right": 1217,
+      "bottom": 1655,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16440] طه احمد عطيه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1035.171875,
+      "y": 1624.703125,
+      "width": 138.828125,
+      "height": 24,
+      "top": 1624.703125,
+      "right": 1174,
+      "bottom": 1648.703125,
+      "left": 1035.171875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-495-input",
+    "rect": {
+      "x": 1241,
+      "y": 1740.5,
+      "width": 18,
+      "height": 18,
+      "top": 1740.5,
+      "right": 1259,
+      "bottom": 1758.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "عا\n[#16439] عصام اسماعيل",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1732,
+      "width": 204,
+      "height": 35,
+      "top": 1732,
+      "right": 1217,
+      "bottom": 1767,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16439] عصام اسماعيل",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1031.9375,
+      "y": 1736.703125,
+      "width": 142.0625,
+      "height": 24,
+      "top": 1736.703125,
+      "right": 1174,
+      "bottom": 1760.703125,
+      "left": 1031.9375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-499-input",
+    "rect": {
+      "x": 1241,
+      "y": 1852.5,
+      "width": 18,
+      "height": 18,
+      "top": 1852.5,
+      "right": 1259,
+      "bottom": 1870.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "ما\n[#16438] مستوصف اهناسيا",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1844,
+      "width": 204,
+      "height": 35,
+      "top": 1844,
+      "right": 1217,
+      "bottom": 1879,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16438] مستوصف اهناسيا",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1059.515625,
+      "y": 1840.90625,
+      "width": 114.484375,
+      "height": 39.59375,
+      "top": 1840.90625,
+      "right": 1174,
+      "bottom": 1880.5,
+      "left": 1059.515625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-503-input",
+    "rect": {
+      "x": 1241,
+      "y": 1964.5,
+      "width": 18,
+      "height": 18,
+      "top": 1964.5,
+      "right": 1259,
+      "bottom": 1982.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "فا\n[#16437] فارما اوفر سيز بنى مزار",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 1956,
+      "width": 204,
+      "height": 35,
+      "top": 1956,
+      "right": 1217,
+      "bottom": 1991,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16437] فارما اوفر سيز بنى مزار",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1014.1875,
+      "y": 1952.90625,
+      "width": 159.8125,
+      "height": 39.59375,
+      "top": 1952.90625,
+      "right": 1174,
+      "bottom": 1992.5,
+      "left": 1014.1875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-507-input",
+    "rect": {
+      "x": 1241,
+      "y": 2031.5,
+      "width": 18,
+      "height": 18,
+      "top": 2031.5,
+      "right": 1259,
+      "bottom": 2049.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "رف\n[#16436] رفعت فتحى رمضان",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2023,
+      "width": 204,
+      "height": 35,
+      "top": 2023,
+      "right": 1217,
+      "bottom": 2058,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16436] رفعت فتحى رمضان",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1049.359375,
+      "y": 2019.90625,
+      "width": 124.640625,
+      "height": 39.59375,
+      "top": 2019.90625,
+      "right": 1174,
+      "bottom": 2059.5,
+      "left": 1049.359375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-511-input",
+    "rect": {
+      "x": 1241,
+      "y": 2143.5,
+      "width": 18,
+      "height": 18,
+      "top": 2143.5,
+      "right": 1259,
+      "bottom": 2161.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "عا\n[#16435] عماد الدين قرنى",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2135,
+      "width": 204,
+      "height": 35,
+      "top": 2135,
+      "right": 1217,
+      "bottom": 2170,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16435] عماد الدين قرنى",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1026.546875,
+      "y": 2139.703125,
+      "width": 147.453125,
+      "height": 24,
+      "top": 2139.703125,
+      "right": 1174,
+      "bottom": 2163.703125,
+      "left": 1026.546875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-515-input",
+    "rect": {
+      "x": 1241,
+      "y": 2255.5,
+      "width": 18,
+      "height": 18,
+      "top": 2255.5,
+      "right": 1259,
+      "bottom": 2273.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "مس\n[#16434] محمد سعد محفوظ",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2247,
+      "width": 204,
+      "height": 35,
+      "top": 2247,
+      "right": 1217,
+      "bottom": 2282,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16434] محمد سعد محفوظ",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1055.171875,
+      "y": 2243.90625,
+      "width": 118.828125,
+      "height": 39.59375,
+      "top": 2243.90625,
+      "right": 1174,
+      "bottom": 2283.5,
+      "left": 1055.171875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-519-input",
+    "rect": {
+      "x": 1241,
+      "y": 2367.5,
+      "width": 18,
+      "height": 18,
+      "top": 2367.5,
+      "right": 1259,
+      "bottom": 2385.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "ها\n[#16433] هاني العطف",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2359,
+      "width": 204,
+      "height": 35,
+      "top": 2359,
+      "right": 1217,
+      "bottom": 2394,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16433] هاني العطف",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1043.4375,
+      "y": 2363.703125,
+      "width": 130.5625,
+      "height": 24,
+      "top": 2363.703125,
+      "right": 1174,
+      "bottom": 2387.703125,
+      "left": 1043.4375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-523-input",
+    "rect": {
+      "x": 1241,
+      "y": 2479.5,
+      "width": 18,
+      "height": 18,
+      "top": 2479.5,
+      "right": 1259,
+      "bottom": 2497.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اس\n[#16432] احمد سليمان الديب",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2471,
+      "width": 204,
+      "height": 35,
+      "top": 2471,
+      "right": 1217,
+      "bottom": 2506,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16432] احمد سليمان الديب",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1043.609375,
+      "y": 2467.90625,
+      "width": 130.390625,
+      "height": 39.59375,
+      "top": 2467.90625,
+      "right": 1174,
+      "bottom": 2507.5,
+      "left": 1043.609375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-527-input",
+    "rect": {
+      "x": 1241,
+      "y": 2591.5,
+      "width": 18,
+      "height": 18,
+      "top": 2591.5,
+      "right": 1259,
+      "bottom": 2609.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صو\n[#16431] صيدليه وفاء مغاغه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2583,
+      "width": 204,
+      "height": 35,
+      "top": 2583,
+      "right": 1217,
+      "bottom": 2618,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16431] صيدليه وفاء مغاغه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1046.921875,
+      "y": 2579.90625,
+      "width": 127.078125,
+      "height": 39.59375,
+      "top": 2579.90625,
+      "right": 1174,
+      "bottom": 2619.5,
+      "left": 1046.921875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-531-input",
+    "rect": {
+      "x": 1241,
+      "y": 2658.5,
+      "width": 18,
+      "height": 18,
+      "top": 2658.5,
+      "right": 1259,
+      "bottom": 2676.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "مس\n[#16430] مخزن ستروكا جملة",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2650,
+      "width": 204,
+      "height": 35,
+      "top": 2650,
+      "right": 1217,
+      "bottom": 2685,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16430] مخزن ستروكا جملة",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1043.484375,
+      "y": 2646.90625,
+      "width": 130.515625,
+      "height": 39.59375,
+      "top": 2646.90625,
+      "right": 1174,
+      "bottom": 2686.5,
+      "left": 1043.484375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-704-input",
+    "rect": {
+      "x": 1241,
+      "y": 2815.5,
+      "width": 18,
+      "height": 18,
+      "top": 2815.5,
+      "right": 1259,
+      "bottom": 2833.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صو\n[#16429] صيدلية ورده سعيد عبد الفتاح بني حدير",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2807,
+      "width": 204,
+      "height": 35,
+      "top": 2807,
+      "right": 1217,
+      "bottom": 2842,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16429] صيدلية ورده سعيد عبد الفتاح بني حدير",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1030.84375,
+      "y": 2803.90625,
+      "width": 143.15625,
+      "height": 39.59375,
+      "top": 2803.90625,
+      "right": 1174,
+      "bottom": 2843.5,
+      "left": 1030.84375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-708-input",
+    "rect": {
+      "x": 1241,
+      "y": 2927.5,
+      "width": 18,
+      "height": 18,
+      "top": 2927.5,
+      "right": 1259,
+      "bottom": 2945.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "مأ\n[#16428] مريم أمين",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 2919,
+      "width": 204,
+      "height": 35,
+      "top": 2919,
+      "right": 1217,
+      "bottom": 2954,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16428] مريم أمين",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1060.828125,
+      "y": 2923.703125,
+      "width": 113.171875,
+      "height": 24,
+      "top": 2923.703125,
+      "right": 1174,
+      "bottom": 2947.703125,
+      "left": 1060.828125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-712-input",
+    "rect": {
+      "x": 1241,
+      "y": 3039.5,
+      "width": 18,
+      "height": 18,
+      "top": 3039.5,
+      "right": 1259,
+      "bottom": 3057.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "وم\n[#16427] وائل محمد محمد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3031,
+      "width": 204,
+      "height": 35,
+      "top": 3031,
+      "right": 1217,
+      "bottom": 3066,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16427] وائل محمد محمد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1021.5625,
+      "y": 3035.703125,
+      "width": 152.4375,
+      "height": 24,
+      "top": 3035.703125,
+      "right": 1174,
+      "bottom": 3059.703125,
+      "left": 1021.5625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-716-input",
+    "rect": {
+      "x": 1241,
+      "y": 3151.5,
+      "width": 18,
+      "height": 18,
+      "top": 3151.5,
+      "right": 1259,
+      "bottom": 3169.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "عا\n[#16426] عمرو السعيد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3143,
+      "width": 204,
+      "height": 35,
+      "top": 3143,
+      "right": 1217,
+      "bottom": 3178,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16426] عمرو السعيد",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1045.171875,
+      "y": 3147.703125,
+      "width": 128.828125,
+      "height": 24,
+      "top": 3147.703125,
+      "right": 1174,
+      "bottom": 3171.703125,
+      "left": 1045.171875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-720-input",
+    "rect": {
+      "x": 1241,
+      "y": 3263.5,
+      "width": 18,
+      "height": 18,
+      "top": 3263.5,
+      "right": 1259,
+      "bottom": 3281.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صع\n[#16425] صيدليه علي مبارك منيا الحيط",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3255,
+      "width": 204,
+      "height": 35,
+      "top": 3255,
+      "right": 1217,
+      "bottom": 3290,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16425] صيدليه علي مبارك منيا الحيط",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1016.46875,
+      "y": 3251.90625,
+      "width": 157.53125,
+      "height": 39.59375,
+      "top": 3251.90625,
+      "right": 1174,
+      "bottom": 3291.5,
+      "left": 1016.46875
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-724-input",
+    "rect": {
+      "x": 1241,
+      "y": 3330.5,
+      "width": 18,
+      "height": 18,
+      "top": 3330.5,
+      "right": 1259,
+      "bottom": 3348.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اS\n[#16424] المغفره sur",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3322,
+      "width": 204,
+      "height": 35,
+      "top": 3322,
+      "right": 1217,
+      "bottom": 3357,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16424] المغفره sur",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1049.65625,
+      "y": 3326.703125,
+      "width": 124.34375,
+      "height": 24,
+      "top": 3326.703125,
+      "right": 1174,
+      "bottom": 3350.703125,
+      "left": 1049.65625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-728-input",
+    "rect": {
+      "x": 1241,
+      "y": 3442.5,
+      "width": 18,
+      "height": 18,
+      "top": 3442.5,
+      "right": 1259,
+      "bottom": 3460.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "ص\n[#16423] ص.الصحة",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3434,
+      "width": 204,
+      "height": 35,
+      "top": 3434,
+      "right": 1217,
+      "bottom": 3469,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16423] ص.الصحة",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1064.078125,
+      "y": 3438.703125,
+      "width": 109.921875,
+      "height": 24,
+      "top": 3438.703125,
+      "right": 1174,
+      "bottom": 3462.703125,
+      "left": 1064.078125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-732-input",
+    "rect": {
+      "x": 1241,
+      "y": 3554.5,
+      "width": 18,
+      "height": 18,
+      "top": 3554.5,
+      "right": 1259,
+      "bottom": 3572.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صا\n[#16422] صيدليه احمد ابراهيم الفيوم سنتر",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3546,
+      "width": 204,
+      "height": 35,
+      "top": 3546,
+      "right": 1217,
+      "bottom": 3581,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16422] صيدليه احمد ابراهيم الفيوم سنتر",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1046.78125,
+      "y": 3542.90625,
+      "width": 127.21875,
+      "height": 39.59375,
+      "top": 3542.90625,
+      "right": 1174,
+      "bottom": 3582.5,
+      "left": 1046.78125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-736-input",
+    "rect": {
+      "x": 1241,
+      "y": 3666.5,
+      "width": 18,
+      "height": 18,
+      "top": 3666.5,
+      "right": 1259,
+      "bottom": 3684.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "عأ\n[#16421] عماد أمين",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3658,
+      "width": 204,
+      "height": 35,
+      "top": 3658,
+      "right": 1217,
+      "bottom": 3693,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16421] عماد أمين",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1061.40625,
+      "y": 3662.703125,
+      "width": 112.59375,
+      "height": 24,
+      "top": 3662.703125,
+      "right": 1174,
+      "bottom": 3686.703125,
+      "left": 1061.40625
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-740-input",
+    "rect": {
+      "x": 1241,
+      "y": 3778.5,
+      "width": 18,
+      "height": 18,
+      "top": 3778.5,
+      "right": 1259,
+      "bottom": 3796.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صا\n[#16420] صيدليه احمد محمد على",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3770,
+      "width": 204,
+      "height": 35,
+      "top": 3770,
+      "right": 1217,
+      "bottom": 3805,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16420] صيدليه احمد محمد على",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1046.78125,
+      "y": 3766.90625,
+      "width": 127.21875,
+      "height": 39.59375,
+      "top": 3766.90625,
+      "right": 1174,
+      "bottom": 3806.5,
+      "left": 1046.78125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-744-input",
+    "rect": {
+      "x": 1241,
+      "y": 3845.5,
+      "width": 18,
+      "height": 18,
+      "top": 3845.5,
+      "right": 1259,
+      "bottom": 3863.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "رس\n[#16419] رمضان سميح خميس",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3837,
+      "width": 204,
+      "height": 35,
+      "top": 3837,
+      "right": 1217,
+      "bottom": 3872,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16419] رمضان سميح خميس",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1043.203125,
+      "y": 3833.90625,
+      "width": 130.796875,
+      "height": 39.59375,
+      "top": 3833.90625,
+      "right": 1174,
+      "bottom": 3873.5,
+      "left": 1043.203125
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-748-input",
+    "rect": {
+      "x": 1241,
+      "y": 3912.5,
+      "width": 18,
+      "height": 18,
+      "top": 3912.5,
+      "right": 1259,
+      "bottom": 3930.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "اع\n[#16418] ابتسام عبد جمعه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3904,
+      "width": 204,
+      "height": 35,
+      "top": 3904,
+      "right": 1217,
+      "bottom": 3939,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16418] ابتسام عبد جمعه",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1021.375,
+      "y": 3908.703125,
+      "width": 152.625,
+      "height": 24,
+      "top": 3908.703125,
+      "right": 1174,
+      "bottom": 3932.703125,
+      "left": 1021.375
+    }
+  },
+  {
+    "tag": "INPUT",
+    "class": "ag-input-field-input ag-checkbox-input",
+    "text": "",
+    "title": "",
+    "id": "ag-752-input",
+    "rect": {
+      "x": 1241,
+      "y": 3979.5,
+      "width": 18,
+      "height": 18,
+      "top": 3979.5,
+      "right": 1259,
+      "bottom": 3997.5,
+      "left": 1241
+    }
+  },
+  {
+    "tag": "A",
+    "class": "ng-star-inserted",
+    "text": "صف\n[#16417] صيدليه فاطمه الزهراء",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1013,
+      "y": 3971,
+      "width": 204,
+      "height": 35,
+      "top": 3971,
+      "right": 1217,
+      "bottom": 4006,
+      "left": 1013
+    }
+  },
+  {
+    "tag": "A",
+    "class": "",
+    "text": "[#16417] صيدليه فاطمه الزهراء",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 1034.671875,
+      "y": 3967.90625,
+      "width": 139.328125,
+      "height": 39.59375,
+      "top": 3967.90625,
+      "right": 1174,
+      "bottom": 4007.5,
+      "left": 1034.671875
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-first mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled ng-star-inserted",
+    "text": "",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 168,
+      "y": 4026,
+      "width": 48,
+      "height": 48,
+      "top": 4026,
+      "right": 216,
+      "bottom": 4074,
+      "left": 168
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-previous mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled",
+    "text": "",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 120,
+      "y": 4026,
+      "width": 48,
+      "height": 48,
+      "top": 4026,
+      "right": 168,
+      "bottom": 4074,
+      "left": 120
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-next mat-mdc-button-disabled-interactive mat-unthemed",
+    "text": "",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 72,
+      "y": 4026,
+      "width": 48,
+      "height": 48,
+      "top": 4026,
+      "right": 120,
+      "bottom": 4074,
+      "left": 72
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-last mat-mdc-button-disabled-interactive mat-unthemed ng-star-inserted",
+    "text": "",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 24,
+      "y": 4026,
+      "width": 48,
+      "height": 48,
+      "top": 4026,
+      "right": 72,
+      "bottom": 4074,
+      "left": 24
+    }
+  },
+  {
+    "tag": "BUTTON",
+    "class": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary",
+    "text": "add",
+    "title": "",
+    "id": "",
+    "rect": {
+      "x": 16,
+      "y": 928,
+      "width": 56,
+      "height": 56,
+      "top": 928,
+      "right": 72,
+      "bottom": 984,
+      "left": 16
+    }
+  }
+]

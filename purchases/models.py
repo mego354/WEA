@@ -11,8 +11,8 @@ class PurchaseOrder(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending / قيد الانتظار'),
         ('approved', 'Approved / معتمد'),
-        ('picked', 'Picked / تم الاستلام في المخزن'),
-        ('settled', 'Settled / تمت الفوترة في الحسابات'),
+        ('picked', 'Picked / دخل المخزن'),
+        ('settled', 'Settled / تم الترحيل للحسابات'),
         ('rejected', 'Rejected / مرفوض'),
         ('split', 'Split / مقسم'),
         ('cancelled', 'Cancelled / ملغي'),
@@ -28,11 +28,18 @@ class PurchaseOrder(models.Model):
     order_date = models.DateField(default=timezone.now, verbose_name="تاريخ الطلب")
     expected_delivery_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستلام المتوقع")
     
+    delivery_agent = models.CharField(max_length=150, blank=True, verbose_name="مسئول التوصيل")
+    delivery_time = models.CharField(max_length=100, blank=True, verbose_name="وقت التوصيل")
+
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="حالة الطلب")
     is_hold = models.BooleanField(default=False, verbose_name="معلق مؤقتاً (Hold)")
+    is_canceled = models.BooleanField(default=False, verbose_name="ملغي")
+    is_split = models.BooleanField(default=False, verbose_name="مقسم")
+    parent_order = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name="split_orders", verbose_name="الطلب الأصلي المنفصل عنه")
     
     # Inventory & Accounting Linkage
     memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_order", verbose_name="إذن إضافة المخزن")
+
     stocked_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ استلام البضاعة في المخزن")
     invoiced_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الترحيل للحسابات (الفوترة)")
     
@@ -102,17 +109,43 @@ class PurchaseOrder(models.Model):
         ])
 
     @property
+    def status_label_en(self):
+        labels = {
+            'pending': 'Pending',
+            'approved': 'Approved',
+            'picked': 'Picked',
+            'settled': 'Settled',
+            'rejected': 'Rejected',
+            'split': 'Split',
+            'cancelled': 'Cancelled'
+        }
+        return labels.get(self.status, self.status.capitalize())
+
+    @property
+    def status_label_ar(self):
+        labels = {
+            'pending': 'قيد الانتظار',
+            'approved': 'معتمد',
+            'picked': 'دخل المخزن',
+            'settled': 'تم الترحيل للحسابات',
+            'rejected': 'مرفوض',
+            'split': 'مقسم',
+            'cancelled': 'ملغي'
+        }
+        return labels.get(self.status, self.status)
+
+    @property
     def status_badge_class(self):
         mapping = {
-            'settled': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            'picked': 'bg-blue-50 text-blue-700 border-blue-200',
-            'approved': 'bg-green-50 text-green-700 border-green-200',
-            'pending': 'bg-amber-50 text-amber-700 border-amber-200',
-            'rejected': 'bg-red-50 text-red-700 border-red-200',
-            'cancelled': 'bg-slate-100 text-slate-700 border-slate-300',
-            'split': 'bg-purple-50 text-purple-700 border-purple-200',
+            'settled': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            'picked': 'bg-blue-50 text-blue-700 border border-blue-200',
+            'approved': 'bg-green-50 text-green-700 border border-green-200',
+            'pending': 'bg-amber-50 text-amber-700 border border-amber-200',
+            'rejected': 'bg-red-50 text-red-700 border border-red-200',
+            'cancelled': 'bg-slate-100 text-slate-700 border border-slate-300',
+            'split': 'bg-purple-50 text-purple-700 border border-purple-200',
         }
-        return mapping.get(self.status, 'bg-slate-50 text-slate-600 border-slate-200')
+        return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
 
 
 class PurchaseOrderItem(models.Model):
@@ -172,3 +205,145 @@ class PurchaseOrderAttachment(models.Model):
     class Meta:
         verbose_name = "مرفق أمر شراء"
         verbose_name_plural = "مرفقات أوامر الشراء"
+
+
+class PurchaseOrderComment(models.Model):
+    order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name="comments", verbose_name="أمر الشراء")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="po_comments", verbose_name="الكاتب")
+    text = models.TextField(verbose_name="نص التعليق")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "تعليق أمر شراء"
+        verbose_name_plural = "تعليقات أوامر الشراء"
+        ordering = ['-created_at']
+
+
+class PurchaseReturnOrder(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending / قيد الانتظار'),
+        ('approved', 'Approved / معتمد'),
+        ('delivered', 'Delivered / خرج من المخزن'),
+        ('settled', 'Settled / تم الترحيل للحسابات'),
+        ('cancelled', 'Cancelled / ملغي'),
+    ]
+
+    serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
+    order_number = models.CharField(max_length=50, unique=True, verbose_name="رقم أمر الإرجاع")
+
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="return_orders", verbose_name="أمر الشراء الأصلي")
+    supplier = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="purchase_return_orders", verbose_name="المورد")
+    warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, related_name="purchase_return_orders", verbose_name="مخزن الإرجاع")
+
+    order_date = models.DateField(default=timezone.now, verbose_name="تاريخ الإرجاع")
+    delivery_agent = models.CharField(max_length=150, blank=True, verbose_name="مسئول الاستلام / الشحن")
+    delivery_time = models.CharField(max_length=100, blank=True, verbose_name="وقت الاستلام")
+
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="حالة المرتجع")
+
+    memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_return_order", verbose_name="إذن صرف المخزن")
+    dispatched_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ خروج البضاعة من المخزن")
+    settled_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الترحيل للحسابات (إثبات إشعار الخصم)")
+
+    items_count = models.PositiveIntegerField(default=0, verbose_name="عدد الأصناف")
+    items_quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الكميات المرتجعة")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="المجموع قبل الضريبة (ج.م)")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="قيمة الضريبة (ج.م)")
+    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي قيمة المرتجع (ج.م)")
+
+    notes = models.TextField(blank=True, verbose_name="ملاحظات وأسباب الإرجاع")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_purchase_returns", verbose_name="المنشئ")
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_purchase_returns", verbose_name="آخر تعديل بواسطة")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "أمر إرجاع مشتريات"
+        verbose_name_plural = "أوامر إرجاع المشتريات"
+        ordering = ['-serial_num']
+
+    def __str__(self):
+        return f"{self.order_number} - {self.supplier.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.serial_num:
+            max_serial = PurchaseReturnOrder.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 0
+            self.serial_num = max_serial + 1
+            self.order_number = f"#RO-{self.serial_num}"
+        super().save(*args, **kwargs)
+
+    def recalculate_totals(self):
+        items = self.items.all()
+        self.items_count = items.count()
+        self.items_quantity = sum((item.quantity for item in items), Decimal('0.00'))
+        self.subtotal = sum((item.subtotal for item in items), Decimal('0.00'))
+        self.tax_amount = sum((item.tax_amount for item in items), Decimal('0.00'))
+        self.grand_total = sum((item.total_price for item in items), Decimal('0.00'))
+        self.save(update_fields=['items_count', 'items_quantity', 'subtotal', 'tax_amount', 'grand_total'])
+
+    @property
+    def status_label_en(self):
+        labels = {
+            'pending': 'Pending',
+            'approved': 'Approved',
+            'delivered': 'Delivered',
+            'settled': 'Settled',
+            'cancelled': 'Cancelled'
+        }
+        return labels.get(self.status, self.status.capitalize())
+
+    @property
+    def status_label_ar(self):
+        labels = {
+            'pending': 'قيد الانتظار',
+            'approved': 'معتمد',
+            'delivered': 'خرج من المخزن',
+            'settled': 'تم الترحيل للحسابات',
+            'cancelled': 'ملغي'
+        }
+        return labels.get(self.status, self.status)
+
+    @property
+    def status_badge_class(self):
+        mapping = {
+            'settled': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            'delivered': 'bg-blue-50 text-blue-700 border border-blue-200',
+            'approved': 'bg-green-50 text-green-700 border border-green-200',
+            'pending': 'bg-amber-50 text-amber-700 border border-amber-200',
+            'cancelled': 'bg-slate-100 text-slate-700 border border-slate-300',
+        }
+        return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
+
+
+class PurchaseReturnOrderItem(models.Model):
+    return_order = models.ForeignKey(PurchaseReturnOrder, on_delete=models.CASCADE, related_name="items", verbose_name="أمر الإرجاع")
+    item_order = models.PositiveSmallIntegerField(default=1, verbose_name="ترتيب البند")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="purchase_return_items", verbose_name="المنتج")
+
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="الكمية المرتجعة")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="سعر التكلفة المرتجع (ج.م)")
+
+    product_batch_number = models.CharField(max_length=100, blank=True, verbose_name="رقم التشغيل (Batch No)")
+    product_expiry_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الصلاحية")
+
+    tax_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, verbose_name="الضريبة %")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="قيمة الضريبة")
+
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="المجموع قبل الضريبة")
+    total_price = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الصافي الإجمالي")
+
+    class Meta:
+        verbose_name = "بند أمر إرجاع مشتريات"
+        verbose_name_plural = "بنود أوامر إرجاع المشتريات"
+        ordering = ['item_order']
+
+    def save(self, *args, **kwargs):
+        self.subtotal = (Decimal(str(self.quantity)) * Decimal(str(self.unit_price))).quantize(Decimal('0.01'))
+        tax_pct = Decimal(str(self.tax_percentage or '0'))
+        if tax_pct > 0:
+            self.tax_amount = (self.subtotal * (tax_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+        else:
+            self.tax_amount = Decimal('0.00')
+        self.total_price = self.subtotal + self.tax_amount
+        super().save(*args, **kwargs)
+

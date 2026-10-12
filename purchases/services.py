@@ -2,9 +2,10 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from .models import PurchaseOrder, PurchaseOrderItem
+from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
 from inventory.models import InventoryMemo, InventoryMemoItem, InventoryStock, InventoryLot
 from treasury.models import VendorAccount, VendorTransaction, VendorInstallment
+
 
 
 class PurchaseOrderService:
@@ -243,3 +244,237 @@ class PurchaseOrderService:
         order.updated_by = user
         order.save(update_fields=['status', 'updated_by', 'updated_at'])
         return order
+
+    @staticmethod
+    @transaction.atomic
+    def split_order(order: PurchaseOrder, split_item_ids_with_qty, user):
+        """
+        Splits selected items or quantities from an existing order into a new child order.
+        split_item_ids_with_qty: dict of {item_id: split_qty}
+        """
+        if order.status in ['settled', 'cancelled']:
+            raise ValidationError("لا يمكن فصل طلب تم ترحيله للحسابات أو ملغي.")
+
+        if not split_item_ids_with_qty:
+            raise ValidationError("يرجى تحديد الأصناف المراد فصلها.")
+
+        # Create child order
+        child_order = PurchaseOrder.objects.create(
+            supplier=order.supplier,
+            target_warehouse=order.target_warehouse,
+            delivery_address=order.delivery_address,
+            order_date=order.order_date,
+            expected_delivery_date=order.expected_delivery_date,
+            delivery_agent=order.delivery_agent,
+            delivery_time=order.delivery_time,
+            custom_discount_percentage=order.custom_discount_percentage,
+            shipping_fees=Decimal('0.00'),
+            notes=f"أمر مشتريات منفصل عن الطلب الأصلي {order.order_number}",
+            status=order.status if order.status in ['pending', 'approved'] else 'pending',
+            is_split=True,
+            parent_order=order,
+            created_by=user,
+            updated_by=user
+        )
+
+        child_item_idx = 1
+        for item_id, split_qty in split_item_ids_with_qty.items():
+            split_qty = Decimal(str(split_qty))
+            item = order.items.filter(id=item_id).first()
+            if not item or split_qty <= Decimal('0.00'):
+                continue
+
+            if split_qty > item.quantity:
+                raise ValidationError(f"الكمية المراد فصلها للصنف {item.product.name} أكبر من الكمية المسجلة.")
+
+            # Create line in child order
+            PurchaseOrderItem.objects.create(
+                order=child_order,
+                item_order=child_item_idx,
+                product=item.product,
+                quantity=split_qty,
+                unit_price=item.unit_price,
+                product_batch_number=item.product_batch_number,
+                product_expiry_date=item.product_expiry_date,
+                discount_percentage=item.discount_percentage,
+                tax_percentage=item.tax_percentage
+            )
+            child_item_idx += 1
+
+            # Adjust or remove from parent order
+            remaining_qty = item.quantity - split_qty
+            if remaining_qty <= Decimal('0.00'):
+                item.delete()
+            else:
+                item.quantity = remaining_qty
+                item.save()
+
+        order.is_split = True
+        order.save(update_fields=['is_split', 'updated_at'])
+        order.recalculate_totals()
+        child_order.recalculate_totals()
+        return child_order
+
+
+class PurchaseReturnOrderService:
+
+    @staticmethod
+    @transaction.atomic
+    def create_return_order(supplier, warehouse, order_date, items_data, user,
+                            purchase_order=None, delivery_agent="", delivery_time="", notes=""):
+        """
+        Creates a new purchase return order with line items.
+        """
+        if not items_data:
+            raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر إرجاع المشتريات.")
+
+        return_order = PurchaseReturnOrder.objects.create(
+            supplier=supplier,
+            warehouse=warehouse,
+            purchase_order=purchase_order,
+            order_date=order_date or timezone.now().date(),
+            delivery_agent=delivery_agent,
+            delivery_time=delivery_time,
+            notes=notes,
+            created_by=user,
+            updated_by=user,
+            status='pending'
+        )
+
+        for idx, itm in enumerate(items_data, start=1):
+            PurchaseReturnOrderItem.objects.create(
+                return_order=return_order,
+                item_order=idx,
+                product=itm['product'],
+                quantity=Decimal(str(itm['quantity'])),
+                unit_price=Decimal(str(itm['unit_price'])),
+                product_batch_number=itm.get('batch_number', ''),
+                product_expiry_date=itm.get('expiry_date') or None,
+                tax_percentage=Decimal(str(itm.get('tax_percentage', 0)))
+            )
+
+        return_order.recalculate_totals()
+        return return_order
+
+    @staticmethod
+    @transaction.atomic
+    def approve_return_order(return_order: PurchaseReturnOrder, user):
+        """Transitions status from pending to approved."""
+        if return_order.status != 'pending':
+            raise ValidationError(f"لا يمكن اعتماد مرتجع بحالة: {return_order.get_status_display()}")
+        return_order.status = 'approved'
+        return_order.updated_by = user
+        return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+        return return_order
+
+    @staticmethod
+    @transaction.atomic
+    def deliver_return_order(return_order: PurchaseReturnOrder, user):
+        """
+        Physical Dispatch / Unstocking from warehouse:
+        1. Verifies that warehouse holds sufficient stock on hand.
+        2. Generates an outward Warehouse Memo (إذن صرف مخزن).
+        3. Decrements InventoryStock qty_on_hand.
+        4. Decrements InventoryLot batch if tracked.
+        5. Transitions status to delivered (خرج من المخزن).
+        """
+        if return_order.status not in ['approved', 'pending']:
+            raise ValidationError(f"لا يمكن صرف بضاعة لمرتجع بحالة: {return_order.get_status_display()}")
+
+        # Verify sufficient stock
+        for item in return_order.items.select_related('product'):
+            stock = InventoryStock.objects.filter(warehouse=return_order.warehouse, product=item.product).first()
+            available = stock.qty_on_hand if stock else Decimal('0.00')
+            if available < item.quantity:
+                raise ValidationError(
+                    f"الرصيد المتاح من الصنف '{item.product.name}' في مخزن '{return_order.warehouse.name}' غير كافٍ للإرجاع ({available:,.2f} متوفر / {item.quantity:,.2f} مطلوب)."
+                )
+
+        memo_number = f"MEMO-OUT-RO-{return_order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='outward',
+            warehouse=return_order.warehouse,
+            statement=f"إذن صرف إرجاع مشتريات {return_order.order_number} للمورد {return_order.supplier.name}",
+            status='applied',
+            applied_at=timezone.now(),
+            created_by=user
+        )
+
+        for item in return_order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=item.product,
+                quantity=item.quantity,
+                unit_cost=item.unit_price,
+                batch_number=item.product_batch_number,
+                expiry_date=item.product_expiry_date
+            )
+
+            stock = InventoryStock.objects.get(warehouse=return_order.warehouse, product=item.product)
+            stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+            stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+            # Decrement batch lot if tracked
+            if item.product_batch_number:
+                lot = InventoryLot.objects.filter(stock=stock, batch_number=item.product_batch_number).first()
+                if lot:
+                    lot.quantity = max(Decimal('0.00'), lot.quantity - item.quantity)
+                    lot.save(update_fields=['quantity'])
+
+        return_order.memo = memo
+        return_order.dispatched_at = timezone.now()
+        return_order.status = 'delivered'
+        return_order.updated_by = user
+        return_order.save(update_fields=['memo', 'dispatched_at', 'status', 'updated_by', 'updated_at'])
+        return return_order
+
+    @staticmethod
+    @transaction.atomic
+    def settle_return_order(return_order: PurchaseReturnOrder, user):
+        """
+        Financial Settlement / Debit Note:
+        1. Ensures goods were physically dispatched (status='delivered').
+        2. Posts a double-entry Debit Note in VendorTransaction.
+        3. Decrements supplier payable debt balance in VendorAccount.
+        4. Transitions status to settled.
+        """
+        if return_order.status != 'delivered':
+            raise ValidationError("يجب صرف البضاعة من المخزن أولاً (Delivered) قبل الترحيل للحسابات.")
+
+        account = VendorAccount.get_or_create_for_supplier(return_order.supplier)
+        new_balance = account.current_balance - return_order.grand_total
+
+        tx = VendorTransaction.objects.create(
+            account=account,
+            transaction_type='debit',
+            reason='purchase_return',
+            transaction_date=timezone.now().date(),
+            credit=Decimal('0.00'),
+            debit=return_order.grand_total,
+            running_balance=new_balance,
+            description=f"إشعار خصم مرتجع مشتريات {return_order.order_number} ({return_order.supplier.name})",
+            created_by=user
+        )
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx.transaction_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        return_order.settled_at = timezone.now()
+        return_order.status = 'settled'
+        return_order.updated_by = user
+        return_order.save(update_fields=['settled_at', 'status', 'updated_by', 'updated_at'])
+        return return_order
+
+    @staticmethod
+    @transaction.atomic
+    def cancel_return_order(return_order: PurchaseReturnOrder, user):
+        """Cancels a pending or approved return order before unstocking."""
+        if return_order.status in ['delivered', 'settled']:
+            raise ValidationError("لا يمكن إلغاء أمر مرتجع بعد خروج البضاعة من المخزن أو ترحيله للحسابات.")
+        return_order.status = 'cancelled'
+        return_order.updated_by = user
+        return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+        return return_order
+

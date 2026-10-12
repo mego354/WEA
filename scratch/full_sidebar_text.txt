@@ -1,0 +1,159 @@
+home
+الرئيسية
+view_agenda
+جدول الاعمال
+calendar_month
+التقويم
+checklist
+Todos
+contacts
+جهات الاتصال
+confirmation_number
+المهام
+store
+المنتجات
+add
+timeline
+الأنشطة
+add
+storefront
+المبيعات
+add
+storefront
+المشتريات
+add
+inventory
+المخازن
+add
+account_balance_wallet
+الخزن
+add
+approval
+الموافقات
+assessment
+التقييمات
+attach_money
+المصروفات
+menu_book
+المصادر
+score
+الأهداف
+add
+event_busy
+خطة أيام العمل
+track_changes
+تتبع الموقع
+group
+الآداء
+text_snippet
+التقارير
+bug_report
+مشاكل تتبع الموقع
+settings
+إعدادات
+add
+Dr.wael Atta (CEO)
+SuperAdmin
+notifications_active
+141
+logout
+workspace: weapharma
+version: 26.10.04-4d42543
+صس
+add_a_photo
+اضف مؤسسة
+[#16456]
+صيدلية سامي هلال
+شخص
+عميل
+B
+Pharmacist
+Pharmacy
+add
+expand_more
+Customer
+visibility
+more_vert
+نظرة عامة
+الأنشطة
+المبيعات
+المرفقات
+Todos
+المهام
+المعلومات الأساسية
+expand_less
+الكود
+اضف
+التليفون
+اضغط لإضافة رقم الهاتف
+الموبايل
+اضغط لإضافة رقم الجوال
+البريد الإلكتروني
+اضغط لإضافة البريد الإلكتروني
+الموقع الإلكتروني
+اضغط لإضافة رابط
+AM/PM
+اختر...
+KOL
+اختر...
+المعلومات الإضافية
+expand_less
+ملاحظة
+اضف
+المعرف الضريبي
+اضف
+الوظيفة
+اضف
+حساب العميل
+expand_less
+لا يوجد حساب
+العناوين
+expand_less
+المناشي
+محافظة الجيزة | المناشى
+check_circle
+home
+more_vert
+حذف الموقع
+اضف
+المسئولين
+expand_less
+AA
+Abd alwhab (Giza Sales Rep
+Direct Sales Rep
+Mohamed Essam (District Manager)
+DistrictManager
+Mohamed Elbadry ( Imbaba )
+MedicalRep
+T
+test
+MedicalRep
+طرق الاتصال
+expand_less
+لا يوجد طرق اتصال
+الشركاء
+expand_less
+لا يوجد جهات اتصال مرتبطة
+اضف
+الفروع
+expand_less
+لا يوجد جهات اتصال مرتبطة
+اضف
+schedule
+انشئ
+بواسطة
+Mohamed Elbadry ( Imbaba )
+(MedicalRep)
+07/10/2026 05:26 م
+history
+تم التعديل
+بواسطة
+Mohamed Elbadry ( Imbaba )
+(MedicalRep)
+07/10/2026 05:26 م
+التعليقات
+
+
+
+
+add

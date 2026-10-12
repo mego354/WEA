@@ -1,0 +1,125 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>إشعار إرجاع مشتريات {{ return_order.order_number }} - WEA Pharma</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; }
+        @media print {
+            .no-print { display: none; }
+            body { background: white; padding: 0; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 p-6 text-slate-800">
+
+    <div class="max-w-3xl mx-auto mb-4 no-print flex justify-end gap-3">
+        <button onclick="window.print()" class="px-4 py-2 bg-teal-600 text-white font-bold text-xs rounded-lg shadow">
+            طباعة إشعار الإرجاع (Print)
+        </button>
+        <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">
+            إغلاق
+        </button>
+    </div>
+
+    <div class="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow border border-slate-200 text-xs">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b pb-4 mb-6">
+            <div>
+                <h1 class="text-xl font-black text-slate-900">WEA PHARMA</h1>
+                <p class="text-slate-500">173 ز - البوابة الأولى- حدائق الأهرام</p>
+                <p class="text-slate-500">سجل تجاري: 184791 | بطاقة ضريبية: 978-339-684</p>
+                <p class="text-slate-500">هاتف: 01111787179 - 01024070412</p>
+            </div>
+            <div class="text-left">
+                <h2 class="text-lg font-bold text-teal-700">إشعار إرجاع مشتريات (Debit Note)</h2>
+                <p class="font-mono font-bold text-slate-900 text-sm">{{ return_order.order_number }}</p>
+                <p class="text-slate-500">التاريخ: {{ return_order.order_date|date:"Y-m-d" }}</p>
+                <p class="text-slate-500">الحالة: {{ return_order.get_status_display }}</p>
+            </div>
+        </div>
+
+        <!-- Supplier & Origin Warehouse Info -->
+        <div class="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl mb-6">
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات المورد المستلم:</h3>
+                <p>الاسم: <strong>{{ return_order.supplier.name }}</strong></p>
+                <p>الهاتف: {{ return_order.supplier.mobile|default:return_order.supplier.phone|default:"-" }}</p>
+                <p>المنطقة: {{ return_order.supplier.area.name|default:"-" }}</p>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات الإرجاع:</h3>
+                <p>المخزن المنصرف منه: <strong>{{ return_order.warehouse.name }}</strong></p>
+                <p>المنشئ: {{ return_order.created_by.get_full_name|default:return_order.created_by.username }}</p>
+                {% if return_order.memo %}
+                <p>إذن صرف المخزن: {{ return_order.memo.memo_number }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Line items -->
+        <table class="w-full text-right border-collapse mb-6">
+            <thead>
+                <tr class="border-b-2 border-slate-300 font-bold bg-slate-50">
+                    <th class="py-2 px-2">#</th>
+                    <th class="py-2 px-2">كود الصنف</th>
+                    <th class="py-2 px-2">اسم الصنف</th>
+                    <th class="py-2 px-2 text-center">الكمية</th>
+                    <th class="py-2 px-2">سعر التكلفة</th>
+                    <th class="py-2 px-2">التشغيلة</th>
+                    <th class="py-2 px-2">الصلاحية</th>
+                    <th class="py-2 px-2 text-left">إجمالي القيمة</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for itm in return_order.items.all %}
+                <tr>
+                    <td class="py-2 px-2 font-mono">{{ itm.item_order }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product.sku_code }}</td>
+                    <td class="py-2 px-2 font-bold">{{ itm.product.name }}</td>
+                    <td class="py-2 px-2 text-center font-mono">{{ itm.quantity|intcomma }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.unit_price|intcomma }} ج.م</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product_batch_number|default:"-" }}</td>
+                    <td class="py-2 px-2 font-mono">{{ itm.product_expiry_date|date:"Y-m-d"|default:"-" }}</td>
+                    <td class="py-2 px-2 font-mono font-bold text-left">{{ itm.total_price|intcomma }} ج.م</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Totals summary -->
+        <div class="flex justify-end mb-8">
+            <div class="w-64 space-y-1.5 border-t pt-2">
+                <div class="flex justify-between">
+                    <span class="text-slate-500">إجمالي الأصناف:</span>
+                    <span class="font-mono">{{ return_order.subtotal|intcomma }} ج.م</span>
+                </div>
+                <div class="flex justify-between font-bold text-slate-900 border-t pt-1.5 text-sm">
+                    <span>إجمالي قيمة المرتجع:</span>
+                    <span class="font-mono text-teal-700">{{ return_order.grand_total|intcomma }} ج.م</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signatures -->
+        <div class="grid grid-cols-3 gap-6 pt-12 border-t text-center text-slate-600">
+            <div>
+                <p class="font-bold mb-8">أمين المخزن</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+            <div>
+                <p class="font-bold mb-8">المسئول المالي</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+            <div>
+                <p class="font-bold mb-8">استلام المورد / المندوب</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

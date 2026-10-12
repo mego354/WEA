@@ -1,0 +1,72 @@
+[
+  {
+    "text": "باركود متاح للبيع قيمة الضريبة السعر التصنيف الكود الاسم",
+    "tag": "DIV",
+    "class": "ag-header-row ag-header-row-column"
+  },
+  {
+    "text": "image Geron GE1 WEA 140.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-first"
+  },
+  {
+    "text": "image Legatonexx Spray LE1 WEA 120.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image Putalaxy gel PU1 WEA 75.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image Soriana V.D SO1 WEA 75.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image Steps ST1 WEA 140.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image Ultrahumudin Cream UL1 WEA 105.000 جنيه 0% checked more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image تيوب الالترا هيوميدين 7000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون الترا هيوميدين 4000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون بيوتالاكسي 3000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون جيرون 6000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون ستيبس 5000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون سوريانا 1000 Packing materials 0.000 جنيه 0% 1000 more_vert",
+    "tag": "DIV",
+    "class": "ag-row-odd ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute"
+  },
+  {
+    "text": "image كرتون ليجاتونيكس 2000 Packing materials 0.000 جنيه 0% more_vert",
+    "tag": "DIV",
+    "class": "ag-row-even ag-row-no-focus ag-row ag-row-level-0 ag-row-position-absolute ag-row-last"
+  }
+]

@@ -1,200 +1,314 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}المنتجات (Products Catalog){% endblock %}
-
-{% block breadcrumb %}
-    <span class="text-slate-400">الرئيسية</span>
-    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">المنتجات والكتالوج (Products)</span>
-{% endblock %}
-
-{% block top_actions %}
-    <button onclick="openModal('add-product-modal')" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
-        <span class="material-symbols-outlined text-base">add_circle</span>
-        <span>إضافة منتج جديد</span>
-    </button>
-{% endblock %}
+{% block title %}المنتجات - Bricks Rep{% endblock %}
 
 {% block content %}
-<div class="space-y-5">
+<div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Header Filter Bar -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div class="flex items-center gap-3">
-            <span class="text-xs font-bold text-slate-500">إجمالي الأصناف:</span>
-            <span class="px-2.5 py-1 bg-brand-50 text-brand-700 text-xs font-bold rounded-lg border border-brand-200">{{ total_count }} صنف</span>
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">المنتجات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ total_count }} صنف
+            </span>
         </div>
 
-        <form method="GET" class="flex items-center gap-3 w-full md:w-auto">
-            <select name="category" onchange="this.form.submit()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-800">
-                <option value="">-- كافة التصنيفات --</option>
-                {% for cat in categories %}
-                <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
-                {% endfor %}
-            </select>
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            <!-- Search Bar -->
+            <form method="GET" class="relative">
+                {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+                {% if sellable_filter %}<input type="hidden" name="sellable" value="{{ sellable_filter }}">{% endif %}
+                <div class="relative">
+                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالاسم أو الكود..."
+                           class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                </div>
+            </form>
 
-            <div class="relative w-full sm:w-64">
-                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالاسم أو الكود..."
-                       class="w-full pr-9 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white text-slate-800">
-                <button type="submit" class="absolute right-3 top-2 text-slate-400 hover:text-brand-600">
-                    <span class="material-symbols-outlined text-lg">search</span>
-                </button>
-            </div>
-        </form>
+            <!-- Slide-out Filter Drawer Button -->
+            <button type="button" onclick="openFilterDrawer()"
+                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>فلتر</span>
+                {% if active_filters_count > 0 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
+                    {{ active_filters_count }}
+                </span>
+                {% endif %}
+            </button>
+
+            <!-- Export CSV -->
+            <a href="{% url 'products_export' %}?search={{ search_query }}&category={{ selected_category|default:'' }}&sellable={{ sellable_filter|default:'' }}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden md:inline">تصدير البيانات</span>
+            </a>
+
+            <!-- Create Product Button -->
+            <a href="{% url 'product_create' %}"
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>انشئ منتج</span>
+            </a>
+        </div>
     </div>
 
-    <!-- Products Table -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <!-- Products Table Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
         <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
-                <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3 px-4">الكود (SKU)</th>
-                        <th class="py-3 px-4">اسم المنتج</th>
-                        <th class="py-3 px-4">التصنيف</th>
-                        <th class="py-3 px-4">سعر البيع للجمهور</th>
-                        <th class="py-3 px-4">تكلفة الشراء الافتراضية</th>
-                        <th class="py-3 px-4">الضريبة %</th>
-                        <th class="py-3 px-4">الوحدة</th>
-                        <th class="py-3 px-4">الحالة</th>
+                        <th class="py-3.5 px-4">الاسم</th>
+                        <th class="py-3.5 px-4">الكود</th>
+                        <th class="py-3.5 px-4">التصنيف</th>
+                        <th class="py-3.5 px-4">السعر</th>
+                        <th class="py-3.5 px-4">قيمة الضريبة</th>
+                        <th class="py-3.5 px-4 text-center">متاح للبيع</th>
+                        <th class="py-3.5 px-4">باركود</th>
+                        <th class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for p in products %}
-                    <tr class="hover:bg-slate-50/70 transition-colors">
-                        <td class="py-3.5 px-4 font-mono font-bold text-brand-600">
+                    <tr class="hover:bg-slate-50/80 transition-colors group">
+                        <!-- Name with Thumbnail preview -->
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-3">
+                                {% if p.thumbnail %}
+                                <img src="{{ p.thumbnail.url }}" alt="{{ p.name }}" class="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0">
+                                {% else %}
+                                <div class="w-9 h-9 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0 font-bold text-xs">
+                                    <span class="material-symbols-outlined text-base">image</span>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <a href="{% url 'product_detail' p.id %}" class="font-bold text-slate-900 hover:text-[#27bebe] transition-colors">
+                                        {{ p.name }}
+                                    </a>
+                                    {% if p.description %}
+                                    <p class="text-[11px] text-slate-400 font-normal truncate max-w-xs">{{ p.description }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Code / SKU -->
+                        <td class="py-3.5 px-4 font-mono font-bold text-slate-700">
                             {{ p.sku_code }}
                         </td>
+
+                        <!-- Category -->
+                        <td class="py-3.5 px-4">
+                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                {{ p.category.name|default:"WEA" }}
+                            </span>
+                        </td>
+
+                        <!-- Price -->
                         <td class="py-3.5 px-4 font-bold text-slate-900">
-                            {{ p.name }}
-                            {% if p.description %}
-                            <span class="block text-[11px] text-slate-400 font-normal truncate max-w-xs">{{ p.description }}</span>
-                            {% endif %}
+                            {{ p.retail_price|intcomma }} جنيه
                         </td>
-                        <td class="py-3.5 px-4 text-xs">
-                            <span class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold">{{ p.category.name }}</span>
-                        </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
-                            {{ p.retail_price|intcomma }} ج.م
-                        </td>
-                        <td class="py-3.5 px-4 font-semibold text-slate-600">
-                            {{ p.default_purchase_cost|intcomma }} ج.م
-                        </td>
-                        <td class="py-3.5 px-4 text-xs font-mono">
+
+                        <!-- Tax -->
+                        <td class="py-3.5 px-4 font-mono text-slate-600">
                             {{ p.tax_percentage }}%
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-500">
-                            {{ p.unit }}
-                        </td>
-                        <td class="py-3.5 px-4">
+
+                        <!-- Sellable -->
+                        <td class="py-3.5 px-4 text-center">
                             {% if p.sellable %}
-                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">متاح للبيع</span>
+                            <span class="material-symbols-outlined text-emerald-600 text-base" title="متاح للبيع">check_circle</span>
                             {% else %}
-                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500">غير متاح</span>
+                            <span class="text-slate-300 font-bold">—</span>
                             {% endif %}
+                        </td>
+
+                        <!-- Barcode -->
+                        <td class="py-3.5 px-4 font-mono text-slate-500">
+                            {{ p.barcode|default:"—" }}
+                        </td>
+
+                        <!-- Actions Dropdown -->
+                        <td class="py-3.5 px-4 text-center">
+                            <div class="relative inline-block text-right">
+                                <button type="button" onclick="toggleActionMenu('action-{{ p.id }}')"
+                                        class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                                    <span class="material-symbols-outlined text-lg">more_vert</span>
+                                </button>
+                                <div id="action-{{ p.id }}" class="hidden absolute left-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+                                    <a href="{% url 'product_detail' p.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-sm">visibility</span>
+                                        <span>معاينة</span>
+                                    </a>
+                                    <a href="{% url 'product_edit' p.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-sm">edit</span>
+                                        <span>تعديل</span>
+                                    </a>
+                                    <form method="POST" action="{% url 'product_delete' p.id %}" onsubmit="return confirm('هل أنت متأكد من حذف المنتج {{ p.name }}؟');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-right">
+                                            <span class="material-symbols-outlined text-sm">delete</span>
+                                            <span>حذف</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="py-12 text-center text-slate-400">
-                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">store</span>
-                            <p class="text-sm font-semibold">لا توجد منتجات مسجلة تطابق البحث.</p>
+                        <td colspan="8" class="py-16 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">inventory_2</span>
+                            <p class="font-bold text-slate-500 text-sm">لا توجد منتجات مطابقة لخيارات البحث</p>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        <!-- Reference ERP Pagination Footer -->
+        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <span>Items per page:</span>
+                <select onchange="location.href='?page_size=' + this.value + '&search={{ search_query }}&category={{ selected_category|default:'' }}'"
+                        class="border border-slate-200 rounded px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-white">
+                    <option value="40" {% if paginator.per_page == 40 %}selected{% endif %}>40</option>
+                    <option value="20" {% if paginator.per_page == 20 %}selected{% endif %}>20</option>
+                    <option value="100" {% if paginator.per_page == 100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <span>
+                    {{ page_obj.start_index }} – {{ page_obj.end_index }} of {{ paginator.count }}
+                </span>
+                <div class="flex items-center gap-1">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}&search={{ search_query }}&category={{ selected_category|default:'' }}"
+                       class="p-1 rounded text-slate-600 hover:bg-slate-100">
+                        <span class="material-symbols-outlined text-sm">chevron_right</span>
+                    </a>
+                    {% else %}
+                    <span class="p-1 rounded text-slate-300 cursor-not-allowed">
+                        <span class="material-symbols-outlined text-sm">chevron_right</span>
+                    </span>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&search={{ search_query }}&category={{ selected_category|default:'' }}"
+                       class="p-1 rounded text-slate-600 hover:bg-slate-100">
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </a>
+                    {% else %}
+                    <span class="p-1 rounded text-slate-300 cursor-not-allowed">
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 
-</div>
+    <!-- Floating Action Button (FAB +) bottom-left -->
+    <a href="{% url 'product_create' %}"
+       class="fixed bottom-6 left-6 w-14 h-14 bg-[#27bebe] hover:bg-[#20a3a3] text-white rounded-full flex items-center justify-center shadow-lg shadow-[#27bebe]/40 hover:scale-105 transition-all z-30"
+       title="إضافة منتج جديد">
+        <span class="material-symbols-outlined text-2xl font-bold">add</span>
+    </a>
 
-<!-- ADD PRODUCT MODAL -->
-<div id="add-product-modal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 p-6">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
-            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">add_circle</span>
-                <span>إضافة منتج جديد (Add Product)</span>
-            </h3>
-            <button onclick="closeModal('add-product-modal')" class="text-slate-400 hover:text-slate-600">
-                <span class="material-symbols-outlined">close</span>
+    <!-- SLIDE-OUT FILTER DRAWER -->
+    <div id="filter-backdrop" onclick="closeFilterDrawer()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity"></div>
+    <div id="filter-drawer" class="fixed inset-y-0 left-0 w-80 sm:w-96 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        <!-- Drawer Header -->
+        <div class="h-16 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
+                <span class="material-symbols-outlined text-[#27bebe]">tune</span>
+                <span>فلاتر المنتجات</span>
+            </div>
+            <button type="button" onclick="closeFilterDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
             </button>
         </div>
 
-        <form method="POST" action="{% url 'product_create' %}" class="space-y-4">
-            {% csrf_token %}
+        <!-- Drawer Content Form -->
+        <form method="GET" class="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-slate-700">
+            {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+
+            <!-- Category -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">اسم المنتج *</label>
-                <input type="text" name="name" required placeholder="مثال: Geron 500mg" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
+                <label class="block font-bold text-slate-700 mb-2">التصنيف</label>
+                <select name="category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    <option value="">كافة التصنيفات</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">كود المنتج (SKU) *</label>
-                    <input type="text" name="sku_code" required placeholder="مثال: GE1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900 font-mono">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">التصنيف *</label>
-                    <select name="category" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-                        {% for cat in categories %}
-                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">سعر البيع للجمهور (ج.م)</label>
-                    <input type="number" step="0.01" name="retail_price" value="100.00" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">تكلفة الشراء الافتراضية (ج.م)</label>
-                    <input type="number" step="0.01" name="default_purchase_cost" value="20.00" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">نسبة الضريبة %</label>
-                    <input type="number" step="0.01" name="tax_percentage" value="0.00" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">الوحدة</label>
-                    <input type="text" name="unit" value="عبوة (Pack)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900">
-                </div>
-            </div>
-
+            <!-- Sellable Toggle -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">الوصف</label>
-                <textarea name="description" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 text-slate-900"></textarea>
+                <label class="block font-bold text-slate-700 mb-2">متاح للبيع</label>
+                <select name="sellable" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    <option value="">الكل</option>
+                    <option value="true" {% if sellable_filter == 'true' %}selected{% endif %}>متاح للبيع فقط</option>
+                    <option value="false" {% if sellable_filter == 'false' %}selected{% endif %}>غير متاح للبيع</option>
+                </select>
             </div>
 
-            <div class="flex items-center gap-2 pt-1">
-                <input type="checkbox" name="sellable" checked id="sellable_box" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-300">
-                <label for="sellable_box" class="text-xs font-bold text-slate-700 cursor-pointer">قابل للبيع التجاري</label>
+            <!-- Price Range -->
+            <div>
+                <label class="block font-bold text-slate-700 mb-2">نطاق السعر (جنيه)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="number" step="0.01" name="min_price" value="{{ min_price|default:'' }}" placeholder="الحد الأدنى"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    <input type="number" step="0.01" name="max_price" value="{{ max_price|default:'' }}" placeholder="الحد الأقصى"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                </div>
             </div>
 
-            <div class="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button type="button" onclick="closeModal('add-product-modal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                    إلغاء
-                </button>
-                <button type="submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/20 transition-all">
-                    حفظ المنتج
+            <!-- Actions -->
+            <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <a href="{% url 'products_list' %}"
+                   class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
+                    اعادة تعيين
+                </a>
+                <button type="submit"
+                        class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm flex-1">
+                    تطبيق الفلتر
                 </button>
             </div>
         </form>
     </div>
+
 </div>
 
 <script>
-    function openModal(id) {
-        document.getElementById(id).classList.remove('hidden');
+function openFilterDrawer() {
+    document.getElementById('filter-backdrop').classList.remove('hidden');
+    document.getElementById('filter-drawer').classList.remove('-translate-x-full');
+}
+
+function closeFilterDrawer() {
+    document.getElementById('filter-backdrop').classList.add('hidden');
+    document.getElementById('filter-drawer').classList.add('-translate-x-full');
+}
+
+function toggleActionMenu(id) {
+    document.querySelectorAll('[id^="action-"]').forEach(el => {
+        if (el.id !== id) el.classList.add('hidden');
+    });
+    const menu = document.getElementById(id);
+    if (menu) menu.classList.toggle('hidden');
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('[id^="action-"]') && !e.target.closest('button[onclick^="toggleActionMenu"]')) {
+        document.querySelectorAll('[id^="action-"]').forEach(el => el.classList.add('hidden'));
     }
-    function closeModal(id) {
-        document.getElementById(id).classList.add('hidden');
-    }
+});
 </script>
 {% endblock %}

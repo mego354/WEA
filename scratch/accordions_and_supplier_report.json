@@ -1,0 +1,13 @@
+{
+  "detail_3dots_menu": [
+    "timeline\nتسلسل الأحداث",
+    "edit\nتعديل",
+    "delete\nمسح"
+  ],
+  "customer_dropdown_items": [
+    "Lead",
+    "Customer",
+    "Inactive"
+  ],
+  "accordions": {}
+}
