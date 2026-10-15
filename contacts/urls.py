@@ -5,6 +5,8 @@ urlpatterns = [
     path('', views.contacts_list, name='contacts_list'),
     path('create/', views.contact_create, name='contact_create'),
     path('export/', views.contacts_export, name='contacts_export'),
+    path('import/', views.contacts_import, name='contacts_import'),
+    path('import/template/', views.contacts_import_template, name='contacts_import_template'),
     path('api/subareas/', views.get_subareas, name='contact_subareas_api'),
     
     # Detail and Overview

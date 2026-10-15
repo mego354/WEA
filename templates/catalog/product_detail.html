@@ -7,19 +7,19 @@
 <div class="max-w-6xl mx-auto pb-16 space-y-6">
 
     <!-- Header -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div class="flex items-center gap-4">
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4">
             {% if product.thumbnail %}
-            <img src="{{ product.thumbnail.url }}" alt="{{ product.name }}" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shadow-sm">
+            <img src="{{ product.thumbnail.url }}" alt="{{ product.name }}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover border border-slate-200 shadow-sm shrink-0">
             {% else %}
-            <div class="w-16 h-16 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] font-bold text-xl shadow-sm">
+            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] font-bold text-lg sm:text-xl shadow-sm shrink-0">
                 {{ product.name|slice:":2" }}
             </div>
             {% endif %}
 
             <div>
-                <div class="flex items-center gap-3">
-                    <h1 class="text-2xl font-black text-slate-900 tracking-tight">{{ product.name }}</h1>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{{ product.name }}</h1>
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700">
                         {{ product.sku_code }}
                     </span>
@@ -37,12 +37,12 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-3">
-            <a href="{% url 'product_edit' product.id %}" class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+            <a href="{% url 'product_edit' product.id %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل</span>
             </a>
-            <a href="{% url 'products_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+            <a href="{% url 'products_list' %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[44px]">
                 <span>العودة للقائمة</span>
             </a>
         </div>

@@ -55,7 +55,7 @@ class ContactsModuleTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'صيدلية النجاح الجديدة')
         self.assertContains(response, 'انشئ جهة اتصال')
-        self.assertContains(response, 'تصدير البيانات')
+        self.assertContains(response, 'تصدير إلى Excel')
 
     def test_contacts_list_filtering(self):
         # Search query
@@ -72,12 +72,70 @@ class ContactsModuleTestCase(TestCase):
         self.assertEqual(response_cust.status_code, 200)
         self.assertContains(response_cust, 'صيدلية النجاح الجديدة')
 
-    def test_contacts_export_csv(self):
+    def test_contacts_export_excel(self):
+        import io
+        import openpyxl
         response = self.client.get(reverse('contacts_export'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8-sig')
-        content = response.content.decode('utf-8-sig')
-        self.assertIn('صيدلية النجاح الجديدة', content)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.assertIn('.xlsx', response['Content-Disposition'])
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertTrue(ws.sheet_view.rightToLeft)
+        found = any(cell.value == 'صيدلية النجاح الجديدة' for row in ws.iter_rows() for cell in row)
+        self.assertTrue(found)
+
+    def test_contacts_import_template(self):
+        import io
+        import openpyxl
+        response = self.client.get(reverse('contacts_import_template'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertEqual(ws.cell(row=1, column=1).value, 'المسلسل')
+
+    def test_contacts_import_workflow(self):
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from contacts.models import Contact
+
+        # 1. GET page
+        get_resp = self.client.get(reverse('contacts_import'))
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertContains(get_resp, 'استيراد جهات الاتصال')
+
+        # 2. Build workbook matching contacts headers
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['المسلسل', 'الاسم', 'علاقة العمل (عميل / مورد / كلاهما)', 'الموبايل', 'الهاتف', 'المنطقة', 'العنوان التفصيلي', 'حد الائتمان'])
+        ws.append([9999, 'صيدلية الأمل الكبرى', 'عميل', '01011122233', '0233445566', 'مدينة نصر', 'شارع الطيران', 50000.00])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile('contacts_test.xlsx', out.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+        # 3. Preview
+        preview_resp = self.client.post(reverse('contacts_import'), {
+            'action': 'preview',
+            'excel_file': excel_file,
+        })
+        self.assertEqual(preview_resp.status_code, 200)
+        self.assertContains(preview_resp, 'صيدلية الأمل الكبرى')
+        self.assertContains(preview_resp, 'اختر طريقة تنفيذ الاستيراد')
+
+        # 4. Import
+        import_resp = self.client.post(reverse('contacts_import'), {
+            'action': 'execute',
+            'import_mode': 'create_and_update',
+        }, follow=True)
+        self.assertEqual(import_resp.status_code, 200)
+        self.assertTrue(Contact.objects.filter(name='صيدلية الأمل الكبرى').exists())
+        c = Contact.objects.get(name='صيدلية الأمل الكبرى')
+        self.assertEqual(c.mobile, '01011122233')
+        self.assertTrue(c.is_customer)
 
     def test_contact_detail_view(self):
         response = self.client.get(reverse('contact_detail', args=[self.contact.id]))

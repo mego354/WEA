@@ -229,3 +229,61 @@ def customer_transactions_list(request):
         'selected_customer_id': customer_id,
     }
     return render(request, 'sales/customer_transactions_list.html', context)
+
+
+from master_data.excel_utils import export_to_excel_response
+
+
+@login_required
+def sales_orders_export(request):
+    status_filter = request.GET.get('status', 'all')
+    customer_filter = request.GET.get('customer')
+    search = request.GET.get('search', '').strip()
+
+    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-serial_num')
+
+    if status_filter != 'all':
+        qs = qs.filter(status=status_filter)
+    if customer_filter:
+        qs = qs.filter(customer_id=customer_filter)
+    if search:
+        qs = qs.filter(
+            Q(order_number__icontains=search) |
+            Q(serial_num__icontains=search) |
+            Q(customer__name__icontains=search)
+        )
+
+    columns = [
+        {'header': 'رقم أمر البيع', 'key': 'order_number', 'width': 18, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda o: o.customer.name, 'width': 35, 'align': 'right'},
+        {'header': 'المنطقة', 'key': lambda o: o.customer.area.name if o.customer.area else '', 'width': 20, 'align': 'right'},
+        {'header': 'المخزن المنصرف منه', 'key': lambda o: o.source_warehouse.name if o.source_warehouse else '', 'width': 22, 'align': 'right'},
+        {'header': 'تاريخ الطلب', 'key': lambda o: o.order_date.strftime('%Y-%m-%d') if o.order_date else '', 'width': 16, 'align': 'center'},
+        {'header': 'الحالة', 'key': lambda o: o.get_status_display(), 'width': 18, 'align': 'center'},
+        {'header': 'إجمالي القيمة', 'key': lambda o: float(o.grand_total) if o.grand_total is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'المنشئ', 'key': lambda o: o.created_by.get_full_name() or o.created_by.username if o.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'ملاحظات', 'key': lambda o: o.notes or '', 'width': 30, 'align': 'right'},
+    ]
+
+    return export_to_excel_response(qs, columns, filename="sales_orders_export", sheet_title="أوامر البيع")
+
+
+@login_required
+def collections_export(request):
+    customer_id = request.GET.get('customer')
+    qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+
+    columns = [
+        {'header': 'رقم السند', 'key': lambda c: f"#{c.serial_num}", 'width': 14, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda c: c.customer.name, 'width': 35, 'align': 'right'},
+        {'header': 'الخزنة / الحساب', 'key': lambda c: c.vault.name, 'width': 25, 'align': 'right'},
+        {'header': 'المبلغ المحصل', 'key': lambda c: float(c.amount) if c.amount is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'طريقة الدفع', 'key': lambda c: c.get_payment_method_display(), 'width': 16, 'align': 'center'},
+        {'header': 'تاريخ وساعة السند', 'key': lambda c: c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'المحصل', 'key': lambda c: c.created_by.get_full_name() or c.created_by.username if c.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'ملاحظات', 'key': lambda c: c.notes or '', 'width': 30, 'align': 'right'},
+    ]
+
+    return export_to_excel_response(qs, columns, filename="collections_export", sheet_title="التحصيلات النقدية")

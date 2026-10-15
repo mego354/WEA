@@ -74,8 +74,11 @@
 </head>
 <body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
 
+    <!-- SIDEBAR BACKDROP OVERLAY -->
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden transition-opacity duration-300 lg:hidden"></div>
+
     <!-- SIDEBAR -->
-    <aside id="sidebar" class="w-72 bg-white border-l border-slate-200 min-h-screen flex flex-col fixed inset-y-0 right-0 z-40 transition-transform duration-300 ease-in-out">
+    <aside id="sidebar" class="w-72 bg-white border-l border-slate-200 min-h-screen flex flex-col fixed inset-y-0 right-0 z-50 transition-transform duration-300 ease-in-out translate-x-full lg:translate-x-0 shadow-2xl lg:shadow-none">
         <!-- Logo Header -->
         <div class="h-16 flex items-center justify-between px-6 border-b border-slate-100 bg-white">
             <a href="{% url 'home' %}" class="flex items-center gap-3">
@@ -87,28 +90,28 @@
                     <span class="text-xs text-brand-600 font-medium">نظام الموارد المتكامل</span>
                 </div>
             </a>
-            <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined">close</span>
+            <button onclick="toggleSidebar()" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-2xl">close</span>
             </button>
         </div>
 
         <!-- Navigation Links -->
         <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
             <!-- Home -->
-            <a href="{% url 'home' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+            <a href="{% url 'home' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
                 <span class="material-symbols-outlined text-xl {% if request.resolver_match.url_name == 'home' %}text-brand-600 material-symbols-fill{% endif %}">home</span>
                 <span>الرئيسية</span>
             </a>
 
             <!-- Contacts -->
-            <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+            <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
                 <span class="material-symbols-outlined text-xl {% if 'contacts' in request.path %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
                 <span>جهات الاتصال</span>
             </a>
 
             <!-- Products (المنتجات) -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'catalog' in request.path or 'products' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'catalog' in request.path or 'products' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 material-symbols-fill{% endif %}">store</span>
                         <span>المنتجات</span>
@@ -116,11 +119,11 @@
                     <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if 'catalog' in request.path or 'products' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'products_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'products_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">store</span>
                         <span>المنتجات</span>
                     </a>
-                    <a href="{% url 'categories_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'categories_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">category</span>
                         <span>التصنيفات</span>
                     </a>
@@ -129,7 +132,7 @@
 
             <!-- Purchases (المشتريات) -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
                         <span>المشتريات</span>
@@ -137,27 +140,27 @@
                     <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'purchase_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium">
+                    <a href="{% url 'purchase_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
                         <span class="material-symbols-outlined text-base">shopping_cart</span>
                         <span>الطلبات</span>
                     </a>
-                    <a href="{% url 'purchase_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'purchase_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">refresh</span>
                         <span>المرتجعات</span>
                     </a>
-                    <a href="{% url 'vendor_payments_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'vendor_payments_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">receipt</span>
                         <span>المدفوعات</span>
                     </a>
-                    <a href="{% url 'vendor_payment_requests_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'vendor_payment_requests_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">request_quote</span>
                         <span>طلبات الدفع</span>
                     </a>
-                    <a href="{% url 'accounting_vendors_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'accounting_vendors_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">attach_money</span>
                         <span>حسابات الموردين</span>
                     </a>
-                    <a href="{% url 'vendor_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">
+                    <a href="{% url 'vendor_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">receipt_long</span>
                         <span>عمليات الموردين</span>
                     </a>
@@ -166,7 +169,7 @@
 
             <!-- Warehouses & Inventory -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">warehouse</span>
                         <span>المخازن والمخزون</span>
@@ -174,15 +177,15 @@
                     <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if 'inventory' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'inventory_stock_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أرصدة المخزون والتشغيلات</a>
-                    <a href="{% url 'warehouses_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">المخازن</a>
-                    <a href="{% url 'inventory_memos_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أذونات المخزن (إضافة وصرف)</a>
+                    <a href="{% url 'inventory_stock_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أرصدة المخزون والتشغيلات</a>
+                    <a href="{% url 'warehouses_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">المخازن</a>
+                    <a href="{% url 'inventory_memos_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أذونات المخزن (إضافة وصرف)</a>
                 </div>
             </div>
 
             <!-- Treasury / Vaults -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
                         <span>الخزن والمالية</span>
@@ -190,14 +193,14 @@
                     <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if 'vault' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'vaults_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">الخزن النقدية والحسابات</a>
-                    <a href="{% url 'vault_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حركات النقدية</a>
+                    <a href="{% url 'vaults_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الخزن النقدية والحسابات</a>
+                    <a href="{% url 'vault_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حركات النقدية</a>
                 </div>
             </div>
 
             <!-- Sales (P1) -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">storefront</span>
                         <span>المبيعات والعملاء</span>
@@ -205,15 +208,15 @@
                     <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">أوامر البيع</a>
-                    <a href="{% url 'collections_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">التحصيلات</a>
-                    <a href="{% url 'accounting_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">حسابات العملاء</a>
+                    <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أوامر البيع</a>
+                    <a href="{% url 'collections_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">التحصيلات</a>
+                    <a href="{% url 'accounting_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حسابات العملاء</a>
                 </div>
             </div>
 
             <!-- Settings -->
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">settings</span>
                         <span>الإعدادات والنظام</span>
@@ -221,9 +224,9 @@
                     <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-settings" class="pr-9 pl-2 space-y-1 {% if 'settings' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'roles_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">الأدوار والصلاحيات</a>
-                    <a href="{% url 'users_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">إدارة المستخدمين</a>
-                    <a href="{% url 'branding_settings' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50">بيانات الشركة والفاتورة</a>
+                    <a href="{% url 'roles_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الأدوار والصلاحيات</a>
+                    <a href="{% url 'users_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">إدارة المستخدمين</a>
+                    <a href="{% url 'branding_settings' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">بيانات الشركة والفاتورة</a>
                 </div>
             </div>
         </div>
@@ -239,8 +242,8 @@
                     <p class="text-xs text-slate-500 truncate">{{ request.user.role_name }}</p>
                 </div>
             </div>
-            <a href="{% url 'logout' %}" title="تسجيل الخروج" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                <span class="material-symbols-outlined">logout</span>
+            <a href="{% url 'logout' %}" title="تسجيل الخروج" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+                <span class="material-symbols-outlined text-xl">logout</span>
             </a>
         </div>
     </aside>
@@ -248,12 +251,12 @@
     <!-- MAIN WRAPPER -->
     <div class="flex-1 flex flex-col min-w-0 mr-0 lg:mr-72 transition-all duration-300">
         <!-- TOPBAR -->
-        <header class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
-            <div class="flex items-center gap-4">
-                <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
-                    <span class="material-symbols-outlined">menu</span>
+        <header class="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors" aria-label="فتح القائمة">
+                    <span class="material-symbols-outlined text-2xl">menu</span>
                 </button>
-                <div class="flex items-center gap-2 text-sm text-slate-500">
+                <div class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap">
                     {% block breadcrumb %}
                     <span class="font-medium text-slate-700">الرئيسية</span>
                     {% endblock %}
@@ -261,19 +264,19 @@
             </div>
 
             <!-- Top Actions -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 sm:gap-3">
                 <!-- Notifications -->
-                <button class="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-                    <span class="material-symbols-outlined">notifications</span>
-                    <span class="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">105</span>
+                <button class="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+                    <span class="material-symbols-outlined text-xl">notifications</span>
+                    <span class="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">105</span>
                 </button>
 
                 <!-- Language indicator -->
-                <span class="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg">عربي (EGP)</span>
+                <span class="hidden sm:inline-block px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg">عربي (EGP)</span>
 
                 <!-- Quick Action Button -->
                 {% block top_actions %}
-                <a href="{% url 'purchase_order_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
+                <a href="{% url 'purchase_order_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                     <span class="material-symbols-outlined text-base">add</span>
                     <span>أمر مشتريات جديد</span>
                 </a>
@@ -283,10 +286,10 @@
 
         <!-- FLASH MESSAGES -->
         {% if messages %}
-        <div class="px-6 pt-4 space-y-2">
+        <div class="px-3 sm:px-6 pt-3 sm:pt-4 space-y-2">
             {% for message in messages %}
-            <div class="p-4 rounded-xl flex items-center gap-3 text-sm font-medium {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% elif message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
-                <span class="material-symbols-outlined text-lg">{% if message.tags == 'error' %}error{% elif message.tags == 'success' %}check_circle{% else %}info{% endif %}</span>
+            <div class="p-3.5 sm:p-4 rounded-xl flex items-center gap-3 text-xs sm:text-sm font-medium {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% elif message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+                <span class="material-symbols-outlined text-lg sm:text-xl shrink-0">{% if message.tags == 'error' %}error{% elif message.tags == 'success' %}check_circle{% else %}info{% endif %}</span>
                 <span>{{ message }}</span>
             </div>
             {% endfor %}
@@ -294,16 +297,59 @@
         {% endif %}
 
         <!-- PAGE CONTENT -->
-        <main class="flex-1 p-6">
+        <main class="flex-1 p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 max-w-full">
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <!-- MOBILE BOTTOM NAVIGATION BAR (<1024px) -->
+    <nav class="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 h-16 px-2 flex items-center justify-around shadow-lg">
+        <!-- Home -->
+        <a href="{% url 'home' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if request.resolver_match.url_name == 'home' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if request.resolver_match.url_name == 'home' %}material-symbols-fill{% endif %}">home</span>
+            <span class="text-[10px] mt-0.5">الرئيسية</span>
+        </a>
+
+        <!-- Contacts -->
+        <a href="{% url 'contacts_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'contacts' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if 'contacts' in request.path %}material-symbols-fill{% endif %}">contacts</span>
+            <span class="text-[10px] mt-0.5">جهات الاتصال</span>
+        </a>
+
+        <!-- Catalog -->
+        <a href="{% url 'products_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if 'catalog' in request.path or 'products' in request.path %}material-symbols-fill{% endif %}">store</span>
+            <span class="text-[10px] mt-0.5">المنتجات</span>
+        </a>
+
+        <!-- Purchases -->
+        <a href="{% url 'purchase_orders_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'purchase' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if 'purchase' in request.path %}material-symbols-fill{% endif %}">shopping_cart</span>
+            <span class="text-[10px] mt-0.5">المشتريات</span>
+        </a>
+
+        <!-- Menu Drawer Toggle -->
+        <button type="button" onclick="toggleSidebar()" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] text-slate-500 hover:text-brand-600 transition-colors">
+            <span class="material-symbols-outlined text-2xl">menu</span>
+            <span class="text-[10px] mt-0.5">القائمة</span>
+        </button>
+    </nav>
 
     <!-- Script for sidebar toggle & submenus -->
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('translate-x-full');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isClosed = sidebar.classList.contains('translate-x-full');
+            if (isClosed) {
+                sidebar.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden', 'lg:overflow-auto');
+            } else {
+                sidebar.classList.add('translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden', 'lg:overflow-auto');
+            }
         }
 
         function toggleSubmenu(id) {

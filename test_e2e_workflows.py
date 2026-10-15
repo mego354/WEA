@@ -337,8 +337,49 @@ def run_tests():
         assert resp.status_code == 200, f"Error rendering {url}: expected 200, got {resp.status_code}"
         print(f"  ✓ {url:<36} [HTTP 200 OK]")
 
+    # 9. Verify All Excel Exports (.xlsx) and Import Workflows
+    print("\n[9] Verifying All Excel Exports (.xlsx) & Import Workflows...")
+    import openpyxl
+    import io
+
+    excel_exports = [
+        ('/catalog/export/', 'Products Export'),
+        ('/contacts/export/', 'Contacts Export'),
+        ('/purchases/export/', 'Purchase Orders Export'),
+        ('/purchases/returns/export/', 'Purchase Return Orders Export'),
+        ('/sales/export/', 'Sales Orders Export'),
+        ('/sales/collections/export/', 'Collections Export'),
+        ('/inventory/export/', 'Inventory Stock Export'),
+        ('/treasury/payments/export/', 'Vendor Payments Export'),
+        ('/catalog/import/template/', 'Products Import Template'),
+        ('/contacts/import/template/', 'Contacts Import Template'),
+    ]
+
+    for export_url, label in excel_exports:
+        res = client.get(export_url)
+        assert res.status_code == 200, f"Export {label} ({export_url}) failed with {res.status_code}"
+        assert res['Content-Type'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', f"Export {label} has incorrect Content-Type: {res['Content-Type']}"
+        assert '.xlsx' in res['Content-Disposition'], f"Export {label} missing .xlsx filename"
+        
+        # Verify valid openpyxl spreadsheet
+        wb = openpyxl.load_workbook(io.BytesIO(res.content))
+        ws = wb.active
+        assert ws.sheet_view.rightToLeft is True, f"Sheet for {label} is not set to Right-To-Left (RTL)"
+        print(f"  ✓ {label:<32} [{ws.title}] - Valid .xlsx with RTL view")
+
+    # Verify Import Pages
+    import_pages = [
+        ('/catalog/import/', 'Products Import Page'),
+        ('/contacts/import/', 'Contacts Import Page'),
+    ]
+    for imp_url, imp_label in import_pages:
+        res = client.get(imp_url)
+        assert res.status_code == 200, f"Import page {imp_label} ({imp_url}) failed with {res.status_code}"
+        assert 'Excel' in res.content.decode('utf-8'), f"Import page {imp_label} missing Excel branding"
+        print(f"  ✓ {imp_label:<32} [HTTP 200 OK]")
+
     print("\n" + "=" * 60)
-    print("ALL E2E WORKFLOWS AND PAGES VERIFIED SUCCESSFULLY! 100% PASS.")
+    print("ALL E2E WORKFLOWS, EXPORTS & IMPORTS VERIFIED SUCCESSFULLY! 100% PASS.")
     print("=" * 60)
 
 if __name__ == '__main__':

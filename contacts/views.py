@@ -1,4 +1,5 @@
 import csv
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -8,6 +9,7 @@ from django.core.paginator import Paginator
 from .models import Contact, ContactAddress, ContactComment, ContactAttachment, ContactTodo, ContactActivity
 from master_data.models import Area
 from treasury.models import VendorAccount
+from sales.models import CustomerAccount
 from accounts.models import User
 from .constants import CUSTOMER_CATEGORIES, SPECIALTIES, ACCOUNT_TYPES, COUNTRY_CODES
 
@@ -583,36 +585,354 @@ def contacts_export(request):
             Q(code__icontains=search)
         )
 
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    response['Content-Disposition'] = 'attachment; filename="contacts_export.csv"'
-    writer = csv.writer(response)
-    writer.writerow([
-        'رقم المسلسل', 'الاسم', 'نوع الحساب', 'علاقة العمل',
-        'حالة العميل', 'المنطقة', 'العنوان الرئيسي', 'الموبايل',
-        'تصنيف العميل', 'التخصص', 'نوع الاكونت', 'الكود', 'حد الائتمان'
-    ])
+from master_data.excel_utils import (
+    export_to_excel_response,
+    generate_excel_template_response,
+    ExcelImportParser,
+    parse_decimal_safe,
+    parse_boolean_safe,
+)
+from sales.models import CustomerAccount
+from django.db import transaction
 
-    for c in qs:
-        main_addr = c.addresses.filter(is_main=True).first()
-        addr_text = main_addr.street_address if main_addr else ''
-        area_text = f"{main_addr.sub_area} | {main_addr.area.name}" if (main_addr and main_addr.area) else (c.area.name if c.area else '')
-        writer.writerow([
-            f"#{c.serial_num}",
-            c.name,
-            c.get_contact_type_display(),
-            c.relation_display,
-            c.status_label,
-            area_text,
-            addr_text,
-            c.mobile or c.phone,
-            c.customer_category,
-            c.specialty,
-            c.account_type,
-            c.code,
-            c.credit_limit
-        ])
 
-    return response
+@login_required
+def contacts_export(request):
+    relation = request.GET.get('relation', 'all').strip()
+    status = request.GET.get('status', 'all').strip()
+    search = request.GET.get('search', '').strip() or request.GET.get('q', '').strip()
+
+    qs = Contact.objects.select_related('area').prefetch_related('addresses__area').all()
+
+    if status != 'all' and status:
+        qs = qs.filter(status=status)
+    if relation == 'vendor':
+        qs = qs.filter(is_supplier=True)
+    elif relation == 'customer':
+        qs = qs.filter(is_customer=True)
+
+    if search:
+        qs = qs.filter(
+            Q(name__icontains=search) |
+            Q(serial_num__icontains=search) |
+            Q(mobile__icontains=search) |
+            Q(tax_id__icontains=search) |
+            Q(code__icontains=search)
+        )
+
+    columns = [
+        {'header': 'رقم المسلسل', 'key': lambda c: f"#{c.serial_num}", 'width': 14, 'align': 'center'},
+        {'header': 'الاسم', 'key': 'name', 'width': 35, 'align': 'right'},
+        {'header': 'نوع الحساب', 'key': lambda c: c.get_contact_type_display(), 'width': 16, 'align': 'center'},
+        {'header': 'علاقة العمل', 'key': lambda c: c.relation_display, 'width': 16, 'align': 'center'},
+        {'header': 'حالة العميل', 'key': lambda c: c.status_label, 'width': 14, 'align': 'center'},
+        {'header': 'المنطقة', 'key': lambda c: c.area.name if c.area else '', 'width': 22, 'align': 'right'},
+        {'header': 'العنوان الرئيسي', 'key': lambda c: c.addresses.filter(is_main=True).first().street_address if c.addresses.filter(is_main=True).exists() else '', 'width': 35, 'align': 'right'},
+        {'header': 'الموبايل', 'key': lambda c: c.mobile or '', 'width': 18, 'align': 'center'},
+        {'header': 'الهاتف', 'key': lambda c: c.phone or '', 'width': 18, 'align': 'center'},
+        {'header': 'تصنيف العميل', 'key': lambda c: c.customer_category or '', 'width': 18, 'align': 'center'},
+        {'header': 'التخصص', 'key': lambda c: c.specialty or '', 'width': 18, 'align': 'center'},
+        {'header': 'نوع الاكونت', 'key': lambda c: c.account_type or '', 'width': 18, 'align': 'center'},
+        {'header': 'الكود', 'key': lambda c: c.code or '', 'width': 16, 'align': 'center'},
+        {'header': 'حد الائتمان', 'key': lambda c: float(c.credit_limit) if c.credit_limit is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+    ]
+
+    return export_to_excel_response(qs, columns, filename="contacts_export", sheet_title="جهات الاتصال")
+
+
+@login_required
+def contacts_import_template(request):
+    columns = [
+        {'header': 'المسلسل', 'width': 14},
+        {'header': 'الاسم', 'width': 35},
+        {'header': 'علاقة العمل (عميل / مورد / كلاهما)', 'width': 24},
+        {'header': 'الموبايل', 'width': 18},
+        {'header': 'الهاتف', 'width': 18},
+        {'header': 'المنطقة', 'width': 20},
+        {'header': 'العنوان التفصيلي', 'width': 35},
+        {'header': 'حد الائتمان', 'width': 16},
+        {'header': 'تصنيف العميل', 'width': 18},
+        {'header': 'التخصص', 'width': 18},
+        {'header': 'الرقم الضريبي', 'width': 18},
+        {'header': 'الكود', 'width': 16},
+    ]
+    sample_rows = [
+        [1001, 'صيدلية النور والشفاء', 'عميل', '01012345678', '0223456789', 'مدينة نصر', '15 شارع الطيران، بجوار مسجد رابعة', 50000.00, 'A', 'صيدلية مجتمعية', '123-456-789', 'CLI-1001'],
+        [1002, 'شركة النيل للتوزيع الدوائي', 'مورد', '01198765432', '0233445566', 'الدقي', '40 شارع مصدق، الجيزة', 0.00, '', '', '987-654-321', 'SUP-1002'],
+    ]
+    return generate_excel_template_response(columns, sample_rows=sample_rows, filename="contacts_import_template", sheet_title="نموذج جهات الاتصال")
+
+
+@login_required
+def contacts_import(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'preview':
+            excel_file = request.FILES.get('excel_file')
+            if not excel_file:
+                messages.error(request, "يرجى اختيار ملف Excel للرفع.")
+                return render(request, 'contacts/contacts_import.html', {'preview_mode': False})
+
+            column_mapping = {
+                'serial_num': ['رقم المسلسل', 'المسلسل', 'serial_num', 'serial'],
+                'name': ['اسم العميل', 'اسم المورد', 'الاسم', 'name', 'contact_name'],
+                'relation': ['علاقة العمل (عميل / مورد / كلاهما)', 'علاقة العمل', 'نوع العلاقة', 'relation', 'type'],
+                'mobile': ['الموبايل', 'رقم الموبايل', 'mobile', 'phone_number'],
+                'phone': ['الهاتف', 'التليفون', 'phone'],
+                'area': ['المنطقة', 'المحافظة', 'area', 'governorate'],
+                'street_address': ['العنوان التفصيلي', 'العنوان', 'العنوان الرئيسي', 'address', 'street'],
+                'credit_limit': ['حد الائتمان', 'الحد الائتماني', 'credit_limit'],
+                'customer_category': ['تصنيف العميل', 'التصنيف', 'category'],
+                'specialty': ['التخصص', 'specialty'],
+                'tax_id': ['الرقم الضريبي', 'البطاقة الضريبية', 'tax_id'],
+                'code': ['الكود', 'كود العميل', 'كود المورد', 'code'],
+            }
+
+            parser = ExcelImportParser(excel_file, column_mapping)
+            if not parser.parse():
+                for err in parser.errors:
+                    messages.error(request, err)
+                return render(request, 'contacts/contacts_import.html', {'preview_mode': False})
+
+            existing_serials = set(Contact.objects.filter(serial_num__isnull=False).values_list('serial_num', flat=True))
+            existing_mobiles = set(Contact.objects.exclude(mobile='').values_list('mobile', flat=True))
+            existing_codes = set(Contact.objects.exclude(code='').values_list('code', flat=True))
+
+            preview_rows = []
+            seen_serials = set()
+            new_count = 0
+            update_count = 0
+            invalid_count = 0
+
+            for r in parser.rows_data:
+                row_errors = []
+                name = str(r.get('name') or '').strip()
+                serial = r.get('serial_num')
+                serial_clean = None
+                if serial not in [None, '']:
+                    try:
+                        serial_clean = int(float(str(serial)))
+                    except Exception:
+                        row_errors.append("رقم المسلسل يجب أن يكون عدداً صحيحاً")
+
+                if not name:
+                    row_errors.append("اسم جهة الاتصال مطلوب")
+
+                if serial_clean:
+                    if serial_clean in seen_serials:
+                        row_errors.append("رقم مسلسل مكرر داخل نفس الملف")
+                    else:
+                        seen_serials.add(serial_clean)
+
+                mobile = str(r.get('mobile') or '').strip()
+                code = str(r.get('code') or '').strip()
+
+                is_existing = False
+                if serial_clean and serial_clean in existing_serials:
+                    is_existing = True
+                elif code and code in existing_codes:
+                    is_existing = True
+                elif mobile and mobile in existing_mobiles:
+                    is_existing = True
+
+                is_valid = len(row_errors) == 0
+
+                if not is_valid:
+                    invalid_count += 1
+                elif is_existing:
+                    update_count += 1
+                else:
+                    new_count += 1
+
+                preview_rows.append({
+                    'row_num': r.get('__row_num__'),
+                    'serial_num': serial_clean,
+                    'name': name,
+                    'relation': r.get('relation') or 'عميل',
+                    'mobile': mobile,
+                    'phone': str(r.get('phone') or '').strip(),
+                    'area': str(r.get('area') or '').strip(),
+                    'street_address': str(r.get('street_address') or '').strip(),
+                    'credit_limit': str(r.get('credit_limit') or '0.00'),
+                    'customer_category': str(r.get('customer_category') or ''),
+                    'specialty': str(r.get('specialty') or ''),
+                    'tax_id': str(r.get('tax_id') or '').strip(),
+                    'code': code,
+                    'is_valid': is_valid,
+                    'is_existing': is_existing,
+                    'errors': row_errors,
+                })
+
+            valid_count = len(preview_rows) - invalid_count
+            request.session['contacts_import_data'] = preview_rows
+
+            context = {
+                'preview_mode': True,
+                'total_rows': len(preview_rows),
+                'valid_count': valid_count,
+                'invalid_count': invalid_count,
+                'new_count': new_count,
+                'update_count': update_count,
+                'preview_rows': preview_rows[:100],
+                'total_preview_count': min(len(preview_rows), 100),
+            }
+            return render(request, 'contacts/contacts_import.html', context)
+
+        elif action == 'execute':
+            import_mode = request.POST.get('import_mode', 'create_and_update')
+            rows_data = request.session.get('contacts_import_data', [])
+
+            if not rows_data:
+                messages.error(request, "انتهت صلاحية جلسة الاستيراد أو لا توجد بيانات. يرجى إعادة رفع الملف.")
+                return redirect('contacts_import')
+
+            created_count = 0
+            updated_count = 0
+            skipped_count = 0
+
+            areas_map = {a.name.strip().lower(): a for a in Area.objects.all()}
+
+            try:
+                with transaction.atomic():
+                    for r in rows_data:
+                        if not r.get('is_valid'):
+                            skipped_count += 1
+                            continue
+
+                        name = r['name']
+                        serial_clean = r.get('serial_num')
+                        mobile = r.get('mobile', '')
+                        code = r.get('code', '')
+                        rel_str = str(r.get('relation') or '').lower()
+
+                        is_customer = True
+                        is_supplier = False
+                        if 'مورد' in rel_str or 'supplier' in rel_str or 'vendor' in rel_str:
+                            is_supplier = True
+                            if 'عميل' not in rel_str and 'customer' not in rel_str:
+                                is_customer = False
+                        if 'كلاهما' in rel_str or ('عميل' in rel_str and 'مورد' in rel_str):
+                            is_customer = True
+                            is_supplier = True
+
+                        area_name = r.get('area', '').strip()
+                        area_obj = None
+                        if area_name:
+                            area_key = area_name.lower()
+                            if area_key in areas_map:
+                                area_obj = areas_map[area_key]
+                            else:
+                                area_obj = Area.objects.create(name=area_name, area_type='area')
+                                areas_map[area_key] = area_obj
+
+                        credit_limit = parse_decimal_safe(r.get('credit_limit'), Decimal('0.00'))
+
+                        # Find matching contact
+                        contact = None
+                        if serial_clean:
+                            contact = Contact.objects.filter(serial_num=serial_clean).first()
+                        if not contact and code:
+                            contact = Contact.objects.filter(code=code).first()
+                        if not contact and mobile:
+                            contact = Contact.objects.filter(mobile=mobile).first()
+
+                        if contact:
+                            if import_mode in ['create_and_update', 'update_only']:
+                                contact.name = name
+                                contact.is_customer = is_customer
+                                contact.is_supplier = is_supplier
+                                if mobile:
+                                    contact.mobile = mobile
+                                if r.get('phone'):
+                                    contact.phone = r['phone']
+                                if area_obj:
+                                    contact.area = area_obj
+                                if credit_limit > 0:
+                                    contact.credit_limit = credit_limit
+                                if r.get('customer_category'):
+                                    contact.customer_category = r['customer_category']
+                                if r.get('specialty'):
+                                    contact.specialty = r['specialty']
+                                if r.get('tax_id'):
+                                    contact.tax_id = r['tax_id']
+                                if code:
+                                    contact.code = code
+                                contact.save()
+
+                                if r.get('street_address'):
+                                    main_addr = contact.addresses.filter(is_main=True).first()
+                                    if main_addr:
+                                        main_addr.street_address = r['street_address']
+                                        if area_obj:
+                                            main_addr.area = area_obj
+                                        main_addr.save()
+                                    else:
+                                        ContactAddress.objects.create(
+                                            contact=contact,
+                                            street_address=r['street_address'],
+                                            area=area_obj,
+                                            is_main=True
+                                        )
+
+                                if is_customer:
+                                    CustomerAccount.get_or_create_for_customer(contact)
+                                if is_supplier:
+                                    VendorAccount.get_or_create_for_supplier(contact)
+
+                                updated_count += 1
+                            else:
+                                skipped_count += 1
+                        else:
+                            if import_mode in ['create_and_update', 'create_only']:
+                                new_contact = Contact(
+                                    name=name,
+                                    serial_num=serial_clean,
+                                    is_customer=is_customer,
+                                    is_supplier=is_supplier,
+                                    mobile=mobile,
+                                    phone=r.get('phone', ''),
+                                    area=area_obj,
+                                    credit_limit=credit_limit,
+                                    customer_category=r.get('customer_category', ''),
+                                    specialty=r.get('specialty', ''),
+                                    tax_id=r.get('tax_id', ''),
+                                    code=code,
+                                    status='customer' if is_customer else 'active',
+                                    created_by=request.user
+                                )
+                                new_contact.save()
+
+                                if r.get('street_address') or area_obj:
+                                    ContactAddress.objects.create(
+                                        contact=new_contact,
+                                        street_address=r.get('street_address', ''),
+                                        area=area_obj,
+                                        is_main=True
+                                    )
+
+                                if is_customer:
+                                    CustomerAccount.get_or_create_for_customer(new_contact)
+                                if is_supplier:
+                                    VendorAccount.get_or_create_for_supplier(new_contact)
+
+                                created_count += 1
+                            else:
+                                skipped_count += 1
+
+                request.session.pop('contacts_import_data', None)
+                messages.success(
+                    request,
+                    f"اكتمل استيراد جهات الاتصال بنجاح! تم إنشاء {created_count} جهة اتصال جديدة، "
+                    f"وتحديث {updated_count} جهة، وتخطي {skipped_count} سجل."
+                )
+                return redirect('contacts_list')
+
+            except Exception as e:
+                messages.error(request, f"حدث خطأ أثناء حفظ جهات الاتصال وتم التراجع عن كافة العمليات: {str(e)}")
+                return redirect('contacts_import')
+
+    return render(request, 'contacts/contacts_import.html', {'preview_mode': False})
 
 
 @login_required

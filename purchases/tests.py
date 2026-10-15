@@ -174,14 +174,19 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         self.assertEqual(PurchaseOrderComment.objects.filter(order=self.order).count(), 1)
         self.assertIn('تم التواصل مع المورد', self.order.comments.first().text)
 
-    def test_purchase_orders_export_csv(self):
+    def test_purchase_orders_export_excel(self):
+        import io
+        import openpyxl
         export_url = reverse('purchase_orders_export')
         response = self.client.get(export_url)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8-sig')
-        content = response.content.decode('utf-8-sig')
-        self.assertIn('مصنع اورجانيك للمكملات الغذائية بنها', content)
-        self.assertIn('58,849.20', content)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.assertIn('.xlsx', response['Content-Disposition'])
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertTrue(ws.sheet_view.rightToLeft)
+        found = any('مصنع اورجانيك' in str(cell.value) for row in ws.iter_rows() for cell in row)
+        self.assertTrue(found)
 
     def test_purchase_return_orders_list(self):
         returns_url = reverse('purchase_return_orders_list')
@@ -358,7 +363,7 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         # 6. GET export
         export_resp = self.client.get(reverse('purchase_return_orders_export'))
         self.assertEqual(export_resp.status_code, 200)
-        self.assertEqual(export_resp['Content-Type'], 'text/csv; charset=utf-8-sig')
+        self.assertEqual(export_resp['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     def test_reference_url_aliases(self):
         # /purchase-orders/

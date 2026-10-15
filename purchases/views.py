@@ -8,6 +8,7 @@ from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
+from master_data.excel_utils import export_to_excel_response
 
 from .models import (
     PurchaseOrder, PurchaseOrderItem, PurchaseOrderAttachment, PurchaseOrderComment,
@@ -331,28 +332,20 @@ def purchase_orders_export(request):
             Q(supplier__name__icontains=search)
         )
 
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    response['Content-Disposition'] = 'attachment; filename="purchase_orders_export.csv"'
-    writer = csv.writer(response)
-    writer.writerow([
-        'رقم المسلسل', 'الاسم', 'المنطقة', 'انشئ فى', 'المنشئ',
-        'الحالة', 'اجمالى القيمة', 'مسئول التوصيل', 'وقت التوصيل'
-    ])
+    columns = [
+        {'header': 'رقم الطلب', 'key': 'order_number', 'width': 16, 'align': 'center'},
+        {'header': 'المورد', 'key': lambda o: o.supplier.name, 'width': 35, 'align': 'right'},
+        {'header': 'المنطقة', 'key': lambda o: o.supplier.area.name if o.supplier.area else '', 'width': 22, 'align': 'right'},
+        {'header': 'المخزن', 'key': lambda o: o.target_warehouse.name if o.target_warehouse else '', 'width': 22, 'align': 'right'},
+        {'header': 'تاريخ الإنشاء', 'key': lambda o: o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'المنشئ', 'key': lambda o: o.created_by.get_full_name() or o.created_by.username if o.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda o: o.status_label_en, 'width': 18, 'align': 'center'},
+        {'header': 'إجمالي القيمة', 'key': lambda o: float(o.grand_total) if o.grand_total is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'مسئول التوصيل', 'key': lambda o: o.delivery_agent or '', 'width': 20, 'align': 'center'},
+        {'header': 'وقت التوصيل', 'key': lambda o: o.delivery_time or '', 'width': 20, 'align': 'center'},
+    ]
 
-    for o in qs:
-        writer.writerow([
-            o.order_number,
-            o.supplier.name,
-            o.supplier.area.name if o.supplier.area else '',
-            o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '',
-            o.created_by.get_full_name() or o.created_by.username if o.created_by else '',
-            o.status_label_en,
-            f"{o.grand_total:,.2f}",
-            o.delivery_agent or '',
-            o.delivery_time or ''
-        ])
-
-    return response
+    return export_to_excel_response(qs, columns, filename="purchase_orders_export", sheet_title="طلبات الشراء")
 
 
 @login_required
@@ -601,26 +594,18 @@ def purchase_return_orders_export(request):
             Q(supplier__name__icontains=search)
         )
 
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    response['Content-Disposition'] = 'attachment; filename="purchase_returns_export.csv"'
-    writer = csv.writer(response)
-    writer.writerow([
-        'رقم المسلسل', 'الاسم', 'المنطقة', 'انشئ فى', 'المنشئ',
-        'الحالة', 'اجمالى القيمة', 'مسئول الاستلام', 'وقت الاستلام'
-    ])
+    columns = [
+        {'header': 'رقم أمر الإرجاع', 'key': 'order_number', 'width': 18, 'align': 'center'},
+        {'header': 'المورد', 'key': lambda r: r.supplier.name, 'width': 35, 'align': 'right'},
+        {'header': 'المنطقة', 'key': lambda r: r.supplier.area.name if r.supplier.area else '', 'width': 22, 'align': 'right'},
+        {'header': 'المخزن', 'key': lambda r: r.warehouse.name if r.warehouse else '', 'width': 22, 'align': 'right'},
+        {'header': 'تاريخ الإنشاء', 'key': lambda r: r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'المنشئ', 'key': lambda r: r.created_by.get_full_name() or r.created_by.username if r.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda r: r.status_label_en, 'width': 18, 'align': 'center'},
+        {'header': 'إجمالي المرتجع', 'key': lambda r: float(r.grand_total) if r.grand_total is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'مسئول الاستلام', 'key': lambda r: r.delivery_agent or '', 'width': 20, 'align': 'center'},
+        {'header': 'وقت الاستلام', 'key': lambda r: r.delivery_time or '', 'width': 20, 'align': 'center'},
+    ]
 
-    for r in qs:
-        writer.writerow([
-            r.order_number,
-            r.supplier.name,
-            r.supplier.area.name if r.supplier.area else '',
-            r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '',
-            r.created_by.get_full_name() or r.created_by.username if r.created_by else '',
-            r.status_label_en,
-            f"{r.grand_total:,.2f}",
-            r.delivery_agent or '',
-            r.delivery_time or ''
-        ])
-
-    return response
+    return export_to_excel_response(qs, columns, filename="purchase_returns_export", sheet_title="مرتجعات الشراء")
 

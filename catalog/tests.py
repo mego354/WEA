@@ -149,13 +149,75 @@ class CatalogModelsAndViewsTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Product.objects.filter(id=self.product.id).exists())
 
-    def test_products_export_csv(self):
+    def test_products_export_excel(self):
+        import io
+        import openpyxl
         response = self.client.get(reverse('products_export'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8-sig')
-        content = response.content.decode('utf-8-sig')
-        self.assertIn('Geron', content)
-        self.assertIn('GER-001', content)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.assertIn('.xlsx', response['Content-Disposition'])
+        
+        # Verify it is a valid openpyxl workbook
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertTrue(ws.sheet_view.rightToLeft)
+        # Verify Geron is in the sheet
+        found = any(cell.value == 'Geron' for row in ws.iter_rows() for cell in row)
+        self.assertTrue(found)
+
+    def test_product_import_template(self):
+        import io
+        import openpyxl
+        response = self.client.get(reverse('product_import_template'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertEqual(ws.cell(row=1, column=1).value, 'كود المنتج (SKU)')
+
+    def test_product_import_workflow(self):
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        # 1. GET page
+        get_resp = self.client.get(reverse('product_import'))
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertContains(get_resp, 'استيراد المنتجات')
+
+        # 2. Create workbook in memory matching product columns
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['كود المنتج (SKU)', 'اسم المنتج', 'التصنيف', 'سعر البيع للجمهور', 'سعر تكلفة الشراء', 'نسبة الضريبة', 'متاح للبيع', 'الباركود', 'الوحدة', 'الوصف'])
+        ws.append(['PAN-COLD-01', 'بانادول كولد', 'مكملات غذائية', 45.0, 32.5, 0.0, 'نعم', '6221234567890', 'علبة', 'مضاد نزلات البرد'])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile(
+            'products_test.xlsx',
+            out.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+        # 3. POST preview
+        preview_resp = self.client.post(reverse('product_import'), {
+            'action': 'preview',
+            'excel_file': excel_file,
+        })
+        self.assertEqual(preview_resp.status_code, 200)
+        self.assertContains(preview_resp, 'PAN-COLD-01')
+        self.assertContains(preview_resp, 'اختر طريقة تنفيذ الاستيراد')
+
+        # 4. POST execute import
+        execute_resp = self.client.post(reverse('product_import'), {
+            'action': 'execute',
+            'import_mode': 'create_and_update',
+        }, follow=True)
+        self.assertEqual(execute_resp.status_code, 200)
+        self.assertTrue(Product.objects.filter(sku_code='PAN-COLD-01').exists())
+        imported_p = Product.objects.get(sku_code='PAN-COLD-01')
+        self.assertEqual(imported_p.name, 'بانادول كولد')
+        self.assertEqual(imported_p.retail_price, Decimal('45.00'))
 
     def test_categories_list_and_create(self):
         cat_url = reverse('categories_list')
