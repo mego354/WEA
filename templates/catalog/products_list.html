@@ -39,11 +39,19 @@
                 {% endif %}
             </button>
 
-            <!-- Export CSV -->
-            <a href="{% url 'products_export' %}?search={{ search_query }}&category={{ selected_category|default:'' }}&sellable={{ sellable_filter|default:'' }}"
+            <!-- Import Excel -->
+            <a href="{% url 'product_import' %}"
                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span class="hidden md:inline">تصدير البيانات</span>
+                <span class="material-symbols-outlined text-base text-brand-600">upload_file</span>
+                <span class="hidden sm:inline">استيراد Excel</span>
+            </a>
+
+            <!-- Export to Excel -->
+            <a href="{% url 'products_export' %}?search={{ search_query }}&category={{ selected_category|default:'' }}&sellable={{ sellable_filter|default:'' }}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors"
+               title="تصدير إلى Excel (.xlsx)">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
 
             <!-- Create Product Button -->

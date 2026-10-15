@@ -9,10 +9,35 @@ from .services import TreasuryService
 from contacts.models import Contact
 
 
+from master_data.excel_utils import export_to_excel_response
+
+
 @login_required
 def vendor_payments_list(request):
     payments = VendorPayment.objects.select_related('supplier', 'vault', 'created_by').order_by('-serial_num')
     return render(request, 'treasury/vendor_payments_list.html', {'payments': payments})
+
+
+@login_required
+def vendor_payments_export(request):
+    supplier_id = request.GET.get('supplier')
+    qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by').order_by('-serial_num')
+    if supplier_id:
+        qs = qs.filter(supplier_id=supplier_id)
+
+    columns = [
+        {'header': 'رقم سند الصرف', 'key': lambda p: f"#{p.serial_num}", 'width': 16, 'align': 'center'},
+        {'header': 'المورد', 'key': lambda p: p.supplier.name, 'width': 35, 'align': 'right'},
+        {'header': 'الخزنة / الحساب', 'key': lambda p: p.vault.name, 'width': 25, 'align': 'right'},
+        {'header': 'المبلغ المدفوع', 'key': lambda p: float(p.amount) if p.amount is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'طريقة السداد', 'key': lambda p: p.get_payment_method_display(), 'width': 16, 'align': 'center'},
+        {'header': 'رقم الشيك / المرجع', 'key': lambda p: p.reference_number or '', 'width': 20, 'align': 'center'},
+        {'header': 'تاريخ وساعة الصرف', 'key': lambda p: p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'المسئول', 'key': lambda p: p.created_by.get_full_name() or p.created_by.username if p.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'ملاحظات', 'key': lambda p: p.notes or '', 'width': 30, 'align': 'right'},
+    ]
+
+    return export_to_excel_response(qs, columns, filename="vendor_payments_export", sheet_title="مدفوعات الموردين")
 
 
 @login_required

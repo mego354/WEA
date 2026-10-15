@@ -1,0 +1,223 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}استيراد جهات الاتصال من Excel{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'contacts_list' %}" class="hover:text-brand-600 transition-colors">جهات الاتصال</a>
+<span class="text-slate-300">/</span>
+<span class="font-medium text-slate-700">استيراد من Excel</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center font-bold">
+                <span class="material-symbols-outlined text-2xl">groups</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900">استيراد جهات الاتصال (العملاء والموردين)</h1>
+                <p class="text-xs sm:text-sm text-slate-500">رفع بيانات العملاء، الموردين، العناوين، وحدود الائتمان بصيغة Excel</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'contacts_import_template' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-lg text-brand-600">download</span>
+                <span>تحميل نموذج Excel فارغ</span>
+            </a>
+            <a href="{% url 'contacts_list' %}" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs sm:text-sm font-medium rounded-xl transition-all min-h-[44px]">
+                <span>العودة للقائمة</span>
+            </a>
+        </div>
+    </div>
+
+    {% if not preview_mode %}
+    <!-- STEP 1: File Upload Box -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="preview">
+
+            <div class="border-2 border-dashed border-slate-200 hover:border-brand-500 transition-colors rounded-2xl p-8 sm:p-12 text-center bg-slate-50/50 flex flex-col items-center justify-center gap-4 cursor-pointer relative" onclick="document.getElementById('excel_file').click()">
+                <div class="w-16 h-16 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-3xl">cloud_upload</span>
+                </div>
+                <div class="space-y-1">
+                    <p class="text-base font-bold text-slate-800">اسحب وأفلت ملف Excel هنا، أو انقر للاختيار</p>
+                    <p class="text-xs sm:text-sm text-slate-500">يقبل صيغ .xlsx بحجم أقصى 10 ميجابايت</p>
+                </div>
+                <input type="file" id="excel_file" name="excel_file" accept=".xlsx" class="hidden" onchange="updateFileName(this)">
+                <div id="file_name_display" class="hidden text-sm font-semibold text-brand-700 bg-brand-50 px-4 py-2 rounded-xl border border-brand-200"></div>
+            </div>
+
+            <!-- Guidelines Callout -->
+            <div class="bg-blue-50/80 border border-blue-200/60 rounded-xl p-4 flex gap-3 text-sm text-blue-900">
+                <span class="material-symbols-outlined text-blue-600 shrink-0">info</span>
+                <div class="space-y-1 text-xs sm:text-sm leading-relaxed">
+                    <p class="font-bold">إرشادات هامة قبل رفع جهات الاتصال:</p>
+                    <ul class="list-disc list-inside space-y-0.5 text-blue-800">
+                        <li>يمكنك تحديد علاقة العمل كـ <strong>عميل</strong> أو <strong>مورد</strong> أو كلاهما.</li>
+                        <li>يتم مطابقة السجلات الحالية تلقائياً بالاعتماد على: رقم المسلسل، أو الكود، أو رقم الموبايل.</li>
+                        <li>رقم المسلسل اختياري؛ في حال تركه فارغاً سيقوم النظام بتوليد مسلسل تسلسلي تلقائي فريد.</li>
+                        <li>يتم إنشاء الحسابات المالية (حسابات العملاء وحسابات الموردين في شجرة الحسابات) بصورة تلقائية.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+                    <span class="material-symbols-outlined text-lg">visibility</span>
+                    <span>معاينة وتحليل الملف</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% else %}
+    <!-- STEP 2 & 3: Preview and Confirmation -->
+    <div class="space-y-6">
+
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <span class="text-xs text-slate-500 font-medium">إجمالي الصفوف</span>
+                <p class="text-xl sm:text-2xl font-bold text-slate-800 mt-1">{{ total_rows }}</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <span class="text-xs text-emerald-600 font-medium">جهات اتصال صالحة</span>
+                <p class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">{{ valid_count }}</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <span class="text-xs text-rose-600 font-medium">صفوف بها أخطاء</span>
+                <p class="text-xl sm:text-2xl font-bold text-rose-600 mt-1">{{ invalid_count }}</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <span class="text-xs text-brand-600 font-medium">جهات اتصال جديدة</span>
+                <p class="text-xl sm:text-2xl font-bold text-brand-600 mt-1">{{ new_count }}</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 col-span-2 sm:col-span-1">
+                <span class="text-xs text-amber-600 font-medium">تحديث لجهات حالية</span>
+                <p class="text-xl sm:text-2xl font-bold text-amber-600 mt-1">{{ update_count }}</p>
+            </div>
+        </div>
+
+        <!-- Import Execution Form -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="execute">
+
+                <!-- Mode Selection -->
+                <div class="space-y-3">
+                    <label class="block text-sm font-bold text-slate-800">اختر طريقة تنفيذ الاستيراد:</label>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <label class="flex items-start gap-3 p-4 rounded-xl border-2 border-brand-500 bg-brand-50/30 cursor-pointer">
+                            <input type="radio" name="import_mode" value="create_and_update" checked class="mt-1 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <span class="font-bold text-slate-900 block text-sm">إنشاء الجديد وتحديث المطابق</span>
+                                <span class="text-xs text-slate-500">إضافة جهات الاتصال الجديدة، وتحديث البيانات للهواتف/الأكواد المطابقة.</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-200 hover:border-slate-300 bg-white cursor-pointer">
+                            <input type="radio" name="import_mode" value="create_only" class="mt-1 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <span class="font-bold text-slate-900 block text-sm">إضافة الجديد فقط</span>
+                                <span class="text-xs text-slate-500">تسجيل جهات الاتصال الجديدة وتخطي أي جهة اتصال مسجلة مسبقاً.</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-200 hover:border-slate-300 bg-white cursor-pointer">
+                            <input type="radio" name="import_mode" value="update_only" class="mt-1 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <span class="font-bold text-slate-900 block text-sm">تحديث المطابق فقط</span>
+                                <span class="text-xs text-slate-500">تحديث الجهات المسجلة فقط وتجاهل إضافة أي جهات اتصال جديدة.</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Preview Table -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-800">معاينة البيانات المستخلصة (أول 100 سجل):</h3>
+                        <span class="text-xs text-slate-500">إجمالي المعاينة: {{ total_preview_count }} سجل</span>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-xl border border-slate-200">
+                        <table class="min-w-[700px] w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">#</th>
+                                    <th class="py-3 px-3">الحالة المقترحة</th>
+                                    <th class="py-3 px-3">المسلسل</th>
+                                    <th class="py-3 px-3">الاسم</th>
+                                    <th class="py-3 px-3">العلاقة</th>
+                                    <th class="py-3 px-3">الموبايل</th>
+                                    <th class="py-3 px-3">المنطقة</th>
+                                    <th class="py-3 px-3">حد الائتمان</th>
+                                    <th class="py-3 px-3">الأخطاء إن وجدت</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for r in preview_rows %}
+                                <tr class="{% if not r.is_valid %}bg-rose-50/50{% elif r.is_existing %}bg-amber-50/30{% else %}hover:bg-slate-50{% endif %}">
+                                    <td class="py-2.5 px-3 font-medium text-slate-500">{{ r.row_num }}</td>
+                                    <td class="py-2.5 px-3">
+                                        {% if not r.is_valid %}
+                                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-700">غير صالح</span>
+                                        {% elif r.is_existing %}
+                                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-700">تحديث</span>
+                                        {% else %}
+                                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-brand-100 text-brand-700">جديد</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="py-2.5 px-3 font-bold text-slate-800">{{ r.serial_num|default:"تلقائي" }}</td>
+                                    <td class="py-2.5 px-3 font-medium text-slate-900">{{ r.name }}</td>
+                                    <td class="py-2.5 px-3 text-slate-600">{{ r.relation|default:"عميل" }}</td>
+                                    <td class="py-2.5 px-3 font-semibold text-slate-800">{{ r.mobile|default:"—" }}</td>
+                                    <td class="py-2.5 px-3 text-slate-600">{{ r.area|default:"—" }}</td>
+                                    <td class="py-2.5 px-3 font-semibold text-slate-800">{{ r.credit_limit }}</td>
+                                    <td class="py-2.5 px-3">
+                                        {% if r.errors %}
+                                        <span class="text-rose-600 font-medium">{{ r.errors|join:", " }}</span>
+                                        {% else %}
+                                        <span class="text-emerald-600 text-xs">صالح للتنفيذ</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                    <a href="{% url 'contacts_import' %}" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-semibold rounded-xl transition-all min-h-[44px]">
+                        <span>إلغاء وإعادة الرفع</span>
+                    </a>
+                    <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-md shadow-brand-500/20 transition-all min-h-[44px]" onclick="return confirm('هل أنت متأكد من رغبتك في تطبيق استيراد وتحديث جهات الاتصال؟')">
+                        <span class="material-symbols-outlined text-lg">check_circle</span>
+                        <span>تأكيد وتنفيذ الاستيراد الآن</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+    function updateFileName(input) {
+        const display = document.getElementById('file_name_display');
+        if (input.files && input.files.length > 0) {
+            display.textContent = 'الملف المختار: ' + input.files[0].name;
+            display.classList.remove('hidden');
+        } else {
+            display.classList.add('hidden');
+        }
+    }
+</script>
+{% endblock %}
