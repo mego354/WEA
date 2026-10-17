@@ -1,0 +1,109 @@
+{
+  "bodyText": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nremove\ncalendar_today\nخطة الزيارات\nroom\nالزيارات\ncall\nالمكالمات\nhandshake\nالاتفاقيات\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع الموقع\ngroup\nالآداء\ntext_snippet\nالتقارير\nbug_report\nمشاكل تتبع الموقع\nsettings\nإعدادات\nadd\nDr.wael Atta (CEO)\nSuperAdmin\nnotifications_active\n188\nlogout\nworkspace: weapharma\nversion: 26.10.13-84efe84\nخطة الزيارات\narrow_back\nالمسئول\nDr.wael Atta (CEO)\nالمدة\n–\nexpand_more\nالجمعة\n16/10/2026\nغير مخططة\nexpand_more\nالسبت\n17/10/2026\nغير مخططة\nexpand_more\nالأحد\n18/10/2026\nغير مخططة\nexpand_more\nالاثنين\n19/10/2026\nغير مخططة\nexpand_more\nالثلاثاء\n20/10/2026\nغير مخططة\nexpand_more\nالأربعاء\n21/10/2026\nغير مخططة\nexpand_more\nالخميس\n22/10/2026\nغير مخططة\nexpand_more\nالجمعة\n23/10/2026\nغير مخططة\nexpand_more\nالسبت\n24/10/2026\nغير مخططة\nexpand_more\nالأحد\n25/10/2026\nغير مخططة\nexpand_more\nالاثنين\n26/10/2026\nغير مخططة\nexpand_more\nالثلاثاء\n27/10/2026\nغير مخططة\nexpand_more\nالأربعاء\n28/10/2026\nغير مخططة\nexpand_more\nالخميس\n29/10/2026\nغير مخططة\nexpand_more\nالجمعة\n30/10/2026\nغير مخططة\nexpand_more\nالسبت\n31/10/2026\nغير مخططة\nتنقية العملاء\nمجموعة الفلاتر المختارة\nمجموعة فلاتر جديدة\nmore_vert\nإظهار الغير فعال\nلا\nالمنطقة الرئيسية\nالمنطقة\nالمجموعة\nحالة العميل\nالمؤسسة\nالنوع\nعلاقة العمل\nعميل\nتصنيف العميل\nالتخصص\nنوع الاكونت\nAM/PM\nKOL\nاخفاء المعين في خطة\nفلتر\nاعادة تعيين\nمسح\nadd",
+  "controls": [
+    {
+      "tag": "BUTTON",
+      "text": "notifications_active 188"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "logout"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "arrow_back"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المسئول Dr.wael Atta (CEO)"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المدة –"
+    },
+    {
+      "tag": "BUTTON",
+      "text": ""
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "مجموعة الفلاتر المختارة مجموعة فلاتر جديدة"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "more_vert"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "إظهار الغير فعال لا"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المنطقة الرئيسية"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المنطقة"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المجموعة"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "حالة العميل"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "المؤسسة"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "النوع"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "علاقة العمل عميل"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "تصنيف العميل"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "التخصص"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "نوع الاكونت"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "AM/PM"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "KOL"
+    },
+    {
+      "tag": "MAT-FORM-FIELD",
+      "text": "اخفاء المعين في خطة"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "فلتر"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "اعادة تعيين"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "مسح"
+    },
+    {
+      "tag": "BUTTON",
+      "text": "add"
+    }
+  ]
+}

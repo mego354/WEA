@@ -1,0 +1,351 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}الزيارات - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="relative min-h-[calc(100vh-5rem)]">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الزيارات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ total_count }} زيارة
+            </span>
+            <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">
+                {{ approved_count }} معتمدة
+            </span>
+            <span class="text-xs px-2.5 py-1 bg-amber-50 text-amber-700 font-bold rounded-full border border-amber-200">
+                {{ pending_count }} قيد الاعتماد
+            </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            <!-- Search Bar -->
+            <form method="GET" class="relative">
+                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                {% if selected_approval_status %}<input type="hidden" name="approval_status" value="{{ selected_approval_status }}">{% endif %}
+                {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
+                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
+                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                <div class="relative">
+                    <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو المسؤول أو الرقم..."
+                           class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                </div>
+            </form>
+
+            <!-- Filter Drawer Button -->
+            <button type="button" onclick="openFilterDrawer()"
+                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>فلتر</span>
+            </button>
+
+            <!-- View Toggle: Table / Cards -->
+            <div class="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
+                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+                   class="p-2 {% if view_mode == 'table' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض جدولي">
+                    <span class="material-symbols-outlined text-base">table_chart</span>
+                </a>
+                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+                   class="p-2 {% if view_mode == 'cards' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض بطاقات">
+                    <span class="material-symbols-outlined text-base">view_agenda</span>
+                </a>
+            </div>
+
+            <!-- Export to Excel -->
+            <a href="{% url 'visits_export' %}?q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
+               title="تصدير البيانات">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span>تصدير البيانات</span>
+            </a>
+
+            <!-- Create Visit Button -->
+            <a href="{% url 'visit_create' %}"
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>تسجيل زيارة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- TABLE VIEW -->
+    {% if view_mode == 'table' %}
+    <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse">
+                <thead>
+                    <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
+                        <th class="py-3.5 px-4 w-16">زيارة</th>
+                        <th class="py-3.5 px-4">جهة الاتصال</th>
+                        <th class="py-3.5 px-4">التاريخ</th>
+                        <th class="py-3.5 px-4">بدأ في</th>
+                        <th class="py-3.5 px-4">انتهى في</th>
+                        <th class="py-3.5 px-4">المدة</th>
+                        <th class="py-3.5 px-4">المسؤول</th>
+                        <th class="py-3.5 px-4">المنطقة</th>
+                        <th class="py-3.5 px-4">نوع الاكونت</th>
+                        <th class="py-3.5 px-4 text-center">ناجحة</th>
+                        <th class="py-3.5 px-4 text-center">مزدوجة</th>
+                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                        <th class="py-3.5 px-4 text-center">الاعتماد</th>
+                        <th class="py-3.5 px-4 text-center w-20">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                    {% for v in visits %}
+                    <tr class="hover:bg-teal-50/30 transition-colors">
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                            <div class="flex items-center gap-1">
+                                <a href="{% url 'visit_detail' v.pk %}" class="hover:text-[#27bebe]">#{{ v.serial_num }}</a>
+                                {% if v.verification_status == 'verified' %}
+                                <span class="material-symbols-outlined text-xs text-emerald-500" title="تم التحقق من الموقع (ضمن النطاق)">gpp_good</span>
+                                {% elif v.verification_status == 'force_bypassed' %}
+                                <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاهل التحقق بالقوة">gpp_maybe</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="py-3 px-4">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-slate-400 text-base">person</span>
+                                <div>
+                                    <a href="{% url 'visit_detail' v.pk %}" class="font-bold text-slate-900 hover:text-[#27bebe] block">
+                                        {{ v.contact.name }}
+                                    </a>
+                                    {% if v.contact.code %}
+                                    <span class="text-[10px] text-slate-400 font-mono">[{{ v.contact.code }}]</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 text-slate-600 font-mono">
+                            {{ v.date|date:"d/m/Y" }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                            {{ v.started_at|date:"H:i"|default:"-" }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                            {{ v.ended_at|date:"H:i"|default:"-" }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-600 font-mono">
+                            {% if v.duration %}{{ v.duration }} ث{% else %}-{% endif %}
+                        </td>
+                        <td class="py-3 px-4 text-slate-800">
+                            {{ v.owner.get_full_name|default:v.owner.username }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-500">
+                            {{ v.contact.area.name|default:"-" }}
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px]">
+                                {{ v.contact.account_type|default:"Clinic" }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            {% if v.is_successful %}
+                            <span class="text-emerald-600 font-bold">✓</span>
+                            {% else %}
+                            <span class="text-slate-300">✗</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            {% if v.doubled %}
+                            <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">مزدوجة</span>
+                            {% else %}
+                            <span class="text-slate-300">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                                {{ v.status_display_ar }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
+                                {{ v.approval_display_ar }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center">
+                                <span class="material-symbols-outlined text-lg">visibility</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="14" class="py-12 text-center text-slate-400">
+                            <div class="flex flex-col items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
+                                <p class="text-sm font-medium">لا توجد زيارات مسجلة تطابق معايير البحث.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <!-- CARDS VIEW (view_agenda) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for v in visits %}
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#27bebe]/50 transition-all space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <span class="font-mono font-bold text-slate-900 text-sm">#{{ v.serial_num }}</span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
+                    {{ v.approval_display_ar }}
+                </span>
+            </div>
+
+            <div>
+                <a href="{% url 'visit_detail' v.pk %}" class="font-bold text-slate-900 hover:text-[#27bebe] text-sm block">
+                    {{ v.contact.name }}
+                </a>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    {{ v.contact.specialty|default:v.contact.account_type }} • {{ v.contact.area.name|default:'' }}
+                </p>
+            </div>
+
+            <div class="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl font-mono">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">التاريخ:</span>
+                    <span>{{ v.date|date:"d/m/Y" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">المسؤول:</span>
+                    <span class="font-sans font-bold">{{ v.owner.get_full_name|default:v.owner.username }}</span>
+                </div>
+                {% if v.template %}
+                <div class="flex justify-between">
+                    <span class="text-slate-400">القالب:</span>
+                    <span class="font-sans text-[#27bebe]">{{ v.template.display_name_ar }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="pt-2 flex justify-end">
+                <a href="{% url 'visit_detail' v.pk %}" class="inline-flex items-center gap-1 text-xs font-bold text-[#27bebe] hover:underline">
+                    <span>عرض التفاصيل</span>
+                    <span class="material-symbols-outlined text-sm">arrow_back</span>
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full py-12 text-center text-slate-400">
+            <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
+            <p class="text-sm font-medium mt-2">لا توجد زيارات مسجلة.</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Pagination Bar -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-white rounded-xl shadow-xs mt-4">
+        <span class="text-xs text-slate-500 font-medium">
+            عرض {{ page_obj.start_index }} - {{ page_obj.end_index }} من أصل {{ total_count }}
+        </span>
+        <div class="flex items-center gap-1.5">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&view={{ view_mode }}&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+               class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                السابق
+            </a>
+            {% endif %}
+
+            <span class="px-3 py-1.5 bg-[#27bebe] text-white rounded-lg text-xs font-bold">
+                {{ page_obj.number }}
+            </span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&view={{ view_mode }}&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+               class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                التالي
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Filter Drawer -->
+<div id="filter-drawer" class="fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeFilterDrawer()"></div>
+    <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+        <div class="w-screen max-w-sm bg-white shadow-xl flex flex-col">
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h2 class="text-base font-bold text-slate-900">تنقية الزيارات</h2>
+                <button type="button" onclick="closeFilterDrawer()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="GET" class="p-6 space-y-4 flex-1 overflow-y-auto">
+                {% if selected_q %}<input type="hidden" name="q" value="{{ selected_q }}">{% endif %}
+                <input type="hidden" name="view" value="{{ view_mode }}">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول</label>
+                    <select name="owner" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع المسؤولين</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if selected_owner == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الاعتماد</label>
+                    <select name="approval_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع حالات الاعتماد</option>
+                        <option value="pending" {% if selected_approval_status == 'pending' %}selected{% endif %}>قيد الاعتماد (Pending)</option>
+                        <option value="approved" {% if selected_approval_status == 'approved' %}selected{% endif %}>معتمدة (Approved)</option>
+                        <option value="disapproved" {% if selected_approval_status == 'disapproved' %}selected{% endif %}>مرفوضة (Disapproved)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الزيارة</label>
+                    <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع الحالات</option>
+                        <option value="finished" {% if selected_status == 'finished' %}selected{% endif %}>منتهية (Finished)</option>
+                        <option value="started" {% if selected_status == 'started' %}selected{% endif %}>جارية (Started)</option>
+                        <option value="planned" {% if selected_status == 'planned' %}selected{% endif %}>مخططة (Planned)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">من تاريخ</label>
+                    <input type="date" name="date_from" value="{{ selected_date_from }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">إلى تاريخ</label>
+                    <input type="date" name="date_to" value="{{ selected_date_to }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <div class="pt-4 flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                        تطبيق الفلتر
+                    </button>
+                    <a href="{% url 'visits_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إعادة تعيين
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openFilterDrawer() {
+    document.getElementById('filter-drawer').classList.remove('hidden');
+}
+function closeFilterDrawer() {
+    document.getElementById('filter-drawer').classList.add('hidden');
+}
+</script>
+{% endblock %}

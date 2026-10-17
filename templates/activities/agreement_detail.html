@@ -1,0 +1,147 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}اتفاقية #{{ agreement.serial_num }} - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Top Navigation & Action Header -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div class="flex items-center gap-3">
+            <a href="{% url 'agreements_list' %}" class="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <h1 class="text-2xl font-black text-slate-900 tracking-tight">اتفاقية #{{ agreement.serial_num }}</h1>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ agreement.status_badge_class }}">
+                        {{ agreement.status_display_ar }}
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 font-medium mt-0.5">{{ agreement.title }}</p>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+            {% if can_manage_approvals %}
+                {% if agreement.status == 'new' %}
+                <a href="{% url 'agreement_action' agreement.pk 'approve' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">check_circle</span>
+                    <span>اعتماد</span>
+                </a>
+                <a href="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">cancel</span>
+                    <span>رفض</span>
+                </a>
+                {% elif agreement.status == 'approved' %}
+                <a href="{% url 'agreement_action' agreement.pk 'done' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">task_alt</span>
+                    <span>إنجاز الاتفاقية</span>
+                </a>
+                <a href="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">cancel</span>
+                    <span>إلغاء الاعتماد</span>
+                </a>
+                {% elif agreement.status == 'disapproved' %}
+                <a href="{% url 'agreement_action' agreement.pk 'reopen' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                    <span>إعادة فتح</span>
+                </a>
+                {% endif %}
+            {% endif %}
+
+            {% if agreement.status == 'new' %}
+            <a href="{% url 'agreement_edit' agreement.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل</span>
+            </a>
+            {% endif %}
+
+            {% if agreement.status == 'new' or request.user.is_superuser %}
+            <a href="{% url 'agreement_delete' agreement.pk %}" onclick="return confirm('هل أنت متأكد من حذف هذه الاتفاقية؟');" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-colors">
+                <span class="material-symbols-outlined text-base">delete</span>
+                <span>حذف</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Details Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- Main Info (2 cols) -->
+        <div class="md:col-span-2 space-y-6">
+            <!-- Customer & Terms Card -->
+            <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">description</span>
+                    <span>تفاصيل الاتفاقية</span>
+                </h2>
+
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-1">العميل</span>
+                        <div class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-slate-400 text-base">person</span>
+                            {{ agreement.customer.name }}
+                        </div>
+                        {% if agreement.customer.code %}
+                        <span class="text-[10px] text-slate-500 font-mono">كود: {{ agreement.customer.code }}</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">المبلغ المالي</span>
+                        <div class="font-black text-slate-900 text-base font-mono text-[#27bebe]">
+                            {{ agreement.amount|intcomma }} ج.م
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">نوع الاتفاقية</span>
+                        <span class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-semibold inline-block">
+                            {{ agreement.type.name }}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">تاريخ الاتفاقية</span>
+                        <div class="font-bold text-slate-800 font-mono">
+                            {{ agreement.date|date:"d/m/Y" }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100">
+                    <span class="text-slate-400 text-xs block mb-2">الوصف والشروط</span>
+                    <div class="p-4 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">
+                        {% if agreement.description %}{{ agreement.description|safe }}{% else %}لا يوجد وصف مسجل لهذه الاتفاقية.{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meta Sidebar (1 col) -->
+        <div class="space-y-6">
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2.5">بيانات التتبع والإنشاء</h3>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <span class="text-slate-400 block">المنشئ</span>
+                        <span class="font-bold text-slate-800">{{ agreement.created_by.get_full_name|default:agreement.created_by.username }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">تاريخ الإنشاء</span>
+                        <span class="font-mono text-slate-700">{{ agreement.created_at|date:"d/m/Y - H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">آخر تحديث</span>
+                        <span class="font-mono text-slate-700">{{ agreement.updated_at|date:"d/m/Y - H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

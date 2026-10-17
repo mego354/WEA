@@ -1,0 +1,280 @@
+==================================================
+ENDPOINT: /api/v1/visits?offset=0&limit=10
+Keys: ['status', 'error']
+Status: 404
+Error: HTTP Error 404: Not Found
+==================================================
+ENDPOINT: /api/v1/visits/count
+Keys: ['status', 'error']
+Status: 400
+Error: HTTP Error 400: Bad Request
+==================================================
+ENDPOINT: /api/v1/visits/settings
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "settings": {
+    "non_planned_enabled": true,
+    "min_days_policy": {
+      "rules": [
+        {
+          "name": "زيارات PM",
+          "contact_filter": {
+            "extra->account_type": [
+              "Clinic",
+              "Polyclinic"
+            ]
+          },
+          "min_days": 6
+        },
+        {
+          "name": "زيارات صيدليات ومخازن وموزعين ",
+          "contact_filter": {
+            "extra->account_type": [
+              "Pharmacy",
+              "Drug Store",
+   
+==================================================
+ENDPOINT: /api/v1/visits/wf/states
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "states": [
+    {
+      "id": "60c574bf-b3a0-4559-a6c3-576db1c88b11",
+      "name": "Visits:approval_status:pending",
+      "display_name": "Pending",
+      "active": true,
+      "order": 3,
+      "progress_state": "todo",
+      "attributes": null
+    },
+    {
+      "id": "f0d2ae6b-12be-4f79-8765-161ae7f254d8",
+      "name": "Visits:approval_status:approved",
+      "display_name": "Approved",
+      "active": true,
+      "order": 4,
+      "progress_state": "done",
+      "attributes": null
+   
+==================================================
+ENDPOINT: /api/v1/visits/templates/list
+Keys: ['status', 'error']
+Status: 405
+Error: HTTP Error 405: Method Not Allowed
+==================================================
+ENDPOINT: /api/v1/visits/expenses/types
+Keys: ['status', 'error']
+Status: 404
+Error: HTTP Error 404: Not Found
+==================================================
+ENDPOINT: /api/v1/ui-preferences/visits-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {}
+==================================================
+ENDPOINT: /api/v1/filters/view/visits-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "filters": [],
+  "count": 0
+}
+==================================================
+ENDPOINT: /api/v1/visits/planning?offset=0&limit=10
+Keys: ['status', 'error']
+Status: 400
+Error: HTTP Error 400: Bad Request
+==================================================
+ENDPOINT: /api/v1/visits/planning/count
+Keys: ['status', 'error']
+Status: 404
+Error: HTTP Error 404: Not Found
+==================================================
+ENDPOINT: /api/v1/planned-visits?offset=0&limit=10
+Keys: ['status', 'error']
+Status: 404
+Error: HTTP Error 404: Not Found
+==================================================
+ENDPOINT: /api/v1/ui-preferences/planned-visits-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {}
+==================================================
+ENDPOINT: /api/v1/filters/view/planned-visits-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "filters": [],
+  "count": 0
+}
+==================================================
+ENDPOINT: /api/v1/agreements?offset=0&limit=10
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "agreements": [
+    {
+      "serial_num": 222,
+      "title": "تحويل 2000 ج مقابل كتابات جيرون ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">تحويل&nbsp;2000&nbsp;ج&nbsp;مقابل&nbsp;كتابات&nbsp;جيرون&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 2000,
+      "status": {
+        "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+        "name": "Agreements:status:new",
+        "display_na
+==================================================
+ENDPOINT: /api/v1/agreements/count
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "count": 212
+}
+==================================================
+ENDPOINT: /api/v1/agreements/types
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "agreements-types": [
+    {
+      "id": "5d376fa5-8bca-41fe-9ae7-198e89522142",
+      "name": "Conference"
+    },
+    {
+      "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+      "name": "Cash money"
+    },
+    {
+      "id": "c6424a7d-3feb-438c-b0b8-a85924039994",
+      "name": "Devices"
+    },
+    {
+      "id": "fce9f6ab-75bb-412d-8fd1-0afc4bc71c53",
+      "name": "Gifts"
+    },
+    {
+      "id": "0eb3f729-baaa-465a-93bd-6357a073f0d7",
+      "name": "RTD"
+    },
+    {
+      "id": "5835396b-5
+==================================================
+ENDPOINT: /api/v1/agreements/wf/states
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "states": [
+    {
+      "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+      "name": "Agreements:status:new",
+      "display_name": "New",
+      "active": true,
+      "order": 3,
+      "progress_state": "todo",
+      "attributes": null
+    },
+    {
+      "id": "05e6659f-c5b9-41c0-ade0-3bedc923efe9",
+      "name": "Agreements:status:approved",
+      "display_name": "Approved",
+      "active": true,
+      "order": 22,
+      "progress_state": "in_progress",
+      "attributes": null
+    },
+    {
+
+==================================================
+ENDPOINT: /api/v1/ui-preferences/agreements-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {}
+==================================================
+ENDPOINT: /api/v1/filters/view/agreements-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "filters": [],
+  "count": 0
+}
+==================================================
+ENDPOINT: /api/v1/calls?offset=0&limit=10
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "calls": []
+}
+==================================================
+ENDPOINT: /api/v1/calls/count
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "count": 0
+}
+==================================================
+ENDPOINT: /api/v1/calls/templates/list
+Keys: ['status', 'error']
+Status: 404
+Error: HTTP Error 404: Not Found
+==================================================
+ENDPOINT: /api/v1/ui-preferences/calls-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {}
+==================================================
+ENDPOINT: /api/v1/filters/view/calls-listing
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "filters": [],
+  "count": 0
+}
+==================================================
+ENDPOINT: /api/v1/users?offset=0&limit=50
+Keys: ['status', 'data']
+Status: 200
+Data type: dict
+Data content: {
+  "users": [
+    {
+      "name": " (Shobra Alkema)",
+      "email": "Shobra@gmail.com",
+      "role": {
+        "name": "MedicalRep",
+        "display_name": "MedicalRep",
+        "is_sales_team": true,
+        "is_area_manager": false,
+        "is_subarea_manager": false,
+        "is_rep": true,
+        "is_area_assignable": false,
+        "is_subarea_assignable": true,
+        "is_contact_assignable": true,
+        "is_sales_target_assignable": true,
+        "is_super": false,
+        "built
+==================================================
+ENDPOINT: /api/v1/contacts?offset=0&limit=5
+Keys: ['status', 'error']
+Status: 405
+Error: HTTP Error 405: Method Not Allowed

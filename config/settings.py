@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'purchases.apps.PurchasesConfig',
     'treasury.apps.TreasuryConfig',
     'sales.apps.SalesConfig',
+    'activities.apps.ActivitiesConfig',
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,25 @@
+[
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "method": "POST",
+    "status": 200,
+    "post_data": "{\"sent_at\":\"2026-10-15T06:34:20.290Z\",\"sdk\":{\"name\":\"sentry.javascript.angular.capacitor\",\"version\":\"4.3.0\"}}\n{\"type\":\"session\"}\n{\"sid\":\"3f2ab4926890450380b2476ffe71437c\",\"init\":true,\"started\":\"2026-10-15T06:34:20.092Z\",\"timestamp\":\"2026-10-15T06:34:20.092Z\",\"status\":\"ok\",\"errors\":0,\"attrs\":{\"release\":\"26.10.13-84efe84\",\"environment\":\"production\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"}}",
+    "response": {}
+  },
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/auth/refresh",
+    "method": "POST",
+    "status": 200,
+    "post_data": "{}",
+    "response": {
+      "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzYWx6aWZ5LWJlIiwic3ViIjoiNmI2MzQ5ZTYtMDZmYy00NjUxLWFmMDQtMzMyMWRlZDUyZjE1IiwiYXVkIjpbInNhbHppZnktYmUiXSwiZXhwIjoxNzk0NjM4MDYwLCJuYmYiOjE3OTIwNDYwNTAsImlhdCI6MTc5MjA0NjA2MCwianRpIjoiYjNmYjg2YjUtMGE2Yy00NmNkLWFhNmEtNWQwNWM5NzE4YmMxIiwidWlzIjp0cnVlLCJwcm92aWRlciI6ImVtYWlsX3Bhc3N3b3JkIiwibW9iaWxlIjoiKzIwMTExMTc4NzE3OSJ9.fVn6pYhXDSUlFOxn6O7azGhkYqxuK-jubFFIFzkbOEI"
+    }
+  },
+  {
+    "url": "https://o1074034.ingest.sentry.io/api/6073652/envelope/?sentry_version=7&sentry_key=0aa165bb9db6419b8fca77be8f6e161d&sentry_client=sentry.javascript.angular%2F10.69.0",
+    "method": "POST",
+    "status": 200,
+    "post_data": "{\"sent_at\":\"2026-10-15T06:34:30.935Z\",\"sdk\":{\"name\":\"sentry.javascript.angular.capacitor\",\"version\":\"4.3.0\"}}\n{\"type\":\"session\"}\n{\"sid\":\"ec074a5ca0ee4035977a9d63ca196b88\",\"init\":true,\"started\":\"2026-10-15T06:34:30.874Z\",\"timestamp\":\"2026-10-15T06:34:30.874Z\",\"status\":\"ok\",\"errors\":0,\"attrs\":{\"release\":\"26.10.13-84efe84\",\"environment\":\"production\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36\"}}",
+    "response": {}
+  }
+]

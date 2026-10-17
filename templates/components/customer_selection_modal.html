@@ -1,0 +1,522 @@
+<!-- CANONICAL UNIFIED CUSTOMER SELECTION MODAL -->
+<!-- Matches Reference ERP <app-visit-create-customer-selection> & Planned Visits Customer Addition -->
+<div id="unified-customer-selection-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="customer-selection-title" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeCustomerSelectionModal()"></div>
+
+        <!-- Dialog Box -->
+        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100">
+            
+            <!-- Modal Header -->
+            <div class="bg-[#27bebe] px-6 py-4 flex items-center justify-between text-white">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-xl" id="modal-header-icon">room</span>
+                    <h3 class="text-base font-bold" id="customer-selection-modal-title">زيارة خارج الخطة</h3>
+                </div>
+                <button type="button" onclick="closeCustomerSelectionModal()" class="text-white/80 hover:text-white p-1 rounded-lg transition-colors">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <form id="unified-customer-selection-form" onsubmit="handleUnifiedModalSubmit(event)" class="p-6 space-y-4">
+                {% csrf_token %}
+                <input type="hidden" id="modal-mode" value="unplanned_visit">
+                <input type="hidden" id="modal-assignee-id" name="assignee_id" value="">
+                <input type="hidden" id="modal-plan-date" name="date" value="">
+                <input type="hidden" id="modal-selected-contact-id" name="contact_id" value="">
+
+                <!-- STEP 1: CUSTOMER SELECTION -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm text-[#27bebe]">person_search</span>
+                            <span>عميل *</span>
+                        </label>
+                        <span class="text-[11px] text-slate-400">اختر العميل بالاسم أو الكود</span>
+                    </div>
+
+                    <!-- Search Input Box -->
+                    <div id="unified-search-box-container" class="relative">
+                        <input type="text" id="unified-customer-search-input"
+                               autocomplete="off"
+                               oninput="handleUnifiedCustomerSearch(event)"
+                               onfocus="openUnifiedSearchResults()"
+                               placeholder="بحث بالاسم أو الكود..."
+                               class="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-xs font-medium text-slate-900 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] placeholder:text-slate-400 transition-colors">
+                        
+                        <div class="absolute left-3 top-2.5 flex items-center gap-1.5 text-slate-400">
+                            <span id="unified-search-spinner" class="hidden animate-spin material-symbols-outlined text-sm text-[#27bebe]">progress_activity</span>
+                            <button type="button" onclick="clearUnifiedSearchInput()" class="hover:text-slate-600">
+                                <span class="material-symbols-outlined text-base">clear</span>
+                            </button>
+                        </div>
+
+                        <!-- Dropdown Search Results -->
+                        <div id="unified-customer-dropdown" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1">
+                            <div id="unified-customer-results-list" class="space-y-1">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Customer Dossier Card (Matches Reference Parity) -->
+                    <div id="unified-selected-customer-card" class="hidden bg-slate-50/90 border border-teal-200 rounded-xl p-3.5 space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-[#27bebe] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs" id="unified-card-avatar">
+                                    CL
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="text-xs font-black text-slate-900" id="unified-card-name">--</h4>
+                                        <span id="unified-card-type-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">شخص</span>
+                                        <span id="unified-card-category-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-[#1a8b8b]">عميل</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+                                        <span id="unified-card-specialty">التخصص: عام</span>
+                                        <span>•</span>
+                                        <span id="unified-card-area">المنطقة: غير محددة</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="button" onclick="clearUnifiedCustomerSelection()" class="px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors shrink-0">
+                                تغيير العميل
+                            </button>
+                        </div>
+
+                        <!-- Card Meta Footer: Directions, Preview, Location Status -->
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-200/70 text-xs">
+                            <div id="unified-card-gps-indicator" class="flex items-center gap-1 text-[11px]">
+                                <!-- Populated dynamically -->
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <a id="unified-card-directions-btn" href="#" target="_blank" class="hidden inline-flex items-center gap-1 px-2 py-1 rounded bg-white hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-[#27bebe] text-[11px] font-bold transition-colors" title="الاتجاهات عبر Google Maps">
+                                    <span class="material-symbols-outlined text-xs text-[#27bebe]">directions</span>
+                                    <span>directions</span>
+                                </a>
+                                <a id="unified-card-preview-btn" href="#" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-bold transition-colors" title="معاينة ملف العميل">
+                                    <span class="material-symbols-outlined text-xs text-slate-500">visibility</span>
+                                    <span>معاينة</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 2: TEMPLATE SELECTION (قالب الزيارة) -->
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">dashboard_customize</span>
+                        <span>قالب الزيارة</span>
+                    </label>
+                    <select id="unified-template-select" name="template_id" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">اختر قالب الزيارة</option>
+                        <!-- Populated dynamically or via context -->
+                    </select>
+                </div>
+
+                <!-- STEP 3: PLANNED VISIT CONTEXT (Only active in 'add_to_plan' mode) -->
+                <div id="unified-plan-context-fields" class="hidden space-y-3 pt-2 border-t border-slate-100">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">التاريخ المحدد في الخطة</label>
+                        <input type="text" id="unified-plan-date-display" readonly class="w-full bg-slate-100 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold font-mono text-slate-700">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ملاحظات التخطيط</label>
+                        <input type="text" id="unified-plan-notes" name="notes" placeholder="مثال: متابعة كتابات الصنف ومستحقات التحصيل..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    </div>
+                </div>
+
+                <!-- Error Display Box -->
+                <div id="unified-modal-error" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base shrink-0">error</span>
+                    <span id="unified-modal-error-text">حدث خطأ.</span>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="pt-4 flex gap-2 border-t border-slate-100">
+                    <button type="submit" id="unified-modal-submit-btn" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5">
+                        <span class="material-symbols-outlined text-base" id="unified-submit-icon">check</span>
+                        <span id="unified-submit-text">تسجيل الزيارة</span>
+                    </button>
+                    <button type="button" onclick="closeCustomerSelectionModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إلغاء
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    let unifiedModalCurrentCustomer = null;
+    let unifiedModalCachedTemplates = null;
+    let unifiedModalSearchTimeout = null;
+
+    // Open Unified Customer Selection Modal
+    // mode: 'unplanned_visit' | 'add_to_plan'
+    // options: { date: 'YYYY-MM-DD', assigneeId: '123', contactId: '...', contactData: {...} }
+    async function openCustomerSelectionModal(mode = 'unplanned_visit', options = {}) {
+        const modal = document.getElementById('unified-customer-selection-modal');
+        if (!modal) return;
+
+        // Reset state & error
+        hideUnifiedModalError();
+        clearUnifiedCustomerSelection();
+
+        const modeInput = document.getElementById('modal-mode');
+        const titleEl = document.getElementById('customer-selection-modal-title');
+        const iconEl = document.getElementById('modal-header-icon');
+        const submitText = document.getElementById('unified-submit-text');
+        const submitIcon = document.getElementById('unified-submit-icon');
+        const planFields = document.getElementById('unified-plan-context-fields');
+        const planDateInput = document.getElementById('modal-plan-date');
+        const planDateDisplay = document.getElementById('unified-plan-date-display');
+        const assigneeInput = document.getElementById('modal-assignee-id');
+
+        modeInput.value = mode;
+
+        if (mode === 'add_to_plan') {
+            titleEl.textContent = 'إضافة عميل إلى الخطة';
+            if (iconEl) iconEl.textContent = 'event_available';
+            submitText.textContent = 'إضافة إلى الخطة';
+            if (submitIcon) submitIcon.textContent = 'playlist_add';
+            planFields.classList.remove('hidden');
+
+            const dateVal = options.date || new Date().toISOString().split('T')[0];
+            planDateInput.value = dateVal;
+            if (planDateDisplay) planDateDisplay.value = dateVal;
+            if (assigneeInput) assigneeInput.value = options.assigneeId || '';
+        } else {
+            titleEl.textContent = 'زيارة خارج الخطة';
+            if (iconEl) iconEl.textContent = 'room';
+            submitText.textContent = 'تسجيل الزيارة';
+            if (submitIcon) submitIcon.textContent = 'directions_walk';
+            planFields.classList.add('hidden');
+        }
+
+        // Load templates into select if not loaded
+        await loadUnifiedTemplates();
+
+        // If pre-supplied contactData or contactId
+        if (options.contactData) {
+            selectUnifiedCustomer(options.contactData);
+        } else if (options.contactId) {
+            fetchUnifiedCustomerById(options.contactId);
+        }
+
+        modal.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+
+        // Focus search input if no customer preselected
+        if (!options.contactData && !options.contactId) {
+            setTimeout(() => {
+                const searchInput = document.getElementById('unified-customer-search-input');
+                if (searchInput) searchInput.focus();
+            }, 100);
+        }
+    }
+
+    function closeCustomerSelectionModal() {
+        const modal = document.getElementById('unified-customer-selection-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            const dropdown = document.getElementById('unified-customer-dropdown');
+            if (dropdown) dropdown.classList.add('hidden');
+        }
+    }
+
+    async function loadUnifiedTemplates() {
+        const select = document.getElementById('unified-template-select');
+        if (!select || select.options.length > 1) return;
+
+        if (unifiedModalCachedTemplates) {
+            renderUnifiedTemplateOptions(unifiedModalCachedTemplates);
+            return;
+        }
+
+        try {
+            const res = await fetch('/activities/api/templates/');
+            if (res.ok) {
+                const data = await res.json();
+                unifiedModalCachedTemplates = data.results || [];
+                renderUnifiedTemplateOptions(unifiedModalCachedTemplates);
+            }
+        } catch(e) {
+            console.warn('Failed to load visit templates:', e);
+        }
+    }
+
+    function renderUnifiedTemplateOptions(templates) {
+        const select = document.getElementById('unified-template-select');
+        if (!select) return;
+        select.innerHTML = '<option value="">اختر قالب الزيارة</option>';
+        templates.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = t.display_name_ar || t.name;
+            select.appendChild(opt);
+        });
+    }
+
+    // Typeahead Search Logic
+    function handleUnifiedCustomerSearch(e) {
+        clearTimeout(unifiedModalSearchTimeout);
+        const query = e.target.value.trim();
+        const spinner = document.getElementById('unified-search-spinner');
+        const dropdown = document.getElementById('unified-customer-dropdown');
+        const listEl = document.getElementById('unified-customer-results-list');
+
+        if (spinner) spinner.classList.remove('hidden');
+
+        unifiedModalSearchTimeout = setTimeout(async function() {
+            try {
+                const res = await fetch(`/contacts/api/search/?q=${encodeURIComponent(query)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.results || [];
+                    renderUnifiedSearchResults(list);
+                }
+            } catch(err) {
+                if (listEl) listEl.innerHTML = '<p class="text-xs text-rose-500 text-center py-3">حدث خطأ أثناء تحميل العملاء</p>';
+            } finally {
+                if (spinner) spinner.classList.add('hidden');
+                if (dropdown) dropdown.classList.remove('hidden');
+            }
+        }, 250);
+    }
+
+    function openUnifiedSearchResults() {
+        const input = document.getElementById('unified-customer-search-input');
+        if (input) {
+            handleUnifiedCustomerSearch({ target: input });
+        }
+    }
+
+    function clearUnifiedSearchInput() {
+        const input = document.getElementById('unified-customer-search-input');
+        if (input) {
+            input.value = '';
+            input.focus();
+            openUnifiedSearchResults();
+        }
+    }
+
+    function renderUnifiedSearchResults(contacts) {
+        const listEl = document.getElementById('unified-customer-results-list');
+        if (!listEl) return;
+
+        if (!contacts.length) {
+            listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي عملاء مطابقين للبحث.</p>';
+            return;
+        }
+
+        listEl.innerHTML = contacts.map(c => `
+            <div onclick="selectUnifiedCustomer(${JSON.stringify(c).replace(/"/g, '&quot;')})"
+                 class="flex items-center justify-between p-2.5 rounded-xl hover:bg-teal-50/60 cursor-pointer transition-colors">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-8 h-8 rounded-full bg-[#27bebe] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                        ${c.initials || (c.name ? c.name.substring(0, 2) : 'CL')}
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-xs font-bold text-slate-900 truncate">${c.formatted_number || c.code ? '[' + (c.formatted_number || c.code) + '] ' : ''}${c.name}</span>
+                            <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.account_type || c.category || 'عميل'}</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                            <span>${c.specialty || 'عام'}</span>
+                            <span>•</span>
+                            <span>${c.area_name || 'غير محدد'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="shrink-0 text-left">
+                    ${c.has_saved_location ? '<span class="material-symbols-outlined text-sm text-emerald-600" title="موقع محفوظ">pin_drop</span>' : '<span class="material-symbols-outlined text-sm text-slate-300" title="لا يوجد موقع مسجل">location_off</span>'}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function selectUnifiedCustomer(c) {
+        unifiedModalCurrentCustomer = c;
+        document.getElementById('modal-selected-contact-id').value = c.id;
+
+        const searchContainer = document.getElementById('unified-search-box-container');
+        const card = document.getElementById('unified-selected-customer-card');
+        const dropdown = document.getElementById('unified-customer-dropdown');
+
+        if (dropdown) dropdown.classList.add('hidden');
+        if (searchContainer) searchContainer.classList.add('hidden');
+        if (card) card.classList.remove('hidden');
+
+        // Populate card
+        const nameEl = document.getElementById('unified-card-name');
+        const avatarEl = document.getElementById('unified-card-avatar');
+        const catEl = document.getElementById('unified-card-category-badge');
+        const specEl = document.getElementById('unified-card-specialty');
+        const areaEl = document.getElementById('unified-card-area');
+        const typeEl = document.getElementById('unified-card-type-badge');
+        const gpsEl = document.getElementById('unified-card-gps-indicator');
+        const directionsBtn = document.getElementById('unified-card-directions-btn');
+        const previewBtn = document.getElementById('unified-card-preview-btn');
+
+        const codeStr = c.formatted_number || c.code ? `[${c.formatted_number || c.code}] ` : '';
+        if (nameEl) nameEl.textContent = `${codeStr}${c.name}`;
+        if (avatarEl) avatarEl.textContent = c.initials || (c.name ? c.name.substring(0, 2) : 'CL');
+        if (catEl) catEl.textContent = c.category || c.account_type || 'عميل';
+        if (typeEl) typeEl.textContent = c.contact_type_display || 'شخص';
+        if (specEl) specEl.textContent = `التخصص: ${c.specialty || 'عام'}`;
+        if (areaEl) areaEl.textContent = `المنطقة: ${c.area_name || 'غير محددة'}`;
+
+        if (previewBtn) previewBtn.href = `/contacts/${c.id}/`;
+
+        if (c.latitude && c.longitude) {
+            if (directionsBtn) {
+                directionsBtn.classList.remove('hidden');
+                directionsBtn.href = `https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`;
+            }
+            if (gpsEl) {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <span class="material-symbols-outlined text-xs">pin_drop</span>
+                        <span>موقع محفوظ: ${Number(c.latitude).toFixed(4)}, ${Number(c.longitude).toFixed(4)}</span>
+                    </span>
+                `;
+            }
+        } else {
+            if (directionsBtn) directionsBtn.classList.add('hidden');
+            if (gpsEl) {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        <span class="material-symbols-outlined text-xs">info</span>
+                        <span>لا يوجد موقع مسجل للعميل</span>
+                    </span>
+                `;
+            }
+        }
+        hideUnifiedModalError();
+    }
+
+    function clearUnifiedCustomerSelection() {
+        unifiedModalCurrentCustomer = null;
+        document.getElementById('modal-selected-contact-id').value = '';
+
+        const searchContainer = document.getElementById('unified-search-box-container');
+        const card = document.getElementById('unified-selected-customer-card');
+        const searchInput = document.getElementById('unified-customer-search-input');
+
+        if (card) card.classList.add('hidden');
+        if (searchContainer) searchContainer.classList.remove('hidden');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+    }
+
+    async function fetchUnifiedCustomerById(id) {
+        try {
+            const res = await fetch(`/contacts/api/search/?q=&id=${id}`);
+            if (res.ok) {
+                const data = await res.json();
+                const list = data.results || [];
+                const found = list.find(item => item.id == id);
+                if (found) selectUnifiedCustomer(found);
+            }
+        } catch(e) {}
+    }
+
+    function showUnifiedModalError(msg) {
+        const errBox = document.getElementById('unified-modal-error');
+        const errText = document.getElementById('unified-modal-error-text');
+        if (errBox && errText) {
+            errText.textContent = msg;
+            errBox.classList.remove('hidden');
+        }
+    }
+
+    function hideUnifiedModalError() {
+        const errBox = document.getElementById('unified-modal-error');
+        if (errBox) errBox.classList.add('hidden');
+    }
+
+    // Form Submit Handler
+    async function handleUnifiedModalSubmit(e) {
+        e.preventDefault();
+        hideUnifiedModalError();
+
+        const contactId = document.getElementById('modal-selected-contact-id').value;
+        if (!contactId || !unifiedModalCurrentCustomer) {
+            showUnifiedModalError('يرجى اختيار العميل أولاً للمتابعة.');
+            return false;
+        }
+
+        const mode = document.getElementById('modal-mode').value;
+        const templateId = document.getElementById('unified-template-select').value;
+        const submitBtn = document.getElementById('unified-modal-submit-btn');
+
+        if (mode === 'unplanned_visit') {
+            // UNPLANNED VISIT: Route into canonical visit form with selected contact & template
+            let url = `/visits/create/?contact_id=${contactId}`;
+            if (templateId) url += `&template_id=${templateId}`;
+            window.location.href = url;
+            return false;
+        }
+
+        if (mode === 'add_to_plan') {
+            // ADD TO PLAN: POST to planned_visit_add_item
+            const dateStr = document.getElementById('modal-plan-date').value;
+            const assigneeId = document.getElementById('modal-assignee-id').value;
+            const notes = document.getElementById('unified-plan-notes').value;
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('contact_id', contactId);
+                formData.append('date', dateStr);
+                formData.append('assignee_id', assigneeId);
+                formData.append('template_id', templateId);
+                formData.append('notes', notes);
+
+                // Get CSRF token
+                const csrfToken = document.querySelector('#unified-customer-selection-form input[name="csrfmiddlewaretoken"]')?.value;
+
+                const res = await fetch('/planned-visits/add-item/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    closeCustomerSelectionModal();
+                    // Reload page anchored to target day
+                    window.location.href = `${window.location.pathname}${window.location.search}#day-${dateStr}`;
+                    window.location.reload();
+                } else {
+                    showUnifiedModalError(data.message || 'فشلت إضافة العميل إلى الخطة.');
+                }
+            } catch(err) {
+                showUnifiedModalError('حدث خطأ في الاتصال بالخادم. يرجى إعادة المحاولة.');
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                }
+            }
+        }
+
+        return false;
+    }
+</script>

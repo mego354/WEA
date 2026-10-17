@@ -1,0 +1,117 @@
+[
+  {
+    "text": "home\nالرئيسية",
+    "tag": "A",
+    "href": "/home"
+  },
+  {
+    "text": "view_agenda\nجدول الاعمال",
+    "tag": "A",
+    "href": "/agenda"
+  },
+  {
+    "text": "calendar_month\nالتقويم",
+    "tag": "A",
+    "href": "/calendar"
+  },
+  {
+    "text": "checklist\nTodos",
+    "tag": "A",
+    "href": "/todos"
+  },
+  {
+    "text": "contacts\nجهات الاتصال",
+    "tag": "A",
+    "href": "/contacts"
+  },
+  {
+    "text": "confirmation_number\nالمهام",
+    "tag": "A",
+    "href": "/tickets"
+  },
+  {
+    "text": "store\nالمنتجات\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "timeline\nالأنشطة\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "storefront\nالمبيعات\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "storefront\nالمشتريات\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "inventory\nالمخازن\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "account_balance_wallet\nالخزن\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "approval\nالموافقات",
+    "tag": "A",
+    "href": "/requests"
+  },
+  {
+    "text": "assessment\nالتقييمات",
+    "tag": "A",
+    "href": "/assessments"
+  },
+  {
+    "text": "attach_money\nالمصروفات",
+    "tag": "A",
+    "href": "/expenses"
+  },
+  {
+    "text": "menu_book\nالمصادر",
+    "tag": "A",
+    "href": "/resources"
+  },
+  {
+    "text": "score\nالأهداف\nadd",
+    "tag": "A",
+    "href": ""
+  },
+  {
+    "text": "event_busy\nخطة أيام العمل",
+    "tag": "A",
+    "href": "/yearly-off-days"
+  },
+  {
+    "text": "track_changes\nتتبع الموقع",
+    "tag": "A",
+    "href": "/location-tracking"
+  },
+  {
+    "text": "group\nالآداء",
+    "tag": "A",
+    "href": "/performance"
+  },
+  {
+    "text": "text_snippet\nالتقارير",
+    "tag": "A",
+    "href": "/reports"
+  },
+  {
+    "text": "bug_report\nمشاكل تتبع الموقع",
+    "tag": "A",
+    "href": "/location-tracking-troubleshoot"
+  },
+  {
+    "text": "settings\nإعدادات\nadd",
+    "tag": "A",
+    "href": ""
+  }
+]

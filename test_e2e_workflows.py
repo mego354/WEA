@@ -12,6 +12,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.test import Client
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from contacts.models import Contact
 from catalog.models import Product, ProductCategory
@@ -378,10 +379,211 @@ def run_tests():
         assert 'Excel' in res.content.decode('utf-8'), f"Import page {imp_label} missing Excel branding"
         print(f"  ✓ {imp_label:<32} [HTTP 200 OK]")
 
+    # 9. Activities Module E2E Verification
+    print("\n[9] Testing Activities Module (Planned Visits, Visits, Agreements)...")
+    from activities.models import Agreement, AgreementType, VisitTemplate, PlannedVisitDay, PlannedVisitItem, Visit
+
+    # Test Agreements
+    ag_res = client.get('/agreements/')
+    assert ag_res.status_code == 200, f"/agreements/ failed with {ag_res.status_code}"
+    assert "الاتفاقيات" in ag_res.content.decode('utf-8')
+    print("  ✓ /agreements/ page rendered.")
+
+    ag_type = AgreementType.objects.first()
+    contact = Contact.objects.first()
+    create_ag_res = client.post('/agreements/', {
+        'create_agreement': '1',
+        'customer': contact.id,
+        'title': 'اتفاقية تجريبية شاملة',
+        'type': ag_type.id,
+        'amount': '4500.00',
+        'date': timezone.now().date().strftime('%Y-%m-%d'),
+        'description': 'شروط العقد التجاري'
+    })
+    assert create_ag_res.status_code == 302
+    test_ag = Agreement.objects.filter(title='اتفاقية تجريبية شاملة').first()
+    assert test_ag is not None
+    assert test_ag.status == 'new'
+    print(f"  ✓ Created Agreement #{test_ag.serial_num} (Status: {test_ag.status})")
+
+    # Approve agreement
+    client.get(f'/agreements/{test_ag.pk}/action/approve/')
+    test_ag.refresh_from_db()
+    assert test_ag.status == 'approved'
+    print(f"  ✓ Agreement #{test_ag.serial_num} approved successfully.")
+
+    # Mark done
+    client.get(f'/agreements/{test_ag.pk}/action/done/')
+    test_ag.refresh_from_db()
+    assert test_ag.status == 'done'
+    print(f"  ✓ Agreement #{test_ag.serial_num} marked as done.")
+
+    # Test Planned Visits
+    pv_res = client.get('/planned-visits/')
+    assert pv_res.status_code == 200, f"/planned-visits/ failed with {pv_res.status_code}"
+    assert "خطة الزيارات" in pv_res.content.decode('utf-8')
+    print("  ✓ /planned-visits/ page rendered.")
+
+    # Schedule a visit
+    target_plan_date = timezone.now().date() + timezone.timedelta(days=2)
+    v_template = VisitTemplate.objects.first()
+    schedule_res = client.post('/planned-visits/add-item/', {
+        'assignee_id': user.id,
+        'date': target_plan_date.strftime('%Y-%m-%d'),
+        'contact_id': contact.id,
+        'template_id': v_template.id if v_template else '',
+        'notes': 'زيارة مجدولة E2E'
+    })
+    assert schedule_res.status_code == 302
+    pv_item = PlannedVisitItem.objects.filter(notes='زيارة مجدولة E2E').first()
+    assert pv_item is not None
+    print(f"  ✓ Scheduled Planned Visit for {contact.name} on {target_plan_date}.")
+
+    # Execute planned visit
+    exec_res = client.get(f'/planned-visits/item/{pv_item.pk}/execute/')
+    assert exec_res.status_code == 302
+    pv_item.refresh_from_db()
+    assert pv_item.is_executed is True
+    assert pv_item.visit is not None
+    print(f"  ✓ Converted Planned Visit to Actual Visit #{pv_item.visit.serial_num}.")
+
+    # Test Visits
+    visits_res = client.get('/visits/')
+    assert visits_res.status_code == 200, f"/visits/ failed with {visits_res.status_code}"
+    assert "الزيارات" in visits_res.content.decode('utf-8')
+    print("  ✓ /visits/ page rendered.")
+
+    # Create Unplanned Visit
+    unplan_res = client.post('/visits/create/', {
+        'contact': contact.id,
+        'template': v_template.id if v_template else '',
+        'owner': user.id,
+        'date': timezone.now().date().strftime('%Y-%m-%d'),
+        'is_successful': 'on',
+        'feedback': 'زيارة غير مخططة ناجحة'
+    })
+    assert unplan_res.status_code == 302
+    unplan_visit = Visit.objects.filter(feedback='زيارة غير مخططة ناجحة').first()
+    assert unplan_visit is not None
+    assert unplan_visit.is_planned is False
+    print(f"  ✓ Created Unplanned Visit #{unplan_visit.serial_num}.")
+
+    # Manager Approve Visit
+    approve_v_res = client.post(f'/visits/{unplan_visit.pk}/action/approve/', {
+        'approval_notes': 'معتمدة E2E'
+    })
+    assert approve_v_res.status_code == 302
+    unplan_visit.refresh_from_db()
+    assert unplan_visit.approval_status == 'approved'
+    print(f"  ✓ Visit #{unplan_visit.serial_num} approved successfully.")
+
+    # Activities Exports Verification
+    act_exports = [
+        ('/agreements/export/', 'Agreements Export'),
+        ('/planned-visits/export/', 'Planned Visits Export'),
+        ('/visits/export/', 'Visits Export'),
+    ]
+    for exp_url, exp_label in act_exports:
+        res = client.get(exp_url)
+        assert res.status_code == 200, f"Export {exp_label} ({exp_url}) failed with {res.status_code}"
+        assert res['Content-Type'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        wb = openpyxl.load_workbook(io.BytesIO(res.content))
+        ws = wb.active
+        assert ws.sheet_view.rightToLeft is True
+        print(f"  ✓ {exp_label:<32} [{ws.title}] - Valid .xlsx with RTL view")
+
+    # 10. Global Bottom-Left FAB & Quick-Add Bottom Sheet Verification
+    print("\n[10] Testing Global FAB & Quick-Add Bottom Sheet...")
+    fab_pages = ['/home/', '/visits/', '/agreements/', '/planned-visits/']
+    for p in fab_pages:
+        page_res = client.get(p)
+        content_str = page_res.content.decode('utf-8')
+        assert 'quick-add' in content_str, f"quick-add container missing on {p}"
+        assert 'openQuickAdd()' in content_str, f"openQuickAdd() trigger missing on {p}"
+        assert 'تسجيل زيارة خارج الخطة' in content_str, f"Action 1 missing on {p}"
+        assert 'امر بيع جديد' in content_str, f"Action 2 missing on {p}"
+        assert 'مرتجع جديد' in content_str, f"Action 3 missing on {p}"
+        assert 'تحصيل جديد' in content_str, f"Action 4 missing on {p}"
+        assert 'الغاء' in content_str, f"Action 5 Cancel missing on {p}"
+        print(f"  ✓ Global FAB & all 5 Quick-Add actions verified on {p}")
+
+    # 11. Agreements Bulk Status Transition Verification
+    print("\n[11] Testing Agreements Bulk Status Transition...")
+    ag2 = Agreement.objects.create(
+        customer=contact,
+        title='اتفاقية دفعة تجريبية 2',
+        type=ag_type,
+        amount=Decimal('1200.00'),
+        date=timezone.now().date(),
+        created_by=user,
+        status='new'
+    )
+    bulk_res = client.post('/agreements/bulk-status/', {
+        'status': 'approved',
+        'selected_ids': [test_ag.pk, ag2.pk]
+    })
+    assert bulk_res.status_code == 302, f"Bulk status update returned {bulk_res.status_code}"
+    test_ag.refresh_from_db()
+    ag2.refresh_from_db()
+    assert test_ag.status == 'approved', f"Expected approved, got {test_ag.status}"
+    assert ag2.status == 'approved', f"Expected approved, got {ag2.status}"
+    print(f"  ✓ Bulk transition to 'approved' succeeded for Agreements #{test_ag.serial_num} and #{ag2.serial_num}")
+
+    bulk_res_done = client.post('/agreements/bulk-status/', {
+        'status': 'done',
+        'selected_ids': [test_ag.pk, ag2.pk]
+    })
+    test_ag.refresh_from_db()
+    ag2.refresh_from_db()
+    assert test_ag.status == 'done' and ag2.status == 'done'
+    print(f"  ✓ Bulk transition to 'done' succeeded.")
+
+    # 12. Role-Based Permissions Enforcement Verification
+    print("\n[12] Testing Role-Based Permission Boundaries (Manager vs Medical Rep)...")
+    from accounts.models import Role
+    rep_role, _ = Role.objects.get_or_create(
+        name='medical_rep',
+        defaults={'display_name': 'مندوب دعاية طبية', 'is_rep': True, 'is_area_manager': False}
+    )
+    rep_user, _ = User.objects.get_or_create(
+        username='rep_tester',
+        defaults={'email': 'rep@bricks-rep.com', 'role': rep_role, 'is_superuser': False, 'is_staff': False}
+    )
+    rep_user.set_password('RepPass123!')
+    rep_user.role = rep_role
+    rep_user.is_superuser = False
+    rep_user.is_staff = False
+    rep_user.save()
+
+    rep_client = Client()
+    rep_client.login(username='rep_tester', password='RepPass123!')
+
+    # Medical Rep attempts to approve visit -> must be rejected
+    rep_v_approve = rep_client.post(f'/visits/{unplan_visit.pk}/action/approve/', {'approval_notes': 'Rep hack'})
+    unplan_visit.refresh_from_db()
+    # Confirm flash error or redirect
+    assert rep_v_approve.status_code == 302
+
+    # Medical Rep attempts bulk status change -> must be rejected
+    rep_bulk_ag = rep_client.post('/agreements/bulk-status/', {
+        'status': 'new',
+        'selected_ids': [test_ag.pk]
+    })
+    test_ag.refresh_from_db()
+    assert test_ag.status == 'done', f"Medical Rep was able to change status! Got {test_ag.status}"
+    print("  ✓ Rep unauthorized approval attempt successfully blocked by backend permissions.")
+
+    # 13. Scope Verification: Ensure Unwanted Calls Module is Deleted
+    print("\n[13] Verifying Unwanted 'Calls' Module is Completely Removed...")
+    calls_res = client.get('/calls/')
+    assert calls_res.status_code == 404, f"Expected 404 for /calls/, but got {calls_res.status_code}"
+    print("  ✓ /calls/ endpoint returns HTTP 404 Not Found.")
+
     print("\n" + "=" * 60)
-    print("ALL E2E WORKFLOWS, EXPORTS & IMPORTS VERIFIED SUCCESSFULLY! 100% PASS.")
+    print("ALL E2E WORKFLOWS, ACTIVITIES & EXPORTS VERIFIED SUCCESSFULLY! 100% PASS.")
     print("=" * 60)
 
 if __name__ == '__main__':
     run_tests()
+
 

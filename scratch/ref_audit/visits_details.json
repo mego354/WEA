@@ -1,0 +1,116 @@
+{
+  "title": " فلاتر ",
+  "tableHeaders": [],
+  "actionButtons": [
+    {
+      "text": "notifications_active\n188",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+    },
+    {
+      "text": "logout",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+    },
+    {
+      "text": "filter_list\n2",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-primary"
+    },
+    {
+      "text": "view_agenda",
+      "aria": "",
+      "title": "",
+      "class": "mat-button-toggle-button mat-focus-indicator"
+    },
+    {
+      "text": "table_chart",
+      "aria": "",
+      "title": "",
+      "class": "mat-button-toggle-button mat-focus-indicator"
+    },
+    {
+      "text": "تصدير البيانات",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+    },
+    {
+      "text": "settings",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+    },
+    {
+      "text": "",
+      "aria": "First page",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-first mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled ng-star-inserted"
+    },
+    {
+      "text": "",
+      "aria": "Previous page",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-previous mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled"
+    },
+    {
+      "text": "",
+      "aria": "Next page",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-next mat-mdc-button-disabled-interactive mat-unthemed"
+    },
+    {
+      "text": "",
+      "aria": "Last page",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-last mat-mdc-button-disabled-interactive mat-unthemed ng-star-inserted"
+    },
+    {
+      "text": "more_vert",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-menu-trigger mat-unthemed"
+    },
+    {
+      "text": "",
+      "aria": "Open calendar",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+    },
+    {
+      "text": "فلتر",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+    },
+    {
+      "text": "اعادة تعيين",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+    },
+    {
+      "text": "مسح",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+    },
+    {
+      "text": "add",
+      "aria": "",
+      "title": "",
+      "class": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary"
+    }
+  ],
+  "filterLabels": [
+    "بحث",
+    "مجموعة الفلاتر المختارة",
+    "التاريخ",
+    "المسئول",
+    "الحالة",
+    "حالة الموافقة"
+  ]
+}

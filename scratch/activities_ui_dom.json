@@ -1,0 +1,205 @@
+{
+  "visits": {
+    "title": "",
+    "buttons": [],
+    "tableHeaders": [],
+    "filters": [],
+    "bodyTextPreview": ""
+  },
+  "planned_visits": {
+    "title": "خطة الزيارات",
+    "buttons": [
+      {
+        "text": "notifications_active\n51",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+      },
+      {
+        "text": "logout",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+      },
+      {
+        "text": "arrow_back",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed ng-star-inserted"
+      },
+      {
+        "text": "",
+        "aria": "Open calendar",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+      },
+      {
+        "text": "more_vert",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-menu-trigger mat-unthemed"
+      },
+      {
+        "text": "فلتر",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+      },
+      {
+        "text": "اعادة تعيين",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+      },
+      {
+        "text": "مسح",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+      },
+      {
+        "text": "add",
+        "aria": "",
+        "classes": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary"
+      }
+    ],
+    "tableHeaders": [],
+    "filters": [
+      "المسئول Dr.wael Atta (CEO)",
+      "Dr.wael Atta (CEO)",
+      "المدة –",
+      "مجموعة الفلاتر المختارة مجموعة فلاتر جديدة",
+      "مجموعة فلاتر جديدة",
+      "إظهار الغير فعال لا",
+      "لا",
+      "المنطقة الرئيسية",
+      "المنطقة",
+      "المجموعة",
+      "حالة العميل",
+      "المؤسسة",
+      "النوع",
+      "علاقة العمل عميل",
+      "عميل",
+      "تصنيف العميل",
+      "التخصص",
+      "نوع الاكونت",
+      "AM/PM",
+      "KOL"
+    ],
+    "bodyTextPreview": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nremove\ncalendar_today\nخطة الزيارات\nroom\nالزيارات\ncall\nالمكالمات\nhandshake\nالاتفاقيات\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع المو"
+  },
+  "agreements": {
+    "title": "الاتفاقيات",
+    "buttons": [
+      {
+        "text": "notifications_active\n51",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+      },
+      {
+        "text": "logout",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+      },
+      {
+        "text": "filter_list\n2",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-primary"
+      },
+      {
+        "text": "تصدير البيانات",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+      },
+      {
+        "text": "",
+        "aria": "First page",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-first mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled ng-star-inserted"
+      },
+      {
+        "text": "",
+        "aria": "Previous page",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-previous mat-mdc-button-disabled mat-mdc-button-disabled-interactive mat-unthemed mat-mdc-tooltip-disabled"
+      },
+      {
+        "text": "",
+        "aria": "Next page",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-next mat-mdc-button-disabled-interactive mat-unthemed"
+      },
+      {
+        "text": "",
+        "aria": "Last page",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger mat-mdc-paginator-navigation-last mat-mdc-button-disabled-interactive mat-unthemed ng-star-inserted"
+      },
+      {
+        "text": "more_vert",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-menu-trigger mat-unthemed"
+      },
+      {
+        "text": "",
+        "aria": "Open calendar",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+      },
+      {
+        "text": "",
+        "aria": "Open calendar",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+      },
+      {
+        "text": "فلتر",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+      },
+      {
+        "text": "اعادة تعيين",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+      },
+      {
+        "text": "مسح",
+        "aria": "",
+        "classes": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+      },
+      {
+        "text": "add",
+        "aria": "",
+        "classes": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary"
+      }
+    ],
+    "tableHeaders": [],
+    "filters": [
+      "بحث search",
+      "مجموعة الفلاتر المختارةمجموعة فلاتر جديدة",
+      "مجموعة فلاتر جديدة",
+      "انشئ فى–",
+      "التاريخ–",
+      "إظهار الغير فعاللا",
+      "لا",
+      "مسئول جهة الاتصال",
+      "المنطقة الرئيسية",
+      "المنطقة",
+      "المجموعة",
+      "حالة العميل",
+      "المؤسسة",
+      "النوع",
+      "علاقة العملعميل",
+      "عميل",
+      "تصنيف العميل",
+      "التخصص",
+      "نوع الاكونت",
+      "AM/PM"
+    ],
+    "bodyTextPreview": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nremove\ncalendar_today\nخطة الزيارات\nroom\nالزيارات\ncall\nالمكالمات\nhandshake\nالاتفاقيات\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع المو"
+  },
+  "calls": {
+    "title": "",
+    "buttons": [
+      {
+        "text": "notifications",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+      },
+      {
+        "text": "logout",
+        "aria": "",
+        "classes": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+      }
+    ],
+    "tableHeaders": [],
+    "filters": [],
+    "bodyTextPreview": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nremove\ncalendar_today\nخطة الزيارات\nroom\nالزيارات\ncall\nالمكالمات\nhandshake\nالاتفاقيات\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع المو"
+  }
+}

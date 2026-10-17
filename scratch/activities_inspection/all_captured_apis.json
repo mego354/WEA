@@ -1,0 +1,11 @@
+[
+  {
+    "url": "https://weapharma.bricks-rep.com/api/v1/auth/refresh",
+    "method": "POST",
+    "status": 200,
+    "post_data": "{}",
+    "response": {
+      "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzYWx6aWZ5LWJlIiwic3ViIjoiNmI2MzQ5ZTYtMDZmYy00NjUxLWFmMDQtMzMyMWRlZDUyZjE1IiwiYXVkIjpbInNhbHppZnktYmUiXSwiZXhwIjoxNzk0NjM4NTI1LCJuYmYiOjE3OTIwNDY1MTUsImlhdCI6MTc5MjA0NjUyNSwianRpIjoiNzNkNDkxYmEtOWMwNy00ODBkLWEzMWMtOTc0MjViYzRmYWVlIiwidWlzIjp0cnVlLCJwcm92aWRlciI6ImVtYWlsX3Bhc3N3b3JkIiwibW9iaWxlIjoiKzIwMTExMTc4NzE3OSJ9.5wuxkp8JrXfY7slYXMniqACgH9WHECxnOm0gAp8oc0E"
+    }
+  }
+]

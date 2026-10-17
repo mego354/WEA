@@ -1,0 +1,79 @@
+{
+  "title": "تنقية العملاء",
+  "tableHeaders": [],
+  "actionButtons": [
+    {
+      "text": "notifications_active\n188",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted"
+    },
+    {
+      "text": "logout",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed"
+    },
+    {
+      "text": "arrow_back",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed ng-star-inserted"
+    },
+    {
+      "text": "",
+      "aria": "Open calendar",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed"
+    },
+    {
+      "text": "more_vert",
+      "aria": "",
+      "title": "",
+      "class": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-menu-trigger mat-unthemed"
+    },
+    {
+      "text": "فلتر",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary"
+    },
+    {
+      "text": "اعادة تعيين",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+    },
+    {
+      "text": "مسح",
+      "aria": "",
+      "title": "",
+      "class": "mdc-button mat-mdc-button-base mdc-button--outlined mat-mdc-outlined-button mat-unthemed"
+    },
+    {
+      "text": "add",
+      "aria": "",
+      "title": "",
+      "class": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary"
+    }
+  ],
+  "filterLabels": [
+    "المسئول",
+    "المدة",
+    "مجموعة الفلاتر المختارة",
+    "إظهار الغير فعال",
+    "المنطقة الرئيسية",
+    "المنطقة",
+    "المجموعة",
+    "حالة العميل",
+    "المؤسسة",
+    "النوع",
+    "علاقة العمل",
+    "تصنيف العميل",
+    "التخصص",
+    "نوع الاكونت",
+    "AM/PM",
+    "KOL",
+    "اخفاء المعين في خطة"
+  ]
+}

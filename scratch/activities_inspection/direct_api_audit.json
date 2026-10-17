@@ -1,0 +1,1925 @@
+{
+  "/api/v1/visits?offset=0&limit=10": {
+    "status": 404,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "/api/v1/visits/count": {
+    "status": 400,
+    "error": "HTTP Error 400: Bad Request"
+  },
+  "/api/v1/visits/settings": {
+    "status": 200,
+    "data": {
+      "settings": {
+        "non_planned_enabled": true,
+        "min_days_policy": {
+          "rules": [
+            {
+              "name": "زيارات PM",
+              "contact_filter": {
+                "extra->account_type": [
+                  "Clinic",
+                  "Polyclinic"
+                ]
+              },
+              "min_days": 6
+            },
+            {
+              "name": "زيارات صيدليات ومخازن وموزعين ",
+              "contact_filter": {
+                "extra->account_type": [
+                  "Pharmacy",
+                  "Drug Store",
+                  "Distributor",
+                  "Pharmacist"
+                ]
+              },
+              "min_days": 1
+            }
+          ],
+          "global_fallback": 1,
+          "enforcement_mode": "warn"
+        }
+      }
+    }
+  },
+  "/api/v1/visits/wf/states": {
+    "status": 200,
+    "data": {
+      "states": [
+        {
+          "id": "60c574bf-b3a0-4559-a6c3-576db1c88b11",
+          "name": "Visits:approval_status:pending",
+          "display_name": "Pending",
+          "active": true,
+          "order": 3,
+          "progress_state": "todo",
+          "attributes": null
+        },
+        {
+          "id": "f0d2ae6b-12be-4f79-8765-161ae7f254d8",
+          "name": "Visits:approval_status:approved",
+          "display_name": "Approved",
+          "active": true,
+          "order": 4,
+          "progress_state": "done",
+          "attributes": null
+        },
+        {
+          "id": "0c418169-da89-4903-a5be-b3c44b203f78",
+          "name": "Visits:approval_status:disapproved",
+          "display_name": "Disapproved",
+          "active": true,
+          "order": 5,
+          "progress_state": "cancelled",
+          "attributes": null
+        }
+      ]
+    }
+  },
+  "/api/v1/visits/templates/list": {
+    "status": 405,
+    "error": "HTTP Error 405: Method Not Allowed"
+  },
+  "/api/v1/visits/expenses/types": {
+    "status": 404,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "/api/v1/ui-preferences/visits-listing": {
+    "status": 200,
+    "data": {}
+  },
+  "/api/v1/filters/view/visits-listing": {
+    "status": 200,
+    "data": {
+      "filters": [],
+      "count": 0
+    }
+  },
+  "/api/v1/visits/planning?offset=0&limit=10": {
+    "status": 400,
+    "error": "HTTP Error 400: Bad Request"
+  },
+  "/api/v1/visits/planning/count": {
+    "status": 404,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "/api/v1/planned-visits?offset=0&limit=10": {
+    "status": 404,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "/api/v1/ui-preferences/planned-visits-listing": {
+    "status": 200,
+    "data": {}
+  },
+  "/api/v1/filters/view/planned-visits-listing": {
+    "status": 200,
+    "data": {
+      "filters": [],
+      "count": 0
+    }
+  },
+  "/api/v1/agreements?offset=0&limit=10": {
+    "status": 200,
+    "data": {
+      "agreements": [
+        {
+          "serial_num": 222,
+          "title": "تحويل 2000 ج مقابل كتابات جيرون ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">تحويل&nbsp;2000&nbsp;ج&nbsp;مقابل&nbsp;كتابات&nbsp;جيرون&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 2000,
+          "status": {
+            "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+            "name": "Agreements:status:new",
+            "display_name": "New",
+            "active": true,
+            "order": 3,
+            "progress_state": "todo",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 10588,
+            "code": "E1237",
+            "number": "E1237",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "محمد علي عبد القادر",
+            "area_id": "0346",
+            "main_address_id": "35db78ff-a2f0-438e-863a-5f0617020bcd",
+            "customer_rank": "aaaaaaaaaaaaaaaablbt",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "am_pm": "PM",
+              "class": "B",
+              "specialty": "General practitioner"
+            },
+            "id": "79c816b6-1519-42a8-aff4-966682cbaafc",
+            "created_at": "2024-02-06T16:29:46Z",
+            "created_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+            "updated_at": "2024-11-26T11:51:06Z",
+            "updated_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f"
+          },
+          "date": "2026-10-06",
+          "id": "dacee726-6a05-4241-a5eb-cad2950d40cb",
+          "created_at": "2026-10-11T08:48:45Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-10-11T08:48:45Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 221,
+          "title": "تم تحويل 800 ج ل د محمد عبده مقابل 40 علبه الترا هيوميدين",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">تم&nbsp;تحويل&nbsp;800&nbsp;ج&nbsp;ل&nbsp;د&nbsp;محمد&nbsp;عبده&nbsp;مقابل&nbsp;40&nbsp;علبه&nbsp;الترا&nbsp;هيوميدين</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 800,
+          "status": {
+            "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+            "name": "Agreements:status:new",
+            "display_name": "New",
+            "active": true,
+            "order": 3,
+            "progress_state": "todo",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 14767,
+            "number": "#14767",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "محمد عبده",
+            "area_id": "0341",
+            "main_address_id": "01d0e195-bfed-42a7-8532-25d3f14bb8b3",
+            "customer_rank": "aaaaaaaaaaaaaaaadatd",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "am_pm": null,
+              "class": "A",
+              "contact_name": null,
+              "job_title": null,
+              "specialty": "Pediatrics"
+            },
+            "id": "43e0881b-5b8a-45c7-927b-f33a48890ddf",
+            "created_at": "2025-10-29T18:50:51Z",
+            "created_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+            "updated_at": "2025-10-29T18:51:00Z",
+            "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+          },
+          "date": "2026-09-20",
+          "id": "5dfb9581-7508-432d-a3db-fb3534629df9",
+          "created_at": "2026-09-20T14:24:58Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-09-20T14:24:58Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 219,
+          "title": "1500 ج باقي اوردر بيشوي صافي + 10 علب جيرون و 10 ستيبس جابهم من المخزن ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">1500&nbsp;ج&nbsp;باقي&nbsp;اوردر&nbsp;بيشوي&nbsp;صافي&nbsp;+&nbsp;10&nbsp;علب&nbsp;جيرون&nbsp;و&nbsp;10&nbsp;ستيبس&nbsp;جابهم&nbsp;من&nbsp;المخزن&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 1500,
+          "status": {
+            "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+            "name": "Agreements:status:new",
+            "display_name": "New",
+            "active": true,
+            "order": 3,
+            "progress_state": "todo",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 15343,
+            "number": "#15343",
+            "contact_type": "organization",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "مركز الشروق gp",
+            "area_id": "0324",
+            "main_address_id": "b7e82b2e-e100-4d9a-a898-9d4ada1bd22e",
+            "customer_rank": "aaaaaaaaaaaaaaaadhxx",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Polyclinic",
+              "class": "A",
+              "kol": "p1gsjpqeonp",
+              "specialty": "General practitioner"
+            },
+            "id": "32a287c3-60fb-402b-8d6f-ae37670a09a9",
+            "created_at": "2026-02-10T19:01:29Z",
+            "created_by_id": "06ec9ac5-c297-4085-b5c3-a3069eedb56d",
+            "updated_at": "2026-09-13T15:51:05Z",
+            "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+          },
+          "date": "2026-09-09",
+          "id": "786e7133-334d-477a-9808-6643ea53b719",
+          "created_at": "2026-09-12T07:10:40Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-09-12T07:10:40Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 220,
+          "title": "1000 ج مقابل 80 علبه بيوتالاكسي صيدليات جزيرة محمد ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">1000&nbsp;ج&nbsp;مقابل&nbsp;80&nbsp;علبه&nbsp;بيوتالاكسي&nbsp;صيدليات&nbsp;جزيرة&nbsp;محمد&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 1000,
+          "status": {
+            "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+            "name": "Agreements:status:new",
+            "display_name": "New",
+            "active": true,
+            "order": 3,
+            "progress_state": "todo",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 6982,
+            "code": "W1092",
+            "number": "W1092",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "حسام حسن",
+            "area_id": "0350",
+            "main_address_id": "33f3b8fa-c065-4682-8f49-7067397c1d77",
+            "customer_rank": "aaaaaaaaaaaaaaaabijp",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "am_pm": "PM",
+              "class": "B",
+              "contact_name": "امبابه ",
+              "specialty": "Orthopedics"
+            },
+            "id": "70a82d5d-2958-473e-9b12-9b32e01f043f",
+            "created_at": "2023-08-29T12:30:52Z",
+            "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+            "updated_at": "2024-01-06T14:49:07Z",
+            "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+          },
+          "date": "2026-09-09",
+          "id": "09e5bbe2-3baf-4f15-90ce-7663b885d71d",
+          "created_at": "2026-09-12T07:14:01Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-09-12T07:14:01Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 218,
+          "title": "Cash money 1000 ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">Cash&nbsp;money&nbsp;1000&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 1000,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 8435,
+            "code": "W2171",
+            "number": "W2171",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "عبد الرازق الدموكى",
+            "area_id": "0346",
+            "main_address_id": "d59e3975-33ab-4505-a878-1012010ed8d8",
+            "customer_rank": "aaaaaaaaaaaaaaaabanh",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "am_pm": "PM",
+              "class": "A",
+              "contact_name": "امبابه ",
+              "specialty": "Pediatrics"
+            },
+            "id": "57343534-6138-4bd6-8a52-154bff36c486",
+            "created_at": "2023-08-29T16:57:10Z",
+            "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+            "updated_at": "2026-04-02T10:12:50Z",
+            "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+          },
+          "date": "2026-08-17",
+          "id": "4f336d45-ae2f-49b7-ac95-30a16c819096",
+          "created_at": "2026-08-16T23:10:28Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-08-16T23:10:28Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 217,
+          "title": "Cash money 2000 ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">Cash&nbsp;money&nbsp;2000&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 2000,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 14156,
+            "number": "#14156",
+            "contact_type": "organization",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "عيادات ابو بكر ORTHO د سمير حسن",
+            "area_id": "Wea742",
+            "main_address_id": "98bbe5b7-a764-47ba-bafd-74a657112753",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Polyclinic",
+              "class": "A",
+              "specialty": "Orthopedics"
+            },
+            "id": "3d16d7f1-ee3b-41fa-bdec-850d8be920ad",
+            "created_at": "2025-05-26T20:53:50Z",
+            "created_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+            "updated_at": "2025-07-06T20:57:27Z",
+            "updated_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7"
+          },
+          "date": "2026-08-16",
+          "id": "282bedc5-c36e-4c83-baff-fd0c2d516f87",
+          "created_at": "2026-08-16T13:21:50Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-08-16T13:21:50Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 215,
+          "title": "جهاز ضغط ديجيتال ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">جهاز&nbsp;ضغط&nbsp;ديجيتال&nbsp;</p>",
+          "type": {
+            "id": "c6424a7d-3feb-438c-b0b8-a85924039994",
+            "name": "Devices"
+          },
+          "amount": 1000,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 13145,
+            "number": "#13145",
+            "contact_type": "organization",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "اسماء مصطفي الشيمي",
+            "area_id": "0335",
+            "main_address_id": "0cfefc8d-9c0e-4e2b-9e0e-50a1afb55759",
+            "customer_rank": "aaaaaaaaaaaaaaaadjfl",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "class": "A",
+              "kol": "p1gsjpqeonp",
+              "specialty": "Gynaecology"
+            },
+            "id": "0a9c5fcc-f7b8-4d05-8e23-a4591478ed65",
+            "created_at": "2025-02-12T11:20:09Z",
+            "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "updated_at": "2026-09-13T14:55:30Z",
+            "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+          },
+          "date": "2026-07-29",
+          "id": "71812c75-e157-4254-ae27-a4e068e04140",
+          "created_at": "2026-07-29T14:56:42Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-07-29T14:56:42Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 216,
+          "title": "1500 ج RTD بهية لدكتور محمد مجدى حفني",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">1500&nbsp;ج&nbsp;RTD&nbsp;بهية&nbsp;لدكتور&nbsp;محمد&nbsp;مجدى&nbsp;حفني</p>",
+          "type": {
+            "id": "0eb3f729-baaa-465a-93bd-6357a073f0d7",
+            "name": "RTD"
+          },
+          "amount": 1500,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 7246,
+            "code": "W1163",
+            "number": "W1163",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "محمد مجدى حفنى",
+            "mobile": "+201223035721",
+            "area_id": "0334",
+            "main_address_id": "5b5358a2-641d-4747-87b4-e548fc15b55e",
+            "customer_rank": "aaaaaaaaaaaaaaaacmub",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "am_pm": "PM",
+              "class": "A",
+              "contact_name": "بولاق ",
+              "kol": "p1gsjpqeonp",
+              "specialty": "Orthopedics"
+            },
+            "id": "d48fa7a1-73fa-4809-9bd6-3f1907f08345",
+            "created_at": "2023-08-29T12:30:55Z",
+            "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+            "updated_at": "2026-09-13T14:52:19Z",
+            "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+          },
+          "date": "2026-07-29",
+          "id": "11133202-c30c-4fe1-9c84-0064ac0b0258",
+          "created_at": "2026-07-29T14:58:31Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-07-29T14:58:31Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 214,
+          "title": "500 ج مقابل 15 جيرون و 10 ستيبس ص بيشوي صافي ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">500&nbsp;ج&nbsp;مقابل&nbsp;15&nbsp;جيرون&nbsp;و&nbsp;10&nbsp;ستيبس&nbsp;ص&nbsp;بيشوي&nbsp;صافي&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 500,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 15343,
+            "number": "#15343",
+            "contact_type": "organization",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "مركز الشروق gp",
+            "area_id": "0324",
+            "main_address_id": "b7e82b2e-e100-4d9a-a898-9d4ada1bd22e",
+            "customer_rank": "aaaaaaaaaaaaaaaadhxx",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Polyclinic",
+              "class": "A",
+              "kol": "p1gsjpqeonp",
+              "specialty": "General practitioner"
+            },
+            "id": "32a287c3-60fb-402b-8d6f-ae37670a09a9",
+            "created_at": "2026-02-10T19:01:29Z",
+            "created_by_id": "06ec9ac5-c297-4085-b5c3-a3069eedb56d",
+            "updated_at": "2026-09-13T15:51:05Z",
+            "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+          },
+          "date": "2026-07-12",
+          "id": "f34079f4-1ae7-4983-a4c0-a6513eb5c85f",
+          "created_at": "2026-07-14T13:03:27Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-07-14T13:03:27Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        },
+        {
+          "serial_num": 213,
+          "title": "2500 ج كاش مقابل 100 ستيبس ص الجداوي ",
+          "description": "<p class=\"ql-align-right ql-direction-rtl\">2500&nbsp;ج&nbsp;كاش&nbsp;مقابل&nbsp;100&nbsp;ستيبس&nbsp;ص&nbsp;الجداوي&nbsp;</p>",
+          "type": {
+            "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+            "name": "Cash money"
+          },
+          "amount": 2500,
+          "status": {
+            "id": "0a722275-a627-463e-bd04-565896ae8d30",
+            "name": "Agreements:status:done",
+            "display_name": "Done",
+            "active": true,
+            "order": 42,
+            "progress_state": "done",
+            "attributes": null
+          },
+          "customer": {
+            "serial_num": 10749,
+            "code": "E1095",
+            "number": "E1095",
+            "contact_type": "individual",
+            "business_relation": [
+              "customer"
+            ],
+            "name": "محمد منصور المهدي",
+            "area_id": "0127",
+            "main_address_id": "9984dbe2-140e-4c87-b7dc-02c2377c0d5c",
+            "customer_rank": "aaaaaaaaaaaaaaaabnpp",
+            "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+            "extra": {
+              "account_type": "Clinic",
+              "class": "A",
+              "contact_name": "Mohamed Alaa",
+              "specialty": "General practitioner"
+            },
+            "id": "82ab666f-f76a-426d-ad9e-86da595d608a",
+            "created_at": "2024-04-06T22:37:01Z",
+            "created_by_id": "8116242d-439f-427d-b8e4-3625217c06f4",
+            "updated_at": "2024-11-26T11:51:02Z",
+            "updated_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f"
+          },
+          "date": "2026-05-24",
+          "id": "436c3f25-5759-48d4-80a5-6149f1a3234e",
+          "created_at": "2026-05-24T17:21:59Z",
+          "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          },
+          "updated_at": "2026-05-24T17:21:59Z",
+          "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "updated_by": {
+            "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+            "name": "Mohamed Essam (District Manager)",
+            "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+            "role": {
+              "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+              "name": "DistrictManager",
+              "display_name": "DistrictManager"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "/api/v1/agreements/count": {
+    "status": 200,
+    "data": {
+      "count": 212
+    }
+  },
+  "/api/v1/agreements/types": {
+    "status": 200,
+    "data": {
+      "agreements-types": [
+        {
+          "id": "5d376fa5-8bca-41fe-9ae7-198e89522142",
+          "name": "Conference"
+        },
+        {
+          "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+          "name": "Cash money"
+        },
+        {
+          "id": "c6424a7d-3feb-438c-b0b8-a85924039994",
+          "name": "Devices"
+        },
+        {
+          "id": "fce9f6ab-75bb-412d-8fd1-0afc4bc71c53",
+          "name": "Gifts"
+        },
+        {
+          "id": "0eb3f729-baaa-465a-93bd-6357a073f0d7",
+          "name": "RTD"
+        },
+        {
+          "id": "5835396b-5777-478f-a885-a7ea0089221a",
+          "name": "Rx"
+        },
+        {
+          "id": "a8a05e99-5697-4a84-9ed9-0f92ff8bdfb6",
+          "name": "Others"
+        }
+      ]
+    }
+  },
+  "/api/v1/agreements/wf/states": {
+    "status": 200,
+    "data": {
+      "states": [
+        {
+          "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+          "name": "Agreements:status:new",
+          "display_name": "New",
+          "active": true,
+          "order": 3,
+          "progress_state": "todo",
+          "attributes": null
+        },
+        {
+          "id": "05e6659f-c5b9-41c0-ade0-3bedc923efe9",
+          "name": "Agreements:status:approved",
+          "display_name": "Approved",
+          "active": true,
+          "order": 22,
+          "progress_state": "in_progress",
+          "attributes": null
+        },
+        {
+          "id": "267ea175-a936-4ca8-9671-96f9be752b19",
+          "name": "Agreements:status:disapproved",
+          "display_name": "Disapproved",
+          "active": true,
+          "order": 32,
+          "progress_state": "cancelled",
+          "attributes": null
+        },
+        {
+          "id": "0a722275-a627-463e-bd04-565896ae8d30",
+          "name": "Agreements:status:done",
+          "display_name": "Done",
+          "active": true,
+          "order": 42,
+          "progress_state": "done",
+          "attributes": null
+        }
+      ]
+    }
+  },
+  "/api/v1/ui-preferences/agreements-listing": {
+    "status": 200,
+    "data": {}
+  },
+  "/api/v1/filters/view/agreements-listing": {
+    "status": 200,
+    "data": {
+      "filters": [],
+      "count": 0
+    }
+  },
+  "/api/v1/calls?offset=0&limit=10": {
+    "status": 200,
+    "data": {
+      "calls": []
+    }
+  },
+  "/api/v1/calls/count": {
+    "status": 200,
+    "data": {
+      "count": 0
+    }
+  },
+  "/api/v1/calls/templates/list": {
+    "status": 404,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "/api/v1/ui-preferences/calls-listing": {
+    "status": 200,
+    "data": {}
+  },
+  "/api/v1/filters/view/calls-listing": {
+    "status": 200,
+    "data": {
+      "filters": [],
+      "count": 0
+    }
+  },
+  "/api/v1/users?offset=0&limit=50": {
+    "status": 200,
+    "data": {
+      "users": [
+        {
+          "name": " (Shobra Alkema)",
+          "email": "Shobra@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Shobra Alkhema",
+          "locked_device_info": null,
+          "id": "53e44cd0-ed66-4be4-9902-0102980c6e38",
+          "created_at": "2026-03-09T12:04:28Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-05-11T21:16:34Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "test",
+          "email": "test@bricks-rep.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "",
+          "locked_device_info": null,
+          "id": "4edbdd9b-ee55-4ef4-9f0c-cc63213b5bed",
+          "created_at": "2026-03-08T13:03:16Z",
+          "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+          "updated_at": "2026-06-10T12:37:42Z",
+          "updated_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f"
+        },
+        {
+          "name": "Accountant ",
+          "email": "wea.acc2020@gmail.com",
+          "role": {
+            "name": "Accountant",
+            "display_name": "Accountant",
+            "is_sales_team": false,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": false,
+            "is_area_assignable": false,
+            "is_subarea_assignable": false,
+            "is_contact_assignable": false,
+            "is_sales_target_assignable": false,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "customers:customers/bypassLocation",
+              "purchase:payments:request/assignable",
+              "sales:receiptBooks/assignable",
+              "tickets:todos/restrictOwner"
+            ],
+            "id": "1ce71b82-d956-42d8-8998-4e7f013f7716",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Accountant",
+          "mobile": "+201111836396",
+          "lang": "ar",
+          "profile_image_id": "a797273b-b7eb-4e44-9d29-2ce5526a8268",
+          "locked_device_info": null,
+          "id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85",
+          "created_at": "2026-01-10T11:06:46Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-08-25T11:33:10Z",
+          "updated_by_id": "86e9221e-3d20-4993-bd61-8e8e42dbfa85"
+        },
+        {
+          "name": "Abd alwhab (Giza Sales Rep",
+          "email": "Sales.Giza@gmail.com",
+          "role": {
+            "name": "DirectSalesRep",
+            "display_name": "Direct Sales Rep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "da1351a4-1744-4554-a953-46588dec8fca",
+            "created_at": "2023-04-29T12:52:13Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Giza",
+          "locked_device_info": null,
+          "id": "f07d659f-a7c4-42cc-b9ac-49e328b69251",
+          "created_at": "2025-12-26T18:42:34Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-09-13T18:13:24Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": " Dina Ali (Bni-Suief)",
+          "email": "Bni-Suief@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "BniSwief",
+          "locked_device_info": null,
+          "id": "0dfcaa3c-80fe-4f8a-a3cc-6c0f29d0f57f",
+          "created_at": "2025-12-16T13:51:51Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-09-21T09:48:39Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Shahd Ashraf ( Bolaq )",
+          "email": "wea.bolaq@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "",
+          "locked_device_info": null,
+          "id": "85f9f4df-4873-428a-98e5-e78f8fa21d80",
+          "created_at": "2025-05-25T21:30:35Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-08-08T17:37:39Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Dina Mohamed (Dar elslam&Maadi)",
+          "email": "wea.maadi2@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+          "created_at": "2025-04-30T17:37:52Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-10-14T21:21:48Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Mohamed Essam (District Manager)",
+          "email": "wea.district.m.1@gmail.com",
+          "role": {
+            "name": "DistrictManager",
+            "display_name": "DistrictManager",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": true,
+            "is_rep": false,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "created_at": "2023-04-29T12:52:13Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "District manager ",
+          "lang": "ar",
+          "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+          "locked_device_info": null,
+          "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+          "created_at": "2024-10-13T11:39:13Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-09-07T12:46:54Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Ahmed Abd Elazem (Faisal&Haram) ",
+          "email": "wea.feisal@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Faisal",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "06ec9ac5-c297-4085-b5c3-a3069eedb56d",
+          "created_at": "2023-12-06T14:54:47Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-06-21T14:44:50Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Mohamed Hatem (Fayoum)",
+          "email": "wea.fayoum@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Fayoum",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "6dd46725-532f-4e19-9ee6-3f5c6a9f287d",
+          "created_at": "2023-11-05T13:15:17Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-06-21T14:45:23Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "(Helwan)",
+          "email": "wea.helwan@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "8116242d-439f-427d-b8e4-3625217c06f4",
+          "created_at": "2023-11-04T16:56:43Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-08-08T11:54:04Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Steven Ayad (Minia North)",
+          "email": "Minia.North@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Minia N",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "a266a750-8ad9-4438-a912-c3be6078e1fe",
+          "created_at": "2023-10-24T13:41:39Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-08-31T20:00:54Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "(MRG)",
+          "email": "MRG@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "",
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "a18d91ae-dac5-4160-9172-63903ed96c34",
+          "created_at": "2023-08-28T18:49:17Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-03-05T12:23:03Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Mohamed Abdalgwad (District Manager)",
+          "email": "wea.district.m.2@gmail.com",
+          "role": {
+            "name": "DistrictManager",
+            "display_name": "DistrictManager",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": true,
+            "is_rep": false,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+            "created_at": "2023-04-29T12:52:13Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Upper District",
+          "lang": "ar",
+          "profile_image_id": "53f7226d-2440-4bff-9e7c-f96238b5e34a",
+          "locked_device_info": null,
+          "id": "75998f31-45cd-4f60-9f7f-4d93085570bc",
+          "created_at": "2023-04-29T16:43:33Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-06-21T14:45:48Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Mohamed Elbadry ( Imbaba )",
+          "email": "wea.imbaba@gmail.com",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "code": "Imbaba",
+          "lang": "ar",
+          "profile_image_id": "e641ee33-5745-4042-bf0d-09b18f3af4a9",
+          "locked_device_info": null,
+          "id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+          "created_at": "2023-04-29T16:32:57Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-08-26T03:55:45Z",
+          "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+        },
+        {
+          "name": "WEA",
+          "email": "WEA@GMAIL.COM",
+          "role": {
+            "name": "MedicalRep",
+            "display_name": "MedicalRep",
+            "is_sales_team": true,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": true,
+            "is_area_assignable": false,
+            "is_subarea_assignable": true,
+            "is_contact_assignable": true,
+            "is_sales_target_assignable": true,
+            "is_super": false,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "accounting:vaults/restrictOwner",
+              "assessments:assessments/assessable",
+              "calls:calls/restrictOwner",
+              "expenses:expenses/assignable",
+              "expenses:expenses/restrictOwner",
+              "inventory:warehouses/restrictOwner",
+              "inventory:warehouses/userAssignable",
+              "locationTracking:users/autoTrackable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:collections:request/assignable",
+              "sales:receiptBooks/assignable",
+              "sales:returnOrders/pickupAssignable",
+              "sales:salesOrders/deliveryAssignable",
+              "sales:salesOrders:inventory:warehouses/restrictOwner",
+              "tickets:requests/restrictOwner",
+              "tickets:tickets/restrictOwner",
+              "tickets:todos/restrictOwner",
+              "visits:visits/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": false,
+          "code": "WEA",
+          "mobile": "+201111786130",
+          "lang": "ar",
+          "profile_image_id": "420c119e-4f9b-46cc-8cb6-1c7ecd4482fd",
+          "locked_device_info": null,
+          "id": "817480ea-6bda-4a13-8868-885749231c79",
+          "created_at": "2023-04-29T16:25:56Z",
+          "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "updated_at": "2026-04-30T10:06:25Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Dr.wael Atta (CEO)",
+          "email": "wea.pharm2020@gmail.com",
+          "role": {
+            "name": "SuperAdmin",
+            "display_name": "SuperAdmin",
+            "is_sales_team": false,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": false,
+            "is_area_assignable": false,
+            "is_subarea_assignable": false,
+            "is_contact_assignable": false,
+            "is_sales_target_assignable": false,
+            "is_super": true,
+            "builtin": false,
+            "tags": [
+              "accounting:vaults/assignable",
+              "customers:customers/bypassLocation",
+              "expenses:expenses/assignable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:receiptBooks/assignable",
+              "tickets:todos/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+            "created_at": "2023-04-29T12:52:13Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:02Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "mobile": "+201111787179",
+          "lang": "ar",
+          "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+          "locked_device_info": null,
+          "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+          "created_at": "2023-04-29T13:06:40Z",
+          "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+          "updated_at": "2026-10-11T15:24:08Z",
+          "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+        },
+        {
+          "name": "Bricks Support",
+          "email": "support@bricks-rep.com",
+          "role": {
+            "name": "builtin:support",
+            "display_name": "Bricks Support Team",
+            "is_sales_team": false,
+            "is_area_manager": false,
+            "is_subarea_manager": false,
+            "is_rep": false,
+            "is_area_assignable": false,
+            "is_subarea_assignable": false,
+            "is_contact_assignable": false,
+            "is_sales_target_assignable": false,
+            "is_super": true,
+            "builtin": false,
+            "tags": [
+              "customers:customers/bypassLocation",
+              "expenses:expenses/assignable",
+              "locationTracking:users/trackable",
+              "offline/enabled",
+              "sales:receiptBooks/assignable",
+              "tickets:todos/restrictOwner",
+              "visits:visits:planning/assignable"
+            ],
+            "id": "b956ef62-0137-4145-9f1b-c64ab4493999",
+            "created_at": "2023-04-29T12:52:12Z",
+            "created_by_id": "00000000-0000-0000-0000-000000000000",
+            "updated_at": "2026-10-07T11:18:03Z",
+            "updated_by_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "active": true,
+          "lang": "ar",
+          "locked_device_info": null,
+          "id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+          "created_at": "2023-04-29T12:52:17Z",
+          "created_by_id": "00000000-0000-0000-0000-000000000000",
+          "updated_at": "2026-10-14T12:27:14Z",
+          "updated_by_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ]
+    }
+  },
+  "/api/v1/contacts?offset=0&limit=5": {
+    "status": 405,
+    "error": "HTTP Error 405: Method Not Allowed"
+  }
+}

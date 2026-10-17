@@ -1,0 +1,724 @@
+{
+  "agreements": [
+    {
+      "serial_num": 222,
+      "title": "تحويل 2000 ج مقابل كتابات جيرون ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">تحويل&nbsp;2000&nbsp;ج&nbsp;مقابل&nbsp;كتابات&nbsp;جيرون&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 2000,
+      "status": {
+        "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+        "name": "Agreements:status:new",
+        "display_name": "New",
+        "active": true,
+        "order": 3,
+        "progress_state": "todo",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 10588,
+        "code": "E1237",
+        "number": "E1237",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "محمد علي عبد القادر",
+        "area_id": "0346",
+        "main_address_id": "35db78ff-a2f0-438e-863a-5f0617020bcd",
+        "customer_rank": "aaaaaaaaaaaaaaaablbt",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "B",
+          "specialty": "General practitioner"
+        },
+        "id": "79c816b6-1519-42a8-aff4-966682cbaafc",
+        "created_at": "2024-02-06T16:29:46Z",
+        "created_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+        "updated_at": "2024-11-26T11:51:06Z",
+        "updated_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f"
+      },
+      "date": "2026-10-06",
+      "id": "dacee726-6a05-4241-a5eb-cad2950d40cb",
+      "created_at": "2026-10-11T08:48:45Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-10-11T08:48:45Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 221,
+      "title": "تم تحويل 800 ج ل د محمد عبده مقابل 40 علبه الترا هيوميدين",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">تم&nbsp;تحويل&nbsp;800&nbsp;ج&nbsp;ل&nbsp;د&nbsp;محمد&nbsp;عبده&nbsp;مقابل&nbsp;40&nbsp;علبه&nbsp;الترا&nbsp;هيوميدين</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 800,
+      "status": {
+        "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+        "name": "Agreements:status:new",
+        "display_name": "New",
+        "active": true,
+        "order": 3,
+        "progress_state": "todo",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 14767,
+        "number": "#14767",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "محمد عبده",
+        "area_id": "0341",
+        "main_address_id": "01d0e195-bfed-42a7-8532-25d3f14bb8b3",
+        "customer_rank": "aaaaaaaaaaaaaaaadatd",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": null,
+          "class": "A",
+          "contact_name": null,
+          "job_title": null,
+          "specialty": "Pediatrics"
+        },
+        "id": "43e0881b-5b8a-45c7-927b-f33a48890ddf",
+        "created_at": "2025-10-29T18:50:51Z",
+        "created_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb",
+        "updated_at": "2025-10-29T18:51:00Z",
+        "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+      },
+      "date": "2026-09-20",
+      "id": "5dfb9581-7508-432d-a3db-fb3534629df9",
+      "created_at": "2026-09-20T14:24:58Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-09-20T14:24:58Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 219,
+      "title": "1500 ج باقي اوردر بيشوي صافي + 10 علب جيرون و 10 ستيبس جابهم من المخزن ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">1500&nbsp;ج&nbsp;باقي&nbsp;اوردر&nbsp;بيشوي&nbsp;صافي&nbsp;+&nbsp;10&nbsp;علب&nbsp;جيرون&nbsp;و&nbsp;10&nbsp;ستيبس&nbsp;جابهم&nbsp;من&nbsp;المخزن&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 1500,
+      "status": {
+        "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+        "name": "Agreements:status:new",
+        "display_name": "New",
+        "active": true,
+        "order": 3,
+        "progress_state": "todo",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 15343,
+        "number": "#15343",
+        "contact_type": "organization",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "مركز الشروق gp",
+        "area_id": "0324",
+        "main_address_id": "b7e82b2e-e100-4d9a-a898-9d4ada1bd22e",
+        "customer_rank": "aaaaaaaaaaaaaaaadhxx",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Polyclinic",
+          "class": "A",
+          "kol": "p1gsjpqeonp",
+          "specialty": "General practitioner"
+        },
+        "id": "32a287c3-60fb-402b-8d6f-ae37670a09a9",
+        "created_at": "2026-02-10T19:01:29Z",
+        "created_by_id": "06ec9ac5-c297-4085-b5c3-a3069eedb56d",
+        "updated_at": "2026-09-13T15:51:05Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "date": "2026-09-09",
+      "id": "786e7133-334d-477a-9808-6643ea53b719",
+      "created_at": "2026-09-12T07:10:40Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-09-12T07:10:40Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 220,
+      "title": "1000 ج مقابل 80 علبه بيوتالاكسي صيدليات جزيرة محمد ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">1000&nbsp;ج&nbsp;مقابل&nbsp;80&nbsp;علبه&nbsp;بيوتالاكسي&nbsp;صيدليات&nbsp;جزيرة&nbsp;محمد&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 1000,
+      "status": {
+        "id": "a1dfe59d-9293-4f40-bd8d-13b69db849ba",
+        "name": "Agreements:status:new",
+        "display_name": "New",
+        "active": true,
+        "order": 3,
+        "progress_state": "todo",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 6982,
+        "code": "W1092",
+        "number": "W1092",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "حسام حسن",
+        "area_id": "0350",
+        "main_address_id": "33f3b8fa-c065-4682-8f49-7067397c1d77",
+        "customer_rank": "aaaaaaaaaaaaaaaabijp",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "B",
+          "contact_name": "امبابه ",
+          "specialty": "Orthopedics"
+        },
+        "id": "70a82d5d-2958-473e-9b12-9b32e01f043f",
+        "created_at": "2023-08-29T12:30:52Z",
+        "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+        "updated_at": "2024-01-06T14:49:07Z",
+        "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+      },
+      "date": "2026-09-09",
+      "id": "09e5bbe2-3baf-4f15-90ce-7663b885d71d",
+      "created_at": "2026-09-12T07:14:01Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-09-12T07:14:01Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 218,
+      "title": "Cash money 1000 ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">Cash&nbsp;money&nbsp;1000&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 1000,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 8435,
+        "code": "W2171",
+        "number": "W2171",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "عبد الرازق الدموكى",
+        "area_id": "0346",
+        "main_address_id": "d59e3975-33ab-4505-a878-1012010ed8d8",
+        "customer_rank": "aaaaaaaaaaaaaaaabanh",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "A",
+          "contact_name": "امبابه ",
+          "specialty": "Pediatrics"
+        },
+        "id": "57343534-6138-4bd6-8a52-154bff36c486",
+        "created_at": "2023-08-29T16:57:10Z",
+        "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+        "updated_at": "2026-04-02T10:12:50Z",
+        "updated_by_id": "025258be-5b53-42e0-8828-1ed4c6dbc6fb"
+      },
+      "date": "2026-08-17",
+      "id": "4f336d45-ae2f-49b7-ac95-30a16c819096",
+      "created_at": "2026-08-16T23:10:28Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-08-16T23:10:28Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 217,
+      "title": "Cash money 2000 ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">Cash&nbsp;money&nbsp;2000&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 2000,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 14156,
+        "number": "#14156",
+        "contact_type": "organization",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "عيادات ابو بكر ORTHO د سمير حسن",
+        "area_id": "Wea742",
+        "main_address_id": "98bbe5b7-a764-47ba-bafd-74a657112753",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Polyclinic",
+          "class": "A",
+          "specialty": "Orthopedics"
+        },
+        "id": "3d16d7f1-ee3b-41fa-bdec-850d8be920ad",
+        "created_at": "2025-05-26T20:53:50Z",
+        "created_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7",
+        "updated_at": "2025-07-06T20:57:27Z",
+        "updated_by_id": "974e6875-b0b2-4300-9840-bc95abb158c7"
+      },
+      "date": "2026-08-16",
+      "id": "282bedc5-c36e-4c83-baff-fd0c2d516f87",
+      "created_at": "2026-08-16T13:21:50Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-08-16T13:21:50Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 215,
+      "title": "جهاز ضغط ديجيتال ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">جهاز&nbsp;ضغط&nbsp;ديجيتال&nbsp;</p>",
+      "type": {
+        "id": "c6424a7d-3feb-438c-b0b8-a85924039994",
+        "name": "Devices"
+      },
+      "amount": 1000,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 13145,
+        "number": "#13145",
+        "contact_type": "organization",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "اسماء مصطفي الشيمي",
+        "area_id": "0335",
+        "main_address_id": "0cfefc8d-9c0e-4e2b-9e0e-50a1afb55759",
+        "customer_rank": "aaaaaaaaaaaaaaaadjfl",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "class": "A",
+          "kol": "p1gsjpqeonp",
+          "specialty": "Gynaecology"
+        },
+        "id": "0a9c5fcc-f7b8-4d05-8e23-a4591478ed65",
+        "created_at": "2025-02-12T11:20:09Z",
+        "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "updated_at": "2026-09-13T14:55:30Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "date": "2026-07-29",
+      "id": "71812c75-e157-4254-ae27-a4e068e04140",
+      "created_at": "2026-07-29T14:56:42Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-07-29T14:56:42Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 216,
+      "title": "1500 ج RTD بهية لدكتور محمد مجدى حفني",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">1500&nbsp;ج&nbsp;RTD&nbsp;بهية&nbsp;لدكتور&nbsp;محمد&nbsp;مجدى&nbsp;حفني</p>",
+      "type": {
+        "id": "0eb3f729-baaa-465a-93bd-6357a073f0d7",
+        "name": "RTD"
+      },
+      "amount": 1500,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 7246,
+        "code": "W1163",
+        "number": "W1163",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "محمد مجدى حفنى",
+        "mobile": "+201223035721",
+        "area_id": "0334",
+        "main_address_id": "5b5358a2-641d-4747-87b4-e548fc15b55e",
+        "customer_rank": "aaaaaaaaaaaaaaaacmub",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "A",
+          "contact_name": "بولاق ",
+          "kol": "p1gsjpqeonp",
+          "specialty": "Orthopedics"
+        },
+        "id": "d48fa7a1-73fa-4809-9bd6-3f1907f08345",
+        "created_at": "2023-08-29T12:30:55Z",
+        "created_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f",
+        "updated_at": "2026-09-13T14:52:19Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "date": "2026-07-29",
+      "id": "11133202-c30c-4fe1-9c84-0064ac0b0258",
+      "created_at": "2026-07-29T14:58:31Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-07-29T14:58:31Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 214,
+      "title": "500 ج مقابل 15 جيرون و 10 ستيبس ص بيشوي صافي ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">500&nbsp;ج&nbsp;مقابل&nbsp;15&nbsp;جيرون&nbsp;و&nbsp;10&nbsp;ستيبس&nbsp;ص&nbsp;بيشوي&nbsp;صافي&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 500,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 15343,
+        "number": "#15343",
+        "contact_type": "organization",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "مركز الشروق gp",
+        "area_id": "0324",
+        "main_address_id": "b7e82b2e-e100-4d9a-a898-9d4ada1bd22e",
+        "customer_rank": "aaaaaaaaaaaaaaaadhxx",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Polyclinic",
+          "class": "A",
+          "kol": "p1gsjpqeonp",
+          "specialty": "General practitioner"
+        },
+        "id": "32a287c3-60fb-402b-8d6f-ae37670a09a9",
+        "created_at": "2026-02-10T19:01:29Z",
+        "created_by_id": "06ec9ac5-c297-4085-b5c3-a3069eedb56d",
+        "updated_at": "2026-09-13T15:51:05Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "date": "2026-07-12",
+      "id": "f34079f4-1ae7-4983-a4c0-a6513eb5c85f",
+      "created_at": "2026-07-14T13:03:27Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-07-14T13:03:27Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    },
+    {
+      "serial_num": 213,
+      "title": "2500 ج كاش مقابل 100 ستيبس ص الجداوي ",
+      "description": "<p class=\"ql-align-right ql-direction-rtl\">2500&nbsp;ج&nbsp;كاش&nbsp;مقابل&nbsp;100&nbsp;ستيبس&nbsp;ص&nbsp;الجداوي&nbsp;</p>",
+      "type": {
+        "id": "39f52fb4-b2c6-47a6-b25d-d63989ef7156",
+        "name": "Cash money"
+      },
+      "amount": 2500,
+      "status": {
+        "id": "0a722275-a627-463e-bd04-565896ae8d30",
+        "name": "Agreements:status:done",
+        "display_name": "Done",
+        "active": true,
+        "order": 42,
+        "progress_state": "done",
+        "attributes": null
+      },
+      "customer": {
+        "serial_num": 10749,
+        "code": "E1095",
+        "number": "E1095",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "محمد منصور المهدي",
+        "area_id": "0127",
+        "main_address_id": "9984dbe2-140e-4c87-b7dc-02c2377c0d5c",
+        "customer_rank": "aaaaaaaaaaaaaaaabnpp",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "class": "A",
+          "contact_name": "Mohamed Alaa",
+          "specialty": "General practitioner"
+        },
+        "id": "82ab666f-f76a-426d-ad9e-86da595d608a",
+        "created_at": "2024-04-06T22:37:01Z",
+        "created_by_id": "8116242d-439f-427d-b8e4-3625217c06f4",
+        "updated_at": "2024-11-26T11:51:02Z",
+        "updated_by_id": "eceaf304-29e2-4bcc-b611-f94047c0fc5f"
+      },
+      "date": "2026-05-24",
+      "id": "436c3f25-5759-48d4-80a5-6149f1a3234e",
+      "created_at": "2026-05-24T17:21:59Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "created_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "updated_at": "2026-05-24T17:21:59Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_by": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      }
+    }
+  ]
+}

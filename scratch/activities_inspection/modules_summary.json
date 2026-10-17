@@ -1,0 +1,42 @@
+{
+  "visits": {
+    "url": "https://weapharma.bricks-rep.com/visits",
+    "title": "Bricks Rep",
+    "breadcrumbs": [],
+    "tableHeaders": [],
+    "tabs": [],
+    "buttons": [],
+    "rowsSample": [],
+    "filters": []
+  },
+  "planned_visits": {
+    "url": "https://weapharma.bricks-rep.com/planned-visits",
+    "title": "Bricks Rep",
+    "breadcrumbs": [],
+    "tableHeaders": [],
+    "tabs": [],
+    "buttons": [],
+    "rowsSample": [],
+    "filters": []
+  },
+  "agreements": {
+    "url": "https://weapharma.bricks-rep.com/agreements",
+    "title": "Bricks Rep",
+    "breadcrumbs": [],
+    "tableHeaders": [],
+    "tabs": [],
+    "buttons": [],
+    "rowsSample": [],
+    "filters": []
+  },
+  "calls": {
+    "url": "https://weapharma.bricks-rep.com/calls",
+    "title": "Bricks Rep",
+    "breadcrumbs": [],
+    "tableHeaders": [],
+    "tabs": [],
+    "buttons": [],
+    "rowsSample": [],
+    "filters": []
+  }
+}

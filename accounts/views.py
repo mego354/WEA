@@ -49,3 +49,24 @@ def users_list(request):
 def roles_list(request):
     roles = Role.objects.annotate(users_count=models.Count('users')).order_by('id')
     return render(request, 'accounts/roles_list.html', {'roles': roles})
+
+
+@login_required
+def user_toggle_bypass_location(request, pk):
+    """
+    Superuser-only control to toggle bypass_location_verification for a user.
+    Strictly enforced on the backend.
+    """
+    if not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+        messages.error(request, "عذراً، هذه الصلاحية مقصورة حصرياً على مدراء النظام (SuperAdmin).")
+        return redirect('users_list')
+
+    from django.shortcuts import get_object_or_404
+    target_user = get_object_or_404(User, pk=pk)
+    target_user.bypass_location_verification = not target_user.bypass_location_verification
+    target_user.save()
+
+    status_str = "تفعيل" if target_user.bypass_location_verification else "تعطيل"
+    messages.success(request, f"تم {status_str} تجاوز التحقق من الموقع للمستخدم {target_user.name or target_user.username} بنجاح.")
+    return redirect('users_list')
+

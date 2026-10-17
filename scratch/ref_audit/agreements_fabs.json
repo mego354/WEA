@@ -1,0 +1,202 @@
+[
+  {
+    "text": "store\nالمنتجات\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 410.515625,
+      "bottom": 458.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "storefront\nالمبيعات\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 707.515625,
+      "bottom": 755.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "storefront\nالمشتريات\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 755.515625,
+      "bottom": 803.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "inventory\nالمخازن\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 803.515625,
+      "bottom": 851.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "account_balance_wallet\nالخزن\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 851.515625,
+      "bottom": 899.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "score\nالأهداف\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 1091.515625,
+      "bottom": 1139.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "settings\nإعدادات\nadd",
+    "html": "<a _ngcontent-ng-c3794545038=\"\" mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped",
+    "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+    "rect": {
+      "top": 1379.515625,
+      "bottom": 1427.515625,
+      "left": 1140,
+      "right": 1440,
+      "width": 300,
+      "height": 48
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(46, 46, 46)",
+      "borderRadius": "4px",
+      "boxShadow": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "text": "add",
+    "html": "<button _ngcontent-ng-c2067959451=\"\" mat-fab=\"\" color=\"primary\" class=\"mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\"><span class=\"mat-mdc-button-persistent-ripple mdc-fab__ripple\"></span><",
+    "className": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary",
+    "rect": {
+      "top": 828,
+      "bottom": 884,
+      "left": 16,
+      "right": 72,
+      "width": 56,
+      "height": 56
+    },
+    "computedStyle": {
+      "position": "relative",
+      "bottom": "0px",
+      "left": "0px",
+      "right": "0px",
+      "top": "0px",
+      "backgroundColor": "rgb(39, 190, 190)",
+      "color": "rgba(0, 0, 0, 0.87)",
+      "borderRadius": "50%",
+      "boxShadow": "rgba(0, 0, 0, 0.2) 0px 3px 5px -1px, rgba(0, 0, 0, 0.14) 0px 6px 10px 0px, rgba(0, 0, 0, 0.12) 0px 1px 18px 0px",
+      "zIndex": "auto"
+    }
+  }
+]

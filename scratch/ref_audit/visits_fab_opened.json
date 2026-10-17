@@ -1,0 +1,1471 @@
+{
+  "parentAfterClick": "<div _ngcontent-ng-c2067959451=\"\" class=\"quick-add ng-star-inserted\" style=\"right: unset; left: 1rem;\"><button _ngcontent-ng-c2067959451=\"\" mat-fab=\"\" color=\"primary\" class=\"mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\"><span class=\"mat-mdc-button-persistent-ripple mdc-fab__ripple\"></span><mat-icon _ngcontent-ng-c2067959451=\"\" role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">add</mat-icon><span class=\"mdc-button__label\"></span><span class=\"mat-focus-indicator\"></span><span class=\"mat-mdc-button-touch-target\"></span><span class=\"mat-ripple mat-mdc-button-ripple\"></span></button></div>",
+  "overlays": [
+    {
+      "tag": "DIV",
+      "className": "cdk-overlay-backdrop cdk-overlay-dark-backdrop cdk-overlay-backdrop-showing",
+      "text": "",
+      "html": "<div class=\"cdk-overlay-backdrop cdk-overlay-dark-backdrop cdk-overlay-backdrop-showing\"></div>"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-global-overlay-wrapper",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<div class=\"cdk-global-overlay-wrapper\" dir=\"rtl\" style=\"justify-content: center; align-items: flex-end;\"><div id=\"cdk-overlay-0\" class=\"cdk-overlay-pane\" style=\"max-width: 100%; position: static; margin-bottom: 0px;\"><div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div><mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-co"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-overlay-pane",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<div id=\"cdk-overlay-0\" class=\"cdk-overlay-pane\" style=\"max-width: 100%; position: static; margin-bottom: 0px;\"><div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div><mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-co"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-visually-hidden cdk-focus-trap-anchor",
+      "text": "",
+      "html": "<div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div>"
+    },
+    {
+      "tag": "MAT-BOTTOM-SHEET-CONTAINER",
+      "className": "mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-container-enter",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-container-enter\" id=\"cdk-dialog-0\" role=\"dialog\" aria-modal=\"false\"><app-quick-add class=\"ng-star-inserted\"><mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserte"
+    },
+    {
+      "tag": "APP-QUICK-ADD",
+      "className": "ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<app-quick-add class=\"ng-star-inserted\"><mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted\" aria-disabled=\"false\"><button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__c"
+    },
+    {
+      "tag": "MAT-ACTION-LIST",
+      "className": "mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted\" aria-disabled=\"false\"><button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-u"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "room",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "shopping_cart",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "refresh",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "receipt",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line",
+      "text": "الغاء",
+      "html": "<a mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center "
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "الغاء",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ri"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "الغاء",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ripple-loader-disabled=\"\"><span class=\""
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed",
+      "text": "الغاء",
+      "html": "<button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ripple-loader-disabled=\"\"><span class=\"mat-mdc-button-persistent-ripple mdc-button__ripple\"></span><span class=\"mdc-"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-button-persistent-ripple mdc-button__ripple",
+      "text": "",
+      "html": "<span class=\"mat-mdc-button-persistent-ripple mdc-button__ripple\"></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-button__label",
+      "text": "الغاء",
+      "html": "<span class=\"mdc-button__label\"> الغاء </span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<span class=\"mat-focus-indicator\"></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-button-touch-target",
+      "text": "",
+      "html": "<span class=\"mat-mdc-button-touch-target\"></span>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-visually-hidden cdk-focus-trap-anchor",
+      "text": "",
+      "html": "<div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div>"
+    }
+  ],
+  "activeItemsNearBottom": [
+    {
+      "text": "home\nالرئيسية",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/home"
+    },
+    {
+      "text": "view_agenda\nجدول الاعمال",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/agenda"
+    },
+    {
+      "text": "calendar_month\nالتقويم",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/calendar"
+    },
+    {
+      "text": "checklist\nTodos",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/todos"
+    },
+    {
+      "text": "contacts\nجهات الاتصال",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/contacts"
+    },
+    {
+      "text": "confirmation_number\nالمهام",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/tickets"
+    },
+    {
+      "text": "store\nالمنتجات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "timeline\nالأنشطة\nremove",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 navigation-item--active mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "calendar_today\nخطة الزيارات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/planned-visits"
+    },
+    {
+      "text": "room\nالزيارات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted navigation-item--active",
+      "href": "/visits?tableStateQ=pageIndex__0,sortDirection__desc,sortKey__visit_time&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_business_relation%5B%5D__customer,contact_inactive__false"
+    },
+    {
+      "text": "call\nالمكالمات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/calls"
+    },
+    {
+      "text": "handshake\nالاتفاقيات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/agreements"
+    },
+    {
+      "text": "storefront\nالمبيعات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "storefront\nالمشتريات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "inventory\nالمخازن\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "account_balance_wallet\nالخزن\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "approval\nالموافقات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/requests"
+    },
+    {
+      "text": "assessment\nالتقييمات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/assessments"
+    },
+    {
+      "text": "attach_money\nالمصروفات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/expenses"
+    },
+    {
+      "text": "menu_book\nالمصادر",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/resources"
+    },
+    {
+      "text": "score\nالأهداف\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "event_busy\nخطة أيام العمل",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/yearly-off-days"
+    },
+    {
+      "text": "track_changes\nتتبع الموقع",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/location-tracking"
+    },
+    {
+      "text": "group\nالآداء",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/performance"
+    },
+    {
+      "text": "text_snippet\nالتقارير",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/reports"
+    },
+    {
+      "text": "bug_report\nمشاكل تتبع الموقع",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/location-tracking-troubleshoot"
+    },
+    {
+      "text": "settings\nإعدادات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "notifications_active\n188",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "logout",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed",
+      "href": ""
+    },
+    {
+      "text": "filter_list\n2",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-primary",
+      "href": ""
+    },
+    {
+      "text": "view_agenda",
+      "tag": "BUTTON",
+      "className": "mat-button-toggle-button mat-focus-indicator",
+      "href": ""
+    },
+    {
+      "text": "table_chart",
+      "tag": "BUTTON",
+      "className": "mat-button-toggle-button mat-focus-indicator",
+      "href": ""
+    },
+    {
+      "text": "تصدير البيانات",
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary",
+      "href": ""
+    },
+    {
+      "text": "settings",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-unthemed",
+      "href": ""
+    },
+    {
+      "text": "#154829",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/81aaad0b-51d7-4f0e-98ec-a8507eab6042"
+    },
+    {
+      "text": "رف\n[#16436] رفعت فتحى رمضان",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d7cbf33a-d152-4d7e-bc40-93eeb5047264"
+    },
+    {
+      "text": "[#16436] رفعت فتحى رمضان",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/d7cbf33a-d152-4d7e-bc40-93eeb5047264"
+    },
+    {
+      "text": "[#16436] رفعت فتحى رمضان",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d7cbf33a-d152-4d7e-bc40-93eeb5047264"
+    },
+    {
+      "text": "#154828",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/5a3438c1-11c1-4af6-9409-3449c88c0c51"
+    },
+    {
+      "text": "ما\n[#16472] مايكل ابراهيم اطفال",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/8073292d-3e34-4c03-a60a-9cb1e9af9c22"
+    },
+    {
+      "text": "[#16472] مايكل ابراهيم اطفال",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/8073292d-3e34-4c03-a60a-9cb1e9af9c22"
+    },
+    {
+      "text": "[#16472] مايكل ابراهيم اطفال",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/8073292d-3e34-4c03-a60a-9cb1e9af9c22"
+    },
+    {
+      "text": "#154827",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/0f1b65bd-7d29-4bfc-a4ab-ec3a586d45db"
+    },
+    {
+      "text": "ما\n[E2486] مروه ابو رواش",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/37473774-7ecb-48f3-9bec-fdd37e9a6807"
+    },
+    {
+      "text": "[E2486] مروه ابو رواش",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/37473774-7ecb-48f3-9bec-fdd37e9a6807"
+    },
+    {
+      "text": "[E2486] مروه ابو رواش",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/37473774-7ecb-48f3-9bec-fdd37e9a6807"
+    },
+    {
+      "text": "#154155",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/63111bf9-c746-4475-97fc-fa4d9703e64b"
+    },
+    {
+      "text": "صم\n[#14363] صيدليه مصطفي حسن ش الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/0e1b889b-bdd1-4683-9c18-edc34bea3f12"
+    },
+    {
+      "text": "[#14363] صيدليه مصطفي حسن ش الاقصر",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/0e1b889b-bdd1-4683-9c18-edc34bea3f12"
+    },
+    {
+      "text": "[#14363] صيدليه مصطفي حسن ش الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/0e1b889b-bdd1-4683-9c18-edc34bea3f12"
+    },
+    {
+      "text": "#154154",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/0b68c400-af1a-494e-b2d3-e5ba1b247bd0"
+    },
+    {
+      "text": "صا\n[#14362] صيدليه الرافة ش الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/cb273568-2da0-4470-bcb2-04103629e052"
+    },
+    {
+      "text": "[#14362] صيدليه الرافة ش الاقصر",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/cb273568-2da0-4470-bcb2-04103629e052"
+    },
+    {
+      "text": "[#14362] صيدليه الرافة ش الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/cb273568-2da0-4470-bcb2-04103629e052"
+    },
+    {
+      "text": "#154153",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/d067776c-cfb2-4ea9-a5a0-257f0ca974cc"
+    },
+    {
+      "text": "صم\n[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "#154152",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/3ee4bb50-9a06-4ff4-9202-92003a87d6a0"
+    },
+    {
+      "text": "صا\n[#13943] صيدلية الفتح البركة",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/306dd22c-694d-4bba-8c81-795e28f63179"
+    },
+    {
+      "text": "[#13943] صيدلية الفتح البركة",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/306dd22c-694d-4bba-8c81-795e28f63179"
+    },
+    {
+      "text": "[#13943] صيدلية الفتح البركة",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/306dd22c-694d-4bba-8c81-795e28f63179"
+    },
+    {
+      "text": "#154151",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/b84e923b-6a2d-40d2-9fa9-aace372eddfb"
+    },
+    {
+      "text": "اف\n[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "#154150",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/c3d017c8-9507-41ed-8446-85e3cd20fb01"
+    },
+    {
+      "text": "عا\n[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "#154149",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/ba915ca3-9cc4-4453-bbc7-845bf4369e46"
+    },
+    {
+      "text": "صا\n[W1055] صلاح ابو سعدة",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3929744f-1db1-4eba-a1d6-a5dc340a4892"
+    },
+    {
+      "text": "[W1055] صلاح ابو سعدة",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/3929744f-1db1-4eba-a1d6-a5dc340a4892"
+    },
+    {
+      "text": "[W1055] صلاح ابو سعدة",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3929744f-1db1-4eba-a1d6-a5dc340a4892"
+    },
+    {
+      "text": "#154148",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/883286cd-f423-4d16-8f25-c335b4854c71"
+    },
+    {
+      "text": "صص\n[W0219] صيدلية صديق بشتيل عماره",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f8ddf96c-df3b-47ce-98cc-8c09f6213ce4"
+    },
+    {
+      "text": "[W0219] صيدلية صديق بشتيل عماره",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/f8ddf96c-df3b-47ce-98cc-8c09f6213ce4"
+    },
+    {
+      "text": "[W0219] صيدلية صديق بشتيل عماره",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f8ddf96c-df3b-47ce-98cc-8c09f6213ce4"
+    },
+    {
+      "text": "#154147",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/3bdf50a0-82e5-4ca4-b3fc-e73a33994789"
+    },
+    {
+      "text": "ور\n[W1048] وفاء راضي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/48b80e3a-6b4b-48ca-8b98-5c1ca150a206"
+    },
+    {
+      "text": "[W1048] وفاء راضي",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/48b80e3a-6b4b-48ca-8b98-5c1ca150a206"
+    },
+    {
+      "text": "[W1048] وفاء راضي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/48b80e3a-6b4b-48ca-8b98-5c1ca150a206"
+    },
+    {
+      "text": "#152390",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/31414d62-840f-4725-8345-291b02241728"
+    },
+    {
+      "text": "سس\n[W1046] سناء سعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3ab9db42-6efe-4d97-81f8-877d6a9d0baf"
+    },
+    {
+      "text": "[W1046] سناء سعيد",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/3ab9db42-6efe-4d97-81f8-877d6a9d0baf"
+    },
+    {
+      "text": "[W1046] سناء سعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3ab9db42-6efe-4d97-81f8-877d6a9d0baf"
+    },
+    {
+      "text": "#152220",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/e3d4998c-829e-44dc-bf75-e037eff0152e"
+    },
+    {
+      "text": "هم\n[E0533] هويدا محمد عوض",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/8c5b8f06-645a-435b-baeb-33835b85982b"
+    },
+    {
+      "text": "[E0533] هويدا محمد عوض",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/8c5b8f06-645a-435b-baeb-33835b85982b"
+    },
+    {
+      "text": "[E0533] هويدا محمد عوض",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/8c5b8f06-645a-435b-baeb-33835b85982b"
+    },
+    {
+      "text": "#152219",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/02e42350-16b4-4dc6-97ee-82175d7839d4"
+    },
+    {
+      "text": "رف\n[W1118] راندا فاروق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/b015a886-279d-47b7-9878-09c667523c7b"
+    },
+    {
+      "text": "[W1118] راندا فاروق",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/b015a886-279d-47b7-9878-09c667523c7b"
+    },
+    {
+      "text": "[W1118] راندا فاروق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/b015a886-279d-47b7-9878-09c667523c7b"
+    },
+    {
+      "text": "#154146",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/e514c3de-d984-4547-bc38-f497bccc9294"
+    },
+    {
+      "text": "صع\n[W0498] صيدلية عبد المنعم اخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/155b3dd6-a04b-40ac-b0e9-58433a7af169"
+    },
+    {
+      "text": "[W0498] صيدلية عبد المنعم اخر فيصل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/155b3dd6-a04b-40ac-b0e9-58433a7af169"
+    },
+    {
+      "text": "[W0498] صيدلية عبد المنعم اخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/155b3dd6-a04b-40ac-b0e9-58433a7af169"
+    },
+    {
+      "text": "#154144",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/632c57c6-274c-4987-bdb6-482ff5f96812"
+    },
+    {
+      "text": "صد\n[#16122] صيدلية د.صفاء ابو الفتوح بشتيل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/b70d2398-6d03-43fe-b6a0-305d75606549"
+    },
+    {
+      "text": "[#16122] صيدلية د.صفاء ابو الفتوح بشتيل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/b70d2398-6d03-43fe-b6a0-305d75606549"
+    },
+    {
+      "text": "[#16122] صيدلية د.صفاء ابو الفتوح بشتيل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/b70d2398-6d03-43fe-b6a0-305d75606549"
+    },
+    {
+      "text": "#154145",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/a506fb41-4b21-4378-a270-1d7294b61f72"
+    },
+    {
+      "text": "صا\n[#16471] صيدليه البرى اخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/409a9cb7-5ead-4650-9331-452dce96f008"
+    },
+    {
+      "text": "[#16471] صيدليه البرى اخر فيصل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/409a9cb7-5ead-4650-9331-452dce96f008"
+    },
+    {
+      "text": "[#16471] صيدليه البرى اخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/409a9cb7-5ead-4650-9331-452dce96f008"
+    },
+    {
+      "text": "#154143",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/4a8dd092-e68e-43f8-8105-5f0480780f71"
+    },
+    {
+      "text": "صا\n[E2363] صيدلية احمد محمد آخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2cc6312c-aa65-4bb1-a66b-87ddca435dca"
+    },
+    {
+      "text": "[E2363] صيدلية احمد محمد آخر فيصل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/2cc6312c-aa65-4bb1-a66b-87ddca435dca"
+    },
+    {
+      "text": "[E2363] صيدلية احمد محمد آخر فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2cc6312c-aa65-4bb1-a66b-87ddca435dca"
+    },
+    {
+      "text": "#154142",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/1e7430b5-5792-436a-972d-9bf0d45283fa"
+    },
+    {
+      "text": "صا\n[#14594] صيدليه الفيروز الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/088000fb-f8c7-4b2c-a989-dcf31e2ba5a5"
+    },
+    {
+      "text": "[#14594] صيدليه الفيروز الاقصر",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/088000fb-f8c7-4b2c-a989-dcf31e2ba5a5"
+    },
+    {
+      "text": "[#14594] صيدليه الفيروز الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/088000fb-f8c7-4b2c-a989-dcf31e2ba5a5"
+    },
+    {
+      "text": "#154141",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/534ea577-ee2a-4e37-949f-cb0fcdd15482"
+    },
+    {
+      "text": "صح\n[#14595] صيدليه حنا بشري الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/9f36a918-9486-49c8-bed4-06746009d8f5"
+    },
+    {
+      "text": "[#14595] صيدليه حنا بشري الاقصر",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/9f36a918-9486-49c8-bed4-06746009d8f5"
+    },
+    {
+      "text": "[#14595] صيدليه حنا بشري الاقصر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/9f36a918-9486-49c8-bed4-06746009d8f5"
+    },
+    {
+      "text": "#154140",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/da0141cf-868e-4d3b-ac14-a8aad3fdd4ef"
+    },
+    {
+      "text": "صا\n[W0472] صيدلية الرحاب فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2940d744-9835-4c08-bb82-385472c21377"
+    },
+    {
+      "text": "[W0472] صيدلية الرحاب فيصل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/2940d744-9835-4c08-bb82-385472c21377"
+    },
+    {
+      "text": "[W0472] صيدلية الرحاب فيصل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2940d744-9835-4c08-bb82-385472c21377"
+    },
+    {
+      "text": "#154139",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/8157ddd7-9b8f-4501-a934-d215b2e3e01f"
+    },
+    {
+      "text": "عا\n[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "[#16426] عمرو السعيد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3a388282-e860-4408-82b7-f9c2c8da9f66"
+    },
+    {
+      "text": "#152222",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/0cf436df-ac1b-4fb3-8c09-808d7f3c1cc2"
+    },
+    {
+      "text": "ما\n[W1121] مركز الرحمن الطبى ORTHO",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/17d591ad-d731-43f3-839d-6b64d6ce056e"
+    },
+    {
+      "text": "[W1121] مركز الرحمن الطبى ORTHO",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/17d591ad-d731-43f3-839d-6b64d6ce056e"
+    },
+    {
+      "text": "[W1121] مركز الرحمن الطبى ORTHO",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/17d591ad-d731-43f3-839d-6b64d6ce056e"
+    },
+    {
+      "text": "#154138",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/e9e4b1e6-838a-4751-9eb1-c498b58edec1"
+    },
+    {
+      "text": "صم\n[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "[E2916] صيدلية ماجد فوزي فايدة كامل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/6e64ae44-dd58-4a7f-815d-061f476353c3"
+    },
+    {
+      "text": "#154135",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/58c40110-e2d9-4cb4-824b-fa886c8eaf67"
+    },
+    {
+      "text": "اف\n[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "[E3083] اشرف فؤاد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/7d9e0919-095e-4ec9-8719-33ecbb9b6e6c"
+    },
+    {
+      "text": "#154137",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/7fa4ad22-2d2e-4b7c-bcc9-1697aa64df17"
+    },
+    {
+      "text": "صا\n[E1186] صيدليه الايمان الكبري العروبه",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f7dbec3f-bfbb-4b14-98c2-0230b8c68ea2"
+    },
+    {
+      "text": "[E1186] صيدليه الايمان الكبري العروبه",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/f7dbec3f-bfbb-4b14-98c2-0230b8c68ea2"
+    },
+    {
+      "text": "[E1186] صيدليه الايمان الكبري العروبه",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f7dbec3f-bfbb-4b14-98c2-0230b8c68ea2"
+    },
+    {
+      "text": "#154136",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/22d128ad-726e-4a1a-b903-d196ddbb3d87"
+    },
+    {
+      "text": "صا\n[E0002] صيدلية احمد رجب ارض اللواء",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/1add0ba5-149c-4a6b-9c5b-5c5d179d2f0a"
+    },
+    {
+      "text": "[E0002] صيدلية احمد رجب ارض اللواء",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/1add0ba5-149c-4a6b-9c5b-5c5d179d2f0a"
+    },
+    {
+      "text": "[E0002] صيدلية احمد رجب ارض اللواء",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/1add0ba5-149c-4a6b-9c5b-5c5d179d2f0a"
+    },
+    {
+      "text": "#154134",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/55c07349-f8bb-4e74-bd01-e34a5c1ad869"
+    },
+    {
+      "text": "صك\n[E1229] صيدليه كريم العروبه",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/101213ee-5b0a-4924-8af8-9171acf8d4e9"
+    },
+    {
+      "text": "[E1229] صيدليه كريم العروبه",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/101213ee-5b0a-4924-8af8-9171acf8d4e9"
+    },
+    {
+      "text": "[E1229] صيدليه كريم العروبه",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/101213ee-5b0a-4924-8af8-9171acf8d4e9"
+    },
+    {
+      "text": "#152224",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/e5091ce3-7055-4823-9071-cb570622a68c"
+    },
+    {
+      "text": "ما\n[W1119] مركز الرحمن الطبي GP",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d4fa8c2b-e7ef-43a7-90c6-aa88ce4ab4e8"
+    },
+    {
+      "text": "[W1119] مركز الرحمن الطبي GP",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/d4fa8c2b-e7ef-43a7-90c6-aa88ce4ab4e8"
+    },
+    {
+      "text": "[W1119] مركز الرحمن الطبي GP",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d4fa8c2b-e7ef-43a7-90c6-aa88ce4ab4e8"
+    },
+    {
+      "text": "#154133",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/11f6a651-ee24-410b-9d38-12366cd4f3e8"
+    },
+    {
+      "text": "صش\n[#14306] صيدلية شجرة الدر احمد زكي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/a7d81a43-fade-4aa9-a316-b4688179f0d0"
+    },
+    {
+      "text": "[#14306] صيدلية شجرة الدر احمد زكي",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/a7d81a43-fade-4aa9-a316-b4688179f0d0"
+    },
+    {
+      "text": "[#14306] صيدلية شجرة الدر احمد زكي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/a7d81a43-fade-4aa9-a316-b4688179f0d0"
+    },
+    {
+      "text": "#152221",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/144814a0-4afe-4f61-8b16-feb9fdeffa51"
+    },
+    {
+      "text": "ما\n[W1120] مركز الرحمن الطبي GYN",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/355efc0d-7c9b-437d-8e63-94b6b6d5282a"
+    },
+    {
+      "text": "[W1120] مركز الرحمن الطبي GYN",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/355efc0d-7c9b-437d-8e63-94b6b6d5282a"
+    },
+    {
+      "text": "[W1120] مركز الرحمن الطبي GYN",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/355efc0d-7c9b-437d-8e63-94b6b6d5282a"
+    },
+    {
+      "text": "#154131",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/7afbbbdc-d2f0-4ced-b753-2c184e9c9846"
+    },
+    {
+      "text": "صد\n[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "#154132",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/8a4440a4-6918-4761-899c-7aadee9b4806"
+    },
+    {
+      "text": "#154132",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/8a4440a4-6918-4761-899c-7aadee9b4806"
+    },
+    {
+      "text": "صد\n[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "[#16254] صيدلية د. عصام",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/72b94696-bc86-4d1c-9e34-437d2acac819"
+    },
+    {
+      "text": "#154131",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/7afbbbdc-d2f0-4ced-b753-2c184e9c9846"
+    },
+    {
+      "text": "#152392",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/932b4470-7b0d-45f0-afcb-46f1b13f3127"
+    },
+    {
+      "text": "اا\n[#16174] احمد القط",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/4ef960f9-f08a-48d3-ac96-97656b94441c"
+    },
+    {
+      "text": "[#16174] احمد القط",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/4ef960f9-f08a-48d3-ac96-97656b94441c"
+    },
+    {
+      "text": "[#16174] احمد القط",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/4ef960f9-f08a-48d3-ac96-97656b94441c"
+    },
+    {
+      "text": "#152369",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/da2d7041-1cbe-4ace-885f-5fda3b9503bd"
+    },
+    {
+      "text": "أا\n[#12802] أميرة السيد خضر ارض اللوا",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f35bae4a-c1a1-4812-8dbb-3213422fb9c1"
+    },
+    {
+      "text": "[#12802] أميرة السيد خضر ارض اللوا",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/f35bae4a-c1a1-4812-8dbb-3213422fb9c1"
+    },
+    {
+      "text": "[#12802] أميرة السيد خضر ارض اللوا",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f35bae4a-c1a1-4812-8dbb-3213422fb9c1"
+    },
+    {
+      "text": "#152371",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/025246a0-6166-4f6b-9ff3-747b2428e354"
+    },
+    {
+      "text": "مف\n[W1127] محمد فاروق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/c23ae953-56a5-4644-966a-b3fa7c561f33"
+    },
+    {
+      "text": "[W1127] محمد فاروق",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/c23ae953-56a5-4644-966a-b3fa7c561f33"
+    },
+    {
+      "text": "[W1127] محمد فاروق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/c23ae953-56a5-4644-966a-b3fa7c561f33"
+    },
+    {
+      "text": "#154128",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/d56bba20-1526-4cc1-8d70-2a4bce4e5003"
+    },
+    {
+      "text": "ما\n[#14262] ميرفت البارودي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/c7d74533-3bb8-4e52-9c3f-ded966fac760"
+    },
+    {
+      "text": "[#14262] ميرفت البارودي",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/c7d74533-3bb8-4e52-9c3f-ded966fac760"
+    },
+    {
+      "text": "[#14262] ميرفت البارودي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/c7d74533-3bb8-4e52-9c3f-ded966fac760"
+    },
+    {
+      "text": "#154130",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/3041e833-af58-4ba2-a5ea-8b5cac1d285c"
+    },
+    {
+      "text": "صس\n[E1230] صيدليه سعد سمير الوراق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2d774b43-908d-40ef-8320-c49ed6520e3b"
+    },
+    {
+      "text": "[E1230] صيدليه سعد سمير الوراق",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/2d774b43-908d-40ef-8320-c49ed6520e3b"
+    },
+    {
+      "text": "[E1230] صيدليه سعد سمير الوراق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2d774b43-908d-40ef-8320-c49ed6520e3b"
+    },
+    {
+      "text": "#152368",
+      "tag": "A",
+      "className": "",
+      "href": "/visits/view/901e3767-030e-4d5a-b12f-dff549e9c473"
+    },
+    {
+      "text": "مش\n[W1122] منى شعيره",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/ffc13afe-7428-4cfb-b202-10650bd47199"
+    },
+    {
+      "text": "[W1122] منى شعيره",
+      "tag": "A",
+      "className": "",
+      "href": "/contacts/ffc13afe-7428-4cfb-b202-10650bd47199"
+    },
+    {
+      "text": "[W1122] منى شعيره",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/ffc13afe-7428-4cfb-b202-10650bd47199"
+    },
+    {
+      "text": "add",
+      "tag": "BUTTON",
+      "className": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary",
+      "href": ""
+    },
+    {
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "shopping_cart\nامر بيع جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "refresh\nمرتجع جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "receipt\nتحصيل جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "الغاء",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line",
+      "href": ""
+    },
+    {
+      "text": "الغاء",
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed",
+      "href": ""
+    }
+  ]
+}

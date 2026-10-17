@@ -1,0 +1,649 @@
+{
+  "visits": [
+    {
+      "serial_num": 76948,
+      "contact_id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+      "contact": {
+        "serial_num": 12082,
+        "code": "E0168",
+        "number": "E0168",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "سيد فتحي",
+        "area_id": "0320",
+        "area": {
+          "created_at": "2023-04-29T14:51:47Z",
+          "updated_at": "2025-06-29T06:08:39Z",
+          "area_type": "subarea",
+          "code": "0320",
+          "name": "العياط",
+          "parent_code": "03",
+          "parent": {
+            "created_at": "2023-04-29T14:51:47Z",
+            "updated_at": "2025-06-29T06:08:39Z",
+            "area_type": "area",
+            "code": "03",
+            "name": "محافظة الجيزة"
+          }
+        },
+        "main_address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+        "customer_rank": "aaaaaaaaaaaaaaaackcv",
+        "customer_status_state_id": "72dd443d-e153-494a-81d3-26d898c9f0c0",
+        "extra": {
+          "account_type": "Clinic",
+          "class": "B",
+          "specialty": "Pediatrics"
+        },
+        "id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+        "created_at": "2024-11-06T16:34:50Z",
+        "created_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+        "updated_at": "2026-01-03T13:14:03Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+      "template_id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+      "template": {
+        "name": "customer_Customer_survey",
+        "display_name": {
+          "ar": "Coaching visit (Pharmacy)",
+          "en": "Coaching visit (Pharmacy)"
+        },
+        "active": true,
+        "restrict_user_roles": [
+          "3781d628-81db-40e5-9bdc-7fb87804e1ce",
+          "18cbf7a4-1538-43ad-99f1-1b910fd47b65",
+          "a733740f-ea6a-455d-a608-e0c2da2a9dc3",
+          "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "7ce5d8e3-6b5c-4a17-bef8-a9b8edb7970f",
+          "2bc9908d-b681-4570-8714-f25b40f6372b",
+          "d159c94f-8f7c-43e0-9dc7-918e299bb00c",
+          "d06c84a7-bd90-4d1c-a4a6-2e27b0842515",
+          "a9efe42c-62f1-48c0-bd53-2ebb92dbf999"
+        ],
+        "restrict_contacts": {
+          "business_relation": [
+            "customer"
+          ],
+          "customer_status_state_id": [
+            "57919b8d-c8a5-45c4-a931-33785fd2f7c4"
+          ],
+          "extra->account_type": [
+            "Pharmacy"
+          ]
+        },
+        "questionnaire_id": "8c38483e-29d6-4caa-abb7-5d42800fbee8",
+        "settings": {
+          "mode": "checkin_checkout",
+          "non_planned_enabled": true,
+          "non_planned_auto_approved": true,
+          "detailing_enabled": true,
+          "unsuccessful_mode": "auto_approved",
+          "enable_assessments_for_double_visits_only": false,
+          "auto_end_visit_enabled": false,
+          "auto_end_geofence_radius": 500,
+          "auto_end_geofence_grace_period_minutes": 30,
+          "auto_end_geofence_grace_period_reset_limit": 2,
+          "location_verification_override": false
+        },
+        "id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+        "created_at": "2023-04-29T12:52:15Z",
+        "created_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_at": "2026-08-15T14:23:29Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      "questionnaire_response_id": "102d8192-c9a4-4b4d-abd5-e4a6de40e062",
+      "status": "Visits:status:finished",
+      "approval_status": {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "",
+        "display_name": "",
+        "active": false,
+        "order": 0,
+        "attributes": null
+      },
+      "is_planned": false,
+      "started_at": "2025-03-23T11:53:18Z",
+      "ended_at": "2025-03-23T11:53:49Z",
+      "duration": 32000,
+      "doubled": true,
+      "owner_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+      "owner": {
+        "id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+        "name": "(Giza centrers)",
+        "role_id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+        "role": {
+          "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+          "name": "MedicalRep",
+          "display_name": "MedicalRep"
+        }
+      },
+      "mode": "checkin_checkout",
+      "is_successful": true,
+      "visit_time": "2025-03-23T11:53:49Z",
+      "id": "3b6aaca4-5a5e-4a43-bc13-ae3270056ba5",
+      "created_at": "2025-03-23T11:53:18Z",
+      "created_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+      "updated_at": "2025-03-23T11:53:49Z",
+      "updated_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b"
+    },
+    {
+      "serial_num": 76949,
+      "contact_id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+      "contact": {
+        "serial_num": 12082,
+        "code": "E0168",
+        "number": "E0168",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "سيد فتحي",
+        "area_id": "0320",
+        "area": {
+          "created_at": "2023-04-29T14:51:47Z",
+          "updated_at": "2025-06-29T06:08:39Z",
+          "area_type": "subarea",
+          "code": "0320",
+          "name": "العياط",
+          "parent_code": "03",
+          "parent": {
+            "created_at": "2023-04-29T14:51:47Z",
+            "updated_at": "2025-06-29T06:08:39Z",
+            "area_type": "area",
+            "code": "03",
+            "name": "محافظة الجيزة"
+          }
+        },
+        "main_address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+        "customer_rank": "aaaaaaaaaaaaaaaackcv",
+        "customer_status_state_id": "72dd443d-e153-494a-81d3-26d898c9f0c0",
+        "extra": {
+          "account_type": "Clinic",
+          "class": "B",
+          "specialty": "Pediatrics"
+        },
+        "id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+        "created_at": "2024-11-06T16:34:50Z",
+        "created_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+        "updated_at": "2026-01-03T13:14:03Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+      "template_id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+      "template": {
+        "name": "customer_Customer_survey",
+        "display_name": {
+          "ar": "Coaching visit (Pharmacy)",
+          "en": "Coaching visit (Pharmacy)"
+        },
+        "active": true,
+        "restrict_user_roles": [
+          "3781d628-81db-40e5-9bdc-7fb87804e1ce",
+          "18cbf7a4-1538-43ad-99f1-1b910fd47b65",
+          "a733740f-ea6a-455d-a608-e0c2da2a9dc3",
+          "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "7ce5d8e3-6b5c-4a17-bef8-a9b8edb7970f",
+          "2bc9908d-b681-4570-8714-f25b40f6372b",
+          "d159c94f-8f7c-43e0-9dc7-918e299bb00c",
+          "d06c84a7-bd90-4d1c-a4a6-2e27b0842515",
+          "a9efe42c-62f1-48c0-bd53-2ebb92dbf999"
+        ],
+        "restrict_contacts": {
+          "business_relation": [
+            "customer"
+          ],
+          "customer_status_state_id": [
+            "57919b8d-c8a5-45c4-a931-33785fd2f7c4"
+          ],
+          "extra->account_type": [
+            "Pharmacy"
+          ]
+        },
+        "questionnaire_id": "8c38483e-29d6-4caa-abb7-5d42800fbee8",
+        "settings": {
+          "mode": "checkin_checkout",
+          "non_planned_enabled": true,
+          "non_planned_auto_approved": true,
+          "detailing_enabled": true,
+          "unsuccessful_mode": "auto_approved",
+          "enable_assessments_for_double_visits_only": false,
+          "auto_end_visit_enabled": false,
+          "auto_end_geofence_radius": 500,
+          "auto_end_geofence_grace_period_minutes": 30,
+          "auto_end_geofence_grace_period_reset_limit": 2,
+          "location_verification_override": false
+        },
+        "id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+        "created_at": "2023-04-29T12:52:15Z",
+        "created_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_at": "2026-08-15T14:23:29Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      "questionnaire_response_id": "d7201b6f-ef0e-495f-8056-c288e814fe32",
+      "status": "Visits:status:finished",
+      "approval_status": {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "",
+        "display_name": "",
+        "active": false,
+        "order": 0,
+        "attributes": null
+      },
+      "is_planned": false,
+      "started_at": "2025-03-23T11:53:21Z",
+      "ended_at": "2025-03-23T11:53:43Z",
+      "duration": 22000,
+      "doubled": true,
+      "owner_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+      "owner": {
+        "id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+        "name": "Dr.wael Atta (CEO)",
+        "role_id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+        "profile_image_id": "200cf44f-22b4-4a82-a8cc-decd62b6964b",
+        "role": {
+          "id": "9a4a9027-204e-45ff-93e7-3d2ceceb203c",
+          "name": "SuperAdmin",
+          "display_name": "SuperAdmin"
+        }
+      },
+      "mode": "checkin_checkout",
+      "is_successful": true,
+      "visit_time": "2025-03-23T11:53:43Z",
+      "id": "350859df-2ed4-4ba6-9a4c-a511b3036d7e",
+      "created_at": "2025-03-23T11:53:21Z",
+      "created_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15",
+      "updated_at": "2025-03-23T11:53:43Z",
+      "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+    },
+    {
+      "serial_num": 53352,
+      "contact_id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+      "contact": {
+        "serial_num": 12082,
+        "code": "E0168",
+        "number": "E0168",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "سيد فتحي",
+        "area_id": "0320",
+        "area": {
+          "created_at": "2023-04-29T14:51:47Z",
+          "updated_at": "2025-06-29T06:08:39Z",
+          "area_type": "subarea",
+          "code": "0320",
+          "name": "العياط",
+          "parent_code": "03",
+          "parent": {
+            "created_at": "2023-04-29T14:51:47Z",
+            "updated_at": "2025-06-29T06:08:39Z",
+            "area_type": "area",
+            "code": "03",
+            "name": "محافظة الجيزة"
+          }
+        },
+        "main_address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+        "customer_rank": "aaaaaaaaaaaaaaaackcv",
+        "customer_status_state_id": "72dd443d-e153-494a-81d3-26d898c9f0c0",
+        "extra": {
+          "account_type": "Clinic",
+          "class": "B",
+          "specialty": "Pediatrics"
+        },
+        "id": "caaead87-349f-4a7c-9303-f350db9e84a1",
+        "created_at": "2024-11-06T16:34:50Z",
+        "created_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+        "updated_at": "2026-01-03T13:14:03Z",
+        "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+      },
+      "address_id": "c8a9b2d0-e7ac-496c-af07-91c5d2de2fea",
+      "template_id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+      "template": {
+        "name": "customer_Customer_survey",
+        "display_name": {
+          "ar": "Coaching visit (Pharmacy)",
+          "en": "Coaching visit (Pharmacy)"
+        },
+        "active": true,
+        "restrict_user_roles": [
+          "3781d628-81db-40e5-9bdc-7fb87804e1ce",
+          "18cbf7a4-1538-43ad-99f1-1b910fd47b65",
+          "a733740f-ea6a-455d-a608-e0c2da2a9dc3",
+          "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "7ce5d8e3-6b5c-4a17-bef8-a9b8edb7970f",
+          "2bc9908d-b681-4570-8714-f25b40f6372b",
+          "d159c94f-8f7c-43e0-9dc7-918e299bb00c",
+          "d06c84a7-bd90-4d1c-a4a6-2e27b0842515",
+          "a9efe42c-62f1-48c0-bd53-2ebb92dbf999"
+        ],
+        "restrict_contacts": {
+          "business_relation": [
+            "customer"
+          ],
+          "customer_status_state_id": [
+            "57919b8d-c8a5-45c4-a931-33785fd2f7c4"
+          ],
+          "extra->account_type": [
+            "Pharmacy"
+          ]
+        },
+        "questionnaire_id": "8c38483e-29d6-4caa-abb7-5d42800fbee8",
+        "settings": {
+          "mode": "checkin_checkout",
+          "non_planned_enabled": true,
+          "non_planned_auto_approved": true,
+          "detailing_enabled": true,
+          "unsuccessful_mode": "auto_approved",
+          "enable_assessments_for_double_visits_only": false,
+          "auto_end_visit_enabled": false,
+          "auto_end_geofence_radius": 500,
+          "auto_end_geofence_grace_period_minutes": 30,
+          "auto_end_geofence_grace_period_reset_limit": 2,
+          "location_verification_override": false
+        },
+        "id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+        "created_at": "2023-04-29T12:52:15Z",
+        "created_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_at": "2026-08-15T14:23:29Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      "questionnaire_response_id": "2033bca7-27c7-4f87-b7c4-e27022136ed8",
+      "status": "Visits:status:finished",
+      "approval_status": {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "",
+        "display_name": "",
+        "active": false,
+        "order": 0,
+        "attributes": null
+      },
+      "is_planned": false,
+      "started_at": "2024-11-06T16:48:54Z",
+      "ended_at": "2024-11-06T16:49:17Z",
+      "duration": 24000,
+      "doubled": false,
+      "owner_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+      "owner": {
+        "id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+        "name": "(Giza centrers)",
+        "role_id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+        "role": {
+          "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+          "name": "MedicalRep",
+          "display_name": "MedicalRep"
+        }
+      },
+      "mode": "checkin_checkout",
+      "is_successful": false,
+      "visit_time": "2024-11-06T16:49:17Z",
+      "id": "fb8c3123-c6d9-4dd7-8ce8-282357babff2",
+      "created_at": "2024-11-06T16:48:54Z",
+      "created_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b",
+      "updated_at": "2024-11-06T16:49:17Z",
+      "updated_by_id": "ac957391-d81c-4a07-afb9-f9007db7351b"
+    },
+    {
+      "serial_num": 107476,
+      "contact_id": "c7fb8342-39cd-496a-8493-78b9a7d334b2",
+      "contact": {
+        "serial_num": 9867,
+        "code": "E1785",
+        "number": "E1785",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "نبيل فوزي",
+        "area_id": "0337",
+        "area": {
+          "created_at": "2023-04-29T14:51:47Z",
+          "updated_at": "2025-06-29T06:08:39Z",
+          "area_type": "subarea",
+          "code": "0337",
+          "name": "ميت عقبه",
+          "parent_code": "03",
+          "parent": {
+            "created_at": "2023-04-29T14:51:47Z",
+            "updated_at": "2025-06-29T06:08:39Z",
+            "area_type": "area",
+            "code": "03",
+            "name": "محافظة الجيزة"
+          }
+        },
+        "main_address_id": "179ce31d-508f-4096-abf5-2bce4d68e90d",
+        "customer_rank": "aaaaaaaaaaaaaaaacjkj",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "C",
+          "specialty": "Gynaecology"
+        },
+        "id": "c7fb8342-39cd-496a-8493-78b9a7d334b2",
+        "created_at": "2023-11-15T19:30:54Z",
+        "created_by_id": "879778a0-821a-427c-8ec1-65440dc1307f",
+        "updated_at": "2026-04-02T08:33:23Z",
+        "updated_by_id": "85f9f4df-4873-428a-98e5-e78f8fa21d80"
+      },
+      "address_id": "179ce31d-508f-4096-abf5-2bce4d68e90d",
+      "template_id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+      "template": {
+        "name": "customer_Customer_survey",
+        "display_name": {
+          "ar": "Coaching visit (Pharmacy)",
+          "en": "Coaching visit (Pharmacy)"
+        },
+        "active": true,
+        "restrict_user_roles": [
+          "3781d628-81db-40e5-9bdc-7fb87804e1ce",
+          "18cbf7a4-1538-43ad-99f1-1b910fd47b65",
+          "a733740f-ea6a-455d-a608-e0c2da2a9dc3",
+          "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "7ce5d8e3-6b5c-4a17-bef8-a9b8edb7970f",
+          "2bc9908d-b681-4570-8714-f25b40f6372b",
+          "d159c94f-8f7c-43e0-9dc7-918e299bb00c",
+          "d06c84a7-bd90-4d1c-a4a6-2e27b0842515",
+          "a9efe42c-62f1-48c0-bd53-2ebb92dbf999"
+        ],
+        "restrict_contacts": {
+          "business_relation": [
+            "customer"
+          ],
+          "customer_status_state_id": [
+            "57919b8d-c8a5-45c4-a931-33785fd2f7c4"
+          ],
+          "extra->account_type": [
+            "Pharmacy"
+          ]
+        },
+        "questionnaire_id": "8c38483e-29d6-4caa-abb7-5d42800fbee8",
+        "settings": {
+          "mode": "checkin_checkout",
+          "non_planned_enabled": true,
+          "non_planned_auto_approved": true,
+          "detailing_enabled": true,
+          "unsuccessful_mode": "auto_approved",
+          "enable_assessments_for_double_visits_only": false,
+          "auto_end_visit_enabled": false,
+          "auto_end_geofence_radius": 500,
+          "auto_end_geofence_grace_period_minutes": 30,
+          "auto_end_geofence_grace_period_reset_limit": 2,
+          "location_verification_override": false
+        },
+        "id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+        "created_at": "2023-04-29T12:52:15Z",
+        "created_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_at": "2026-08-15T14:23:29Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      "questionnaire_response_id": "6ba5d8f3-98d3-42ce-b41e-761b9fc98e9f",
+      "status": "Visits:status:finished",
+      "approval_status": {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "",
+        "display_name": "",
+        "active": false,
+        "order": 0,
+        "attributes": null
+      },
+      "is_planned": false,
+      "started_at": "2025-10-28T18:24:01Z",
+      "ended_at": "2025-10-28T18:24:37Z",
+      "duration": 37000,
+      "doubled": false,
+      "owner_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "owner": {
+        "id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+        "name": "Mohamed Essam (District Manager)",
+        "role_id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+        "profile_image_id": "5e9682ad-7d0e-4d62-9a2d-cb644fddd90e",
+        "role": {
+          "id": "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "name": "DistrictManager",
+          "display_name": "DistrictManager"
+        }
+      },
+      "mode": "checkin_checkout",
+      "is_successful": true,
+      "visit_time": "2025-10-28T18:24:37Z",
+      "id": "d693f971-811b-4555-8e8c-c705d7480f1e",
+      "created_at": "2025-10-28T18:24:01Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_at": "2025-10-28T18:24:37Z",
+      "updated_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3"
+    },
+    {
+      "serial_num": 107093,
+      "contact_id": "c7fb8342-39cd-496a-8493-78b9a7d334b2",
+      "contact": {
+        "serial_num": 9867,
+        "code": "E1785",
+        "number": "E1785",
+        "contact_type": "individual",
+        "business_relation": [
+          "customer"
+        ],
+        "name": "نبيل فوزي",
+        "area_id": "0337",
+        "area": {
+          "created_at": "2023-04-29T14:51:47Z",
+          "updated_at": "2025-06-29T06:08:39Z",
+          "area_type": "subarea",
+          "code": "0337",
+          "name": "ميت عقبه",
+          "parent_code": "03",
+          "parent": {
+            "created_at": "2023-04-29T14:51:47Z",
+            "updated_at": "2025-06-29T06:08:39Z",
+            "area_type": "area",
+            "code": "03",
+            "name": "محافظة الجيزة"
+          }
+        },
+        "main_address_id": "179ce31d-508f-4096-abf5-2bce4d68e90d",
+        "customer_rank": "aaaaaaaaaaaaaaaacjkj",
+        "customer_status_state_id": "57919b8d-c8a5-45c4-a931-33785fd2f7c4",
+        "extra": {
+          "account_type": "Clinic",
+          "am_pm": "PM",
+          "class": "C",
+          "specialty": "Gynaecology"
+        },
+        "id": "c7fb8342-39cd-496a-8493-78b9a7d334b2",
+        "created_at": "2023-11-15T19:30:54Z",
+        "created_by_id": "879778a0-821a-427c-8ec1-65440dc1307f",
+        "updated_at": "2026-04-02T08:33:23Z",
+        "updated_by_id": "85f9f4df-4873-428a-98e5-e78f8fa21d80"
+      },
+      "address_id": "179ce31d-508f-4096-abf5-2bce4d68e90d",
+      "template_id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+      "template": {
+        "name": "customer_Customer_survey",
+        "display_name": {
+          "ar": "Coaching visit (Pharmacy)",
+          "en": "Coaching visit (Pharmacy)"
+        },
+        "active": true,
+        "restrict_user_roles": [
+          "3781d628-81db-40e5-9bdc-7fb87804e1ce",
+          "18cbf7a4-1538-43ad-99f1-1b910fd47b65",
+          "a733740f-ea6a-455d-a608-e0c2da2a9dc3",
+          "6906ee45-bd81-414d-a5a1-ff2df6bd5ac6",
+          "7ce5d8e3-6b5c-4a17-bef8-a9b8edb7970f",
+          "2bc9908d-b681-4570-8714-f25b40f6372b",
+          "d159c94f-8f7c-43e0-9dc7-918e299bb00c",
+          "d06c84a7-bd90-4d1c-a4a6-2e27b0842515",
+          "a9efe42c-62f1-48c0-bd53-2ebb92dbf999"
+        ],
+        "restrict_contacts": {
+          "business_relation": [
+            "customer"
+          ],
+          "customer_status_state_id": [
+            "57919b8d-c8a5-45c4-a931-33785fd2f7c4"
+          ],
+          "extra->account_type": [
+            "Pharmacy"
+          ]
+        },
+        "questionnaire_id": "8c38483e-29d6-4caa-abb7-5d42800fbee8",
+        "settings": {
+          "mode": "checkin_checkout",
+          "non_planned_enabled": true,
+          "non_planned_auto_approved": true,
+          "detailing_enabled": true,
+          "unsuccessful_mode": "auto_approved",
+          "enable_assessments_for_double_visits_only": false,
+          "auto_end_visit_enabled": false,
+          "auto_end_geofence_radius": 500,
+          "auto_end_geofence_grace_period_minutes": 30,
+          "auto_end_geofence_grace_period_reset_limit": 2,
+          "location_verification_override": false
+        },
+        "id": "d458b152-4316-4a0e-9f92-f279fe768eb6",
+        "created_at": "2023-04-29T12:52:15Z",
+        "created_by_id": "00000000-0000-0000-0000-000000000000",
+        "updated_at": "2026-08-15T14:23:29Z",
+        "updated_by_id": "6b6349e6-06fc-4651-af04-3321ded52f15"
+      },
+      "questionnaire_response_id": "10b2a9df-4147-48ef-b45d-ceb5eda1264e",
+      "status": "Visits:status:finished",
+      "approval_status": {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "",
+        "display_name": "",
+        "active": false,
+        "order": 0,
+        "attributes": null
+      },
+      "planned_at": "2025-10-27T21:00:00Z",
+      "is_planned": true,
+      "started_at": "2025-10-28T18:22:51Z",
+      "ended_at": "2025-10-28T18:23:55Z",
+      "duration": 65000,
+      "doubled": false,
+      "owner_id": "85f9f4df-4873-428a-98e5-e78f8fa21d80",
+      "owner": {
+        "id": "85f9f4df-4873-428a-98e5-e78f8fa21d80",
+        "name": "Shahd Ashraf ( Bolaq )",
+        "role_id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+        "role": {
+          "id": "d074b371-f4cb-4ea6-910c-dc437fc41967",
+          "name": "MedicalRep",
+          "display_name": "MedicalRep"
+        }
+      },
+      "mode": "checkin_checkout",
+      "is_successful": true,
+      "visit_time": "2025-10-28T18:23:55Z",
+      "id": "cb9ec952-daff-4c8e-9d97-dbd40f13b153",
+      "created_at": "2025-10-25T09:47:51Z",
+      "created_by_id": "b01e7654-5178-4c25-8eee-39f1ea884bb3",
+      "updated_at": "2025-10-28T18:23:55Z",
+      "updated_by_id": "85f9f4df-4873-428a-98e5-e78f8fa21d80"
+    }
+  ]
+}

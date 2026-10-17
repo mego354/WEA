@@ -1,0 +1,961 @@
+{
+  "parentAfterClick": "<div _ngcontent-ng-c2067959451=\"\" class=\"quick-add ng-star-inserted\" style=\"right: unset; left: 1rem;\"><button _ngcontent-ng-c2067959451=\"\" mat-fab=\"\" color=\"primary\" class=\"mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\"><span class=\"mat-mdc-button-persistent-ripple mdc-fab__ripple\"></span><mat-icon _ngcontent-ng-c2067959451=\"\" role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">add</mat-icon><span class=\"mdc-button__label\"></span><span class=\"mat-focus-indicator\"></span><span class=\"mat-mdc-button-touch-target\"></span><span class=\"mat-ripple mat-mdc-button-ripple\"></span></button></div>",
+  "overlays": [
+    {
+      "tag": "DIV",
+      "className": "cdk-overlay-backdrop cdk-overlay-dark-backdrop cdk-overlay-backdrop-showing",
+      "text": "",
+      "html": "<div class=\"cdk-overlay-backdrop cdk-overlay-dark-backdrop cdk-overlay-backdrop-showing\"></div>"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-global-overlay-wrapper",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<div class=\"cdk-global-overlay-wrapper\" dir=\"rtl\" style=\"justify-content: center; align-items: flex-end;\"><div id=\"cdk-overlay-0\" class=\"cdk-overlay-pane\" style=\"max-width: 100%; position: static; margin-bottom: 0px;\"><div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div><mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-co"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-overlay-pane",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<div id=\"cdk-overlay-0\" class=\"cdk-overlay-pane\" style=\"max-width: 100%; position: static; margin-bottom: 0px;\"><div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div><mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-co"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-visually-hidden cdk-focus-trap-anchor",
+      "text": "",
+      "html": "<div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div>"
+    },
+    {
+      "tag": "MAT-BOTTOM-SHEET-CONTAINER",
+      "className": "mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-container-enter",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<mat-bottom-sheet-container tabindex=\"-1\" class=\"mat-bottom-sheet-container cdk-dialog-container mat-bottom-sheet-container-large mat-bottom-sheet-container-animations-enabled mat-bottom-sheet-container-enter\" id=\"cdk-dialog-0\" role=\"dialog\" aria-modal=\"false\"><app-quick-add class=\"ng-star-inserted\"><mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserte"
+    },
+    {
+      "tag": "APP-QUICK-ADD",
+      "className": "ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<app-quick-add class=\"ng-star-inserted\"><mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted\" aria-disabled=\"false\"><button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__c"
+    },
+    {
+      "tag": "MAT-ACTION-LIST",
+      "className": "mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة\nshopping_cart\nامر بيع جديد\nrefresh\nمرتجع جديد\nreceipt\nتحصيل جديد\nالغاء",
+      "html": "<mat-action-list role=\"group\" class=\"mat-mdc-action-list mat-mdc-list-base mdc-list ng-star-inserted\" aria-disabled=\"false\"><button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-u"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon> تسجيل زيارة خارج الخطة </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "room",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">room</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "shopping_cart\nامر بيع جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon> امر بيع جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "shopping_cart",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">shopping_cart</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "refresh\nمرتجع جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon> مرتجع جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "refresh",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">refresh</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<button mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted\" type=\"button\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon no"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span></span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "",
+      "text": "receipt\nتحصيل جديد",
+      "html": "<span style=\"display: flex; gap: 1rem;\"><mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon> تحصيل جديد </span>"
+    },
+    {
+      "tag": "MAT-ICON",
+      "className": "mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color",
+      "text": "receipt",
+      "html": "<mat-icon role=\"img\" class=\"mat-icon notranslate material-icons mat-ligature-font mat-icon-no-color\" aria-hidden=\"true\" data-mat-icon-type=\"font\">receipt</mat-icon>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line",
+      "text": "الغاء",
+      "html": "<a mat-list-item=\"\" class=\"mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line\" aria-disabled=\"false\"><span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center "
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-list-item__content",
+      "text": "الغاء",
+      "html": "<span class=\"mdc-list-item__content\"><span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ri"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-list-item-unscoped-content mdc-list-item__primary-text",
+      "text": "الغاء",
+      "html": "<span class=\"mat-mdc-list-item-unscoped-content mdc-list-item__primary-text\"><button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ripple-loader-disabled=\"\"><span class=\""
+    },
+    {
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed",
+      "text": "الغاء",
+      "html": "<button mat-button=\"\" disableripple=\"true\" class=\"mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed\" style=\"width: 100%;\" mat-ripple-loader-uninitialized=\"\" mat-ripple-loader-class-name=\"mat-mdc-button-ripple\" mat-ripple-loader-disabled=\"\"><span class=\"mat-mdc-button-persistent-ripple mdc-button__ripple\"></span><span class=\"mdc-"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-button-persistent-ripple mdc-button__ripple",
+      "text": "",
+      "html": "<span class=\"mat-mdc-button-persistent-ripple mdc-button__ripple\"></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mdc-button__label",
+      "text": "الغاء",
+      "html": "<span class=\"mdc-button__label\"> الغاء </span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<span class=\"mat-focus-indicator\"></span>"
+    },
+    {
+      "tag": "SPAN",
+      "className": "mat-mdc-button-touch-target",
+      "text": "",
+      "html": "<span class=\"mat-mdc-button-touch-target\"></span>"
+    },
+    {
+      "tag": "DIV",
+      "className": "mat-focus-indicator",
+      "text": "",
+      "html": "<div class=\"mat-focus-indicator\"></div>"
+    },
+    {
+      "tag": "DIV",
+      "className": "cdk-visually-hidden cdk-focus-trap-anchor",
+      "text": "",
+      "html": "<div tabindex=\"0\" class=\"cdk-visually-hidden cdk-focus-trap-anchor\" aria-hidden=\"true\"></div>"
+    }
+  ],
+  "activeItemsNearBottom": [
+    {
+      "text": "home\nالرئيسية",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/home"
+    },
+    {
+      "text": "view_agenda\nجدول الاعمال",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/agenda"
+    },
+    {
+      "text": "calendar_month\nالتقويم",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/calendar"
+    },
+    {
+      "text": "checklist\nTodos",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/todos"
+    },
+    {
+      "text": "contacts\nجهات الاتصال",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/contacts"
+    },
+    {
+      "text": "confirmation_number\nالمهام",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/tickets"
+    },
+    {
+      "text": "store\nالمنتجات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "timeline\nالأنشطة\nremove",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 navigation-item--active mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "calendar_today\nخطة الزيارات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/planned-visits"
+    },
+    {
+      "text": "room\nالزيارات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/visits"
+    },
+    {
+      "text": "call\nالمكالمات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/calls"
+    },
+    {
+      "text": "handshake\nالاتفاقيات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted navigation-item--active",
+      "href": "/agreements?tableStateQ=pageIndex__0,sortDirection__desc,sortKey__serial_num&cardsStateQ=pageIndex__0&gridStateQ=pageIndex__0&sfql=contact_business_relation%5B%5D__customer,contact_inactive__false"
+    },
+    {
+      "text": "storefront\nالمبيعات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "storefront\nالمشتريات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "inventory\nالمخازن\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "account_balance_wallet\nالخزن\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "approval\nالموافقات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/requests"
+    },
+    {
+      "text": "assessment\nالتقييمات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/assessments"
+    },
+    {
+      "text": "attach_money\nالمصروفات",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/expenses"
+    },
+    {
+      "text": "menu_book\nالمصادر",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/resources"
+    },
+    {
+      "text": "score\nالأهداف\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "event_busy\nخطة أيام العمل",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/yearly-off-days"
+    },
+    {
+      "text": "track_changes\nتتبع الموقع",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/location-tracking"
+    },
+    {
+      "text": "group\nالآداء",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/performance"
+    },
+    {
+      "text": "text_snippet\nالتقارير",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/reports"
+    },
+    {
+      "text": "bug_report\nمشاكل تتبع الموقع",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": "/location-tracking-troubleshoot"
+    },
+    {
+      "text": "settings\nإعدادات\nadd",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item navigation-item ng-tns-c3794545038-0 mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "notifications_active\n188",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "logout",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base ng-tns-c3794545038-0 mat-unthemed",
+      "href": ""
+    },
+    {
+      "text": "filter_list\n2",
+      "tag": "BUTTON",
+      "className": "mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-primary",
+      "href": ""
+    },
+    {
+      "text": "تصدير البيانات",
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base mdc-button--raised mat-mdc-raised-button mat-primary",
+      "href": ""
+    },
+    {
+      "text": "#222",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/dacee726-6a05-4241-a5eb-cad2950d40cb"
+    },
+    {
+      "text": "[E1237] محمد علي عبد القادر",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/79c816b6-1519-42a8-aff4-966682cbaafc"
+    },
+    {
+      "text": "#221",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/5dfb9581-7508-432d-a3db-fb3534629df9"
+    },
+    {
+      "text": "[#14767] محمد عبده",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/43e0881b-5b8a-45c7-927b-f33a48890ddf"
+    },
+    {
+      "text": "#220",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/09e5bbe2-3baf-4f15-90ce-7663b885d71d"
+    },
+    {
+      "text": "[W1092] حسام حسن",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/70a82d5d-2958-473e-9b12-9b32e01f043f"
+    },
+    {
+      "text": "#219",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/786e7133-334d-477a-9808-6643ea53b719"
+    },
+    {
+      "text": "[#15343] مركز الشروق gp",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/32a287c3-60fb-402b-8d6f-ae37670a09a9"
+    },
+    {
+      "text": "#218",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/4f336d45-ae2f-49b7-ac95-30a16c819096"
+    },
+    {
+      "text": "[W2171] عبد الرازق الدموكى",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/57343534-6138-4bd6-8a52-154bff36c486"
+    },
+    {
+      "text": "#217",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/282bedc5-c36e-4c83-baff-fd0c2d516f87"
+    },
+    {
+      "text": "[#14156] عيادات ابو بكر ORTHO د سمير حسن",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3d16d7f1-ee3b-41fa-bdec-850d8be920ad"
+    },
+    {
+      "text": "#216",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/11133202-c30c-4fe1-9c84-0064ac0b0258"
+    },
+    {
+      "text": "[W1163] محمد مجدى حفنى",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d48fa7a1-73fa-4809-9bd6-3f1907f08345"
+    },
+    {
+      "text": "#215",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/71812c75-e157-4254-ae27-a4e068e04140"
+    },
+    {
+      "text": "[#13145] اسماء مصطفي الشيمي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/0a9c5fcc-f7b8-4d05-8e23-a4591478ed65"
+    },
+    {
+      "text": "#214",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/f34079f4-1ae7-4983-a4c0-a6513eb5c85f"
+    },
+    {
+      "text": "[#15343] مركز الشروق gp",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/32a287c3-60fb-402b-8d6f-ae37670a09a9"
+    },
+    {
+      "text": "#213",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/436c3f25-5759-48d4-80a5-6149f1a3234e"
+    },
+    {
+      "text": "[E1095] محمد منصور المهدي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/82ab666f-f76a-426d-ad9e-86da595d608a"
+    },
+    {
+      "text": "#212",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/7c3ce628-bccb-44b3-b653-3e029713fa8c"
+    },
+    {
+      "text": "[W0249] صيدلية مصطفى حامد الوراق",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/f0e2be03-5e0c-4d42-ac91-e181da4d11ef"
+    },
+    {
+      "text": "#211",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/17d3c737-6d8f-4662-944c-07ac39e497b1"
+    },
+    {
+      "text": "[#12803] رغداء محمود سويلم",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/bd50f1b0-a4af-4444-8d1e-bfecb0f761f3"
+    },
+    {
+      "text": "#210",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/f9a6ce79-ff82-4dfd-93d3-9e3d91fe04a4"
+    },
+    {
+      "text": "[E1830] مركز عليوه ORTHO د. ايمن طاحون طره الاسمنت",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/8ef08165-e534-4f36-b67a-5317756228fb"
+    },
+    {
+      "text": "#209",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/6663a067-9b15-41f8-96a1-0e0c1a31c20a"
+    },
+    {
+      "text": "[W3056] مستشفى تبارك عزبة النخل Pedia",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/55c9b053-2a36-44ca-971a-8d4187259edc"
+    },
+    {
+      "text": "#208",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/6eee74f5-eac8-47f3-8c16-c48fef11c77a"
+    },
+    {
+      "text": "[#14156] عيادات ابو بكر ORTHO د سمير حسن",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/3d16d7f1-ee3b-41fa-bdec-850d8be920ad"
+    },
+    {
+      "text": "#207",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/9de73c84-220a-41e4-ba3f-349e7d9c1014"
+    },
+    {
+      "text": "[W1087] على شوارب",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/fe9be7e3-3229-4a03-8181-8e85bb009ccf"
+    },
+    {
+      "text": "#206",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/dc6fa1c6-801e-4a97-bac9-2d01d037a76a"
+    },
+    {
+      "text": "[W1011] عفاف ياسين",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/05ba425e-53c4-4369-9bea-941f3f4ce280"
+    },
+    {
+      "text": "#205",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/6c470b9f-dc32-44b1-818f-225178910df0"
+    },
+    {
+      "text": "[E0434] شريف المهدي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/1dd7899d-129a-44af-9145-b390bc962473"
+    },
+    {
+      "text": "#204",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/99bb65b2-52a8-41e8-866b-543ade7c9f8d"
+    },
+    {
+      "text": "[W0233] صيدلية فاطمه برطس",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/baccd980-f177-44ce-a903-a9dec354b827"
+    },
+    {
+      "text": "#203",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/301d2fae-03fb-4363-a003-2662a4f1d4ef"
+    },
+    {
+      "text": "[E0061] صيدليه مدحت المنصوريه",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/273a0339-2731-4e02-8bdd-f80d88b7dd4f"
+    },
+    {
+      "text": "#202",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/92549080-0780-47c9-93d3-6347a6e205b7"
+    },
+    {
+      "text": "[#15240] الاء مجدي حسانين",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/e0d6c160-5118-4212-9d24-f61a0c26e0a8"
+    },
+    {
+      "text": "#201",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/f1ca00ba-29a0-4c91-a211-b0b166170de5"
+    },
+    {
+      "text": "[E1600] امال محمد",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/7220109b-bbf2-4c9e-aeea-db56b2034885"
+    },
+    {
+      "text": "#200",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/6e0f61e8-a5f5-4e5a-a22d-cdf5b5a65c79"
+    },
+    {
+      "text": "[#13122] احمد عزمي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/b6241e8a-1017-4559-bc71-30d5adedf737"
+    },
+    {
+      "text": "#199",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/2c44e2cd-142d-4c80-bd0d-1712c131ad3b"
+    },
+    {
+      "text": "[W1201] شيماء الشيمي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/a698326c-22e6-44da-95ec-a4848de9241a"
+    },
+    {
+      "text": "#198",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/72229944-c7ec-4582-a7e3-7c9bed2400ab"
+    },
+    {
+      "text": "[#12718] احمد شلغم",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/c76c0181-c617-4f10-83e7-c9abffe4bcaf"
+    },
+    {
+      "text": "#197",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/49447a6e-51a9-4ac5-a7f7-20e7f4b89a01"
+    },
+    {
+      "text": "[E1610] سمر احمد البراوي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/012a51b5-df17-4b6f-927c-35f58276ba73"
+    },
+    {
+      "text": "#196",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/b4e5ac03-59b7-4007-b310-9847ff8ed158"
+    },
+    {
+      "text": "[#12938] عبد الستار ابراهيم عيادة الطريق الابيض",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/6d661001-8e1a-49c3-b60b-af9fb254d46b"
+    },
+    {
+      "text": "#195",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/a649979b-62a8-4ae0-a7a2-33a9837fe6b1"
+    },
+    {
+      "text": "[#13509] مجدي مصطفي عبد الباري",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/664fe818-bfec-426a-a45d-d8bfb07dbfd8"
+    },
+    {
+      "text": "#194",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/add613b0-91f4-4b8a-b2c5-6b2e55dae67c"
+    },
+    {
+      "text": "[W1237] نجوى ايميل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/2573d068-9bd8-4b0b-ba4d-3105ac92e604"
+    },
+    {
+      "text": "#193",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/377760c0-3318-40e9-8c77-1bb3de47e5be"
+    },
+    {
+      "text": "[#12803] رغداء محمود سويلم",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/bd50f1b0-a4af-4444-8d1e-bfecb0f761f3"
+    },
+    {
+      "text": "#192",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/541eba9f-fdaa-4867-bc68-3e04ad98837f"
+    },
+    {
+      "text": "[#13395] هالة طلعت",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/89a2a347-274f-40cb-b42f-c95ebe94f52f"
+    },
+    {
+      "text": "#191",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/b6ee7971-5d75-45bf-8993-ca2f73a6e1a8"
+    },
+    {
+      "text": "[W1174] نادية عبد المنعم",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/97b17f4f-6d9a-4b48-9a7f-f916754bf796"
+    },
+    {
+      "text": "#190",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/f2f1923b-442e-4bb0-8346-2ab48280b143"
+    },
+    {
+      "text": "[W1235] عزه شاهين",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/d98c3063-231d-4626-b443-fd26e53fea75"
+    },
+    {
+      "text": "#189",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/ec71261d-bdff-4187-aba8-0d0a831ad927"
+    },
+    {
+      "text": "[#15340] بسنت يسري",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/af8d4ff2-f409-4ca5-ad79-c8e6a0913f47"
+    },
+    {
+      "text": "#188",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/126a59ef-1b7a-4237-a54b-77181e4b2e35"
+    },
+    {
+      "text": "[E0418] حاتم زين",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/daa3631a-a80d-49ab-9416-4b806393ad74"
+    },
+    {
+      "text": "#187",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/cf5549dd-07de-4059-8302-70bd12962c64"
+    },
+    {
+      "text": "[W1141] جيهان عادل",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/9d9fbeb0-c8d1-4cd8-8b4c-ece717272c75"
+    },
+    {
+      "text": "#186",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/cad0db97-6e95-42d7-9bfe-079f8bdce89e"
+    },
+    {
+      "text": "[#12661] طه شعبان",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/ba7e48f9-d2ee-45be-90e4-97dfb85246f5"
+    },
+    {
+      "text": "#185",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/8d64c856-ae74-408b-9eb4-9eff8b799a37"
+    },
+    {
+      "text": "[W0879] حاتم عبد الله",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/ac76c232-d08e-461c-a265-607858073489"
+    },
+    {
+      "text": "#184",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/114d66ab-f8fa-449b-a164-fd78e5489e01"
+    },
+    {
+      "text": "[W1716] هشام احمد حسن",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/cb37c9e6-1bcf-4a85-91f3-739597580e7e"
+    },
+    {
+      "text": "#183",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/agreements/9278d96e-3b3e-4739-bb64-bb0ef809e785"
+    },
+    {
+      "text": "[#14283] احمد عيد صاوي",
+      "tag": "A",
+      "className": "ng-star-inserted",
+      "href": "/contacts/a5284fc2-8b2f-44f6-8a5f-a918418c4967"
+    },
+    {
+      "text": "add",
+      "tag": "BUTTON",
+      "className": "mdc-fab mat-mdc-fab-base mat-mdc-fab mat-mdc-button-base mat-primary",
+      "href": ""
+    },
+    {
+      "text": "room\nتسجيل زيارة خارج الخطة",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "shopping_cart\nامر بيع جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "refresh\nمرتجع جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "receipt\nتحصيل جديد",
+      "tag": "BUTTON",
+      "className": "mat-mdc-list-item mdc-list-item mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line ng-star-inserted",
+      "href": ""
+    },
+    {
+      "text": "الغاء",
+      "tag": "A",
+      "className": "mat-mdc-list-item mdc-list-item u-padding--zero mat-mdc-list-item-interactive mat-mdc-list-item-single-line mdc-list-item--with-one-line",
+      "href": ""
+    },
+    {
+      "text": "الغاء",
+      "tag": "BUTTON",
+      "className": "mdc-button mat-mdc-button-base text-align-center u-display-block u-padding--zero color-warn mat-mdc-button mat-unthemed",
+      "href": ""
+    }
+  ]
+}
