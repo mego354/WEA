@@ -1,0 +1,429 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}الاتفاقيات - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="relative min-h-[calc(100vh-5rem)]">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الاتفاقيات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ total_count }} اتفاقية
+            </span>
+            <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">
+                المجموع: {{ total_amount|intcomma }} ج.م
+            </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            <!-- Normal Actions (Hidden when rows are selected) -->
+            <div id="default-actions" class="flex flex-wrap items-center gap-2.5">
+                <!-- Search Bar -->
+                <form method="GET" class="relative">
+                    {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
+                    {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                    {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
+                    {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                    <div class="relative">
+                        <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو العنوان أو الرقم..."
+                               class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
+                        <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                    </div>
+                </form>
+
+                <!-- Filter Drawer Button -->
+                <button type="button" onclick="openFilterDrawer()"
+                        class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
+                    <span>فلتر</span>
+                </button>
+
+                <!-- Export to Excel -->
+                <a href="{% url 'agreements_export' %}?q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
+                   class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
+                   title="تصدير البيانات">
+                    <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                    <span>تصدير البيانات</span>
+                </a>
+
+                <!-- Create Agreement Button -->
+                <button type="button" onclick="openCreateModal()"
+                        class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">add</span>
+                    <span>إضافة اتفاقية</span>
+                </button>
+            </div>
+
+            <!-- Bulk Selection Action Bar (Shown when 1 or more rows selected) -->
+            <div id="bulk-actions" class="hidden flex items-center gap-2.5 bg-teal-50/80 border border-teal-200 px-3 py-1.5 rounded-xl shadow-xs">
+                <span id="selected-counter" class="text-xs font-bold text-[#27bebe]">تم اختيار 0 اتفاقية</span>
+
+                <!-- Status Change Dropdown -->
+                {% if can_manage_approvals %}
+                <div class="relative inline-block" id="status-dropdown-container">
+                    <button type="button" onclick="toggleStatusDropdown()"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
+                        <span class="material-symbols-outlined text-sm">published_with_changes</span>
+                        <span>تغيير الحالة</span>
+                        <span class="material-symbols-outlined text-sm">arrow_drop_down</span>
+                    </button>
+                    <div id="status-dropdown-menu" class="hidden absolute left-0 mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1.5 divide-y divide-slate-100 text-right">
+                        <button type="button" onclick="submitBulkStatus('new')" class="w-full px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 flex items-center justify-between">
+                            <span>جديد (New)</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+                        </button>
+                        <button type="button" onclick="submitBulkStatus('approved')" class="w-full px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 flex items-center justify-between">
+                            <span>معتمد (Approved)</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        </button>
+                        <button type="button" onclick="submitBulkStatus('disapproved')" class="w-full px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center justify-between">
+                            <span>مرفوض (Disapproved)</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                        </button>
+                        <button type="button" onclick="submitBulkStatus('done')" class="w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                            <span>تم الإنجاز (Done)</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
+                <button type="button" onclick="deselectAll()" class="px-2.5 py-1 text-slate-500 hover:text-slate-800 text-xs font-bold">
+                    إلغاء التحديد
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Bulk Form -->
+    <form id="bulk-status-form" method="POST" action="{% url 'agreements_bulk_status' %}" class="hidden">
+        {% csrf_token %}
+        <input type="hidden" name="status" id="bulk-status-input">
+        <div id="bulk-ids-container"></div>
+    </form>
+
+    <!-- Agreements Table Container -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse">
+                <thead>
+                    <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
+                        <th class="py-3.5 px-3 w-10 text-center">
+                            <input type="checkbox" id="select-all" class="rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] cursor-pointer" title="تحديد الكل">
+                        </th>
+                        <th class="py-3.5 px-4 w-16">#</th>
+                        <th class="py-3.5 px-4">عميل</th>
+                        <th class="py-3.5 px-4">العنوان</th>
+                        <th class="py-3.5 px-4">النوع</th>
+                        <th class="py-3.5 px-4">المبلغ</th>
+                        <th class="py-3.5 px-4">التاريخ</th>
+                        <th class="py-3.5 px-4">المنشئ</th>
+                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                    {% for a in agreements %}
+                    <tr class="hover:bg-teal-50/30 transition-colors cursor-pointer" onclick="window.location='{% url 'agreement_detail' a.pk %}'">
+                        <td class="py-3 px-3 text-center" onclick="event.stopPropagation()">
+                            <input type="checkbox" value="{{ a.pk }}" class="agreement-checkbox rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] cursor-pointer">
+                        </td>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                            <span class="hover:text-[#27bebe]">#{{ a.serial_num }}</span>
+                        </td>
+                        <td class="py-3 px-4">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-slate-400 text-base">person</span>
+                                <div>
+                                    <span class="font-bold text-slate-900 hover:text-[#27bebe] block">
+                                        {{ a.customer.name }}
+                                    </span>
+                                    {% if a.customer.code %}
+                                    <span class="text-[10px] text-slate-400 font-mono">[{{ a.customer.code }}]</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 font-medium text-slate-800 max-w-xs truncate" title="{{ a.title }}">
+                            {{ a.title }}
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                                {{ a.type.name }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 font-bold text-slate-900 font-mono">
+                            {{ a.amount|intcomma }} <span class="text-[10px] font-normal text-slate-500">ج.م</span>
+                        </td>
+                        <td class="py-3 px-4 text-slate-600 font-mono">
+                            {{ a.date|date:"d/m/Y" }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-600">
+                            {{ a.created_by.get_full_name|default:a.created_by.username }}
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ a.status_badge_class }}">
+                                {{ a.status_display_ar }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-12 text-center text-slate-400">
+                            <div class="flex flex-col items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-4xl text-slate-300">handshake</span>
+                                <p class="text-sm font-medium">لا توجد اتفاقيات مطابقة للبحث أو الفلتر المختار.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        {% if page_obj.has_other_pages %}
+        <div class="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+            <span class="text-xs text-slate-500 font-medium">
+                عرض {{ page_obj.start_index }} - {{ page_obj.end_index }} من أصل {{ total_count }}
+            </span>
+            <div class="flex items-center gap-1.5">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}"
+                   class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-white transition-colors">
+                    السابق
+                </a>
+                {% endif %}
+
+                <span class="px-3 py-1.5 bg-[#27bebe] text-white rounded-lg text-xs font-bold">
+                    {{ page_obj.number }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}"
+                   class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-white transition-colors">
+                    التالي
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Filter Drawer -->
+<div id="filter-drawer" class="fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeFilterDrawer()"></div>
+    <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+        <div class="w-screen max-w-sm bg-white shadow-xl flex flex-col">
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h2 class="text-base font-bold text-slate-900">تنقية الاتفاقيات</h2>
+                <button type="button" onclick="closeFilterDrawer()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="GET" class="p-6 space-y-4 flex-1 overflow-y-auto">
+                {% if selected_q %}<input type="hidden" name="q" value="{{ selected_q }}">{% endif %}
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">نوع الاتفاقية</label>
+                    <select name="type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع الأنواع</option>
+                        {% for t in agreement_types %}
+                        <option value="{{ t.id }}" {% if selected_type == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">الحالة</label>
+                    <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع الحالات</option>
+                        <option value="new" {% if selected_status == 'new' %}selected{% endif %}>جديد (New)</option>
+                        <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>معتمد (Approved)</option>
+                        <option value="disapproved" {% if selected_status == 'disapproved' %}selected{% endif %}>مرفوض (Disapproved)</option>
+                        <option value="done" {% if selected_status == 'done' %}selected{% endif %}>منجز (Done)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">من تاريخ</label>
+                    <input type="date" name="date_from" value="{{ selected_date_from }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">إلى تاريخ</label>
+                    <input type="date" name="date_to" value="{{ selected_date_to }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <div class="pt-4 flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                        تطبيق الفلتر
+                    </button>
+                    <a href="{% url 'agreements_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إعادة تعيين
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Agreement Modal -->
+<div id="create-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeCreateModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div class="bg-[#27bebe] px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="text-base font-bold">إضافة اتفاقية جديدة</h3>
+                <button type="button" onclick="closeCreateModal()" class="text-white/80 hover:text-white">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="POST" class="p-6 space-y-4">
+                {% csrf_token %}
+                <input type="hidden" name="create_agreement" value="1">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">العميل *</label>
+                    {{ form.customer }}
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">العنوان *</label>
+                    {{ form.title }}
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">النوع *</label>
+                        {{ form.type }}
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">المبلغ (ج.م) *</label>
+                        {{ form.amount }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">التاريخ *</label>
+                    {{ form.date }}
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">الشروط والتفاصيل</label>
+                    {{ form.description }}
+                </div>
+
+                <div class="pt-4 flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                        حفظ الاتفاقية
+                    </button>
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إلغاء
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openFilterDrawer() {
+    document.getElementById('filter-drawer').classList.remove('hidden');
+}
+function closeFilterDrawer() {
+    document.getElementById('filter-drawer').classList.add('hidden');
+}
+function openCreateModal() {
+    document.getElementById('create-modal').classList.remove('hidden');
+}
+function closeCreateModal() {
+    document.getElementById('create-modal').classList.add('hidden');
+}
+
+// Table Selection & Bulk Status Logic
+const selectAll = document.getElementById('select-all');
+const checkboxes = document.querySelectorAll('.agreement-checkbox');
+const defaultActions = document.getElementById('default-actions');
+const bulkActions = document.getElementById('bulk-actions');
+const selectedCounter = document.getElementById('selected-counter');
+const statusDropdownMenu = document.getElementById('status-dropdown-menu');
+
+function updateSelectionState() {
+    const checked = Array.from(checkboxes).filter(cb => cb.checked);
+    const count = checked.length;
+
+    if (count > 0) {
+        if (defaultActions) defaultActions.classList.add('hidden');
+        if (bulkActions) bulkActions.classList.remove('hidden');
+        if (selectedCounter) selectedCounter.textContent = `تم اختيار ${count} اتفاقية`;
+    } else {
+        if (defaultActions) defaultActions.classList.remove('hidden');
+        if (bulkActions) bulkActions.classList.add('hidden');
+        if (statusDropdownMenu) statusDropdownMenu.classList.add('hidden');
+    }
+
+    if (selectAll) {
+        selectAll.checked = (count > 0 && count === checkboxes.length);
+        selectAll.indeterminate = (count > 0 && count < checkboxes.length);
+    }
+}
+
+if (selectAll) {
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        updateSelectionState();
+    });
+}
+
+checkboxes.forEach(cb => {
+    cb.addEventListener('change', updateSelectionState);
+});
+
+function deselectAll() {
+    checkboxes.forEach(cb => cb.checked = false);
+    if (selectAll) selectAll.checked = false;
+    updateSelectionState();
+}
+
+function toggleStatusDropdown() {
+    if (statusDropdownMenu) {
+        statusDropdownMenu.classList.toggle('hidden');
+    }
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    const container = document.getElementById('status-dropdown-container');
+    if (container && !container.contains(e.target)) {
+        if (statusDropdownMenu) statusDropdownMenu.classList.add('hidden');
+    }
+});
+
+function submitBulkStatus(statusVal) {
+    const checked = Array.from(checkboxes).filter(cb => cb.checked);
+    if (checked.length === 0) return;
+
+    const form = document.getElementById('bulk-status-form');
+    const statusInput = document.getElementById('bulk-status-input');
+    const container = document.getElementById('bulk-ids-container');
+
+    statusInput.value = statusVal;
+    container.innerHTML = '';
+
+    checked.forEach(cb => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'selected_ids';
+        inp.value = cb.value;
+        container.appendChild(inp);
+    });
+
+    form.submit();
+}
+</script>
+{% endblock %}

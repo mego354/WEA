@@ -3,9 +3,16 @@ from django.urls import path, include
 import catalog.views as catalog_views
 import purchases.views as purchases_views
 import treasury.views as treasury_views
+import contacts.views as contacts_views
+
+
+import accounts.views as accounts_views
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('login/', accounts_views.login_view, name='login_root_alias'),
+    path('logout/', accounts_views.logout_view, name='logout_root_alias'),
     path('', include('master_data.urls')),
     path('home/', include('master_data.urls')),
     path('auth/', include('accounts.urls')),
@@ -15,6 +22,8 @@ urlpatterns = [
     path('inventory/', include('inventory.urls')),
     path('treasury/', include('treasury.urls')),
     path('sales/', include('sales.urls')),
+    path('activities/', include('activities.urls')),
+    path('', include('activities.urls')),
 
     # Reference ERP URL Parity Aliases
     path('products/', include('catalog.urls')),
@@ -32,4 +41,9 @@ urlpatterns = [
     path('vendor-payment-requests/', treasury_views.vendor_payment_requests_list, name='vendor_payment_requests_alias'),
     path('accounting/vendors/', treasury_views.accounting_vendors_list, name='accounting_vendors_alias'),
     path('accounting/vendor-transactions/', treasury_views.vendor_transactions_list, name='vendor_transactions_alias'),
+
+    # Customer and Visit Search API Parity
+    path('api/customers/search/', contacts_views.customers_search_api, name='customers_search_global_api'),
+    path('api/v1/visits/contacts/list', contacts_views.customers_search_api, name='visits_contacts_list_reference_api'),
 ]
+

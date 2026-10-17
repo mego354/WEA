@@ -51,3 +51,32 @@ class CompanyProfile(models.Model):
     def get_settings(cls):
         profile, _ = cls.objects.get_or_create(id=1)
         return profile
+
+
+class LocationSettings(models.Model):
+    tolerance = models.PositiveIntegerField(default=300, verbose_name="سماحية الموقع (متر)")
+    max_verified_accuracy = models.PositiveIntegerField(default=50, verbose_name="الحد الأقصى للدقة المحققة (متر)")
+    max_verified_warn_accuracy = models.PositiveIntegerField(default=100, verbose_name="الحد الأقصى للدقة المحققة مع التحذير (متر)")
+    auto_start_location_tracking_service = models.BooleanField(default=True, verbose_name="تشغيل تلقائي لمتابعة الموقع")
+    auto_set_customer_location_in_visit = models.BooleanField(default=True, verbose_name="حفظ موقع العميل بشكل تلقائي مع أول زيارة")
+    
+    # Workflow verification settings matching reference ERP
+    verify_visits = models.BooleanField(default=True, verbose_name="التحقق من موقع الزيارات")
+    verify_sales_orders = models.BooleanField(default=False, verbose_name="التحقق من موقع أوامر البيع")
+    verify_sales_returns = models.BooleanField(default=False, verbose_name="التحقق من موقع المرتجعات")
+    verify_collections = models.BooleanField(default=False, verbose_name="التحقق من موقع التحصيلات")
+    verify_purchase_orders = models.BooleanField(default=False, verbose_name="التحقق من موقع أوامر الشراء")
+    verify_purchase_returns = models.BooleanField(default=False, verbose_name="التحقق من موقع أوامر إرجاع الشراء")
+
+    class Meta:
+        verbose_name = "إعدادات الموقع"
+        verbose_name_plural = "إعدادات الموقع"
+
+    def __str__(self):
+        return f"Location Settings (Tolerance: {self.tolerance}m)"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+

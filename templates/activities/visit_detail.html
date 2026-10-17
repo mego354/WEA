@@ -1,0 +1,367 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}زيارة #{{ visit.serial_num }} - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+
+    <!-- Top Navigation & Action Header -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div class="flex items-center gap-3">
+            <a href="{% url 'visits_list' %}" class="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <h1 class="text-2xl font-black text-slate-900 tracking-tight">زيارة #{{ visit.serial_num }}</h1>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ visit.approval_badge_class }}">
+                        {{ visit.approval_display_ar }}
+                    </span>
+                    {% if visit.is_planned %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#27bebe] border border-teal-200">
+                        مخططة
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                        غير مخططة
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500 font-medium mt-0.5">
+                    {{ visit.contact.name }} • {{ visit.date|date:"d/m/Y" }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Manager Approval Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+            {% if can_manage_approvals %}
+                {% if visit.approval_status == 'pending' %}
+                <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                        <span class="material-symbols-outlined text-base">check_circle</span>
+                        <span>اعتماد الزيارة</span>
+                    </button>
+                </form>
+                <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-base">cancel</span>
+                    <span>رفض الزيارة</span>
+                </button>
+                {% else %}
+                <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                        <span>تغيير حالة الاعتماد</span>
+                    </button>
+                </form>
+                {% endif %}
+            {% endif %}
+
+            <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل الملاحظات</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Details Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- Left 2 Cols: Contact info, Questionnaire, Samples -->
+        <div class="md:col-span-2 space-y-6">
+
+            <!-- Contact & Template Card -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">account_circle</span>
+                    <span>بيانات العميل والقالب</span>
+                </h2>
+
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-1">جهة الاتصال</span>
+                        <div class="font-bold text-slate-900 text-sm">{{ visit.contact.name }}</div>
+                        <span class="text-[11px] text-slate-500 font-mono">كود: {{ visit.contact.code|default:'-' }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">المسؤول (المندوب)</span>
+                        <div class="font-bold text-slate-800">{{ visit.owner.get_full_name|default:visit.owner.username }}</div>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">نوع الحساب والتخصص</span>
+                        <span class="font-medium text-slate-800">{{ visit.contact.account_type|default:'-' }} • {{ visit.contact.specialty|default:'-' }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">المنطقة الجغرافية</span>
+                        <span class="font-medium text-slate-800">{{ visit.contact.area.name|default:'-' }}</span>
+                    </div>
+                    {% if visit.template %}
+                    <div class="col-span-2 pt-2 border-t border-slate-100">
+                        <span class="text-slate-400 block mb-1">قالب الزيارة</span>
+                        <span class="px-3 py-1 rounded-lg bg-teal-50 text-[#27bebe] font-bold text-xs inline-block">
+                            {{ visit.template.display_name_ar }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Questionnaire Answers Card -->
+            {% if visit.questionnaire_answers %}
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
+                    <span>إجابات الاستبيان والملاحظات</span>
+                </h2>
+
+                <div class="space-y-3">
+                    {% for q, a in visit.questionnaire_answers.items %}
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
+                        <span class="font-bold text-slate-800 block mb-1">{{ q }}</span>
+                        <span class="text-slate-600 font-medium">{{ a }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- General Feedback -->
+            {% if visit.feedback %}
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
+                <h3 class="text-xs font-bold text-slate-900">ملاحظات وتقرير الزيارة</h3>
+                <div class="p-4 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">
+                    {{ visit.feedback }}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Samples Distributed -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">medication</span>
+                    <span>العينات الطبية الموزعة</span>
+                </h2>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-xs">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
+                                <th class="py-2 px-3">المنتج / العينة</th>
+                                <th class="py-2 px-3">الكمية</th>
+                                <th class="py-2 px-3">ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for s in visit.samples.all %}
+                            <tr>
+                                <td class="py-2.5 px-3 font-bold text-slate-800">{{ s.product.name }}</td>
+                                <td class="py-2.5 px-3 font-mono font-bold text-[#27bebe]">{{ s.quantity }}</td>
+                                <td class="py-2.5 px-3 text-slate-500">{{ s.notes|default:'-' }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="py-4 text-center text-slate-400">لم يتم توزيع عينات في هذه الزيارة.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right 1 Col: Execution Metrics & Audit -->
+        <div class="space-y-6">
+
+            <!-- Location Verification Card (Strict Reference Parity matching Visit #154829) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">gps_fixed</span>
+                        <span>التحقق من الموقع</span>
+                    </h3>
+                    {% if visit.verification_status == 'verified' %}
+                    <span class="material-symbols-outlined text-2xl text-emerald-500" title="تم التحقق بنجاح">gpp_good</span>
+                    {% elif visit.verification_status == 'force_bypassed' %}
+                    <span class="material-symbols-outlined text-2xl text-amber-500" title="تم تجاوز التحقق بالقوة">gpp_maybe</span>
+                    {% elif visit.verification_status == 'no_customer_location' %}
+                    <span class="material-symbols-outlined text-2xl text-blue-500" title="موقع تلقائي">add_location_alt</span>
+                    {% else %}
+                    <span class="material-symbols-outlined text-2xl text-rose-500" title="غير محقق">gpp_bad</span>
+                    {% endif %}
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <!-- Distance -->
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">المسافة:</span>
+                        <span class="font-mono font-bold {% if visit.distance is not None and visit.distance <= 300 %}text-emerald-700{% elif visit.distance is not None %}text-amber-700{% else %}text-slate-500{% endif %}">
+                            {% if visit.distance is not None %}
+                            {{ visit.distance|floatformat:2 }} m
+                            {% else %}
+                            غير محسوبة
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <!-- Completion Status (حالة الاستكمال) -->
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">حالة الاستكمال:</span>
+                        <span class="font-bold {% if visit.verification_status == 'verified' %}text-emerald-600{% elif visit.verification_status == 'force_bypassed' %}text-amber-600{% else %}text-slate-600{% endif %}">
+                            {{ visit.verification_status_display_ar }}
+                        </span>
+                    </div>
+
+                    <!-- Location Status (حالة الموقع) -->
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">حالة الموقع:</span>
+                        <span class="font-bold {% if 'ضمن' in visit.location_status or visit.location_status == 'within_geofence' %}text-emerald-600{% elif 'بعيد' in visit.location_status or visit.location_status == 'outside_geofence' %}text-rose-600{% else %}text-slate-600{% endif %}">
+                            {{ visit.location_status|default:visit.verification_status_display_ar }}
+                        </span>
+                    </div>
+
+                    {% if visit.device_accuracy %}
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">دقة جهاز المندوب:</span>
+                        <span class="font-mono text-slate-700">±{{ visit.device_accuracy|floatformat:0 }} م</span>
+                    </div>
+                    {% endif %}
+
+                    <!-- Coordinates Details -->
+                    <div class="pt-2 space-y-1.5 text-[11px] font-mono text-slate-500">
+                        {% if visit.latitude and visit.longitude %}
+                        <div class="flex items-center justify-between">
+                            <span>تسجيل الزيارة:</span>
+                            <span class="text-slate-800 font-bold">{{ visit.latitude|floatformat:4 }}, {{ visit.longitude|floatformat:4 }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if visit.customer_latitude_snapshot and visit.customer_longitude_snapshot %}
+                        <div class="flex items-center justify-between">
+                            <span>موقع العميل:</span>
+                            <span class="text-slate-800 font-bold">{{ visit.customer_latitude_snapshot|floatformat:4 }}, {{ visit.customer_longitude_snapshot|floatformat:4 }}</span>
+                        </div>
+                        {% elif visit.contact.has_saved_location %}
+                        <div class="flex items-center justify-between">
+                            <span>موقع العميل:</span>
+                            <span class="text-slate-800 font-bold">{{ visit.contact.latitude|floatformat:4 }}, {{ visit.contact.longitude|floatformat:4 }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if visit.latitude and visit.longitude %}
+                    <div class="pt-2 text-center">
+                        <a href="https://maps.google.com/?q={{ visit.latitude }},{{ visit.longitude }}" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-[#27bebe] font-bold hover:underline">
+                            <span class="material-symbols-outlined text-sm">map</span>
+                            <span>عرض موقع الزيارة على Google Maps</span>
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Metrics Card -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2.5">مؤشرات التنفيذ</h3>
+
+                <div class="space-y-3 text-xs">
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">حالة الزيارة:</span>
+                        <span class="font-bold text-slate-800">{{ visit.status_display_ar }}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">زيارة ناجحة:</span>
+                        <span class="font-bold {% if visit.is_successful %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                            {% if visit.is_successful %}نعم ✓{% else %}لا ✗{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">زيارة مزدوجة:</span>
+                        <span class="font-bold {% if visit.doubled %}text-purple-600{% else %}text-slate-400{% endif %}">
+                            {% if visit.doubled %}نعم (Double){% else %}فردية{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">المدة:</span>
+                        <span class="font-mono font-bold text-slate-800">{{ visit.duration }} ثانية</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">وقت البدء:</span>
+                        <span class="font-mono text-slate-700">{{ visit.started_at|date:"H:i:s"|default:'-' }}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1">
+                        <span class="text-slate-400">وقت الانتهاء:</span>
+                        <span class="font-mono text-slate-700">{{ visit.ended_at|date:"H:i:s"|default:'-' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit Card -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3 text-xs">
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">التدقيق والاعتماد</h3>
+                <div>
+                    <span class="text-slate-400 block">تاريخ التسجيل</span>
+                    <span class="font-mono text-slate-700">{{ visit.created_at|date:"d/m/Y - H:i" }}</span>
+                </div>
+                {% if visit.approved_by %}
+                <div>
+                    <span class="text-slate-400 block">تم الاعتماد بواسطة</span>
+                    <span class="font-bold text-emerald-700">{{ visit.approved_by.get_full_name|default:visit.approved_by.username }}</span>
+                </div>
+                {% endif %}
+                {% if visit.approval_notes %}
+                <div>
+                    <span class="text-slate-400 block">ملاحظات المدير</span>
+                    <p class="text-slate-600 p-2 bg-slate-50 rounded-lg mt-1 font-medium">{{ visit.approval_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Disapprove Modal -->
+<div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDisapproveModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="text-base font-bold">رفض الزيارة #{{ visit.serial_num }}</h3>
+                <button type="button" onclick="closeDisapproveModal()" class="text-white/80 hover:text-white">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="POST" action="{% url 'visit_action' visit.pk 'disapprove' %}" class="p-6 space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">سبب الرفض والملاحظات</label>
+                    <textarea name="approval_notes" rows="3" required placeholder="يرجى توضيح سبب رفض هذه الزيارة للمندوب..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors">
+                        تأكيد الرفض
+                    </button>
+                    <button type="button" onclick="closeDisapproveModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إلغاء
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openDisapproveModal() {
+    document.getElementById('disapprove-modal').classList.remove('hidden');
+}
+function closeDisapproveModal() {
+    document.getElementById('disapprove-modal').classList.add('hidden');
+}
+</script>
+{% endblock %}

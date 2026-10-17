@@ -1,0 +1,669 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - Bricks Rep{% endblock %}
+
+{% block extra_head %}
+<style>
+    .customer-card-avatar {
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: 9999px;
+        background-color: #27bebe;
+        color: #ffffff;
+        font-weight: 800;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 6px -1px rgba(39, 190, 190, 0.2);
+    }
+    .gps-pulse {
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+        0% { transform: scale(0.95); opacity: 0.8; }
+        50% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .typeahead-item:hover {
+        background-color: #f0fdfd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+
+    <!-- Top Navigation Header -->
+    <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div class="flex items-center gap-3">
+            <a href="{% url 'visits_list' %}" class="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
+            <div>
+                <h1 class="text-xl font-black text-slate-900 tracking-tight">{{ title }}</h1>
+                <p class="text-xs text-slate-500 font-medium">تسجيل وتوثيق تفاصيل الزيارة الميدانية مع التحقق من الموقع الجغرافي</p>
+            </div>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-[#27bebe] border border-teal-100">
+            <span class="material-symbols-outlined text-sm">verified</span>
+            <span>نموذج موحد</span>
+        </span>
+    </div>
+
+    <!-- Main Registration Card -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        
+        <!-- Header Ribbon -->
+        <div class="bg-[#27bebe] px-6 py-4 text-white flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-2xl">location_on</span>
+                <div>
+                    <h2 class="text-sm font-bold">تسجيل بيانات الزيارة</h2>
+                    <p class="text-xs text-white/80">توثيق نتائج الزيارة والعينات والتحقق من النطاق الجغرافي المعتمد (300 متر).</p>
+                </div>
+            </div>
+            <div id="gps-quick-indicator" class="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/20 text-white text-xs font-semibold backdrop-blur-xs">
+                <span class="material-symbols-outlined text-sm">my_location</span>
+                <span id="gps-quick-text">جاري التقاط الموقع...</span>
+            </div>
+        </div>
+
+        <form method="POST" id="visit-registration-form" onsubmit="return handleFormSubmit(event)" class="p-6 space-y-6">
+            {% csrf_token %}
+
+            <!-- Hidden Inputs for GPS and context -->
+            {{ form.latitude }}
+            {{ form.longitude }}
+            {{ form.device_accuracy }}
+            {% if planned_item_id %}
+            <input type="hidden" name="planned_item_id" value="{{ planned_item_id }}">
+            {% endif %}
+
+            <!-- SECTION 1: CUSTOMER SELECTION (Strict Reference Parity) -->
+            <div class="space-y-3 pb-5 border-b border-slate-100">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">person_search</span>
+                        <span>جهة الاتصال (العميل) *</span>
+                    </label>
+                    <span class="text-[11px] text-slate-400">مطلوب لاحتساب مسافة النطاق الجغرافي</span>
+                </div>
+
+                <!-- Hidden Django Select field (synced automatically) -->
+                <div class="hidden">
+                    {{ form.contact }}
+                </div>
+                {% if form.contact.errors %}
+                <p class="text-xs text-rose-500 font-semibold">{{ form.contact.errors.0 }}</p>
+                {% endif %}
+
+                <!-- Selected Customer Dossier Card (shown when a customer is chosen) -->
+                <div id="selected-customer-card" class="{% if not selected_contact and not form.contact.value %}hidden{% endif %} bg-slate-50/80 border border-teal-200/80 rounded-2xl p-4 transition-all">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3.5">
+                            <div class="customer-card-avatar" id="customer-avatar-initials">
+                                {{ selected_contact.initials|default:"CL" }}
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-black text-slate-900" id="customer-display-name">
+                                        {% if selected_contact %}[{{ selected_contact.formatted_number|default:selected_contact.code|default:selected_contact.id }}] {{ selected_contact.name }}{% endif %}
+                                    </h3>
+                                    <span id="customer-category-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-[#1a8b8b]">
+                                        {% if selected_contact %}{{ selected_contact.customer_category|default:selected_contact.account_type|default:"عميل" }}{% else %}عميل{% endif %}
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500">
+                                    <span id="customer-specialty-text">تخصص: {% if selected_contact %}{{ selected_contact.specialty|default:"عام" }}{% else %}عام{% endif %}</span>
+                                    <span>•</span>
+                                    <span id="customer-area-text">المنطقة: {% if selected_contact and selected_contact.area %}{{ selected_contact.area.name }}{% else %}غير محددة{% endif %}</span>
+                                </div>
+                                <!-- Customer GPS Status -->
+                                <div class="flex items-center gap-1.5 mt-2 text-[11px]" id="customer-gps-status">
+                                    {% if selected_contact and selected_contact.has_saved_location %}
+                                    <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                        <span class="material-symbols-outlined text-xs">pin_drop</span>
+                                        <span>موقع محفوظ: {{ selected_contact.latitude|floatformat:4 }}, {{ selected_contact.longitude|floatformat:4 }}</span>
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                        <span class="material-symbols-outlined text-xs">info</span>
+                                        <span>لا يوجد موقع مسجل للعميل (سيتم حفظ أول موقع تلقائياً عند التسجيل)</span>
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action buttons for selected customer -->
+                        <div class="flex items-center gap-2 self-end sm:self-center">
+                            <button type="button" onclick="clearCustomerSelection()" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                                تغيير العميل
+                            </button>
+                            <a id="customer-profile-link" href="{% if selected_contact %}{% url 'contact_detail_overview' selected_contact.id %}{% else %}#{% endif %}" target="_blank" class="p-1.5 bg-white hover:bg-teal-50 border border-slate-200 text-[#27bebe] rounded-xl transition-colors" title="عرض ملف العميل">
+                                <span class="material-symbols-outlined text-lg">open_in_new</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer Search Typeahead Box (shown when no customer is selected or user clicks Change) -->
+                <div id="customer-search-container" class="{% if selected_contact or form.contact.value %}hidden{% endif %} relative">
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute right-3.5 top-2.5 text-slate-400 text-lg">search</span>
+                        <input type="text" id="customer-search-input" onkeyup="handleCustomerSearch(event)" onfocus="openSearchResults()"
+                               placeholder="ابحث باسم العميل، الكود، التخصص، أو العنوان..." autocomplete="off"
+                               class="w-full rounded-xl border border-slate-200 pr-10 pl-10 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-xs">
+                        <span id="search-spinner" class="material-symbols-outlined absolute left-3.5 top-2.5 text-slate-400 text-lg hidden animate-spin">refresh</span>
+                    </div>
+
+                    <!-- Live Results Dropdown -->
+                    <div id="customer-search-dropdown" class="hidden absolute right-0 left-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto z-30 divide-y divide-slate-100">
+                        <div id="customer-search-results" class="p-1.5 space-y-1">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: DEVICE GPS & GEOFENCE VERIFICATION CARD -->
+            <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-teal-50 text-[#27bebe] flex items-center justify-center font-bold">
+                            <span class="material-symbols-outlined text-base">near_me</span>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-800">التحقق من الموقع الجغرافي (GPS)</h4>
+                            <p class="text-[11px] text-slate-500">مقارنة موقع جهازك بموقع العميل المسجل بنطاق تسامح 300 متر</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="acquireDeviceLocation()" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 text-xs font-medium transition-colors shadow-xs">
+                        <span class="material-symbols-outlined text-sm">my_location</span>
+                        <span>إعادة الالتقاط</span>
+                    </button>
+                </div>
+
+                <!-- GPS Status Bar -->
+                <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">حالة الـ GPS:</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="gps-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                            <span id="gps-status-label" class="font-bold text-slate-700">جاري التقاط إحداثيات موقعك...</span>
+                        </div>
+                    </div>
+
+                    <!-- Geofence & Distance Feedback -->
+                    <div id="distance-feedback-row" class="hidden flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span class="text-slate-500">المسافة عن العميل:</span>
+                        <span id="distance-feedback-badge" class="px-2.5 py-0.5 rounded-md font-bold text-xs bg-slate-100 text-slate-700">
+                            -
+                        </span>
+                    </div>
+
+                    <div id="gps-coords-detail" class="text-[11px] text-slate-400 font-mono text-left dir-ltr">
+                        Latitude: -, Longitude: - (Accuracy: -)
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: VISIT CORE DETAILS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول (المندوب) *</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.owner.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">قالب الزيارة</label>
+                    {{ form.template }}
+                    {% if form.template.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.template.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center pt-1">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ الزيارة *</label>
+                    {{ form.date }}
+                    {% if form.date.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.date.errors.0 }}</p>{% endif %}
+                </div>
+                <div class="flex items-center gap-2 pt-5">
+                    {{ form.is_successful }}
+                    <label for="{{ form.is_successful.id_for_label }}" class="text-xs font-bold text-slate-700 cursor-pointer">زيارة ناجحة</label>
+                </div>
+                <div class="flex items-center gap-2 pt-5">
+                    {{ form.doubled }}
+                    <label for="{{ form.doubled.id_for_label }}" class="text-xs font-bold text-slate-700 cursor-pointer">زيارة مزدوجة (Double)</label>
+                </div>
+            </div>
+
+            <!-- SECTION 4: SAMPLES DISTRIBUTION (Optional) -->
+            {% if products %}
+            <div class="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">medication</span>
+                        <span>توزيع عينة طبية (اختياري)</span>
+                    </h3>
+                    <span class="text-[11px] text-slate-400">تحديث فوري لرصيد العينات</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="sm:col-span-2">
+                        <select name="sample_product" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                            <option value="">اختر المنتج / العينة من القائمة...</option>
+                            {% for p in products %}
+                            <option value="{{ p.id }}">{{ p.name }} {% if p.code %}({{ p.code }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <input type="number" name="sample_quantity" value="1" min="1" placeholder="الكمية"
+                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- SECTION 5: NOTES & FEEDBACK -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">الملاحظات والنتائج</label>
+                {{ form.feedback }}
+                {% if form.feedback.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.feedback.errors.0 }}</p>{% endif %}
+            </div>
+
+            <!-- SUBMISSION BUTTONS (With Double-Click Protection) -->
+            <div class="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100">
+                <button type="submit" id="submit-visit-btn" class="w-full sm:w-auto px-8 py-3 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined text-base">save</span>
+                    <span id="submit-btn-text">حفظ الزيارة</span>
+                </button>
+                <a href="{% url 'visits_list' %}" class="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl text-center transition-colors">
+                    إلغاء
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const isSuperuserBypass = {{ can_bypass_gps|yesno:"true,false" }};
+    const isGpsRequired = {{ verify_visits_enabled|yesno:"true,false" }} && !isSuperuserBypass;
+    let currentCustomer = null;
+    let currentDeviceCoords = null;
+    let searchDebounceTimeout = null;
+
+    // Initialize with preselected customer if available
+    {% if selected_contact %}
+    currentCustomer = {
+        id: "{{ selected_contact.id }}",
+        name: "{{ selected_contact.name|escapejs }}",
+        code: "{{ selected_contact.code|default:selected_contact.formatted_number|escapejs }}",
+        category: "{{ selected_contact.customer_category|default:selected_contact.account_type|default:'عميل'|escapejs }}",
+        specialty: "{{ selected_contact.specialty|default:'عام'|escapejs }}",
+        area: "{{ selected_contact.area.name|default:'غير محددة'|escapejs }}",
+        lat: {% if selected_contact.latitude %}{{ selected_contact.latitude }}{% else %}null{% endif %},
+        lng: {% if selected_contact.longitude %}{{ selected_contact.longitude }}{% else %}null{% endif %}
+    };
+    {% endif %}
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Automatically request browser GPS on page load
+        acquireDeviceLocation();
+
+        // If Django select already has a value not represented in currentCustomer, sync it
+        const djangoSelect = document.getElementById('visit-contact-select');
+        if (djangoSelect && djangoSelect.value && !currentCustomer) {
+            fetchCustomerDetails(djangoSelect.value);
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('customer-search-container');
+            const dropdown = document.getElementById('customer-search-dropdown');
+            if (container && !container.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    });
+
+    // Haversine Distance Calculation in meters
+    function computeHaversineDistance(lat1, lon1, lat2, lon2) {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+        const R = 6371000; // radius of Earth in meters
+        const phi1 = lat1 * Math.PI / 180;
+        const phi2 = lat2 * Math.PI / 180;
+        const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+        const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                  Math.cos(phi1) * Math.cos(phi2) *
+                  Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(R * c * 100) / 100;
+    }
+
+    // Acquire Device GPS Location
+    function acquireDeviceLocation() {
+        const dot = document.getElementById('gps-status-dot');
+        const label = document.getElementById('gps-status-label');
+        const detail = document.getElementById('gps-coords-detail');
+        const quickText = document.getElementById('gps-quick-text');
+
+        if (!navigator.geolocation) {
+            if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            if (label) label.textContent = "متصفحك لا يدعم تحديد الموقع الجغرافي (Geolocation).";
+            if (quickText) quickText.textContent = "GPS غير مدعوم";
+            return;
+        }
+
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping";
+        if (label) label.textContent = "جاري التقاط إحداثيات موقعك عبر الأقمار الصناعية...";
+        if (quickText) quickText.textContent = "جاري الالتقاط...";
+
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const acc = Math.round(position.coords.accuracy || 0);
+
+                currentDeviceCoords = { lat: lat, lng: lng, accuracy: acc };
+
+                // Populate hidden inputs
+                const latInput = document.getElementById('id_latitude');
+                const lngInput = document.getElementById('id_longitude');
+                const accInput = document.getElementById('id_device_accuracy');
+                if (latInput) latInput.value = lat;
+                if (lngInput) lngInput.value = lng;
+                if (accInput) accInput.value = acc;
+
+                if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                if (label) label.textContent = `تم تحديد موقعك بدقة عالية (±${acc} متر)`;
+                if (quickText) quickText.textContent = `دقة ±${acc}م`;
+                if (detail) detail.textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)} (±${acc}m accuracy)`;
+
+                updateGeofenceCheck();
+            },
+            function(error) {
+                let errorMsg = "تعذر تحديد الموقع الجغرافي.";
+                if (error.code === error.PERMISSION_DENIED) {
+                    errorMsg = "تم رفض إذن الوصول إلى الموقع في المتصفح.";
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    errorMsg = "إشارة الموقع الجغرافي غير متوفرة حالياً.";
+                } else if (error.code === error.TIMEOUT) {
+                    errorMsg = "انتهت مهلة محاولة التقاط الموقع الجغرافي.";
+                }
+
+                if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                if (label) {
+                    if (isSuperuserBypass) {
+                        label.textContent = `${errorMsg} (تم تفعيل استثناء المشرف العام - يمكن المتابعة وحفظ الزيارة)`;
+                    } else {
+                        label.textContent = `${errorMsg} تحديد الموقع إلزامي للمندوب لتسجيل الزيارة.`;
+                    }
+                }
+                if (quickText) quickText.textContent = isSuperuserBypass ? "تجاوز المشرف" : "فشل الالتقاط";
+                if (detail) detail.textContent = `Error: ${error.message}`;
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    }
+
+    // Update Distance and Geofence Check Display
+    function updateGeofenceCheck() {
+        const feedbackRow = document.getElementById('distance-feedback-row');
+        const feedbackBadge = document.getElementById('distance-feedback-badge');
+        if (!feedbackRow || !feedbackBadge) return;
+
+        if (!currentCustomer) {
+            feedbackRow.classList.add('hidden');
+            return;
+        }
+
+        if (!currentCustomer.lat || !currentCustomer.lng) {
+            feedbackRow.classList.remove('hidden');
+            feedbackBadge.className = "px-2.5 py-0.5 rounded-md font-bold text-xs bg-amber-50 text-amber-700 border border-amber-200";
+            feedbackBadge.textContent = "لا يوجد موقع مسجل للعميل (سيتم حفظ هذا الموقع له تلقائياً)";
+            return;
+        }
+
+        if (!currentDeviceCoords) {
+            feedbackRow.classList.remove('hidden');
+            feedbackBadge.className = "px-2.5 py-0.5 rounded-md font-bold text-xs bg-slate-100 text-slate-600";
+            feedbackBadge.textContent = "في انتظار التقاط إحداثيات جهاز المندوب...";
+            return;
+        }
+
+        const dist = computeHaversineDistance(
+            currentDeviceCoords.lat, currentDeviceCoords.lng,
+            currentCustomer.lat, currentCustomer.lng
+        );
+
+        feedbackRow.classList.remove('hidden');
+        if (dist <= 300) {
+            feedbackBadge.className = "px-2.5 py-0.5 rounded-md font-bold text-xs bg-emerald-50 text-emerald-700 border border-emerald-200";
+            feedbackBadge.textContent = `${dist.toFixed(1)} متر (ضمن النطاق المعتمد 300م) ✓`;
+        } else {
+            feedbackBadge.className = "px-2.5 py-0.5 rounded-md font-bold text-xs bg-rose-50 text-rose-700 border border-rose-200";
+            feedbackBadge.textContent = `${dist.toFixed(1)} متر (خارج النطاق المعتمد 300م) ⚠️`;
+        }
+    }
+
+    // Customer Typeahead Search
+    function handleCustomerSearch(e) {
+        clearTimeout(searchDebounceTimeout);
+        const query = e.target.value.trim();
+        const spinner = document.getElementById('search-spinner');
+        const dropdown = document.getElementById('customer-search-dropdown');
+        const resultsEl = document.getElementById('customer-search-results');
+
+        if (spinner) spinner.classList.remove('hidden');
+
+        searchDebounceTimeout = setTimeout(async function() {
+            try {
+                const res = await fetch(`/contacts/api/search/?q=${encodeURIComponent(query)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.results || data || [];
+                    renderSearchResults(list);
+                }
+            } catch (err) {
+                if (resultsEl) resultsEl.innerHTML = '<p class="text-xs text-rose-500 text-center py-3">حدث خطأ أثناء تحميل العملاء</p>';
+            } finally {
+                if (spinner) spinner.classList.add('hidden');
+                if (dropdown) dropdown.classList.remove('hidden');
+            }
+        }, 250);
+    }
+
+    function openSearchResults() {
+        const input = document.getElementById('customer-search-input');
+        if (input) {
+            handleCustomerSearch({ target: input });
+        }
+    }
+
+    function renderSearchResults(contacts) {
+        const resultsEl = document.getElementById('customer-search-results');
+        if (!resultsEl) return;
+
+        if (!contacts.length) {
+            resultsEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي عملاء مطابقين للبحث.</p>';
+            return;
+        }
+
+        resultsEl.innerHTML = contacts.map(c => `
+            <div onclick="selectCustomer(${JSON.stringify(c).replace(/"/g, '&quot;')})"
+                 class="typeahead-item flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-full bg-teal-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                        ${c.initials || (c.name ? c.name.substring(0, 2) : 'CL')}
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-900">${c.formatted_number || c.code ? '[' + (c.formatted_number || c.code) + '] ' : ''}${c.name}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.account_type || c.customer_category || 'عميل'}</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span>${c.specialty || 'عام'}</span>
+                            <span>•</span>
+                            <span>${c.area_name || c.area || 'غير محدد'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-left">
+                    ${c.has_saved_location ? '<span class="material-symbols-outlined text-sm text-emerald-600" title="موقع محفوظ">pin_drop</span>' : '<span class="material-symbols-outlined text-sm text-slate-300" title="لا يوجد موقع مسجل">location_off</span>'}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function selectCustomer(c) {
+        currentCustomer = {
+            id: c.id,
+            name: c.name,
+            code: c.formatted_number || c.code || c.id,
+            category: c.customer_category || c.account_type || 'عميل',
+            specialty: c.specialty || 'عام',
+            area: c.area_name || c.area || 'غير محددة',
+            lat: c.latitude || null,
+            lng: c.longitude || null
+        };
+
+        // Update hidden django select
+        const djangoSelect = document.getElementById('visit-contact-select');
+        if (djangoSelect) {
+            let optionExists = false;
+            for (let i = 0; i < djangoSelect.options.length; i++) {
+                if (djangoSelect.options[i].value == c.id) {
+                    djangoSelect.selectedIndex = i;
+                    optionExists = true;
+                    break;
+                }
+            }
+            if (!optionExists) {
+                const opt = new Option(`[${currentCustomer.code}] ${c.name}`, c.id, true, true);
+                djangoSelect.add(opt);
+            }
+        }
+
+        // Update Dossier Card UI
+        const card = document.getElementById('selected-customer-card');
+        const searchContainer = document.getElementById('customer-search-container');
+        const dropdown = document.getElementById('customer-search-dropdown');
+        const nameEl = document.getElementById('customer-display-name');
+        const avatarEl = document.getElementById('customer-avatar-initials');
+        const catEl = document.getElementById('customer-category-badge');
+        const specEl = document.getElementById('customer-specialty-text');
+        const areaEl = document.getElementById('customer-area-text');
+        const gpsEl = document.getElementById('customer-gps-status');
+        const linkEl = document.getElementById('customer-profile-link');
+
+        if (nameEl) nameEl.textContent = `[${currentCustomer.code}] ${currentCustomer.name}`;
+        if (avatarEl) avatarEl.textContent = c.initials || (c.name ? c.name.substring(0, 2) : 'CL');
+        if (catEl) catEl.textContent = currentCustomer.category;
+        if (specEl) specEl.textContent = `تخصص: ${currentCustomer.specialty}`;
+        if (areaEl) areaEl.textContent = `المنطقة: ${currentCustomer.area}`;
+        if (linkEl) linkEl.href = `/contacts/${c.id}/`;
+
+        if (gpsEl) {
+            if (currentCustomer.lat && currentCustomer.lng) {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <span class="material-symbols-outlined text-xs">pin_drop</span>
+                        <span>موقع محفوظ: ${Number(currentCustomer.lat).toFixed(4)}, ${Number(currentCustomer.lng).toFixed(4)}</span>
+                    </span>
+                `;
+            } else {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        <span class="material-symbols-outlined text-xs">info</span>
+                        <span>لا يوجد موقع مسجل للعميل (سيتم حفظ أول موقع تلقائياً عند التسجيل)</span>
+                    </span>
+                `;
+            }
+        }
+
+        if (dropdown) dropdown.classList.add('hidden');
+        if (searchContainer) searchContainer.classList.add('hidden');
+        if (card) card.classList.remove('hidden');
+
+        updateGeofenceCheck();
+    }
+
+    function clearCustomerSelection() {
+        currentCustomer = null;
+        const djangoSelect = document.getElementById('visit-contact-select');
+        if (djangoSelect) djangoSelect.value = '';
+
+        const card = document.getElementById('selected-customer-card');
+        const searchContainer = document.getElementById('customer-search-container');
+        const searchInput = document.getElementById('customer-search-input');
+
+        if (card) card.classList.add('hidden');
+        if (searchContainer) searchContainer.classList.remove('hidden');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.focus();
+            openSearchResults();
+        }
+
+        updateGeofenceCheck();
+    }
+
+    async function fetchCustomerDetails(id) {
+        try {
+            const res = await fetch(`/contacts/api/search/?q=&id=${id}`);
+            if (res.ok) {
+                const data = await res.json();
+                const list = data.results || data || [];
+                const found = list.find(item => item.id == id);
+                if (found) selectCustomer(found);
+            }
+        } catch(e) {}
+    }
+
+    // Submit handler preventing duplicate submissions and enforcing representative GPS
+    function handleFormSubmit(e) {
+        const djangoSelect = document.getElementById('visit-contact-select');
+        if (!djangoSelect || !djangoSelect.value) {
+            alert('يرجى اختيار العميل المطلوب تسجيل الزيارة له.');
+            clearCustomerSelection();
+            if (e) e.preventDefault();
+            return false;
+        }
+
+        // GPS Requirement Check for Representatives
+        if (isGpsRequired) {
+            const latVal = document.getElementById('id_latitude')?.value;
+            const lngVal = document.getElementById('id_longitude')?.value;
+            if (!latVal || !lngVal) {
+                alert('تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والانتظار حتى يتم التقاط الإحداثيات.');
+                if (e) e.preventDefault();
+                return false;
+            }
+            const latNum = parseFloat(latVal);
+            const lngNum = parseFloat(lngVal);
+            if (isNaN(latNum) || isNaN(lngNum) || latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180 || (latNum === 0 && lngNum === 0)) {
+                alert('إحداثيات الموقع الجغرافي غير صالحة. يرجى إعادة محاولة التقاط الموقع.');
+                if (e) e.preventDefault();
+                return false;
+            }
+        }
+
+        const btn = document.getElementById('submit-visit-btn');
+        const btnText = document.getElementById('submit-btn-text');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            if (btnText) btnText.textContent = 'جاري حفظ واعتماد الزيارة...';
+        }
+        return true;
+    }
+</script>
+{% endblock %}

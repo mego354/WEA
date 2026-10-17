@@ -28,7 +28,7 @@ def contacts_list(request):
     view_mode = request.GET.get('view', 'table').strip()
     show_inactive = request.GET.get('inactive', 'no').strip()
 
-    qs = Contact.objects.select_related('area', 'created_by').prefetch_related('addresses').all()
+    qs = Contact.objects.select_related('area', 'created_by').prefetch_related('addresses__area').all()
 
     # Active filters counter
     active_filters_count = 0
@@ -942,3 +942,100 @@ def get_subareas(request):
         return JsonResponse({'subareas': []})
     subareas = list(Area.objects.filter(parent_id=area_id).values('id', 'name'))
     return JsonResponse({'subareas': subareas})
+
+
+@login_required
+def customers_search_api(request):
+    """
+    Search and list authorized customers for Visit Registration and selectors.
+    Matches https://weapharma.bricks-rep.com/api/v1/visits/contacts/list
+    Enforces role-based customer scoping (Reps see assigned/created; Managers see all).
+    """
+    import json
+    q = ''
+    limit = 100
+
+    if request.method == 'POST':
+        if request.content_type == 'application/json' and request.body:
+            try:
+                body = json.loads(request.body.decode('utf-8'))
+                q = str(body.get('q', '')).strip()
+                limit = int(body.get('limit', 100))
+            except Exception:
+                pass
+        else:
+            q = request.POST.get('q', '').strip()
+            limit = int(request.POST.get('limit', 100))
+    else:
+        q = request.GET.get('q', '').strip()
+        limit = int(request.GET.get('limit', 100))
+
+    # Base queryset: active customers only
+    qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')\
+        .select_related('area', 'created_by')\
+        .prefetch_related('addresses__area')
+
+    # Authorization Scoping
+    user = request.user
+    is_manager = (
+        user.is_superuser or
+        getattr(user, 'is_super_admin', False) or
+        (user.role and (
+            user.role.is_area_manager or
+            any(t in (user.role.name or '').lower() for t in ['manager', 'admin', 'supervisor', 'director']) or
+            any(t in (user.role.display_name or '').lower() for t in ['مدير', 'مشرف'])
+        ))
+    )
+
+    if not is_manager:
+        # Reps only see their assigned customers or customers they created
+        user_contacts = Contact.objects.filter(
+            Q(assigned_team=user) | Q(created_by=user)
+        )
+        if user_contacts.exists():
+            qs = qs.filter(Q(assigned_team=user) | Q(created_by=user)).distinct()
+        else:
+            # If rep has no specifically assigned contacts, fallback to user's area or assigned team
+            qs = qs.filter(Q(assigned_team=user) | Q(created_by=user)).distinct()
+
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q) |
+            Q(code__icontains=q) |
+            Q(serial_num__icontains=q) |
+            Q(mobile__icontains=q) |
+            Q(area__name__icontains=q)
+        ).distinct()
+
+    total_count = qs.count()
+    results = []
+    for c in qs[:limit]:
+        main_addr = c.main_address
+        lat = c.latitude
+        lng = c.longitude
+        results.append({
+            'id': c.id,
+            'serial_num': c.serial_num,
+            'name': c.name,
+            'code': c.code or f"#{c.serial_num}",
+            'display_tag': f"[{c.code}] {c.name}" if c.code else f"[#{c.serial_num}] {c.name}",
+            'initials': c.initials,
+            'contact_type': c.contact_type,
+            'contact_type_display': 'شخص' if c.contact_type == 'person' else 'منظمة',
+            'category': c.customer_category or 'A',
+            'specialty': c.specialty or '',
+            'account_type': c.account_type or '',
+            'area_name': c.area.name if c.area else (main_addr.area.name if main_addr and main_addr.area else ''),
+            'street_address': main_addr.street_address if main_addr else '',
+            'has_location': c.has_saved_location,
+            'has_saved_location': c.has_saved_location,
+            'latitude': float(lat) if lat is not None else None,
+            'longitude': float(lng) if lng is not None else None,
+        })
+
+    return JsonResponse({
+        'results': results,
+        'count': len(results),
+        'total': total_count
+    })
+

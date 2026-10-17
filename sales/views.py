@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.db.models import Q
 from django.core.exceptions import ValidationError
 
+from django.core.paginator import Paginator
 from .models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
 from .services import SalesOrderService, CollectionService
 from contacts.models import Contact
@@ -19,7 +20,7 @@ def sales_orders_list(request):
     customer_filter = request.GET.get('customer')
     search = request.GET.get('search', '').strip()
 
-    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all()
+    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
@@ -34,15 +35,22 @@ def sales_orders_list(request):
             Q(customer__name__icontains=search)
         )
 
-    customers = Contact.objects.filter(is_customer=True)
+    total_count = qs.count()
+    paginator = Paginator(qs, 40)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    # Scoped customer filter options (top 50 active)
+    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
 
     context = {
-        'orders': qs,
+        'orders': page_obj,
+        'page_obj': page_obj,
         'current_status': status_filter,
         'selected_customer': customer_filter,
         'search_query': search,
         'customers': customers,
-        'total_count': qs.count(),
+        'total_count': total_count,
     }
     return render(request, 'sales/sales_orders_list.html', context)
 

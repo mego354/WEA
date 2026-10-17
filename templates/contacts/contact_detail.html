@@ -192,12 +192,27 @@
                     <span class="material-symbols-outlined text-xl">visibility</span>
                 </button>
 
+                {% if contact.is_customer %}
+                <!-- Register Visit Button (Canonical Workflow) -->
+                <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title="تسجيل زيارة لهذا العميل">
+                    <span class="material-symbols-outlined text-sm">add_location_alt</span>
+                    <span>تسجيل زيارة</span>
+                </a>
+                {% endif %}
+
                 <!-- 3-Dots Vertical Action Menu -->
                 <div class="relative">
                     <button type="button" onclick="toggleHeaderActionsMenu()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
                         <span class="material-symbols-outlined text-xl">more_vert</span>
                     </button>
                     <div id="headerActionsMenu" class="hidden absolute left-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-40 text-right">
+                        {% if contact.is_customer %}
+                        <!-- Register Visit -->
+                        <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">
+                            <span class="material-symbols-outlined text-base text-emerald-600">add_location_alt</span>
+                            <span>تسجيل زيارة</span>
+                        </a>
+                        {% endif %}
                         <!-- Timeline -->
                         <a href="?tab=overview#timeline" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                             <span class="material-symbols-outlined text-base text-brand-600">timeline</span>
@@ -327,6 +342,20 @@
                         <span class="erp-detail-val text-emerald-600 font-bold">نعم</span>
                         {% else %}
                         <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اختر...</a>
+                        {% endif %}
+                    </div>
+                    <!-- GPS Coordinates & Location -->
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">الموقع الجغرافي (GPS)</span>
+                        {% if contact.has_saved_location %}
+                        <div class="flex items-center gap-1.5">
+                            <span class="erp-detail-val font-mono text-emerald-700 font-bold">{{ contact.latitude|floatformat:4 }}, {{ contact.longitude|floatformat:4 }}</span>
+                            <a href="https://maps.google.com/?q={{ contact.latitude }},{{ contact.longitude }}" target="_blank" class="text-teal-600 hover:text-teal-700" title="عرض على خرائط Google">
+                                <span class="material-symbols-outlined text-sm">open_in_new</span>
+                            </a>
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-amber-600 font-medium">غير محدد (سيتم حفظه بأول زيارة)</span>
                         {% endif %}
                     </div>
                 </div>

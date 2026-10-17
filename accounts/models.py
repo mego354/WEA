@@ -30,6 +30,7 @@ class User(AbstractUser):
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name="users", verbose_name="الدور الوظيفي")
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True, verbose_name="الصورة الشخصية")
     locale = models.CharField(max_length=10, default="ar", verbose_name="لغة الواجهة")
+    bypass_location_verification = models.BooleanField(default=False, verbose_name="تجاوز التحقق من الموقع (خاص بالمدراء)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ التسجيل")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
 
@@ -48,3 +49,8 @@ class User(AbstractUser):
     @property
     def is_super_admin(self):
         return self.is_superuser or (self.role and self.role.name.lower() in ['superadmin', 'admin'])
+
+    @property
+    def can_bypass_location(self):
+        return self.is_superuser or self.is_super_admin or self.bypass_location_verification
+

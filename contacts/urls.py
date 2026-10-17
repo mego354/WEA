@@ -8,6 +8,7 @@ urlpatterns = [
     path('import/', views.contacts_import, name='contacts_import'),
     path('import/template/', views.contacts_import_template, name='contacts_import_template'),
     path('api/subareas/', views.get_subareas, name='contact_subareas_api'),
+    path('api/search/', views.customers_search_api, name='customers_search_api'),
     
     # Detail and Overview
     path('<int:pk>/', views.contact_detail, name='contact_detail'),

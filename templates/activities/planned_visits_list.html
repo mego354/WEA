@@ -1,0 +1,248 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}خطة الزيارات - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="relative min-h-[calc(100vh-5rem)] space-y-6">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">خطة الزيارات</h1>
+            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
+                {{ days_list|length }} يوم في الخطة
+            </span>
+        </div>
+
+        <!-- Rep & Date Controls Form -->
+        <form method="GET" class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <!-- Rep Selector -->
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <span class="text-xs font-bold text-slate-600 whitespace-nowrap">المسئول *:</span>
+                <select name="assignee" onchange="this.form.submit()" class="flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    {% for u in all_reps %}
+                    <option value="{{ u.id }}" {% if selected_rep.id == u.id %}selected{% endif %}>
+                        {{ u.get_full_name|default:u.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Date Range -->
+            <div class="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full sm:w-auto">
+                <span class="text-xs font-bold text-slate-600 whitespace-nowrap">المدة:</span>
+                <input type="date" name="date_from" value="{{ start_date }}" onchange="this.form.submit()" class="w-[115px] sm:w-auto rounded-xl border border-slate-200 px-1.5 py-1 text-[11px] sm:text-xs font-medium">
+                <span class="text-slate-400 text-xs">-</span>
+                <input type="date" name="date_to" value="{{ end_date }}" onchange="this.form.submit()" class="w-[115px] sm:w-auto rounded-xl border border-slate-200 px-1.5 py-1 text-[11px] sm:text-xs font-medium">
+            </div>
+
+            <!-- Customer Filter Drawer Toggle -->
+            <button type="button" onclick="toggleDrawer()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>تنقية العملاء</span>
+            </button>
+
+            <!-- Export -->
+            <a href="{% url 'planned_visits_export' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span>تصدير</span>
+            </a>
+        </form>
+    </div>
+
+    <!-- Main Content Layout: Day Cards Timeline + Customer Drawer -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+
+        <!-- Day Cards Accordion (3 Cols or 4 Cols when drawer is closed) -->
+        <div id="timeline-container" class="lg:col-span-3 space-y-4">
+            {% for day in days_list %}
+            <div id="day-{{ day.date|date:'Y-m-d' }}" class="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden transition-all duration-200">
+                <!-- Day Header -->
+                <div class="p-4 sm:px-6 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between cursor-pointer" onclick="toggleDayAccordion('day-body-{{ forloop.counter }}')">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-slate-400 text-lg">calendar_today</span>
+                        <div>
+                            <span class="text-sm font-bold text-slate-900">{{ day.weekday_ar }}</span>
+                            <span class="text-xs text-slate-500 font-mono mr-2">{{ day.formatted_date }}</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        {% if day.is_planned %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-[#27bebe] border border-teal-200">
+                            {{ day.items_count }} زيارات مخططة
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                            غير مخططة
+                        </span>
+                        {% endif %}
+
+                        <button type="button" class="text-slate-400 hover:text-slate-600">
+                            <span class="material-symbols-outlined text-xl">expand_more</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Day Content: Visits List -->
+                <div id="day-body-{{ forloop.counter }}" class="p-4 sm:p-6 space-y-3">
+                    {% if day.items %}
+                    <div class="space-y-2">
+                        {% for it in day.items %}
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 hover:border-[#27bebe]/50 transition-colors gap-2">
+                            <div class="flex items-center gap-3">
+                                <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs font-mono">
+                                    {{ it.order }}
+                                </span>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-slate-900 text-xs">{{ it.contact.name }}</span>
+                                        {% if it.contact.code %}
+                                        <span class="text-[10px] text-slate-400 font-mono">[{{ it.contact.code }}]</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                                        <span>{{ it.contact.specialty|default:it.contact.account_type }}</span>
+                                        {% if it.contact.area %}• <span>{{ it.contact.area.name }}</span>{% endif %}
+                                        {% if it.template %}• <span class="text-[#27bebe] font-medium">{{ it.template.display_name_ar }}</span>{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center gap-2">
+                                {% if it.is_executed %}
+                                <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">check</span>
+                                    <span>تم التنفيذ</span>
+                                </span>
+                                {% if it.visit %}
+                                <a href="{% url 'visit_detail' it.visit.pk %}" class="p-1.5 text-slate-400 hover:text-[#27bebe]">
+                                    <span class="material-symbols-outlined text-lg">visibility</span>
+                                </a>
+                                {% endif %}
+                                {% else %}
+                                <a href="{% url 'planned_visit_item_execute' it.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
+                                    <span class="material-symbols-outlined text-sm">directions_walk</span>
+                                    <span>بدء الزيارة</span>
+                                </a>
+                                <a href="{% url 'planned_visit_item_delete' it.pk %}" onclick="return confirm('حذف الزيارة المخططة؟');" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-slate-400 text-center py-3">لا توجد زيارات مجدولة في هذا اليوم حتى الآن.</p>
+                    {% endif %}
+
+                    <!-- Quick Add Button to Day -->
+                    <div class="pt-2">
+                        <button type="button" onclick="openAddModal('{{ day.date|date:'Y-m-d' }}')" class="w-full py-2 border-2 border-dashed border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                            <span class="material-symbols-outlined text-base">add_circle</span>
+                            <span>إضافة عميل لخطة هذا اليوم</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Customer Filtering Drawer (Right / Side in 4th col) -->
+        <div id="customer-drawer" class="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">filter_alt</span>
+                    <span>تنقية العملاء</span>
+                </h3>
+            </div>
+
+            <form method="GET" class="space-y-3">
+                <input type="hidden" name="assignee" value="{{ selected_rep.id }}">
+                <input type="hidden" name="date_from" value="{{ start_date }}">
+                <input type="hidden" name="date_to" value="{{ end_date }}">
+
+                <div>
+                    <input type="text" name="contact_search" value="{{ selected_contact_search|default:'' }}" placeholder="بحث بالاسم أو الكود..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">المنطقة</label>
+                    <select name="area" class="w-full rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-medium">
+                        <option value="">جميع المناطق</option>
+                        {% for a in areas %}
+                        <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                    فلترة العملاء
+                </button>
+            </form>
+
+            <!-- Filtered Contacts List -->
+            <div class="border-t border-slate-100 pt-3 space-y-2 max-h-96 overflow-y-auto">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">العملاء المتاحون ({{ drawer_contacts|length }})</p>
+                {% for c in drawer_contacts %}
+                <div class="p-2.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200/80 transition-colors text-xs flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-bold text-slate-800 truncate">{{ c.name }}</p>
+                        <p class="text-[10px] text-slate-400 font-mono">{{ c.code|default:'' }} • {{ c.account_type|default:'' }}</p>
+                    </div>
+                    <button type="button" onclick="quickSelectContact('{{ c.id }}', '{{ c.name|escapejs }}')" class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-600 shrink-0" title="إضافة للخطة">
+                        <span class="material-symbols-outlined text-base">add</span>
+                    </button>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 text-center py-4">لا يوجد عملاء مطابقين للفلتر.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function toggleDayAccordion(bodyId) {
+    const el = document.getElementById(bodyId);
+    if (el) {
+        el.classList.toggle('hidden');
+    }
+}
+function toggleDrawer() {
+    const drawer = document.getElementById('customer-drawer');
+    const container = document.getElementById('timeline-container');
+    if (drawer && container) {
+        drawer.classList.toggle('hidden');
+        if (drawer.classList.contains('hidden')) {
+            container.classList.remove('lg:col-span-3');
+            container.classList.add('lg:col-span-4');
+        } else {
+            container.classList.remove('lg:col-span-4');
+            container.classList.add('lg:col-span-3');
+        }
+    }
+}
+function openAddModal(dateStr) {
+    openCustomerSelectionModal('add_to_plan', {
+        date: dateStr,
+        assigneeId: '{{ selected_rep.id }}'
+    });
+}
+function closeAddModal() {
+    closeCustomerSelectionModal();
+}
+function quickSelectContact(contactId, contactName) {
+    openCustomerSelectionModal('add_to_plan', {
+        date: '{{ start_date }}',
+        assigneeId: '{{ selected_rep.id }}',
+        contactId: contactId
+    });
+}
+</script>
+{% endblock %}

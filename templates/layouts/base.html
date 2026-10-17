@@ -130,6 +130,31 @@
                 </div>
             </div>
 
+            <!-- Activities (الأنشطة) -->
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-activities')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}text-brand-600 material-symbols-fill{% endif %}">timeline</span>
+                        <span>الأنشطة</span>
+                    </div>
+                    <span id="arrow-activities" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-activities" class="pr-9 pl-2 space-y-1 {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}{% else %}hidden{% endif %}">
+                    <a href="{% url 'planned_visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'planned-visits' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">calendar_today</span>
+                        <span>خطة الزيارات</span>
+                    </a>
+                    <a href="{% url 'visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'visits' in request.path and 'planned' not in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">room</span>
+                        <span>الزيارات</span>
+                    </a>
+                    <a href="{% url 'agreements_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'agreements' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">handshake</span>
+                        <span>الاتفاقيات</span>
+                    </a>
+                </div>
+            </div>
+
             <!-- Purchases (المشتريات) -->
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
@@ -227,7 +252,14 @@
                     <a href="{% url 'roles_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الأدوار والصلاحيات</a>
                     <a href="{% url 'users_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">إدارة المستخدمين</a>
                     <a href="{% url 'branding_settings' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">بيانات الشركة والفاتورة</a>
+                    {% if request.user.is_superuser or request.user.is_super_admin %}
+                    <a href="{% url 'location_settings' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-[#27bebe] hover:bg-slate-50 min-h-[38px] {% if 'location' in request.path %}text-[#27bebe] font-bold bg-teal-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base text-[#27bebe]">gps_fixed</span>
+                        <span>اعدادات الموقع</span>
+                    </a>
+                    {% endif %}
                 </div>
+
             </div>
         </div>
 
@@ -335,7 +367,56 @@
         </button>
     </nav>
 
-    <!-- Script for sidebar toggle & submenus -->
+    <!-- GLOBAL BOTTOM-LEFT FLOATING ACTION BUTTON (FAB) (Matching Reference ERP) -->
+    <div class="quick-add fixed bottom-20 lg:bottom-4 left-4 z-40" style="bottom: 1rem; left: 1rem;">
+        <button type="button" onclick="openQuickAdd()"
+                class="w-14 h-14 rounded-full bg-[#27bebe] hover:bg-[#1fa8a8] text-white flex items-center justify-center shadow-lg transition-transform transform hover:scale-105 active:scale-95 focus:outline-none ring-4 ring-teal-500/20 mat-fab mdc-fab"
+                style="box-shadow: rgba(0, 0, 0, 0.2) 0px 3px 5px -1px, rgba(0, 0, 0, 0.14) 0px 6px 10px 0px, rgba(0, 0, 0, 0.12) 0px 1px 18px 0px;"
+                title="إضافة سريعة" aria-label="إضافة سريعة">
+            <span class="material-symbols-outlined text-3xl">add</span>
+        </button>
+    </div>
+
+    <!-- QUICK-ADD BOTTOM SHEET (Matching Reference ERP <app-quick-add>) -->
+    <div id="quick-add-backdrop" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden transition-opacity" onclick="closeQuickAddBottomSheet()"></div>
+    <div id="quick-add-sheet" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl z-50 hidden transition-transform duration-200 transform translate-y-full border-t border-slate-100">
+        <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto my-3"></div>
+        <div class="divide-y divide-slate-100 text-right">
+            <!-- 1. تسجيل زيارة خارج الخطة -->
+            <button type="button" onclick="closeQuickAddBottomSheet(); openUnplannedVisitModal();" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors">
+                <span class="material-symbols-outlined text-2xl text-[#27bebe]">room</span>
+                <span class="text-sm font-bold text-slate-800">تسجيل زيارة خارج الخطة</span>
+            </button>
+
+            <!-- 2. امر بيع جديد -->
+            <a href="{% url 'sales_orders_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+                <span class="material-symbols-outlined text-2xl text-slate-600">shopping_cart</span>
+                <span class="text-sm font-bold text-slate-800">امر بيع جديد</span>
+            </a>
+
+            <!-- 3. مرتجع جديد -->
+            <a href="{% url 'purchase_return_orders_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+                <span class="material-symbols-outlined text-2xl text-slate-600">refresh</span>
+                <span class="text-sm font-bold text-slate-800">مرتجع جديد</span>
+            </a>
+
+            <!-- 4. تحصيل جديد -->
+            <a href="{% url 'collections_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+                <span class="material-symbols-outlined text-2xl text-slate-600">receipt</span>
+                <span class="text-sm font-bold text-slate-800">تحصيل جديد</span>
+            </a>
+
+            <!-- 5. الغاء -->
+            <button type="button" onclick="closeQuickAddBottomSheet()" class="w-full py-4 text-center text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors">
+                الغاء
+            </button>
+        </div>
+    </div>
+
+    <!-- UNIFIED CUSTOMER SELECTION MODAL (Matching Reference <app-visit-create-customer-selection>) -->
+    {% include 'components/customer_selection_modal.html' %}
+
+    <!-- Script for sidebar toggle, bottom sheet, and submenus -->
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
@@ -357,6 +438,40 @@
             if (menu) {
                 menu.classList.toggle('hidden');
             }
+        }
+
+        function openQuickAddBottomSheet() {
+            const sheet = document.getElementById('quick-add-sheet');
+            const backdrop = document.getElementById('quick-add-backdrop');
+            if (sheet && backdrop) {
+                backdrop.classList.remove('hidden');
+                sheet.classList.remove('hidden');
+                setTimeout(() => {
+                    sheet.classList.remove('translate-y-full');
+                }, 10);
+            }
+        }
+        function openQuickAdd() { openQuickAddBottomSheet(); }
+
+        function closeQuickAddBottomSheet() {
+            const sheet = document.getElementById('quick-add-sheet');
+            const backdrop = document.getElementById('quick-add-backdrop');
+            if (sheet && backdrop) {
+                sheet.classList.add('translate-y-full');
+                setTimeout(() => {
+                    sheet.classList.add('hidden');
+                    backdrop.classList.add('hidden');
+                }, 200);
+            }
+        }
+        function closeQuickAdd() { closeQuickAddBottomSheet(); }
+
+        function openUnplannedVisitModal() {
+            openCustomerSelectionModal('unplanned_visit');
+        }
+
+        function closeUnplannedVisitModal() {
+            closeCustomerSelectionModal();
         }
     </script>
     {% block extra_js %}{% endblock %}

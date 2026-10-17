@@ -68,11 +68,29 @@ class Contact(models.Model):
     def __str__(self):
         return f"{self.name} (#{self.serial_num})"
 
+    def __init__(self, *args, **kwargs):
+        temp_lat = kwargs.pop('latitude', None)
+        temp_lng = kwargs.pop('longitude', None)
+        super().__init__(*args, **kwargs)
+        if temp_lat is not None:
+            self._temp_lat = temp_lat
+        if temp_lng is not None:
+            self._temp_lng = temp_lng
+
     def save(self, *args, **kwargs):
         if not self.serial_num:
             max_serial = Contact.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 1000
             self.serial_num = max_serial + 1
         super().save(*args, **kwargs)
+        if hasattr(self, '_temp_lat') or hasattr(self, '_temp_lng'):
+            lat = getattr(self, '_temp_lat', None)
+            lng = getattr(self, '_temp_lng', None)
+            if lat is not None or lng is not None:
+                self.set_location(lat, lng)
+            if hasattr(self, '_temp_lat'):
+                delattr(self, '_temp_lat')
+            if hasattr(self, '_temp_lng'):
+                delattr(self, '_temp_lng')
 
     @property
     def formatted_number(self):
@@ -112,6 +130,68 @@ class Contact(models.Model):
         if self.is_other:
             rels.append("أخرى")
         return " / ".join(rels) if rels else "غير محدد"
+
+    @property
+    def main_address(self):
+        # Leverage prefetched addresses if available to prevent N+1 query explosion
+        if hasattr(self, '_prefetched_objects_cache') and 'addresses' in self._prefetched_objects_cache:
+            for a in self.addresses.all():
+                if a.is_main:
+                    return a
+            addrs = list(self.addresses.all())
+            return addrs[0] if addrs else None
+        return self.addresses.filter(is_main=True).first() or self.addresses.first()
+
+    @property
+    def latitude(self):
+        if hasattr(self, '_temp_lat'):
+            return self._temp_lat
+        addr = self.main_address
+        return addr.latitude if addr else None
+
+    @latitude.setter
+    def latitude(self, value):
+        if self.pk:
+            self.set_location(value, self.longitude or 0)
+        else:
+            self._temp_lat = value
+
+    @property
+    def longitude(self):
+        if hasattr(self, '_temp_lng'):
+            return self._temp_lng
+        addr = self.main_address
+        return addr.longitude if addr else None
+
+    @longitude.setter
+    def longitude(self, value):
+        if self.pk:
+            self.set_location(self.latitude or 0, value)
+        else:
+            self._temp_lng = value
+
+    @property
+    def has_saved_location(self):
+        return bool(self.latitude is not None and self.longitude is not None)
+
+    def set_location(self, lat, lng):
+        """Save or update the contact's GPS coordinates on its main address."""
+        addr = self.main_address
+        if not addr:
+            addr = ContactAddress.objects.create(
+                contact=self,
+                title="العنوان الرئيسي",
+                is_main=True,
+                area=self.area,
+                latitude=lat,
+                longitude=lng
+            )
+        else:
+            addr.latitude = lat
+            addr.longitude = lng
+            addr.save()
+        return addr
+
 
 
 class ContactAddress(models.Model):
