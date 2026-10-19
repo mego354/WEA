@@ -1,0 +1,246 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}معاينة: {{ template.display_name_ar }} - قوالب الزيارات{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <!-- Breadcrumb & Top Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <a href="{% url 'visit_templates_list' %}" class="hover:text-brand-600 transition-colors">قوالب الزيارات</a>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <span class="text-brand-600 font-bold">معاينة الاستبيان</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900">{{ template.display_name_ar }}</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold {% if template.active %}bg-emerald-50 text-emerald-700 border border-emerald-200{% else %}bg-slate-100 text-slate-600{% endif %}">
+                    {% if template.active %}مفعل{% else %}معطل{% endif %}
+                </span>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                معاينة تفاعلية حية لمحاكاة شاشة الاستبيان لدى المندوب الطبي أثناء تنفيذ الزيارة
+            </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <a href="{% url 'visit_template_edit' template.pk %}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل القالب</span>
+            </a>
+            <a href="{% url 'visit_templates_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors min-h-[40px]">
+                <span>رجوع للقائمة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Interactive Simulated Questionnaire Device Card -->
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-md overflow-hidden">
+        <!-- Top App Bar in Device Preview -->
+        <div class="bg-gradient-to-r from-teal-600 to-teal-700 text-white p-5">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-2xl">assignment</span>
+                    <div>
+                        <h2 class="text-base font-bold">{{ template.display_name_ar }}</h2>
+                        <p class="text-xs text-teal-100" dir="ltr">{{ template.display_name_en|default:template.name }}</p>
+                    </div>
+                </div>
+                <div class="text-left">
+                    <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/20 backdrop-blur-xs text-white">
+                        {{ template.get_mode_display }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Target Accounts -->
+            <div class="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-teal-500/50">
+                <span class="text-[11px] text-teal-100 font-semibold">الحسابات المستهدفة:</span>
+                {% if template.restrict_account_types %}
+                    {% for acc in template.restrict_account_types %}
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/15 text-white">
+                        {{ acc|title }}
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/15 text-white">
+                        كافة أنواع الحسابات
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="p-6 space-y-6">
+            <!-- Stage 1: أسئلة بداية الزيارة (Start-only / Check-in) -->
+            {% if start_questions %}
+            <div class="space-y-4 p-4 rounded-2xl bg-sky-50/50 border border-sky-100">
+                <div class="flex items-center gap-2 text-sky-800 pb-2 border-b border-sky-100">
+                    <span class="material-symbols-outlined text-lg">play_circle</span>
+                    <h3 class="text-sm font-bold">أسئلة بداية الزيارة (تسجيل الحضور / Check-in)</h3>
+                </div>
+
+                <div class="space-y-4">
+                    {% for q in start_questions %}
+                    <div class="space-y-1.5" id="preview_q_{{ q.id }}">
+                        <label class="block text-xs font-bold text-slate-800">
+                            {{ q.text_ar }}
+                            {% if q.is_required %}<span class="text-rose-500">*</span>{% endif %}
+                        </label>
+
+                        {% if q.question_type == 'single_choice' %}
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            {% for opt in q.options %}
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="radio" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" onchange="onPreviewAnswerChanged('{{ q.id }}', this.value)" class="text-teal-600 focus:ring-teal-500">
+                                <span>{{ opt.text_ar }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% elif q.question_type == 'multiple_choice' %}
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            {% for opt in q.options %}
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="checkbox" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-teal-600 focus:ring-teal-500 rounded">
+                                <span>{{ opt.text_ar }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% elif q.question_type == 'textarea' %}
+                        <textarea rows="3" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500"></textarea>
+                        {% else %}
+                        <input type="text" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Stage 2: استبيان أثناء / نهاية الزيارة (Completion / End-only / All) -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2 text-slate-800 pb-2 border-b border-slate-100">
+                    <span class="material-symbols-outlined text-brand-600 text-lg">fact_check</span>
+                    <h3 class="text-sm font-bold">استبيان تفاصيل ونتائج الزيارة (Check-out)</h3>
+                </div>
+
+                <div class="space-y-4" id="completionQuestionsContainer">
+                    {% for q in completion_questions %}
+                    <div class="space-y-1.5 p-3.5 rounded-xl border border-slate-100 bg-slate-50/40 transition-all preview-question-card" 
+                         id="preview_q_{{ q.id }}"
+                         data-question-id="{{ q.id }}"
+                         data-is-conditional="{{ q.is_conditional|yesno:'true,false' }}"
+                         data-parent-id="{{ q.conditional_parent_id|default:'' }}"
+                         data-trigger-val="{{ q.conditional_trigger_value|lower }}"
+                         {% if q.is_conditional %}style="display: none;"{% endif %}>
+                        
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-bold text-slate-800">
+                                {{ q.text_ar }}
+                                {% if q.is_required %}<span class="text-rose-500">*</span>{% endif %}
+                            </label>
+                            {% if q.is_conditional %}
+                            <span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-semibold border border-amber-200">
+                                سؤال مشروط
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        {% if q.question_type == 'single_choice' %}
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            {% for opt in q.options %}
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="radio" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" onchange="onPreviewAnswerChanged('{{ q.id }}', this.value)" class="text-teal-600 focus:ring-teal-500">
+                                <span>{{ opt.text_ar }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% elif q.question_type == 'multiple_choice' %}
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            {% for opt in q.options %}
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="checkbox" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-teal-600 focus:ring-teal-500 rounded">
+                                <span>{{ opt.text_ar }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% elif q.question_type == 'textarea' %}
+                        <textarea rows="3" placeholder="اكتب الملاحظات والتفاصيل هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500"></textarea>
+                        {% else %}
+                        <input type="text" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Product Detailing Preview (if enabled) -->
+            {% if template.enable_product_detailing %}
+            <div class="space-y-3 p-4 rounded-2xl bg-teal-50/50 border border-teal-100">
+                <div class="flex items-center gap-2 text-teal-900 pb-2 border-b border-teal-100">
+                    <span class="material-symbols-outlined text-lg">medication</span>
+                    <h3 class="text-sm font-bold">المنتجات المشروحة في الزيارة (Product Detailing)</h3>
+                </div>
+                <p class="text-xs text-slate-600">
+                    حدد المنتجات والأصناف التي قام المندوب بشرحها ومناقشتها مع الطبيب أو الصيدلي:
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                    {% for prod in products %}
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-teal-400 cursor-pointer text-xs font-bold text-slate-800 transition-colors">
+                        <input type="checkbox" name="preview_products" value="{{ prod.id }}" class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                        <span class="truncate">{{ prod.name }}</span>
+                    </label>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 col-span-full">لا توجد منتجات مسجلة في الكتالوج حالياً للمعاينة.</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Visit Outcome Selector (if enabled) -->
+            {% if template.visit_outcome_mode != 'disabled' %}
+            <div class="space-y-2 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                <label class="block text-xs font-bold text-slate-800">نتيجة الزيارة النهائية (Visit Outcome)</label>
+                <div class="flex flex-wrap gap-2">
+                    <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer">
+                        <input type="radio" name="preview_outcome" value="successful" checked class="text-emerald-600 focus:ring-emerald-500">
+                        <span>زيارة ناجحة (Successful)</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold cursor-pointer">
+                        <input type="radio" name="preview_outcome" value="unsuccessful" class="text-slate-600 focus:ring-slate-500">
+                        <span>زيارة غير ناجحة (Unsuccessful)</span>
+                    </label>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+const activeAnswers = {};
+
+function onPreviewAnswerChanged(questionId, value) {
+    activeAnswers[questionId] = (value || '').trim().toLowerCase();
+    
+    // Evaluate all conditional questions
+    const conditionalCards = document.querySelectorAll('.preview-question-card[data-is-conditional="true"]');
+    conditionalCards.forEach(card => {
+        const parentId = card.getAttribute('data-parent-id');
+        const triggerVal = card.getAttribute('data-trigger-val');
+        
+        if (parentId && triggerVal) {
+            const parentAnswer = activeAnswers[parentId] || '';
+            if (parentAnswer === triggerVal) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

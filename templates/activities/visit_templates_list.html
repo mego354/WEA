@@ -1,0 +1,241 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}قوالب الزيارات - الإعدادات{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Breadcrumb & Top Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <span class="text-slate-400">الإعدادات</span>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <span class="text-brand-600 font-bold">قوالب الزيارات</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900">قوالب الزيارات</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-brand-700 border border-teal-200">
+                    {{ total_count }} قالب
+                </span>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                إدارة نماذج واستبيانات الزيارات الميدانية، والأسئلة المشروطة، وقواعد تسجيل الزيارات المخططة وخارج الخطة
+            </p>
+        </div>
+
+        {% if can_manage %}
+        <div class="flex items-center gap-2">
+            <a href="{% url 'visit_template_create' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-bold shadow-md shadow-teal-500/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-lg">add_circle</span>
+                <span>إضافة قالب جديد</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Filters & Search Bar -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <form method="GET" class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالاسم العربي أو الإنجليزي أو المعرف..." class="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 min-h-[44px]">
+            </div>
+
+            <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                <a href="?{% if selected_q %}q={{ selected_q }}&{% endif %}" class="px-3 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px] flex items-center justify-center {% if not selected_status %}bg-brand-500 text-white shadow-xs{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    الكل ({{ total_count }})
+                </a>
+                <a href="?status=active{% if selected_q %}&q={{ selected_q }}{% endif %}" class="px-3 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px] flex items-center justify-center {% if selected_status == 'active' %}bg-emerald-600 text-white shadow-xs{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    مفعل فقط
+                </a>
+                <a href="?status=inactive{% if selected_q %}&q={{ selected_q }}{% endif %}" class="px-3 py-2 rounded-xl text-xs font-bold transition-colors min-h-[40px] flex items-center justify-center {% if selected_status == 'inactive' %}bg-rose-600 text-white shadow-xs{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    معطل
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Templates Grid Cards -->
+    {% if templates %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {% for tmpl in templates %}
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden">
+            <!-- Card Header -->
+            <div class="p-5 pb-3">
+                <div class="flex items-start justify-between gap-3 mb-2">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full {% if tmpl.active %}bg-emerald-500 shadow-xs shadow-emerald-500/50{% else %}bg-slate-300{% endif %}"></span>
+                            <h2 class="text-base font-bold text-slate-900 hover:text-brand-600 transition-colors">
+                                {{ tmpl.display_name_ar }}
+                            </h2>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5 font-medium" dir="ltr">
+                            {{ tmpl.display_name_en|default:tmpl.name }}
+                        </p>
+                    </div>
+
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold {% if tmpl.active %}bg-emerald-50 text-emerald-700 border border-emerald-200{% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                        {% if tmpl.active %}مفعل{% else %}معطل{% endif %}
+                    </span>
+                </div>
+
+                <!-- Template Settings Pills -->
+                <div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700">
+                        <span class="material-symbols-outlined text-xs">tune</span>
+                        {{ tmpl.get_mode_display }}
+                    </span>
+
+                    {% if tmpl.allow_unplanned %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-100" title="مسموح تسجيل زيارات خارج الخطة">
+                        <span class="material-symbols-outlined text-xs">add_task</span>
+                        خارج الخطة
+                    </span>
+                    {% endif %}
+
+                    {% if tmpl.auto_approve_unplanned %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100" title="موافقة تلقائية للزيارات المنشأة خارج الخطة">
+                        <span class="material-symbols-outlined text-xs">verified</span>
+                        موافقة تلقائية
+                    </span>
+                    {% endif %}
+
+                    {% if tmpl.enable_product_detailing %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100" title="شرح المنتجات مفعل">
+                        <span class="material-symbols-outlined text-xs">medication</span>
+                        شرح منتجات
+                    </span>
+                    {% endif %}
+
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span class="material-symbols-outlined text-xs">quiz</span>
+                        {{ tmpl.questions.count }} أسئلة
+                    </span>
+
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600">
+                        <span class="material-symbols-outlined text-xs">history</span>
+                        {{ tmpl.usage_count }} زيارة
+                    </span>
+                </div>
+
+                <!-- Target Account Types -->
+                <div class="mt-3">
+                    <p class="text-[11px] text-slate-400 font-semibold mb-1">نوع الحساب المستهدف:</p>
+                    <div class="flex flex-wrap gap-1">
+                        {% if tmpl.restrict_account_types %}
+                            {% for acc in tmpl.restrict_account_types %}
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {{ acc|title }}
+                            </span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                كافة الحسابات (شامل)
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Actions Footer -->
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+                <a href="{% url 'visit_template_preview' tmpl.pk %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 hover:text-brand-600 transition-colors min-h-[36px]">
+                    <span class="material-symbols-outlined text-base">visibility</span>
+                    <span>معاينة</span>
+                </a>
+
+                {% if can_manage %}
+                <div class="flex items-center gap-1.5">
+                    <a href="{% url 'visit_template_edit' tmpl.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors min-h-[36px]">
+                        <span class="material-symbols-outlined text-base">edit</span>
+                        <span>تعديل</span>
+                    </a>
+
+                    <form method="POST" action="{% url 'visit_template_toggle_status' tmpl.pk %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="p-1.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-200 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="{% if tmpl.active %}تعطيل القالب{% else %}تفعيل القالب{% endif %}">
+                            <span class="material-symbols-outlined text-base {% if tmpl.active %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                                {% if tmpl.active %}toggle_on{% else %}toggle_off{% endif %}
+                            </span>
+                        </button>
+                    </form>
+
+                    <button type="button" onclick="confirmDeleteTemplate('{{ tmpl.pk }}', '{{ tmpl.display_name_ar }}', '{{ tmpl.usage_count }}')" class="p-1.5 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف القالب">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+        <div class="w-16 h-16 rounded-full bg-teal-50 text-brand-600 flex items-center justify-center mx-auto mb-4">
+            <span class="material-symbols-outlined text-3xl">assignment</span>
+        </div>
+        <h3 class="text-base font-bold text-slate-900">لا توجد قوالب زيارات مطابقة</h3>
+        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            لم يتم العثور على أي قوالب زيارات مسجلة تطابق شروط البحث، يمكنك إضافة قالب جديد للبدء.
+        </p>
+        {% if can_manage %}
+        <div class="mt-4">
+            <a href="{% url 'visit_template_create' %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 shadow-xs">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>إضافة قالب جديد</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+            <span class="material-symbols-outlined text-2xl">warning</span>
+        </div>
+        <div class="text-center">
+            <h3 class="text-lg font-bold text-slate-900">حذف / تعطيل قالب الزيارة</h3>
+            <p id="deleteModalText" class="text-xs sm:text-sm text-slate-500 mt-2">
+                هل أنت متأكد من رغبتك في حذف القالب؟
+            </p>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 min-h-[40px]">
+                إلغاء
+            </button>
+            <form id="deleteModalForm" method="POST" action="">
+                {% csrf_token %}
+                <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-xs min-h-[40px]">
+                    تأكيد الحذف
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDeleteTemplate(id, name, usageCount) {
+    const modal = document.getElementById('deleteModal');
+    const form = document.getElementById('deleteModalForm');
+    const text = document.getElementById('deleteModalText');
+    form.action = `/settings/visits/templates/${id}/delete/`;
+    if (parseInt(usageCount) > 0) {
+        text.innerHTML = `القالب <strong class="text-slate-800">"${name}"</strong> مرتبط بـ <strong>${usageCount}</strong> زيارة تاريخية.<br>سيتم <span class="text-amber-600 font-bold">إلغاء تفعيله</span> لحماية سلامة السجلات التاريخية للزيارات.`;
+    } else {
+        text.innerHTML = `هل أنت متأكد من حذف القالب <strong class="text-slate-800">"${name}"</strong> نهائياً؟`;
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

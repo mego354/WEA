@@ -1,0 +1,134 @@
+ر   {% extends 'layouts/base.html' %}
+
+{% block title %}تعديل بيانات المستخدم: {{ target_user.name|default:target_user.username }} - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'users_list' %}" class="hover:text-[#27bebe] transition-colors">المستخدمون</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">{{ target_user.name|default:target_user.username }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-bold text-[#27bebe]">تعديل بيانات المستخدم</h1>
+            <p class="text-xs text-slate-500 mt-1">تحديث بيانات الحساب، الدور الوظيفي، والمناطق الجغرافية المعينة</p>
+        </div>
+        <a href="{% url 'users_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs">
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+            <span>العودة لقائمة المستخدمين</span>
+        </a>
+    </div>
+
+    <!-- Edit Profile Form -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6">
+        <form method="POST" action="{% url 'user_edit' target_user.pk %}" class="space-y-5">
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- الاسم* -->
+                <div>
+                    <label for="edit_user_name" class="block text-xs font-bold text-slate-700 mb-1.5">الاسم الكامل*</label>
+                    <input type="text" name="name" id="edit_user_name" value="{{ target_user.name }}" required
+                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
+                </div>
+
+                <!-- البريد الإلكتروني* -->
+                <div>
+                    <label for="edit_user_email" class="block text-xs font-bold text-slate-700 mb-1.5">البريد الإلكتروني (اسم الدخول)*</label>
+                    <input type="email" name="email" id="edit_user_email" value="{{ target_user.email }}" required dir="ltr"
+                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 text-right focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
+                </div>
+
+                <!-- الكود -->
+                <div>
+                    <label for="edit_user_code" class="block text-xs font-bold text-slate-700 mb-1.5">كود الموظف / المستخدم</label>
+                    <input type="text" name="code" id="edit_user_code" value="{{ target_user.code }}"
+                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
+                </div>
+
+                <!-- رقم الهاتف -->
+                <div>
+                    <label for="edit_user_mobile" class="block text-xs font-bold text-slate-700 mb-1.5">رقم الهاتف / الموبايل</label>
+                    <input type="text" name="mobile" id="edit_user_mobile" value="{{ target_user.mobile }}" dir="ltr"
+                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 text-right focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
+                </div>
+
+                <!-- الدور الوظيفي* -->
+                <div>
+                    <label for="edit_user_role" class="block text-xs font-bold text-slate-700 mb-1.5">الدور والصلاحية*</label>
+                    <select name="role" id="edit_user_role"
+                            class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
+                        <option value="">بدون دور محدد (صلاحيات افتراضية)</option>
+                        {% for r in roles %}
+                        <option value="{{ r.id }}" {% if target_user.role_id == r.id %}selected{% endif %}>{{ r.display_name }} ({{ r.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- حالة الحساب (مفعل / معطل) -->
+                <div class="flex items-center gap-3 pt-6">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="is_active" {% if target_user.is_active %}checked{% endif %} class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe]"></div>
+                        <span class="mr-3 text-sm font-bold text-slate-700">حساب مفعل</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- المناطق المعينة -->
+            <div class="pt-2">
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">المناطق الجغرافية المعينة للمستخدم</label>
+                <select name="assigned_areas" multiple size="4"
+                        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                    {% for a in areas %}
+                    <option value="{{ a.id }}" {% if a in target_user.assigned_areas.all %}selected{% endif %}>{{ a.name }} [{{ a.code }}]</option>
+                    {% endfor %}
+                </select>
+                <span class="text-[10px] text-slate-400 mt-1 block">اضغط زر Ctrl لتحديد أو إلغاء تحديد عدة مناطق</span>
+            </div>
+
+            <!-- Submit -->
+            <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">save</span>
+                    <span>حفظ التعديلات</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Password Reset Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6">
+        <h3 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-slate-500">lock_reset</span>
+            <span>إعادة تعيين كلمة المرور</span>
+        </h3>
+        <form method="POST" action="{% url 'user_reset_password' target_user.pk %}" class="space-y-4 max-w-md">
+            {% csrf_token %}
+            <div>
+                <label for="new_password" class="block text-xs font-bold text-slate-700 mb-1.5">كلمة المرور الجديدة (6 أحرف كحد أدنى)*</label>
+                <input type="password" name="new_password" id="new_password" required minlength="6" dir="ltr"
+                       class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+            </div>
+            <div>
+                <label for="confirm_password" class="block text-xs font-bold text-slate-700 mb-1.5">تأكيد كلمة المرور*</label>
+                <input type="password" name="confirm_password" id="confirm_password" required minlength="6" dir="ltr"
+                       class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+            </div>
+            <button type="submit" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">key</span>
+                <span>تحديث كلمة المرور</span>
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

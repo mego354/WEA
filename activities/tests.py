@@ -1,11 +1,13 @@
+import json
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from accounts.models import Role
 from contacts.models import Contact
-from catalog.models import Product
+from catalog.models import Product, ProductCategory
 from .models import (
-    AgreementType, Agreement, VisitTemplate,
+    AgreementType, Agreement, VisitTemplate, VisitTemplateQuestion,
     PlannedVisitDay, PlannedVisitItem, Visit,
     VisitSampleItem
 )
@@ -685,5 +687,392 @@ class VisitAndLocationParityTestCase(TestCase):
         data2 = res2.json()
         self.assertFalse(data2.get('success'))
         self.assertIn('مضاف بالفعل', data2.get('message', ''))
+
+
+class VisitTemplatesManagementTestCase(TestCase):
+    """Tests for Visit Templates CRUD, Question Builder, and Deletion Protection."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username='admin_template_tester',
+            email='admin_tmpl@test.com',
+            password='Password123!'
+        )
+        self.rep_role = Role.objects.create(name='rep_tester', display_name='مندوب دعاية', is_rep=True)
+        self.rep = User.objects.create_user(
+            username='rep_template_tester',
+            email='rep_tmpl@test.com',
+            password='Password123!',
+            role=self.rep_role
+        )
+        self.client.force_login(self.admin)
+
+        self.template = VisitTemplate.objects.create(
+            name='single_visit_dr_test',
+            display_name_ar='زيارة فردية لطبيب (اختبار)',
+            display_name_en='Single visit (DR) Test',
+            mode='checkin_checkout',
+            allow_unplanned=True,
+            auto_approve_unplanned=False,
+            enable_product_detailing=True,
+            restrict_account_types=['clinic', 'hospital'],
+            active=True
+        )
+
+        self.q1 = VisitTemplateQuestion.objects.create(
+            template=self.template,
+            text_ar='هل قابلت الطبيب؟',
+            text_en='Did you meet the Dr?',
+            question_type='single_choice',
+            options=[{'text_ar': 'نعم', 'value': 'Yes'}, {'text_ar': 'لا', 'value': 'No'}],
+            stage='all',
+            is_required=True,
+            order=1
+        )
+
+        self.q2 = VisitTemplateQuestion.objects.create(
+            template=self.template,
+            text_ar='ماذا حدث في الزيارة؟',
+            question_type='textarea',
+            stage='all',
+            is_required=True,
+            is_conditional=True,
+            conditional_parent=self.q1,
+            conditional_trigger_value='Yes',
+            order=2
+        )
+
+    def test_templates_list_view(self):
+        res = self.client.get(reverse('visit_templates_list'))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'قوالب الزيارات')
+        self.assertContains(res, 'زيارة فردية لطبيب (اختبار)')
+        self.assertContains(res, 'Clinic')
+
+    def test_template_create_and_edit(self):
+        # Create
+        create_res = self.client.post(reverse('visit_template_create'), {
+            'display_name_ar': 'قالب صيدلية جديد',
+            'display_name_en': 'New Pharmacy Template',
+            'name': 'pharmacy_new_test',
+            'mode': 'checkin_checkout',
+            'active': 'on',
+            'allow_unplanned': 'on',
+            'enable_product_detailing': 'on',
+            'visit_outcome_mode': 'enabled',
+            'special_tolerance': 300,
+            'restrict_account_types': ['pharmacy']
+        })
+        self.assertEqual(create_res.status_code, 302)
+        new_tmpl = VisitTemplate.objects.filter(name='pharmacy_new_test').first()
+        self.assertIsNotNone(new_tmpl)
+        self.assertEqual(new_tmpl.display_name_ar, 'قالب صيدلية جديد')
+        self.assertEqual(new_tmpl.restrict_account_types, ['pharmacy'])
+
+        # Edit
+        edit_res = self.client.post(reverse('visit_template_edit', args=[new_tmpl.pk]), {
+            'display_name_ar': 'قالب صيدلية محدث',
+            'display_name_en': 'Updated Pharmacy Template',
+            'name': 'pharmacy_new_test',
+            'mode': 'normal',
+            'active': 'on',
+            'visit_outcome_mode': 'enabled',
+            'special_tolerance': 400,
+            'restrict_account_types': ['pharmacy', 'store']
+        })
+        self.assertEqual(edit_res.status_code, 302)
+        new_tmpl.refresh_from_db()
+        self.assertEqual(new_tmpl.display_name_ar, 'قالب صيدلية محدث')
+        self.assertEqual(new_tmpl.mode, 'normal')
+        self.assertIn('store', new_tmpl.restrict_account_types)
+
+    def test_template_preview_view(self):
+        res = self.client.get(reverse('visit_template_preview', args=[self.template.pk]))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'هل قابلت الطبيب؟')
+        self.assertContains(res, 'ماذا حدث في الزيارة؟')
+        self.assertContains(res, 'معاينة')
+
+    def test_template_toggle_status(self):
+        self.assertTrue(self.template.active)
+        res = self.client.post(reverse('visit_template_toggle_status', args=[self.template.pk]))
+        self.assertEqual(res.status_code, 302)
+        self.template.refresh_from_db()
+        self.assertFalse(self.template.active)
+
+    def test_template_delete_safety_with_and_without_visits(self):
+        # 1. Template without visits -> hard deleted
+        fresh_tmpl = VisitTemplate.objects.create(name='deletable_tmpl', display_name_ar='قالب قابل للحذف')
+        res1 = self.client.post(reverse('visit_template_delete', args=[fresh_tmpl.pk]))
+        self.assertEqual(res1.status_code, 302)
+        self.assertFalse(VisitTemplate.objects.filter(pk=fresh_tmpl.pk).exists())
+
+        # 2. Template with visits -> protected, auto-deactivated
+        contact = Contact.objects.create(name='مستشفى النور', account_type='hospital')
+        visit = Visit.objects.create(
+            serial_num=9991,
+            contact=contact,
+            template=self.template,
+            owner=self.admin
+        )
+        res2 = self.client.post(reverse('visit_template_delete', args=[self.template.pk]))
+        self.assertEqual(res2.status_code, 302)
+        self.template.refresh_from_db()
+        # Verify not hard deleted, but deactivated to protect history
+        self.assertTrue(VisitTemplate.objects.filter(pk=self.template.pk).exists())
+        self.assertFalse(self.template.active)
+
+    def test_question_builder_endpoints(self):
+        # Add question
+        add_res = self.client.post(reverse('template_question_add', args=[self.template.pk]), {
+            'text_ar': 'احتياجات الطبيب',
+            'text_en': 'Dr needs',
+            'question_type': 'text',
+            'stage': 'end_only',
+            'is_required': 'on',
+            'is_conditional': 'on',
+            'conditional_parent': self.q1.id,
+            'conditional_trigger_value': 'Yes'
+        })
+        self.assertEqual(add_res.status_code, 302)
+        q3 = VisitTemplateQuestion.objects.filter(template=self.template, text_ar='احتياجات الطبيب').first()
+        self.assertIsNotNone(q3)
+        self.assertEqual(q3.stage, 'end_only')
+        self.assertEqual(q3.conditional_parent_id, self.q1.id)
+
+        # Edit question
+        edit_res = self.client.post(reverse('template_question_edit', args=[q3.pk]), {
+            'text_ar': 'احتياجات وملاحظات الطبيب',
+            'question_type': 'textarea',
+            'stage': 'all'
+        })
+        self.assertEqual(edit_res.status_code, 302)
+        q3.refresh_from_db()
+        self.assertEqual(q3.text_ar, 'احتياجات وملاحظات الطبيب')
+        self.assertEqual(q3.question_type, 'textarea')
+
+        # Reorder questions via AJAX
+        reorder_res = self.client.post(
+            reverse('template_questions_reorder', args=[self.template.pk]),
+            json.dumps({'order': [q3.id, self.q1.id, self.q2.id]}),
+            content_type='application/json'
+        )
+        self.assertEqual(reorder_res.status_code, 200)
+        q3.refresh_from_db()
+        self.assertEqual(q3.order, 1)
+
+        # Delete question
+        del_res = self.client.post(reverse('template_question_delete', args=[q3.pk]))
+        self.assertEqual(del_res.status_code, 302)
+        self.assertFalse(VisitTemplateQuestion.objects.filter(pk=q3.pk).exists())
+
+    def test_rep_cannot_manage_templates(self):
+        self.client.force_login(self.rep)
+        res = self.client.get(reverse('visit_template_create'))
+        self.assertEqual(res.status_code, 302)
+        self.assertRedirects(res, reverse('visit_templates_list'))
+
+
+class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
+    """Tests integrating templates throughout visit lifecycle (planned, unplanned, answers, detailing)."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username='workflow_user_tester',
+            email='wf_user@test.com',
+            password='Password123!'
+        )
+        self.client.force_login(self.user)
+
+        self.clinic_customer = Contact.objects.create(
+            name='عيادة الشفاء',
+            code='CLI01',
+            account_type='clinic',
+            is_customer=True,
+            status='customer'
+        )
+        self.pharmacy_customer = Contact.objects.create(
+            name='صيدلية الأمل',
+            code='PH01',
+            account_type='pharmacy',
+            is_customer=True,
+            status='customer'
+        )
+
+        self.test_category = ProductCategory.objects.create(name='الأدوية التجريبية', code='EXP_CAT')
+        self.product1 = Product.objects.create(category=self.test_category, name='Cipram 20mg', sku_code='CIP20', is_active=True)
+        self.product2 = Product.objects.create(category=self.test_category, name='Amoxil 500mg', sku_code='AMX500', is_active=True)
+
+        # Template 1: Clinic Doctor (auto_approve_unplanned=True)
+        self.tmpl_dr = VisitTemplate.objects.create(
+            name='single_visit_dr_wf',
+            display_name_ar='زيارة فردية لطبيب',
+            mode='checkin_checkout',
+            allow_unplanned=True,
+            auto_approve_unplanned=True,
+            enable_product_detailing=True,
+            restrict_account_types=['clinic', 'hospital'],
+            active=True
+        )
+        self.q_meet = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_dr,
+            text_ar='هل قابلت الطبيب؟',
+            question_type='single_choice',
+            options=[{'text_ar': 'نعم', 'value': 'Yes'}, {'text_ar': 'لا', 'value': 'No'}],
+            stage='all',
+            is_required=True,
+            order=1
+        )
+        self.q_details = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_dr,
+            text_ar='ماذا حدث في الزيارة؟',
+            question_type='textarea',
+            stage='all',
+            is_required=True,
+            is_conditional=True,
+            conditional_parent=self.q_meet,
+            conditional_trigger_value='Yes',
+            order=2
+        )
+        self.q_reason_not = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_dr,
+            text_ar='سبب عدم مقابلة الطبيب؟',
+            question_type='textarea',
+            stage='all',
+            is_required=True,
+            is_conditional=True,
+            conditional_parent=self.q_meet,
+            conditional_trigger_value='No',
+            order=3
+        )
+
+        # Template 2: Pharmacy
+        self.tmpl_pharmacy = VisitTemplate.objects.create(
+            name='single_visit_pharmacy_wf',
+            display_name_ar='زيارة صيدلية',
+            mode='checkin_checkout',
+            allow_unplanned=True,
+            auto_approve_unplanned=False,
+            enable_product_detailing=True,
+            restrict_account_types=['pharmacy'],
+            active=True
+        )
+
+    def test_visit_templates_api_filters_by_account_type(self):
+        # 1. Query for clinic customer
+        res_clinic = self.client.get(reverse('visit_templates_api'), {'contact_id': self.clinic_customer.id})
+        self.assertEqual(res_clinic.status_code, 200)
+        data_clinic = res_clinic.json().get('results', [])
+        clinic_names = [t['name'] for t in data_clinic]
+        self.assertIn('single_visit_dr_wf', clinic_names)
+        self.assertNotIn('single_visit_pharmacy_wf', clinic_names)
+
+        # 2. Query for pharmacy customer
+        res_pharm = self.client.get(reverse('visit_templates_api'), {'contact_id': self.pharmacy_customer.id})
+        self.assertEqual(res_pharm.status_code, 200)
+        data_pharm = res_pharm.json().get('results', [])
+        pharm_names = [t['name'] for t in data_pharm]
+        self.assertIn('single_visit_pharmacy_wf', pharm_names)
+        self.assertNotIn('single_visit_dr_wf', pharm_names)
+
+    def test_unplanned_visit_creation_answers_and_product_detailing(self):
+        today = timezone.now().date()
+
+        # Submit with meeting = Yes: requires q_details, but q_reason_not is skipped
+        post_data = {
+            'contact': self.clinic_customer.id,
+            'template': self.tmpl_dr.id,
+            'owner': self.user.id,
+            'date': today.strftime('%Y-%m-%d'),
+            f'question_{self.q_meet.id}': 'Yes',
+            f'question_{self.q_details.id}': 'تمت مناقشة فاعلية الصنف وتأكيد كتابة 5 علب أسبوعياً',
+            'detailed_products': [self.product1.id, self.product2.id],
+            'visit_outcome': 'successful',
+            'feedback': 'زيارة ممتازة ومثمرة'
+        }
+
+        res = self.client.post(reverse('visit_create'), post_data)
+        self.assertEqual(res.status_code, 302)
+
+        visit = Visit.objects.filter(contact=self.clinic_customer).first()
+        self.assertIsNotNone(visit)
+        # Template has auto_approve_unplanned=True -> should be automatically approved
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.visit_outcome, 'successful')
+
+        # Check answers persisted properly in JSON
+        answers = visit.questionnaire_answers
+        self.assertEqual(answers.get(str(self.q_meet.id)), 'Yes')
+        self.assertEqual(answers.get(str(self.q_details.id)), 'تمت مناقشة فاعلية الصنف وتأكيد كتابة 5 علب أسبوعياً')
+        self.assertNotIn(str(self.q_reason_not.id), answers)
+
+        # Check product detailing persisted
+        detailed_ids = list(visit.detailed_products.values_list('id', flat=True))
+        self.assertIn(self.product1.id, detailed_ids)
+        self.assertIn(self.product2.id, detailed_ids)
+
+        # Check visit detail view
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertContains(detail_res, 'زيارة فردية لطبيب')
+        self.assertContains(detail_res, 'Cipram 20mg')
+        self.assertContains(detail_res, 'تمت مناقشة فاعلية الصنف')
+
+    def test_unplanned_visit_validation_enforces_required_fields(self):
+        today = timezone.now().date()
+
+        # Missing required answer to q_meet
+        post_data = {
+            'contact': self.clinic_customer.id,
+            'template': self.tmpl_dr.id,
+            'owner': self.user.id,
+            'date': today.strftime('%Y-%m-%d'),
+        }
+        res = self.client.post(reverse('visit_create'), post_data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res.status_code, 400)
+        data = res.json()
+        self.assertFalse(data.get('success'))
+        self.assertIn('إلزامي', data.get('message', ''))
+
+    def test_planned_visit_execution_with_template(self):
+        today = timezone.now().date()
+
+        # 1. Create a planned day & item
+        plan_day = PlannedVisitDay.objects.create(assignee=self.user, date=today, created_by=self.user)
+        plan_item = PlannedVisitItem.objects.create(
+            plan_day=plan_day,
+            contact=self.clinic_customer,
+            template=self.tmpl_dr,
+            order=1,
+            notes='زيارة مخططة للأسبوع الثالث'
+        )
+
+        # 2. Rep clicks Execute
+        exec_res = self.client.get(reverse('planned_visit_item_execute', args=[plan_item.pk]))
+        self.assertEqual(exec_res.status_code, 302)
+        self.assertIn(f'planned_item_id={plan_item.pk}', exec_res.url)
+        self.assertIn(f'contact_id={self.clinic_customer.id}', exec_res.url)
+
+        # 3. Rep submits visit through form
+        post_data = {
+            'contact': self.clinic_customer.id,
+            'template': self.tmpl_dr.id,
+            'owner': self.user.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'planned_item_id': plan_item.id,
+            f'question_{self.q_meet.id}': 'No',
+            f'question_{self.q_reason_not.id}': 'الطبيب في مؤتمر علمي بالخارج',
+            'feedback': 'تأجيل المتابعة للأسبوع القادم'
+        }
+        submit_res = self.client.post(reverse('visit_create'), post_data)
+        self.assertEqual(submit_res.status_code, 302)
+
+        # Verify plan item executed
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed)
+        self.assertIsNotNone(plan_item.visit)
+        self.assertEqual(plan_item.visit.is_planned, True)
+        self.assertEqual(plan_item.visit.questionnaire_answers.get(str(self.q_reason_not.id)), 'الطبيب في مؤتمر علمي بالخارج')
+
 
 

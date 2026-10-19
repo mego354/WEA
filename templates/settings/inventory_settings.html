@@ -1,0 +1,67 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}اعدادات المخازن - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">اعدادات المخازن</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Header matching Reference ERP (media_1792380517690.png) -->
+    <div class="flex items-center justify-between pb-2">
+        <h1 class="text-2xl font-bold text-[#27bebe]">اعدادات المخازن</h1>
+    </div>
+
+    <!-- Main Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 md:p-8 max-w-2xl">
+        <form method="POST" action="{% url 'inventory_settings' %}" class="space-y-6">
+            {% csrf_token %}
+
+            <div class="space-y-4">
+                <!-- استخدم تاريخ الصلاحية -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5">
+                    <span class="text-xs font-bold text-slate-700">استخدم تاريخ الصلاحية</span>
+                    <input type="checkbox" name="use_expiry_date" {% if profile.use_expiry_date %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- تاريخ الصلاحية مطلوب -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5">
+                    <span class="text-xs font-bold text-slate-700">تاريخ الصلاحية مطلوب</span>
+                    <input type="checkbox" name="is_expiry_mandatory" {% if profile.is_expiry_mandatory %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- استخدم رقم التشغيل -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5">
+                    <span class="text-xs font-bold text-slate-700">استخدم رقم التشغيل</span>
+                    <input type="checkbox" name="use_batch_number" {% if profile.use_batch_number %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- رقم التشغيل مطلوب -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5">
+                    <span class="text-xs font-bold text-slate-700">رقم التشغيل مطلوب</span>
+                    <input type="checkbox" name="is_batch_mandatory" {% if profile.is_batch_mandatory %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+            </div>
+
+            <!-- Save Button -->
+            <div class="pt-4 flex items-center justify-start border-t border-slate-100">
+                <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">save</span>
+                    <span>حفظ</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

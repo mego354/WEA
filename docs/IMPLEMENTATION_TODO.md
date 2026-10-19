@@ -11,6 +11,33 @@
 
 ---
 
+## Phase 6: Visit Templates & Lifecycle Integration (قوالب الزيارات)
+
+- [X] **DATA-01**: Extend `VisitTemplate` model with full settings and constraints matching Reference ERP.
+- [X] **DATA-02**: Create `VisitTemplateQuestion` model with field types, options, required, conditional logic, and lifecycle stages.
+- [X] **DATA-03**: Update `Visit` model with `detailed_products` ManyToMany and visit outcome tracking.
+- [X] **DATA-04**: Generate and execute database migrations.
+- [X] **DATA-05**: Seed all 6 standard reference visit templates and their exact questions.
+- [X] **CRUD-01**: Implement `/settings/visits/templates` listing view and template matching reference screenshot (`media_1792386023336.png`).
+- [X] **CRUD-02**: Implement template creation view and template (`/settings/visits/templates/create`).
+- [X] **CRUD-03**: Implement template edit view and template (`/settings/visits/templates/<id>/edit`).
+- [X] **CRUD-04**: Implement template preview view (`/settings/visits/templates/<id>/preview`).
+- [X] **CRUD-05**: Implement question builder API/endpoints (add question, edit, delete, reorder).
+- [X] **CRUD-06**: Implement template deletion safeguard (prevent deleting active templates with visits).
+- [X] **NAV-01**: Add `قوالب الزيارات` link to Settings submenu in `templates/layouts/base.html`.
+- [X] **FLOW-01**: Integrate template selection in Planned Visits (`PlannedVisitItem`).
+- [X] **FLOW-02**: Integrate template selection and account type filtering in Unplanned Visits (`visit_create`).
+- [X] **FLOW-03**: Implement dynamic questionnaire form rendering (single choice, text, textarea, conditional triggers).
+- [X] **FLOW-04**: Implement Product Detailing (`المنتجات المشروحة`) selection and persistence.
+- [X] **FLOW-05**: Implement Representative Lifecycle: Check-in (start_only stage), In-progress, and Completion/Check-out.
+- [X] **FLOW-06**: Render questionnaire answers and detailed products in Visit Detail (`visit_detail`).
+- [X] **FLOW-07**: Support editing visit answers while preserving historical integrity (`visit_edit`).
+- [X] **TEST-01**: Write comprehensive automated tests in `activities/tests.py`.
+- [X] **TEST-02**: Verify 100% test pass with zero regressions.
+
+
+---
+
 ## Phase 1: Reusable Excel Core Utilities
 
 - [X] `master_data/excel_utils.py` implementation:

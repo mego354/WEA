@@ -110,19 +110,60 @@
             </div>
 
             <!-- Questionnaire Answers Card -->
-            {% if visit.questionnaire_answers %}
+            {% if questionnaire_responses or visit.questionnaire_answers %}
             <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
-                    <span>إجابات الاستبيان والملاحظات</span>
-                </h2>
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
+                        <span>إجابات استبيان الزيارة</span>
+                    </h2>
+                    {% if visit.template %}
+                    <span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-brand-700 border border-teal-200">
+                        {{ visit.template.display_name_ar }}
+                    </span>
+                    {% endif %}
+                </div>
 
                 <div class="space-y-3">
-                    {% for q, a in visit.questionnaire_answers.items %}
-                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
-                        <span class="font-bold text-slate-800 block mb-1">{{ q }}</span>
-                        <span class="text-slate-600 font-medium">{{ a }}</span>
-                    </div>
+                    {% if questionnaire_responses %}
+                        {% for resp in questionnaire_responses %}
+                        <div class="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 text-xs space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-slate-800 block">{{ resp.text_ar }}</span>
+                                <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">{{ resp.stage }}</span>
+                            </div>
+                            <div class="pt-1">
+                                <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold {% if resp.answer == 'Yes' or resp.answer == 'نعم' %}bg-emerald-100 text-emerald-800 border border-emerald-300{% elif resp.answer == 'No' or resp.answer == 'لا' %}bg-rose-100 text-rose-800 border border-rose-300{% else %}bg-white text-slate-700 border border-slate-200{% endif %}">
+                                    {{ resp.answer }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        {% for q, a in visit.questionnaire_answers.items %}
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
+                            <span class="font-bold text-slate-800 block mb-1">{{ q }}</span>
+                            <span class="text-slate-600 font-medium">{{ a }}</span>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Detailed Products Card (المنتجات المشروحة) -->
+            {% if visit.detailed_products.exists %}
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">medication</span>
+                    <span>المنتجات المشروحة (Product Detailing)</span>
+                </h2>
+                <div class="flex flex-wrap gap-2">
+                    {% for p in visit.detailed_products.all %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-[#1a8b8b] border border-teal-200 text-xs font-bold">
+                        <span class="material-symbols-outlined text-sm">check_circle</span>
+                        <span>{{ p.name }}</span>
+                    </span>
                     {% endfor %}
                 </div>
             </div>

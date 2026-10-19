@@ -1,0 +1,108 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}إعدادات المشتريات - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">إعدادات المشتريات</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Header matching Reference ERP (media_1792380472894.png) -->
+    <div class="flex items-center justify-between pb-2">
+        <h1 class="text-2xl font-bold text-[#27bebe]">إعدادات المشتريات</h1>
+    </div>
+
+    <!-- Main Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 md:p-8">
+        <form method="POST" action="{% url 'purchase_settings' %}" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Workflow Automation Switches matching Reference ERP -->
+            <div class="space-y-4">
+                <!-- عمل فاتورة بشكل تلقائى عند الاخراج من المخزن -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">عمل فاتورة بشكل تلقائى عند الاخراج من المخزن</span>
+                    <input type="checkbox" name="auto_invoice_on_dispatch" {% if settings.auto_invoice_on_dispatch %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- عمل فاتورة بشكل تلقائى عند الارجاع الى المخزن -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">عمل فاتورة بشكل تلقائى عند الارجاع الى المخزن</span>
+                    <input type="checkbox" name="auto_invoice_on_return" {% if settings.auto_invoice_on_return %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- تحصيل الدفعة عند فوترة الطلب -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">تحصيل الدفعة عند فوترة الطلب</span>
+                    <input type="checkbox" name="collect_payment_on_invoicing" {% if settings.collect_payment_on_invoicing %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- ربط بالحسابات تلقائى عند إنشاء المدفوعات -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">ربط بالحسابات تلقائى عند إنشاء المدفوعات</span>
+                    <input type="checkbox" name="auto_link_accounting_on_payment" {% if settings.auto_link_accounting_on_payment %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- إغلاق تلقائي لطلبات الدفع النقدي -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">إغلاق تلقائي لطلبات الدفع النقدي</span>
+                    <input type="checkbox" name="auto_close_cash_payment" {% if settings.auto_close_cash_payment %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- إغلاق تلقائي لطلبات الدفع عند السداد كاملا -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <span class="text-xs font-bold text-slate-700">إغلاق تلقائي لطلبات الدفع عند السداد كاملا</span>
+                    <input type="checkbox" name="auto_close_payment_on_full_settlement" {% if settings.auto_close_payment_on_full_settlement %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+            </div>
+
+            <!-- إعدادات الضريبة -->
+            <div class="pt-6 border-t border-slate-100">
+                <h2 class="text-sm font-bold text-slate-800 mb-3">إعدادات الضريبة</h2>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">نمط الضريبة</label>
+                    <select name="tax_mode" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                        <option value="optional" {% if settings.tax_mode == 'optional' %}selected{% endif %}>اختياري</option>
+                        <option value="mandatory" {% if settings.tax_mode == 'mandatory' %}selected{% endif %}>إلزامي</option>
+                        <option value="exempt" {% if settings.tax_mode == 'exempt' %}selected{% endif %}>معفى</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- إعدادات التعبئة -->
+            <div class="pt-6 border-t border-slate-100">
+                <h2 class="text-sm font-bold text-slate-800 mb-3">إعدادات التعبئة</h2>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">حجم التعبئة الافتراضي*</label>
+                    <select name="default_packaging_unit" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                        <option value="piece" {% if settings.default_packaging_unit == 'piece' %}selected{% endif %}>قطعة</option>
+                        <option value="box" {% if settings.default_packaging_unit == 'box' %}selected{% endif %}>علبة</option>
+                        <option value="carton" {% if settings.default_packaging_unit == 'carton' %}selected{% endif %}>كرتونة</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="pt-4 flex items-center justify-end border-t border-slate-100">
+                <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">save</span>
+                    <span>حفظ</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

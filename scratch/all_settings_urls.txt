@@ -1,0 +1,17 @@
+/settings/agreements
+/settings/areas
+/settings/branding
+/settings/contacts-udf
+/settings/expenses
+/settings/inventory
+/settings/location
+/settings/purchase
+/settings/requests
+/settings/roles
+/settings/roles/edit/1ce71b82-d956-42d8-8998-4e7f013f7716
+/settings/sales
+/settings/sync-data
+/settings/tickets
+/settings/users
+/settings/visits
+/settings/visits/templates

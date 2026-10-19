@@ -1,0 +1,243 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}تخصيص الحقول - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">تخصيص الحقول</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Header matching Reference ERP (media_1792380569342.png) -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-[#27bebe]">تخصيص الحقول</h1>
+            <p class="text-xs text-slate-500 mt-1">تخصيص حقول جهات الاتصال لتحديد الحقول الإلزامية وتلك القابلة للتصفية في كارت العميل</p>
+        </div>
+    </div>
+
+    <!-- Info Note -->
+    <div class="bg-teal-50 border border-teal-200 text-teal-800 text-xs p-3.5 rounded-xl flex items-center gap-2.5">
+        <span class="material-symbols-outlined text-lg text-[#27bebe]">info</span>
+        <span>الحقول المؤشر عليها بـ <strong>مغلق</strong> هي حقول نظام رئيسية لا يمكن تعطيلها أو تغيير حالتها.</span>
+    </div>
+
+    <!-- Section 1: Info card header -->
+    <div class="space-y-3">
+        <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <span class="material-symbols-outlined text-slate-400 text-lg">view_headline</span>
+            <h2 class="text-sm font-bold text-slate-700">ترويسة كارت جهة الاتصال (Info card header)</h2>
+        </div>
+
+        <div class="space-y-2.5">
+            {% for f in header_fields %}
+            <div class="p-3.5 rounded-xl flex items-center justify-between bg-white border border-slate-200 hover:border-teal-200 hover:shadow-2xs transition-all">
+                <!-- Actions & Badges on Left -->
+                <div class="flex items-center gap-2">
+                    {% if not f.is_locked %}
+                    <button type="button" onclick="openEditFieldModal('{{ f.id }}', '{{ f.display_name }}', {{ f.is_required|yesno:'true,false' }}, {{ f.is_filterable|yesno:'true,false' }})"
+                            class="p-1 text-slate-400 hover:text-[#27bebe] transition-colors rounded-md" title="تعديل خصائص الحقل">
+                        <span class="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    {% endif %}
+
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        {% if f.is_locked %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">مغلق</span>
+                        {% endif %}
+                        {% if f.is_core %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#27bebe] border border-teal-200">اساسي</span>
+                        {% endif %}
+                        {% if f.is_builtin %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-600 border border-blue-200">مدمج</span>
+                        {% endif %}
+                        {% if f.is_required %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">مطلوب</span>
+                        {% endif %}
+                        {% if f.is_filterable %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">قابلة للتصفية</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Field Name on Right -->
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-300 text-lg">drag_indicator</span>
+                    <span class="text-sm font-bold text-slate-800">{{ f.display_name }}</span>
+                    <span class="text-xs text-slate-400 font-mono">({{ f.field_key }})</span>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400 py-2">لا توجد حقول مسجلة في هذا القسم</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Section 2: Info card subheader -->
+    <div class="space-y-3 pt-2">
+        <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <span class="material-symbols-outlined text-slate-400 text-lg">subtitles</span>
+            <h2 class="text-sm font-bold text-slate-700">أسفل ترويسة جهة الاتصال (Info card subheader)</h2>
+        </div>
+
+        <div class="space-y-2.5">
+            {% for f in subheader_fields %}
+            <div class="p-3.5 rounded-xl flex items-center justify-between bg-white border border-slate-200 hover:border-teal-200 hover:shadow-2xs transition-all">
+                <!-- Actions & Badges on Left -->
+                <div class="flex items-center gap-2">
+                    {% if not f.is_locked %}
+                    <button type="button" onclick="openEditFieldModal('{{ f.id }}', '{{ f.display_name }}', {{ f.is_required|yesno:'true,false' }}, {{ f.is_filterable|yesno:'true,false' }})"
+                            class="p-1 text-slate-400 hover:text-[#27bebe] transition-colors rounded-md" title="تعديل خصائص الحقل">
+                        <span class="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    {% endif %}
+
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        {% if f.is_locked %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">مغلق</span>
+                        {% endif %}
+                        {% if f.is_core %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#27bebe] border border-teal-200">اساسي</span>
+                        {% endif %}
+                        {% if f.is_builtin %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-600 border border-blue-200">مدمج</span>
+                        {% endif %}
+                        {% if f.is_required %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">مطلوب</span>
+                        {% endif %}
+                        {% if f.is_filterable %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">قابلة للتصفية</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Field Name on Right -->
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-300 text-lg">drag_indicator</span>
+                    <span class="text-sm font-bold text-slate-800">{{ f.display_name }}</span>
+                    <span class="text-xs text-slate-400 font-mono">({{ f.field_key }})</span>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400 py-2">لا توجد حقول مسجلة في هذا القسم</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Section 3: Basic Info -->
+    <div class="space-y-3 pt-2">
+        <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <span class="material-symbols-outlined text-slate-400 text-lg">contact_page</span>
+            <h2 class="text-sm font-bold text-slate-700">المعلومات الأساسية (Basic Info)</h2>
+        </div>
+
+        <div class="space-y-2.5">
+            {% for f in basic_fields %}
+            <div class="p-3.5 rounded-xl flex items-center justify-between bg-white border border-slate-200 hover:border-teal-200 hover:shadow-2xs transition-all">
+                <!-- Actions & Badges on Left -->
+                <div class="flex items-center gap-2">
+                    {% if not f.is_locked %}
+                    <button type="button" onclick="openEditFieldModal('{{ f.id }}', '{{ f.display_name }}', {{ f.is_required|yesno:'true,false' }}, {{ f.is_filterable|yesno:'true,false' }})"
+                            class="p-1 text-slate-400 hover:text-[#27bebe] transition-colors rounded-md" title="تعديل خصائص الحقل">
+                        <span class="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    {% endif %}
+
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        {% if f.is_locked %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">مغلق</span>
+                        {% endif %}
+                        {% if f.is_core %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#27bebe] border border-teal-200">اساسي</span>
+                        {% endif %}
+                        {% if f.is_builtin %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-600 border border-blue-200">مدمج</span>
+                        {% endif %}
+                        {% if f.is_required %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">مطلوب</span>
+                        {% endif %}
+                        {% if f.is_filterable %}
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">قابلة للتصفية</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Field Name on Right -->
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-300 text-lg">drag_indicator</span>
+                    <span class="text-sm font-bold text-slate-800">{{ f.display_name }}</span>
+                    <span class="text-xs text-slate-400 font-mono">({{ f.field_key }})</span>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400 py-2">لا توجد حقول مسجلة في هذا القسم</p>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<!-- MODAL: EDIT FIELD SETTINGS -->
+<div id="fieldModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-100">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+            <h2 id="fieldModalTitle" class="text-lg font-bold text-[#27bebe]">تخصيص الحقل</h2>
+            <button type="button" onclick="closeFieldModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined text-2xl">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'contacts_udf' %}" class="space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="field_id" id="fieldIdInput">
+
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 text-right" id="fieldNameDisplay">
+            </div>
+
+            <div class="space-y-3 pt-2">
+                <label class="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer border border-slate-200 transition-colors">
+                    <span class="text-xs font-bold text-slate-700">حقل إلزامي (مطلوب)</span>
+                    <input type="checkbox" name="is_required" id="fieldIsRequiredInput"
+                           class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] focus:ring-offset-0 border-slate-300">
+                </label>
+
+                <label class="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer border border-slate-200 transition-colors">
+                    <span class="text-xs font-bold text-slate-700">قابل للتصفية والفلترة</span>
+                    <input type="checkbox" name="is_filterable" id="fieldIsFilterableInput"
+                           class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] focus:ring-offset-0 border-slate-300">
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button type="button" onclick="closeFieldModal()"
+                        class="px-5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    إلغاء
+                </button>
+                <button type="submit"
+                        class="px-6 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all">
+                    حفظ التعديلات
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openEditFieldModal(id, name, isRequired, isFilterable) {
+    document.getElementById('fieldIdInput').value = id;
+    document.getElementById('fieldNameDisplay').textContent = name;
+    document.getElementById('fieldIsRequiredInput').checked = isRequired;
+    document.getElementById('fieldIsFilterableInput').checked = isFilterable;
+    document.getElementById('fieldModal').classList.remove('hidden');
+}
+
+function closeFieldModal() {
+    document.getElementById('fieldModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

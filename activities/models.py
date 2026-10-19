@@ -75,20 +75,98 @@ class Agreement(models.Model):
 
 
 class VisitTemplate(models.Model):
+    MODE_CHOICES = [
+        ('checkin_checkout', 'Checkin and Checkout'),
+        ('normal', 'عادي'),
+    ]
+
+    OUTCOME_MODES = [
+        ('disabled', 'معطل'),
+        ('enabled_auto_approve_unsuccessful', 'Enabled, auto approve unsuccessful'),
+        ('enabled', 'مفعل'),
+    ]
+
     name = models.CharField(max_length=100, unique=True, verbose_name="اسم القالب الداخلي")
     display_name_ar = models.CharField(max_length=150, verbose_name="الاسم بالعربية")
     display_name_en = models.CharField(max_length=150, blank=True, verbose_name="الاسم بالإنجليزية")
     active = models.BooleanField(default=True, verbose_name="نشط")
+
+    # Settings
+    mode = models.CharField(max_length=50, default='checkin_checkout', choices=MODE_CHOICES, verbose_name="الوضع")
+    allow_unplanned = models.BooleanField(default=True, verbose_name="تفعيل تسجيل زيارات خارج خطة الزيارات")
+    auto_approve_unplanned = models.BooleanField(default=False, verbose_name="موافقة تلقائية للزيارات المنشأة خارج خطة الزيارات")
+    enable_product_detailing = models.BooleanField(default=True, verbose_name="تفعيل شرح المنتجات")
+    enable_double_visit_assessment_only = models.BooleanField(default=False, verbose_name="تفعيل التقييمات للزيارات المزدوجة فقط")
+    visit_outcome_mode = models.CharField(max_length=50, default='enabled_auto_approve_unsuccessful', choices=OUTCOME_MODES, verbose_name="نتيجة الزيارة")
+    auto_end_visit = models.BooleanField(default=False, verbose_name="إنهاء الزيارة تلقائياً")
+
+    # Location
+    has_special_location_settings = models.BooleanField(default=False, verbose_name="اعدادات خاصة للتحقق من الموقع")
+    special_tolerance = models.PositiveIntegerField(default=300, verbose_name="سماحية الموقع الخاصة (متر)")
+
+    # Constraints
+    restricted_roles = models.ManyToManyField('accounts.Role', blank=True, related_name='visit_templates', verbose_name="تقييد على أدوار المستخدمين")
+    business_relationship = models.CharField(max_length=50, blank=True, default='', verbose_name="علاقة العمل")
+    contact_type = models.CharField(max_length=50, blank=True, default='', verbose_name="نوع جهة الاتصال")
     restrict_account_types = models.JSONField(default=list, blank=True, verbose_name="نوع الحساب المستهدف")
-    questionnaire = models.JSONField(default=dict, blank=True, verbose_name="أسئلة الاستبيان")
+    customer_classifications = models.JSONField(default=list, blank=True, verbose_name="تصنيفات العملاء")
+    specialties = models.JSONField(default=list, blank=True, verbose_name="التخصصات المستهدفة")
+    customer_status = models.CharField(max_length=50, blank=True, default='', verbose_name="حالة العميل")
+
+    questionnaire = models.JSONField(default=dict, blank=True, verbose_name="أسئلة الاستبيان (نسخة احتياطية)")
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True, verbose_name="تاريخ التحديث")
 
     class Meta:
         verbose_name = "قالب زيارة"
         verbose_name_plural = "قوالب الزيارات"
-        ordering = ['display_name_ar']
+        ordering = ['id']
 
     def __str__(self):
         return self.display_name_ar or self.name
+
+    @property
+    def questions_count(self):
+        return self.questions.filter(is_active=True).count()
+
+
+class VisitTemplateQuestion(models.Model):
+    QUESTION_TYPES = [
+        ('single_choice', 'اختيار واحد من متعدد'),
+        ('multiple_choice', 'اختيار متعدد'),
+        ('text', 'نص قصير'),
+        ('textarea', 'نص طويل'),
+        ('number', 'رقم'),
+        ('date', 'تاريخ'),
+        ('rating', 'تقييم'),
+    ]
+
+    STAGES = [
+        ('all', 'كامل الزيارة'),
+        ('start_only', 'البدء فقط ▶'),
+        ('end_only', 'الإنهاء فقط ■'),
+    ]
+
+    template = models.ForeignKey(VisitTemplate, on_delete=models.CASCADE, related_name='questions', verbose_name="القالب")
+    text_ar = models.CharField(max_length=255, verbose_name="العنوان (ar)")
+    text_en = models.CharField(max_length=255, blank=True, default='', verbose_name="العنوان (en)")
+    question_type = models.CharField(max_length=50, choices=QUESTION_TYPES, default='single_choice', verbose_name="نوع السؤال")
+    options = models.JSONField(default=list, blank=True, help_text="قائمة الخيارات: [{'text_ar': ..., 'text_en': ..., 'value': ...}]", verbose_name="الخيارات")
+    is_required = models.BooleanField(default=True, verbose_name="مطلوب")
+    is_conditional = models.BooleanField(default=False, verbose_name="مشروط")
+    conditional_parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='conditional_dependents', verbose_name="السؤال الشرطي الأب")
+    conditional_trigger_value = models.CharField(max_length=255, blank=True, default='', verbose_name="قيمة الإجابة المشروطة")
+    stage = models.CharField(max_length=50, choices=STAGES, default='all', verbose_name="مرحلة السؤال")
+    order = models.PositiveIntegerField(default=1, verbose_name="الترتيب")
+    is_active = models.BooleanField(default=True, verbose_name="نشط")
+
+    class Meta:
+        verbose_name = "سؤال استبيان الزيارة"
+        verbose_name_plural = "أسئلة استبيانات الزيارات"
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.template.display_name_ar} - {self.text_ar}"
 
 
 class PlannedVisitDay(models.Model):
@@ -149,6 +227,8 @@ class Visit(models.Model):
     
     feedback = models.TextField(blank=True, default='', verbose_name="الملاحظات والنتائج")
     questionnaire_answers = models.JSONField(default=dict, blank=True, verbose_name="إجابات الاستبيان")
+    detailed_products = models.ManyToManyField('catalog.Product', blank=True, related_name='detailed_in_visits', verbose_name="المنتجات المشروحة")
+    visit_outcome = models.CharField(max_length=50, blank=True, default='', verbose_name="نتيجة الزيارة")
     
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط العرض المسجل")
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط الطول المسجل")

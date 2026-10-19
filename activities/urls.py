@@ -29,5 +29,20 @@ urlpatterns = [
 
     # APIs
     path('api/templates/', views.visit_templates_api, name='visit_templates_api'),
+
+    # Settings -> Visit Templates (Reference ERP URL Parity)
+    path('settings/visits/templates/', views.visit_templates_list, name='visit_templates_list'),
+    path('settings/visits/templates/create/', views.visit_template_create, name='visit_template_create'),
+    path('settings/visits/templates/<int:pk>/edit/', views.visit_template_edit, name='visit_template_edit'),
+    path('settings/visits/templates/<int:pk>/preview/', views.visit_template_preview, name='visit_template_preview'),
+    path('settings/visits/templates/<int:pk>/delete/', views.visit_template_delete, name='visit_template_delete'),
+    path('settings/visits/templates/<int:pk>/toggle-status/', views.visit_template_toggle_status, name='visit_template_toggle_status'),
+
+    # Question Builder endpoints
+    path('settings/visits/templates/<int:template_pk>/questions/add/', views.template_question_add, name='template_question_add'),
+    path('settings/visits/templates/questions/<int:question_pk>/edit/', views.template_question_edit, name='template_question_edit'),
+    path('settings/visits/templates/questions/<int:question_pk>/delete/', views.template_question_delete, name='template_question_delete'),
+    path('settings/visits/templates/<int:template_pk>/questions/reorder/', views.template_questions_reorder, name='template_questions_reorder'),
 ]
+
 

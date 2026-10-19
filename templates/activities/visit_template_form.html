@@ -1,0 +1,532 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - الإعدادات{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+    <!-- Breadcrumbs & Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <a href="{% url 'visit_templates_list' %}" class="hover:text-brand-600 transition-colors">قوالب الزيارات</a>
+                <span class="material-symbols-outlined text-xs">chevron_left</span>
+                <span class="text-brand-600 font-bold">{{ title }}</span>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900">{{ title }}</h1>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                تكوين إعدادات وسلوكيات القالب، والقيود الجغرافية والوظيفية، وبناء أسئلة الاستبيان
+            </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            {% if not is_create %}
+            <a href="{% url 'visit_template_preview' template.pk %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">visibility</span>
+                <span>معاينة الاستبيان</span>
+            </a>
+            {% endif %}
+            <a href="{% url 'visit_templates_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors min-h-[40px]">
+                <span>رجوع للقائمة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Template Configuration Form -->
+    <form method="POST" action="" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- General Info Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600">badge</span>
+                    <h2 class="text-sm font-bold text-slate-900">المعلومات الأساسية للقالب</h2>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.active }}
+                    <span class="text-xs font-bold text-slate-700">تفعيل القالب (نشط)</span>
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">الاسم بالعربية *</label>
+                    {{ form.display_name_ar }}
+                    {% if form.display_name_ar.errors %}
+                    <p class="text-[11px] text-rose-600 mt-1 font-semibold">{{ form.display_name_ar.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">الاسم بالإنجليزية</label>
+                    {{ form.display_name_en }}
+                    {% if form.display_name_en.errors %}
+                    <p class="text-[11px] text-rose-600 mt-1 font-semibold">{{ form.display_name_en.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">المعرف الداخلي الفريد</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                    <p class="text-[11px] text-rose-600 mt-1 font-semibold">{{ form.name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Accordion 1: Settings (الإعدادات) -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <button type="button" onclick="toggleAccordion('acc-settings')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-brand-600">settings</span>
+                    <span class="text-sm font-bold text-slate-900">1. إعدادات وسلوكيات الزيارة (Settings)</span>
+                </div>
+                <span id="arrow-acc-settings" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+            </button>
+            <div id="acc-settings" class="p-5 space-y-4 border-t border-slate-100">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">الوضع (Mode)</label>
+                        {{ form.mode }}
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">نتيجة الزيارة (Visit Outcome)</label>
+                        {{ form.visit_outcome_mode }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.allow_unplanned }}
+                        <span class="text-xs font-bold text-slate-800">تفعيل تسجيل زيارات خارج الخطة</span>
+                    </label>
+
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.auto_approve_unplanned }}
+                        <span class="text-xs font-bold text-slate-800">موافقة تلقائية للزيارات خارج الخطة</span>
+                    </label>
+
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.enable_product_detailing }}
+                        <span class="text-xs font-bold text-slate-800">تفعيل شرح المنتجات (Product Detailing)</span>
+                    </label>
+
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.enable_double_visit_assessment_only }}
+                        <span class="text-xs font-bold text-slate-800">تقييمات للزيارات المزدوجة فقط</span>
+                    </label>
+
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.auto_end_visit }}
+                        <span class="text-xs font-bold text-slate-800">إنهاء الزيارة تلقائياً</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accordion 2: Location Settings (إعدادات الموقع الجغرافي) -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <button type="button" onclick="toggleAccordion('acc-location')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-brand-600">gps_fixed</span>
+                    <span class="text-sm font-bold text-slate-900">2. إعدادات التحقق من الموقع الجغرافي (Location Settings)</span>
+                </div>
+                <span id="arrow-acc-location" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+            </button>
+            <div id="acc-location" class="p-5 space-y-4 border-t border-slate-100">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                        {{ form.has_special_location_settings }}
+                        <span class="text-xs font-bold text-slate-800">اعدادات خاصة للتحقق من الموقع لهذا القالب</span>
+                    </label>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">سماحية الموقع الخاصة (بالمتر)</label>
+                        {{ form.special_tolerance }}
+                        <p class="text-[11px] text-slate-400 mt-1">تتجاوز السماحية العامة للنظام إذا تم تفعيل الإعداد الخاص</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accordion 3: Constraints & Targets (القيود والشروط) -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <button type="button" onclick="toggleAccordion('acc-constraints')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-brand-600">filter_alt</span>
+                    <span class="text-sm font-bold text-slate-900">3. القيود وتحديد الحسابات المستهدفة (Constraints)</span>
+                </div>
+                <span id="arrow-acc-constraints" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+            </button>
+            <div id="acc-constraints" class="p-5 space-y-4 border-t border-slate-100">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">نوع الحساب المستهدف (Account Types)</label>
+                    <p class="text-[11px] text-slate-400 mb-2">
+                        حدد أنواع الحسابات التي يتاح لها هذا القالب عند تسجيل الزيارة (اتركها فارغة لإتاحته لكافة الحسابات):
+                    </p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {% for choice in form.restrict_account_types %}
+                        <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold cursor-pointer">
+                            {{ choice.tag }}
+                            <span>{{ choice.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">تقييد على أدوار المستخدمين (Restricted Roles)</label>
+                    {{ form.restricted_roles }}
+                    <p class="text-[11px] text-slate-400 mt-1">اتركه فارغاً ليكون متاحاً لكافة الأدوار الميدانية</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Submit Bar -->
+        <div class="flex items-center justify-end gap-3 pt-2">
+            <a href="{% url 'visit_templates_list' %}" class="px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors min-h-[44px] flex items-center justify-center">
+                إلغاء
+            </a>
+            <button type="submit" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-teal-500/20 transition-all min-h-[44px] flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-base">save</span>
+                <span>{% if is_create %}حفظ القالب والانتقال للأسئلة{% else %}حفظ التعديلات{% endif %}</span>
+            </button>
+        </div>
+    </form>
+
+    <!-- Question Builder Section (Available in Edit Mode) -->
+    {% if not is_create %}
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4 pt-6 mt-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600">quiz</span>
+                    <h2 class="text-base font-bold text-slate-900">أسئلة واستبيان الزيارة</h2>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-brand-700 border border-teal-200">
+                        {{ questions.count }} أسئلة
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    قم بإضافة الأسئلة، وتحديد خيارات الإجابة، والقواعد الشرطية لظهور الأسئلة التابعة
+                </p>
+            </div>
+
+            <button type="button" onclick="openAddQuestionModal()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">add_circle</span>
+                <span>إضافة سؤال جديد</span>
+            </button>
+        </div>
+
+        <!-- Questions List -->
+        {% if questions %}
+        <div class="space-y-3" id="questionsContainer">
+            {% for q in questions %}
+            <div class="p-4 rounded-xl border border-slate-200 bg-white hover:border-teal-300 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group" data-question-id="{{ q.id }}">
+                <div class="flex items-start gap-3 flex-1">
+                    <span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                        #{{ q.order }}
+                    </span>
+
+                    <div class="space-y-1 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="text-sm font-bold text-slate-900">{{ q.text_ar }}</h3>
+                            {% if q.text_en %}
+                            <span class="text-xs text-slate-400 font-medium" dir="ltr">({{ q.text_en }})</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Badges -->
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {{ q.get_question_type_display }}
+                            </span>
+
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold {% if q.stage == 'start_only' %}bg-sky-50 text-sky-700 border border-sky-200{% elif q.stage == 'end_only' %}bg-purple-50 text-purple-700 border border-purple-200{% else %}bg-slate-100 text-slate-700 border border-slate-200{% endif %}">
+                                {{ q.get_stage_display }}
+                            </span>
+
+                            {% if q.is_required %}
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                إلزامي
+                            </span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500">
+                                اختياري
+                            </span>
+                            {% endif %}
+
+                            {% if q.is_conditional %}
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[12px]">alt_route</span>
+                                مشروط: يظهر عند اختيار "{{ q.conditional_trigger_value }}"
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Options preview if choices -->
+                        {% if q.options %}
+                        <div class="flex flex-wrap items-center gap-1 pt-1.5">
+                            <span class="text-[10px] text-slate-400 font-bold">الخيارات:</span>
+                            {% for opt in q.options %}
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-800 border border-teal-100">
+                                {{ opt.text_ar }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-1 shrink-0 self-end sm:self-center">
+                    <button type="button" onclick="openEditQuestionModal('{{ q.id }}', '{{ q.text_ar|escapejs }}', '{{ q.text_en|escapejs }}', '{{ q.question_type }}', '{{ q.stage }}', {{ q.is_required|yesno:'true,false' }}, {{ q.is_conditional|yesno:'true,false' }}, '{{ q.conditional_parent_id|default:'' }}', '{{ q.conditional_trigger_value|escapejs }}', {{ q.options|safe|default:'[]' }})" class="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="تعديل السؤال">
+                        <span class="material-symbols-outlined text-lg">edit</span>
+                    </button>
+
+                    <form method="POST" action="{% url 'template_question_delete' q.id %}" onsubmit="return confirm('هل أنت متأكد من حذف هذا السؤال؟');" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف السؤال">
+                            <span class="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+            <span class="material-symbols-outlined text-slate-300 text-3xl mb-1">quiz</span>
+            <p class="text-xs text-slate-500">لم يتم إضافة أي أسئلة لهذا القالب بعد.</p>
+            <button type="button" onclick="openAddQuestionModal()" class="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>إضافة أول سؤال</span>
+            </button>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add / Edit Question Modal -->
+<div id="questionModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 my-8">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">quiz</span>
+                <h3 id="questionModalTitle" class="text-sm font-bold text-slate-900">إضافة سؤال جديد</h3>
+            </div>
+            <button type="button" onclick="closeQuestionModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form id="questionModalForm" method="POST" action="{% if not is_create %}{% url 'template_question_add' template.pk %}{% endif %}" class="space-y-4">
+            {% csrf_token %}
+            <input type="hidden" id="modal_options_json" name="options_json" value="[]">
+
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">نص السؤال بالعربية *</label>
+                <input type="text" id="modal_text_ar" name="text_ar" required placeholder="مثال: ? Did you meet the Dr" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">نص السؤال بالإنجليزية (اختياري)</label>
+                <input type="text" id="modal_text_en" name="text_en" placeholder="Question in English..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500" dir="ltr">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">نوع السؤال *</label>
+                    <select id="modal_question_type" name="question_type" onchange="onQuestionTypeChanged(this.value)" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="single_choice">اختيار واحد من متعدد (Single Choice)</option>
+                        <option value="multiple_choice">اختيار متعدد (Multiple Choice)</option>
+                        <option value="text">نص قصير (Text)</option>
+                        <option value="textarea">نص طويل (Textarea)</option>
+                        <option value="number">رقم (Number)</option>
+                        <option value="date">تاريخ (Date)</option>
+                        <option value="rating">تقييم (Rating)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">مرحلة السؤال *</label>
+                    <select id="modal_stage" name="stage" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="all">كامل الزيارة (All Stages)</option>
+                        <option value="start_only">البدء فقط ▶ (Check-in)</option>
+                        <option value="end_only">الإنهاء فقط ■ (Check-out)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 pt-1">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="modal_is_required" name="is_required" checked class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-xs font-bold text-slate-700">سؤال إلزامي</span>
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="modal_is_conditional" name="is_conditional" onchange="toggleConditionalFields(this.checked)" class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-xs font-bold text-slate-700">سؤال مشروط (يتبع سؤال آخر)</span>
+                </label>
+            </div>
+
+            <!-- Conditional Trigger Settings -->
+            <div id="conditionalBox" class="p-3 rounded-xl bg-amber-50/60 border border-amber-200 space-y-3 hidden">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">السؤال الشرطي الأب *</label>
+                        <select id="modal_conditional_parent" name="conditional_parent" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                            <option value="">-- اختر السؤال الأب --</option>
+                            {% if questions %}
+                            {% for parent_q in questions %}
+                            <option value="{{ parent_q.id }}">{{ parent_q.order }}. {{ parent_q.text_ar }}</option>
+                            {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">قيمة الإجابة المشروطة *</label>
+                        <input type="text" id="modal_conditional_trigger_value" name="conditional_trigger_value" placeholder="مثال: Yes أو No" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Choices Builder (for single_choice & multiple_choice) -->
+            <div id="choicesBox" class="space-y-2 pt-2 border-t border-slate-100">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-700">خيارات الإجابة *</label>
+                    <button type="button" onclick="addChoiceRow('', '', '')" class="inline-flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-700">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        <span>إضافة خيار</span>
+                    </button>
+                </div>
+
+                <div id="choicesList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <!-- Dynamic choice rows -->
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeQuestionModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 min-h-[40px]">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-xs min-h-[40px]">
+                    حفظ السؤال
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleAccordion(id) {
+    const el = document.getElementById(id);
+    const arrow = document.getElementById('arrow-' + id);
+    if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (arrow) arrow.style.transform = 'rotate(0deg)';
+    } else {
+        el.classList.add('hidden');
+        if (arrow) arrow.style.transform = 'rotate(180deg)';
+    }
+}
+
+function onQuestionTypeChanged(type) {
+    const choicesBox = document.getElementById('choicesBox');
+    if (type === 'single_choice' || type === 'multiple_choice') {
+        choicesBox.classList.remove('hidden');
+        const container = document.getElementById('choicesList');
+        if (container.children.length === 0) {
+            addChoiceRow('Yes', 'Yes', 'Yes');
+            addChoiceRow('No', 'No', 'No');
+        }
+    } else {
+        choicesBox.classList.add('hidden');
+    }
+}
+
+function toggleConditionalFields(isChecked) {
+    const box = document.getElementById('conditionalBox');
+    if (isChecked) {
+        box.classList.remove('hidden');
+    } else {
+        box.classList.add('hidden');
+    }
+}
+
+function addChoiceRow(textAr = '', val = '', textEn = '') {
+    const container = document.getElementById('choicesList');
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 choice-row';
+    row.innerHTML = `
+        <input type="text" name="option_text_ar[]" value="${textAr}" placeholder="نص الخيار بالعربية" required class="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500">
+        <input type="text" name="option_value[]" value="${val || textAr}" placeholder="القيمة" class="w-24 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500">
+        <button type="button" onclick="this.parentElement.remove()" class="p-1 rounded-lg text-rose-500 hover:bg-rose-50 min-w-[32px] min-h-[32px] flex items-center justify-center">
+            <span class="material-symbols-outlined text-base">delete</span>
+        </button>
+    `;
+    container.appendChild(row);
+}
+
+function openAddQuestionModal() {
+    const modal = document.getElementById('questionModal');
+    const form = document.getElementById('questionModalForm');
+    document.getElementById('questionModalTitle').innerText = 'إضافة سؤال جديد';
+    form.action = "{% if not is_create %}{% url 'template_question_add' template.pk %}{% endif %}";
+
+    document.getElementById('modal_text_ar').value = '';
+    document.getElementById('modal_text_en').value = '';
+    document.getElementById('modal_question_type').value = 'single_choice';
+    document.getElementById('modal_stage').value = 'all';
+    document.getElementById('modal_is_required').checked = true;
+    document.getElementById('modal_is_conditional').checked = false;
+    document.getElementById('modal_conditional_parent').value = '';
+    document.getElementById('modal_conditional_trigger_value').value = '';
+
+    const container = document.getElementById('choicesList');
+    container.innerHTML = '';
+    addChoiceRow('Yes', 'Yes', 'Yes');
+    addChoiceRow('No', 'No', 'No');
+    onQuestionTypeChanged('single_choice');
+    toggleConditionalFields(false);
+
+    modal.classList.remove('hidden');
+}
+
+function openEditQuestionModal(id, textAr, textEn, type, stage, isRequired, isConditional, parentId, triggerVal, options) {
+    const modal = document.getElementById('questionModal');
+    const form = document.getElementById('questionModalForm');
+    document.getElementById('questionModalTitle').innerText = 'تعديل السؤال';
+    form.action = `/settings/visits/templates/questions/${id}/edit/`;
+
+    document.getElementById('modal_text_ar').value = textAr;
+    document.getElementById('modal_text_en').value = textEn;
+    document.getElementById('modal_question_type').value = type;
+    document.getElementById('modal_stage').value = stage;
+    document.getElementById('modal_is_required').checked = isRequired;
+    document.getElementById('modal_is_conditional').checked = isConditional;
+    document.getElementById('modal_conditional_parent').value = parentId;
+    document.getElementById('modal_conditional_trigger_value').value = triggerVal;
+
+    const container = document.getElementById('choicesList');
+    container.innerHTML = '';
+    if (options && options.length > 0) {
+        options.forEach(opt => {
+            addChoiceRow(opt.text_ar || '', opt.value || opt.text_ar || '', opt.text_en || '');
+        });
+    }
+
+    onQuestionTypeChanged(type);
+    toggleConditionalFields(isConditional);
+
+    modal.classList.remove('hidden');
+}
+
+function closeQuestionModal() {
+    document.getElementById('questionModal').classList.add('hidden');
+}
+</script>
+{% endblock %}
