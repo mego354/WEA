@@ -80,3 +80,196 @@ class LocationSettings(models.Model):
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
 
+
+class ExpenseType(models.Model):
+    EXPENSE_CATEGORIES = [
+        ('general', 'مصروفات عامة'),
+        ('visit', 'مصروفات للزيارات فقط'),
+    ]
+
+    name = models.CharField(max_length=150, verbose_name="الاسم بالعربية")
+    name_en = models.CharField(max_length=150, blank=True, verbose_name="الاسم بالإنجليزية")
+    category = models.CharField(max_length=20, choices=EXPENSE_CATEGORIES, default='general', verbose_name="نوع المصروف")
+    unit = models.CharField(max_length=50, blank=True, default='الوحدة', verbose_name="الوحدة")
+    is_active = models.BooleanField(default=True, verbose_name="مفعل")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "نوع مصروف"
+        verbose_name_plural = "انواع المصروفات"
+        ordering = ['id']
+
+    def __str__(self):
+        if self.name_en:
+            return f"{self.name} {self.name_en}"
+        return self.name
+
+
+class TicketType(models.Model):
+    name = models.CharField(max_length=100, verbose_name="نوع المهمة")
+    is_default = models.BooleanField(default=False, verbose_name="افتراضي")
+    is_active = models.BooleanField(default=True, verbose_name="مفعل")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "نوع مهمة"
+        verbose_name_plural = "انواع المهام"
+        ordering = ['-is_default', 'id']
+
+    def __str__(self):
+        return self.name
+
+
+class ApprovalRequestType(models.Model):
+    name = models.CharField(max_length=100, verbose_name="نوع الموافقة")
+    is_default = models.BooleanField(default=False, verbose_name="افتراضي")
+    is_active = models.BooleanField(default=True, verbose_name="مفعل")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "نوع موافقة"
+        verbose_name_plural = "انواع الموافقات"
+        ordering = ['-is_default', 'id']
+
+    def __str__(self):
+        return self.name
+
+
+class AgreementType(models.Model):
+    name = models.CharField(max_length=100, verbose_name="نوع الاتفاقية")
+    is_active = models.BooleanField(default=True, verbose_name="مفعل")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "نوع اتفاقية"
+        verbose_name_plural = "انواع الاتفاقيات"
+        ordering = ['id']
+
+    def __str__(self):
+        return self.name
+
+
+class SalesSettings(models.Model):
+    TAX_MODES = [
+        ('optional', 'اختياري'),
+        ('mandatory', 'إلزامي'),
+        ('exempt', 'معفى'),
+    ]
+
+    PACKAGING_UNITS = [
+        ('box', 'علبة'),
+        ('strip', 'شريط'),
+        ('piece', 'قطعة'),
+        ('carton', 'كرتونة'),
+    ]
+
+    require_verification_manager = models.BooleanField(default=False, verbose_name="مسؤول التحقيق مطلوب في أمر البيع")
+    auto_invoice_on_dispatch = models.BooleanField(default=True, verbose_name="عمل فاتورة بشكل تلقائي عند الاخراج من المخزن")
+    auto_invoice_on_return = models.BooleanField(default=True, verbose_name="عمل فاتورة بشكل تلقائي عند الارجاع الى المخزن")
+    collect_payment_on_invoicing = models.BooleanField(default=True, verbose_name="تحصيل الدفعة عند فوترة الطلب")
+    auto_link_accounting_on_collection = models.BooleanField(default=True, verbose_name="ربط بالحسابات تلقائي عند إنشاء التحصيل")
+    use_receipt_books = models.BooleanField(default=False, verbose_name="استخدم دفاتر إيصالات التحصيلات")
+    auto_close_cash_collection = models.BooleanField(default=True, verbose_name="غلق تلقائي لطلب التحصيل النقدي")
+    auto_close_collection_on_full_payment = models.BooleanField(default=True, verbose_name="غلق تلقائي لطلب التحصيل عند السداد كاملا")
+
+    tax_mode = models.CharField(max_length=20, choices=TAX_MODES, default='optional', verbose_name="نمط الضريبة")
+    default_packaging_unit = models.CharField(max_length=20, choices=PACKAGING_UNITS, default='box', verbose_name="حجم التعبئة الافتراضي")
+    print_template = models.CharField(max_length=100, default='standard', verbose_name="قالب الطباعة")
+
+    class Meta:
+        verbose_name = "إعدادات المبيعات"
+        verbose_name_plural = "إعدادات المبيعات"
+
+    def __str__(self):
+        return "إعدادات المبيعات"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+
+
+class PurchaseSettings(models.Model):
+    TAX_MODES = [
+        ('optional', 'اختياري'),
+        ('mandatory', 'إلزامي'),
+        ('exempt', 'معفى'),
+    ]
+
+    PACKAGING_UNITS = [
+        ('piece', 'قطعة'),
+        ('box', 'علبة'),
+        ('carton', 'كرتونة'),
+    ]
+
+    auto_invoice_on_dispatch = models.BooleanField(default=True, verbose_name="عمل فاتورة بشكل تلقائى عند الاخراج من المخزن")
+    auto_invoice_on_return = models.BooleanField(default=True, verbose_name="عمل فاتورة بشكل تلقائى عند الارجاع الى المخزن")
+    collect_payment_on_invoicing = models.BooleanField(default=False, verbose_name="تحصيل الدفعة عند فوترة الطلب")
+    auto_link_accounting_on_payment = models.BooleanField(default=True, verbose_name="ربط بالحسابات تلقائى عند إنشاء المدفوعات")
+    auto_close_cash_payment = models.BooleanField(default=True, verbose_name="إغلاق تلقائي لطلبات الدفع النقدي")
+    auto_close_payment_on_full_settlement = models.BooleanField(default=True, verbose_name="إغلاق تلقائي لطلبات الدفع عند السداد كاملا")
+
+    tax_mode = models.CharField(max_length=20, choices=TAX_MODES, default='optional', verbose_name="نمط الضريبة")
+    default_packaging_unit = models.CharField(max_length=20, choices=PACKAGING_UNITS, default='piece', verbose_name="حجم التعبئة الافتراضي")
+
+    class Meta:
+        verbose_name = "إعدادات المشتريات"
+        verbose_name_plural = "إعدادات المشتريات"
+
+    def __str__(self):
+        return "إعدادات المشتريات"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+
+
+class ContactFieldSetting(models.Model):
+    SECTIONS = [
+        ('header', 'Info card header'),
+        ('subheader', 'Info card subheader'),
+        ('basic', 'المعلومات الأساسية'),
+    ]
+
+    field_key = models.CharField(max_length=50, unique=True, verbose_name="مفتاح الحقل")
+    display_name = models.CharField(max_length=100, verbose_name="اسم الحقل")
+    section = models.CharField(max_length=50, choices=SECTIONS, verbose_name="القسم")
+    is_locked = models.BooleanField(default=False, verbose_name="مغلق")
+    is_required = models.BooleanField(default=False, verbose_name="مطلوب")
+    is_builtin = models.BooleanField(default=True, verbose_name="مدمج")
+    is_core = models.BooleanField(default=False, verbose_name="اساسي")
+    is_filterable = models.BooleanField(default=False, verbose_name="قابلة للتصفية")
+    order = models.PositiveIntegerField(default=0, verbose_name="الترتيب")
+
+    class Meta:
+        verbose_name = "تخصيص حقل جهات الاتصال"
+        verbose_name_plural = "تخصيص حقول جهات الاتصال"
+        ordering = ['section', 'order']
+
+    def __str__(self):
+        return f"{self.display_name} ({self.field_key})"
+
+
+class DataSyncConfig(models.Model):
+    SYNC_TYPES = [
+        ('contacts', 'إستيراد جهات الاتصال'),
+        ('products', 'إستيراد المنتجات'),
+        ('areas', 'مزامنة المناطق'),
+    ]
+
+    sync_type = models.CharField(max_length=50, unique=True, choices=SYNC_TYPES, verbose_name="نوع المزامنة")
+    title = models.CharField(max_length=100, verbose_name="العنوان")
+    google_sheet_url = models.URLField(blank=True, verbose_name="رابط جدول جوجل")
+    service_account_email = models.CharField(max_length=200, default='gsheets-sync@mandoby-app.iam.gserviceaccount.com', verbose_name="البريد الإلكتروني للخدمة")
+    last_synced_at = models.DateTimeField(null=True, blank=True, verbose_name="آخر مزامنة")
+    status = models.CharField(max_length=50, default='idle', verbose_name="الحالة")
+
+    class Meta:
+        verbose_name = "إعداد مزامنة بيانات"
+        verbose_name_plural = "إعدادات مزامنة البيانات"
+
+    def __str__(self):
+        return self.title
+
+

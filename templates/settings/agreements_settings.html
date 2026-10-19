@@ -1,0 +1,106 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}انواع الاتفاقيات - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">انواع الاتفاقيات</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-4">
+
+    <!-- Header matching Reference ERP (media_1792380383553.png) -->
+    <div class="flex items-center justify-between pb-2">
+        <h1 class="text-2xl font-bold text-[#27bebe]">انواع الاتفاقيات</h1>
+    </div>
+
+    <!-- Action Button: أضف نوع جديد -->
+    <div class="flex justify-center pt-1">
+        <button type="button" onclick="openNewAgreementModal()"
+                class="px-6 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-1.5">
+            <span>أضف نوع جديد</span>
+        </button>
+    </div>
+
+    <!-- Agreement Types List matching Reference ERP Light Teal Cards -->
+    <div class="space-y-3.5 max-w-2xl mx-auto pt-2">
+        {% for a in agreements %}
+        <div class="p-4 rounded-xl flex items-center justify-between shadow-2xs hover:shadow-xs transition-all border border-teal-200/50" style="background-color: #e6f7f7;">
+            <!-- Left: Actions Delete, Edit -->
+            <div class="flex items-center gap-3">
+                <form method="POST" action="{% url 'agreement_type_delete' a.id %}" onsubmit="return confirm('حذف نوع الاتفاقية {{ a.name }}؟');" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
+                        <span class="material-symbols-outlined text-xl">delete</span>
+                    </button>
+                </form>
+                <button type="button" onclick="openEditAgreementModal('{{ a.id }}', '{{ a.name }}')" class="text-slate-500 hover:text-[#27bebe] transition-colors" title="تعديل">
+                    <span class="material-symbols-outlined text-xl">edit</span>
+                </button>
+            </div>
+
+            <!-- Right: Agreement Type Name -->
+            <div class="text-right">
+                <span class="text-sm font-bold text-slate-800">{{ a.name }}</span>
+            </div>
+        </div>
+        {% empty %}
+        <div class="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+            <span class="material-symbols-outlined text-3xl text-slate-300 block mb-1">handshake</span>
+            <p class="text-xs font-semibold">لا توجد أنواع اتفاقيات مسجلة</p>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- MODAL: ADD / EDIT AGREEMENT TYPE -->
+<div id="agreementModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-100">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+            <h2 id="agreementModalTitle" class="text-lg font-bold text-[#27bebe]">إضافة نوع اتفاقية جديد</h2>
+            <button type="button" onclick="closeAgreementModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined text-2xl">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'agreement_type_create' %}" id="agreementForm" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5 text-right">نوع الاتفاقية*</label>
+                <input type="text" name="name" id="agreementNameInput" required placeholder="e.g. Sponsorship, Scientific Meeting"
+                       class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+            </div>
+
+            <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button type="button" onclick="closeAgreementModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 text-sm font-semibold">إلغاء</button>
+                <button type="submit" class="px-6 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm">حفظ</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openNewAgreementModal() {
+        document.getElementById('agreementModalTitle').textContent = "إضافة نوع اتفاقية جديد";
+        document.getElementById('agreementForm').action = "{% url 'agreement_type_create' %}";
+        document.getElementById('agreementNameInput').value = "";
+        document.getElementById('agreementModal').classList.remove('hidden');
+    }
+
+    function openEditAgreementModal(id, name) {
+        document.getElementById('agreementModalTitle').textContent = "تعديل نوع الاتفاقية: " + name;
+        document.getElementById('agreementForm').action = "/settings/agreements/" + id + "/edit/";
+        document.getElementById('agreementNameInput').value = name;
+        document.getElementById('agreementModal').classList.remove('hidden');
+    }
+
+    function closeAgreementModal() {
+        document.getElementById('agreementModal').classList.add('hidden');
+    }
+</script>
+{% endblock %}

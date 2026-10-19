@@ -1,5 +1,5 @@
 from django import forms
-from .models import Agreement, Visit, PlannedVisitItem, VisitSampleItem
+from .models import Agreement, Visit, PlannedVisitItem, VisitSampleItem, VisitTemplate, VisitTemplateQuestion
 from contacts.models import Contact
 
 
@@ -58,7 +58,7 @@ class VisitForm(forms.ModelForm):
         model = Visit
         fields = ['contact', 'template', 'owner', 'date', 'is_successful', 'doubled', 'feedback', 'latitude', 'longitude', 'device_accuracy']
         widgets = {
-            'template': forms.Select(attrs={'id': 'visit-template-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
+            'template': forms.Select(attrs={'id': 'visit-template-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'onchange': 'onTemplateSelected(this.value)'}),
             'owner': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'date': forms.DateInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'type': 'date'}),
             'is_successful': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]'}),
@@ -125,5 +125,108 @@ class VisitForm(forms.ModelForm):
                 raise forms.ValidationError("صيغة إحداثيات الموقع غير صالحة.")
 
         return cleaned_data
+
+
+ACCOUNT_TYPE_CHOICES = [
+    ('clinic', 'عيادة (Clinic)'),
+    ('hospital', 'مستشفى (Hospital)'),
+    ('pharmacy', 'صيدلية (Pharmacy)'),
+    ('polyclinic', 'مجمع عيادات (Polyclinic)'),
+    ('distributor', 'موزع (Distributor)'),
+    ('store', 'مخزن (Store)'),
+    ('center', 'مركز طبي (Medical Center)'),
+    ('lab', 'معمل تحاليل (Lab)'),
+]
+
+
+class VisitTemplateForm(forms.ModelForm):
+    restrict_account_types = forms.MultipleChoiceField(
+        choices=ACCOUNT_TYPE_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+        label="نوع الحساب المستهدف"
+    )
+
+    class Meta:
+        model = VisitTemplate
+        fields = [
+            'display_name_ar', 'display_name_en', 'name', 'active',
+            'mode', 'allow_unplanned', 'auto_approve_unplanned',
+            'enable_product_detailing', 'enable_double_visit_assessment_only',
+            'visit_outcome_mode', 'auto_end_visit',
+            'has_special_location_settings', 'special_tolerance',
+            'restrict_account_types', 'restricted_roles'
+        ]
+        widgets = {
+            'display_name_ar': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالعربية...'}),
+            'display_name_en': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالإنجليزية...'}),
+            'name': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'المعرف الفريد (e.g. single_visit_dr)'}),
+            'mode': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'visit_outcome_mode': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'special_tolerance': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'min': 10}),
+            'restricted_roles': forms.SelectMultiple(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'active': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'allow_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'auto_approve_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'enable_product_detailing': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'enable_double_visit_assessment_only': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'auto_end_visit': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'has_special_location_settings': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            if isinstance(self.instance.restrict_account_types, list):
+                self.fields['restrict_account_types'].initial = self.instance.restrict_account_types
+
+    def clean_restrict_account_types(self):
+        val = self.cleaned_data.get('restrict_account_types')
+        if isinstance(val, (list, tuple)):
+            return list(val)
+        return []
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name', '').strip()
+        if not name:
+            name_en = self.cleaned_data.get('display_name_en', '').strip()
+            name_ar = self.cleaned_data.get('display_name_ar', '').strip()
+            name = (name_en or name_ar).lower().replace(' ', '_').replace('(', '').replace(')', '')
+        return name
+
+
+class VisitTemplateQuestionForm(forms.ModelForm):
+    class Meta:
+        model = VisitTemplateQuestion
+        fields = [
+            'text_ar', 'text_en', 'question_type', 'stage',
+            'is_required', 'is_conditional', 'conditional_parent',
+            'conditional_trigger_value', 'order', 'is_active'
+        ]
+        widgets = {
+            'text_ar': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'نص السؤال بالعربية...'}),
+            'text_en': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'نص السؤال بالإنجليزية (اختياري)...'}),
+            'question_type': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'stage': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'conditional_parent': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'conditional_trigger_value': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'مثال: Yes أو نعم'}),
+            'order': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'min': 1}),
+            'is_required': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'is_conditional': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
+        }
+
+    def __init__(self, *args, template=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if template:
+            # Filter parent question to single_choice or multiple_choice questions in same template
+            qs = VisitTemplateQuestion.objects.filter(
+                template=template,
+                question_type__in=['single_choice', 'multiple_choice']
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            self.fields['conditional_parent'].queryset = qs
+
 
 

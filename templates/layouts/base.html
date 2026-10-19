@@ -248,16 +248,67 @@
                     </div>
                     <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
-                <div id="submenu-settings" class="pr-9 pl-2 space-y-1 {% if 'settings' in request.path %}{% else %}hidden{% endif %}">
-                    <a href="{% url 'roles_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الأدوار والصلاحيات</a>
-                    <a href="{% url 'users_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">إدارة المستخدمين</a>
-                    <a href="{% url 'branding_settings' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">بيانات الشركة والفاتورة</a>
-                    {% if request.user.is_superuser or request.user.is_super_admin %}
-                    <a href="{% url 'location_settings' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-[#27bebe] hover:bg-slate-50 min-h-[38px] {% if 'location' in request.path %}text-[#27bebe] font-bold bg-teal-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base text-[#27bebe]">gps_fixed</span>
-                        <span>اعدادات الموقع</span>
+                <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if 'settings' in request.path %}block{% else %}hidden{% endif %}">
+                    <a href="{% url 'users_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'users' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">group</span>
+                        <span>المستخدمون</span>
                     </a>
-                    {% endif %}
+                    <a href="{% url 'roles_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'roles' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">shield_person</span>
+                        <span>الأدوار والصلاحيات</span>
+                    </a>
+                    <a href="{% url 'visit_templates_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'visits/templates' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">assignment</span>
+                        <span>قوالب الزيارات</span>
+                    </a>
+                    <a href="{% url 'branding_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'branding' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">domain</span>
+                        <span>بيانات الشركة والفاتورة</span>
+                    </a>
+                    <a href="{% url 'location_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'location' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">gps_fixed</span>
+                        <span>إعدادات الموقع</span>
+                    </a>
+                    <a href="{% url 'areas_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'areas' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">map</span>
+                        <span>المناطق</span>
+                    </a>
+                    <a href="{% url 'expenses_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'expenses' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">payments</span>
+                        <span>انواع المصروفات</span>
+                    </a>
+                    <a href="{% url 'tickets_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'tickets' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">task_alt</span>
+                        <span>انواع المهام</span>
+                    </a>
+                    <a href="{% url 'requests_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'requests' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">fact_check</span>
+                        <span>انواع الموافقات</span>
+                    </a>
+                    <a href="{% url 'agreements_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'agreements' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">handshake</span>
+                        <span>انواع الاتفاقيات</span>
+                    </a>
+                    <a href="{% url 'sales_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sales' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">point_of_sale</span>
+                        <span>إعدادات المبيعات</span>
+                    </a>
+                    <a href="{% url 'purchase_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'purchase' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">shopping_basket</span>
+                        <span>إعدادات المشتريات</span>
+                    </a>
+                    <a href="{% url 'inventory_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'inventory' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">inventory</span>
+                        <span>إعدادات المخازن</span>
+                    </a>
+                    <a href="{% url 'contacts_udf' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'contacts-udf' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">tune</span>
+                        <span>تخصيص الحقول</span>
+                    </a>
+                    <a href="{% url 'sync_data' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sync-data' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">sync</span>
+                        <span>مزامنة البيانات</span>
+                    </a>
                 </div>
 
             </div>

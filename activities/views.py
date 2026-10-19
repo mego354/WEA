@@ -1,4 +1,5 @@
 import datetime
+import json
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -11,17 +12,21 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from .models import (
-    Agreement, AgreementType, VisitTemplate,
+    Agreement, AgreementType, VisitTemplate, VisitTemplateQuestion,
     PlannedVisitDay, PlannedVisitItem, Visit,
     VisitSampleItem, VisitExpense
 )
-from .forms import AgreementForm, PlannedVisitItemForm, VisitForm
+from .forms import (
+    AgreementForm, PlannedVisitItemForm, VisitForm,
+    VisitTemplateForm, VisitTemplateQuestionForm
+)
 from contacts.models import Contact
 from master_data.models import Area
 from catalog.models import Product
 from .services import verify_visit_location
 
 User = get_user_model()
+
 
 
 
@@ -49,6 +54,29 @@ def can_manage_approvals(user):
             return True
         if user.role.is_rep:
             return False
+    return False
+
+
+def can_manage_templates(user):
+    """
+    Check if the user is authorized to manage visit templates.
+    Admins, Superusers, and Managers have access.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff or getattr(user, 'is_super_admin', False):
+        return True
+    if user.role:
+        if user.role.is_area_manager:
+            return True
+        role_name = (user.role.name or '').lower()
+        role_display = (user.role.display_name or '').lower()
+        if any(term in role_name for term in ['manager', 'admin', 'supervisor', 'director']):
+            return True
+        if any(term in role_display for term in ['مدير', 'مشرف']):
+            return True
+        if user.role.permissions.filter(codename__in=['change_visittemplate', 'add_visittemplate', 'delete_visittemplate']).exists():
+            return True
     return False
 
 
@@ -480,9 +508,58 @@ def planned_visits_list(request):
 
 @login_required
 def visit_templates_api(request):
-    """API endpoint returning active visit templates for modal dropdowns."""
-    templates = VisitTemplate.objects.filter(active=True).values('id', 'name', 'display_name_ar')
-    return JsonResponse({'results': list(templates)})
+    """
+    API endpoint returning active visit templates.
+    Supports filtering by contact_id or account_type.
+    Returns template metadata and questions schema for dynamic frontend rendering.
+    """
+    contact_id = request.GET.get('contact_id') or request.GET.get('contact')
+    account_type = request.GET.get('account_type', '').strip().lower()
+
+    if contact_id:
+        contact = Contact.objects.filter(pk=contact_id).first()
+        if contact and contact.account_type:
+            account_type = contact.account_type.strip().lower()
+
+    qs = VisitTemplate.objects.filter(active=True).prefetch_related('questions')
+
+    results = []
+    for tmpl in qs:
+        # Check target account types
+        target_types = [t.lower() for t in (tmpl.restrict_account_types or [])]
+        # Include template if it has no restrictions or if account_type matches
+        if not target_types or not account_type or account_type in target_types:
+            questions_data = []
+            for q in tmpl.questions.filter(is_active=True).order_by('order', 'id'):
+                questions_data.append({
+                    'id': q.id,
+                    'text_ar': q.text_ar,
+                    'text_en': q.text_en,
+                    'question_type': q.question_type,
+                    'options': q.options or [],
+                    'is_required': q.is_required,
+                    'is_conditional': q.is_conditional,
+                    'conditional_parent_id': q.conditional_parent_id,
+                    'conditional_trigger_value': q.conditional_trigger_value,
+                    'stage': q.stage,
+                    'order': q.order
+                })
+            results.append({
+                'id': tmpl.id,
+                'name': tmpl.name,
+                'display_name_ar': tmpl.display_name_ar,
+                'display_name_en': tmpl.display_name_en,
+                'mode': tmpl.mode,
+                'allow_unplanned': tmpl.allow_unplanned,
+                'auto_approve_unplanned': tmpl.auto_approve_unplanned,
+                'enable_product_detailing': tmpl.enable_product_detailing,
+                'visit_outcome_mode': tmpl.visit_outcome_mode,
+                'restrict_account_types': tmpl.restrict_account_types or [],
+                'questions': questions_data
+            })
+
+    return JsonResponse({'results': results})
+
 
 
 @login_required
@@ -712,11 +789,35 @@ def visit_detail(request, pk):
     """View visit dossier, questionnaire answers, samples, and approval actions."""
     visit = get_object_or_404(
         Visit.objects.select_related('contact', 'template', 'owner', 'approved_by', 'created_by')
-        .prefetch_related('samples__product', 'expenses'),
+        .prefetch_related('samples__product', 'expenses', 'detailed_products'),
         pk=pk
     )
+
+    # Prepare structured questionnaire answers for display
+    questionnaire_responses = []
+    if visit.template:
+        questions = visit.template.questions.filter(is_active=True).order_by('order', 'id')
+        answers = visit.questionnaire_answers or {}
+        for q in questions:
+            ans = answers.get(str(q.id))
+            if ans is not None and ans != '':
+                if isinstance(ans, list):
+                    display_ans = ", ".join(str(x) for x in ans)
+                else:
+                    display_ans = str(ans)
+                questionnaire_responses.append({
+                    'question': q,
+                    'text_ar': q.text_ar,
+                    'text_en': q.text_en,
+                    'stage': q.get_stage_display(),
+                    'answer': display_ans,
+                    'raw_answer': ans,
+                    'is_meeting_question': ('meet' in q.text_ar.lower() or 'قابلت' in q.text_ar)
+                })
+
     return render(request, 'activities/visit_detail.html', {
         'visit': visit,
+        'questionnaire_responses': questionnaire_responses,
         'can_manage_approvals': can_manage_approvals(request.user),
     })
 
@@ -732,7 +833,8 @@ def visit_create(request):
     4. FAB Action 1 (تسجيل زيارة خارج الخطة)
     5. Dashboard / shortcuts
 
-    Enforces customer authorization scoping, location verification, and duplicate prevention.
+    Enforces customer authorization scoping, location verification, template questions validation,
+    product detailing persistence, and duplicate prevention.
     """
     planned_item_id = request.POST.get('planned_item_id') or request.GET.get('planned_item_id')
 
@@ -741,57 +843,123 @@ def visit_create(request):
         if form.is_valid():
             contact = form.cleaned_data['contact']
             owner = form.cleaned_data.get('owner') or request.user
+            template = form.cleaned_data.get('template')
 
-            # Anti-duplicate check (within last 60 seconds)
-            recent_duplicate = Visit.objects.filter(
-                contact=contact,
-                owner=owner,
-                created_at__gte=timezone.now() - datetime.timedelta(seconds=60)
-            ).first()
-            if recent_duplicate:
-                messages.warning(request, f"تم تسجيل هذه الزيارة بالفعل منذ لحظات (زيارة #{recent_duplicate.serial_num}).")
-                return redirect('visit_detail', pk=recent_duplicate.pk)
+            # Process Questionnaire Answers & Dynamic Validation
+            answers = {}
+            validation_errors = []
+            if template:
+                questions = template.questions.filter(is_active=True).order_by('order', 'id')
+                parent_answers = {}
 
-            visit = form.save(commit=False)
-            visit.created_by = request.user
-            visit.owner = owner
-            visit.is_planned = bool(planned_item_id)
-            visit.status = 'finished'
-            visit.approval_status = 'pending'
-            visit.ended_at = timezone.now()
-            visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
-            visit.duration = 900
+                for q in questions:
+                    is_visible = True
+                    if q.is_conditional and q.conditional_parent_id:
+                        parent_val = parent_answers.get(q.conditional_parent_id, '')
+                        trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                        if str(parent_val).strip().lower() != trigger_val:
+                            is_visible = False
 
-            # Location Verification with Haversine distance engine
-            lat = request.POST.get('latitude') or form.cleaned_data.get('latitude')
-            lng = request.POST.get('longitude') or form.cleaned_data.get('longitude')
-            acc = request.POST.get('device_accuracy') or form.cleaned_data.get('device_accuracy')
-            verify_visit_location(visit, request.user, contact, lat, lng, acc)
+                    if not is_visible:
+                        continue
 
-            visit.save()
+                    field_name = f'question_{q.id}'
+                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                    if isinstance(val, list) and len(val) == 1:
+                        val = val[0]
+                    elif isinstance(val, list) and len(val) == 0:
+                        val = ''
 
-            # Associate planned item if execution came from planned visits
-            if planned_item_id:
-                planned_item = PlannedVisitItem.objects.filter(pk=planned_item_id).first()
-                if planned_item:
-                    planned_item.is_executed = True
-                    planned_item.visit = visit
-                    planned_item.save()
+                    if q.question_type == 'multiple_choice':
+                        val = request.POST.getlist(field_name)
 
-            # Handle samples if provided
-            product_id = request.POST.get('sample_product')
-            quantity = request.POST.get('sample_quantity', 1)
-            if product_id:
-                product = Product.objects.filter(pk=product_id).first()
-                if product:
-                    try:
-                        qty = max(1, int(quantity))
-                        VisitSampleItem.objects.create(visit=visit, product=product, quantity=qty)
-                    except (ValueError, TypeError):
-                        pass
+                    if q.is_required and (val is None or val == '' or val == []):
+                        validation_errors.append(f"السؤال '{q.text_ar}' إلزامي.")
 
-            messages.success(request, f"تم تسجيل الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح.")
-            return redirect('visit_detail', pk=visit.pk)
+                    if val is not None and val != '':
+                        answers[str(q.id)] = val
+                        parent_answers[q.id] = val
+
+            if validation_errors:
+                is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+                if is_ajax:
+                    return JsonResponse({
+                        'success': False,
+                        'message': validation_errors[0],
+                        'errors': validation_errors
+                    }, status=400)
+                for err in validation_errors:
+                    messages.error(request, err)
+                # Form error
+                form.add_error(None, validation_errors[0])
+            else:
+                # Anti-duplicate check (within last 60 seconds)
+                recent_duplicate = Visit.objects.filter(
+                    contact=contact,
+                    owner=owner,
+                    created_at__gte=timezone.now() - datetime.timedelta(seconds=60)
+                ).first()
+                if recent_duplicate:
+                    messages.warning(request, f"تم تسجيل هذه الزيارة بالفعل منذ لحظات (زيارة #{recent_duplicate.serial_num}).")
+                    return redirect('visit_detail', pk=recent_duplicate.pk)
+
+                visit = form.save(commit=False)
+                visit.created_by = request.user
+                visit.owner = owner
+                visit.is_planned = bool(planned_item_id)
+                visit.status = 'finished'
+                visit.approval_status = 'pending'
+                visit.ended_at = timezone.now()
+                visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
+                visit.duration = 900
+                visit.questionnaire_answers = answers
+
+                # Outcome
+                visit_outcome = request.POST.get('visit_outcome', '').strip()
+                if visit_outcome:
+                    visit.visit_outcome = visit_outcome
+                    visit.is_successful = (visit_outcome == 'successful')
+
+                # Auto-approve unplanned visit if configured on template
+                if not planned_item_id and template and template.auto_approve_unplanned:
+                    visit.approval_status = 'approved'
+                    visit.approved_by = request.user
+
+                # Location Verification with Haversine distance engine
+                lat = request.POST.get('latitude') or form.cleaned_data.get('latitude')
+                lng = request.POST.get('longitude') or form.cleaned_data.get('longitude')
+                acc = request.POST.get('device_accuracy') or form.cleaned_data.get('device_accuracy')
+                verify_visit_location(visit, request.user, contact, lat, lng, acc)
+
+                visit.save()
+
+                # Associate planned item if execution came from planned visits
+                if planned_item_id:
+                    planned_item = PlannedVisitItem.objects.filter(pk=planned_item_id).first()
+                    if planned_item:
+                        planned_item.is_executed = True
+                        planned_item.visit = visit
+                        planned_item.save()
+
+                # Handle product detailing
+                detailed_product_ids = request.POST.getlist('detailed_products')
+                if detailed_product_ids:
+                    visit.detailed_products.set(detailed_product_ids)
+
+                # Handle samples if provided
+                product_id = request.POST.get('sample_product')
+                quantity = request.POST.get('sample_quantity', 1)
+                if product_id:
+                    product = Product.objects.filter(pk=product_id).first()
+                    if product:
+                        try:
+                            qty = max(1, int(quantity))
+                            VisitSampleItem.objects.create(visit=visit, product=product, quantity=qty)
+                        except (ValueError, TypeError):
+                            pass
+
+                messages.success(request, f"تم تسجيل الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح.")
+                return redirect('visit_detail', pk=visit.pk)
         else:
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
             if is_ajax:
@@ -840,20 +1008,87 @@ def visit_create(request):
     })
 
 
-
 @login_required
 def visit_edit(request, pk):
-    """Edit visit feedback or results."""
+    """Edit visit feedback, template answers, and detailed products."""
     visit = get_object_or_404(Visit, pk=pk)
     if request.method == 'POST':
         form = VisitForm(request.POST, instance=visit)
         if form.is_valid():
-            visit = form.save()
+            visit = form.save(commit=False)
+            template = visit.template
+
+            # Process Questionnaire Answers
+            answers = visit.questionnaire_answers or {}
+            if template:
+                questions = template.questions.filter(is_active=True).order_by('order', 'id')
+                parent_answers = {}
+                for q in questions:
+                    is_visible = True
+                    if q.is_conditional and q.conditional_parent_id:
+                        parent_val = parent_answers.get(q.conditional_parent_id, '')
+                        trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                        if str(parent_val).strip().lower() != trigger_val:
+                            is_visible = False
+
+                    if not is_visible:
+                        continue
+
+                    field_name = f'question_{q.id}'
+                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                    if isinstance(val, list) and len(val) == 1:
+                        val = val[0]
+                    elif isinstance(val, list) and len(val) == 0:
+                        val = ''
+                    if q.question_type == 'multiple_choice':
+                        val = request.POST.getlist(field_name)
+
+                    if val is not None and val != '':
+                        answers[str(q.id)] = val
+                        parent_answers[q.id] = val
+
+            visit.questionnaire_answers = answers
+            visit_outcome = request.POST.get('visit_outcome', '').strip()
+            if visit_outcome:
+                visit.visit_outcome = visit_outcome
+                visit.is_successful = (visit_outcome == 'successful')
+            visit.save()
+
+            detailed_product_ids = request.POST.getlist('detailed_products')
+            if detailed_product_ids:
+                visit.detailed_products.set(detailed_product_ids)
+            elif 'detailed_products_submitted' in request.POST:
+                visit.detailed_products.clear()
+
             messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num}.")
             return redirect('visit_detail', pk=visit.pk)
     else:
         form = VisitForm(instance=visit)
-    return render(request, 'activities/visit_form.html', {'form': form, 'visit': visit, 'title': f'تعديل الزيارة #{visit.serial_num}'})
+
+    products = Product.objects.filter(is_active=True).order_by('name')
+    templates = VisitTemplate.objects.filter(active=True).order_by('name')
+    selected_contact = visit.contact
+    from master_data.models import LocationSettings
+    location_settings = LocationSettings.get_settings()
+    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+
+    saved_detailed_products = list(visit.detailed_products.values_list('id', flat=True))
+    saved_answers = visit.questionnaire_answers or {}
+
+    return render(request, 'activities/visit_form.html', {
+        'form': form,
+        'visit': visit,
+        'products': products,
+        'templates': templates,
+        'selected_contact': selected_contact,
+        'saved_answers': saved_answers,
+        'saved_detailed_products': saved_detailed_products,
+        'can_bypass_gps': can_bypass_gps,
+        'verify_visits_enabled': location_settings.verify_visits,
+        'gps_tolerance': location_settings.tolerance,
+        'title': f'تعديل الزيارة #{visit.serial_num}'
+    })
+
 
 
 @login_required
@@ -946,4 +1181,347 @@ def visits_export(request):
     response['Content-Disposition'] = f'attachment; filename="visits_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
     wb.save(response)
     return response
+
+
+# -----------------------------------------------------------------------------
+# VISIT TEMPLATES MODULE (إدارة قوالب الزيارات)
+# -----------------------------------------------------------------------------
+
+@login_required
+def visit_templates_list(request):
+    """
+    List visit templates with status badges, questions count, mode, and target accounts.
+    Matches https://weapharma.bricks-rep.com/settings/visits/templates
+    """
+    qs = VisitTemplate.objects.prefetch_related('questions', 'restricted_roles').annotate(
+        usage_count=Count('visits')
+    ).order_by('id')
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q) |
+            Q(display_name_ar__icontains=q) |
+            Q(display_name_en__icontains=q)
+        )
+
+    status = request.GET.get('status')
+    if status == 'active':
+        qs = qs.filter(active=True)
+    elif status == 'inactive':
+        qs = qs.filter(active=False)
+
+    total_count = qs.count()
+    active_count = qs.filter(active=True).count()
+
+    return render(request, 'activities/visit_templates_list.html', {
+        'templates': qs,
+        'total_count': total_count,
+        'active_count': active_count,
+        'selected_q': q,
+        'selected_status': status,
+        'can_manage': can_manage_templates(request.user),
+    })
+
+
+@login_required
+def visit_template_create(request):
+    """Create a new visit template with accordions for settings, location, and constraints."""
+    if not can_manage_templates(request.user):
+        messages.error(request, "عذراً، لا تمتلك الصلاحية الكافية لإنشاء قوالب الزيارات.")
+        return redirect('visit_templates_list')
+
+    if request.method == 'POST':
+        form = VisitTemplateForm(request.POST)
+        if form.is_valid():
+            template = form.save()
+            messages.success(request, f"تم إنشاء القالب '{template.display_name_ar}' بنجاح. يمكنك الآن إضافة الأسئلة والاستبيان.")
+            return redirect('visit_template_edit', pk=template.pk)
+        else:
+            messages.error(request, "يرجى تصحيح الأخطاء في نموذج إنشاء القالب.")
+    else:
+        form = VisitTemplateForm()
+
+    return render(request, 'activities/visit_template_form.html', {
+        'form': form,
+        'is_create': True,
+        'title': 'إنشاء قالب زيارة جديد'
+    })
+
+
+@login_required
+def visit_template_edit(request, pk):
+    """
+    Edit an existing visit template and manage its questions, choices, conditionals, and stages.
+    """
+    if not can_manage_templates(request.user):
+        messages.error(request, "عذراً، لا تمتلك الصلاحية الكافية لتعديل قوالب الزيارات.")
+        return redirect('visit_templates_list')
+
+    template = get_object_or_404(VisitTemplate.objects.prefetch_related('questions'), pk=pk)
+
+    if request.method == 'POST':
+        form = VisitTemplateForm(request.POST, instance=template)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"تم تحديث إعدادات القالب '{template.display_name_ar}' بنجاح.")
+            return redirect('visit_template_edit', pk=template.pk)
+        else:
+            messages.error(request, "يرجى تصحيح الأخطاء في نموذج القالب.")
+    else:
+        form = VisitTemplateForm(instance=template)
+
+    questions = template.questions.all().order_by('order', 'id')
+    question_form = VisitTemplateQuestionForm(template=template)
+
+    return render(request, 'activities/visit_template_form.html', {
+        'form': form,
+        'template': template,
+        'questions': questions,
+        'question_form': question_form,
+        'is_create': False,
+        'title': f'تعديل قالب: {template.display_name_ar}'
+    })
+
+
+@login_required
+def visit_template_preview(request, pk):
+    """Interactive questionnaire preview simulating representative mobile/tablet device screen."""
+    template = get_object_or_404(VisitTemplate.objects.prefetch_related('questions'), pk=pk)
+    questions = template.questions.filter(is_active=True).order_by('order', 'id')
+    products = Product.objects.filter(is_active=True)[:10]
+
+    start_questions = [q for q in questions if q.stage == 'start_only']
+    completion_questions = [q for q in questions if q.stage in ['all', 'end_only']]
+
+    return render(request, 'activities/visit_template_preview.html', {
+        'template': template,
+        'questions': questions,
+        'start_questions': start_questions,
+        'completion_questions': completion_questions,
+        'products': products,
+        'title': f'معاينة استبيان: {template.display_name_ar}'
+    })
+
+
+@login_required
+def visit_template_delete(request, pk):
+    """
+    Delete or deactivate template.
+    If template has associated visits, prevents hard delete to preserve historical data integrity.
+    """
+    if not can_manage_templates(request.user):
+        messages.error(request, "عذراً، لا تمتلك الصلاحية الكافية لحذف قوالب الزيارات.")
+        return redirect('visit_templates_list')
+
+    template = get_object_or_404(VisitTemplate, pk=pk)
+    visits_count = template.visits.count()
+
+    if visits_count > 0:
+        template.active = False
+        template.save()
+        messages.warning(
+            request,
+            f"لا يمكن حذف القالب '{template.display_name_ar}' نهائياً لوجود {visits_count} زيارة مرتبطة به. "
+            "تم إلغاء تفعيل القالب تلقائياً لحماية سلامة السجلات التاريخية."
+        )
+    else:
+        name = template.display_name_ar
+        template.delete()
+        messages.success(request, f"تم حذف القالب '{name}' بنجاح.")
+
+    return redirect('visit_templates_list')
+
+
+@login_required
+def visit_template_toggle_status(request, pk):
+    """Fast toggle active status of visit template."""
+    if not can_manage_templates(request.user):
+        return JsonResponse({'success': False, 'message': 'غير مصرح.'}, status=403)
+
+    template = get_object_or_404(VisitTemplate, pk=pk)
+    template.active = not template.active
+    template.save()
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    if is_ajax:
+        return JsonResponse({'success': True, 'active': template.active})
+
+    status_str = "تفعيل" if template.active else "تعطيل"
+    messages.success(request, f"تم {status_str} القالب '{template.display_name_ar}' بنجاح.")
+    return redirect('visit_templates_list')
+
+
+# -----------------------------------------------------------------------------
+# QUESTION BUILDER AJAX & FORM ENDPOINTS
+# -----------------------------------------------------------------------------
+
+@login_required
+def template_question_add(request, template_pk):
+    """Add a question to a template with options and conditional logic."""
+    if not can_manage_templates(request.user):
+        return JsonResponse({'success': False, 'message': 'غير مصرح.'}, status=403)
+
+    template = get_object_or_404(VisitTemplate, pk=template_pk)
+
+    if request.method == 'POST':
+        text_ar = request.POST.get('text_ar', '').strip()
+        text_en = request.POST.get('text_en', '').strip()
+        question_type = request.POST.get('question_type', 'single_choice')
+        stage = request.POST.get('stage', 'all')
+        is_required = request.POST.get('is_required') in ['true', '1', 'on']
+        is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
+        conditional_parent_id = request.POST.get('conditional_parent') or None
+        conditional_trigger_value = request.POST.get('conditional_trigger_value', '').strip()
+
+        if not text_ar:
+            messages.error(request, "يرجى كتابة نص السؤال بالعربية.")
+            return redirect('visit_template_edit', pk=template_pk)
+
+        # Build options list from POST
+        options = []
+        if question_type in ['single_choice', 'multiple_choice']:
+            raw_options = request.POST.get('options_json')
+            if raw_options:
+                try:
+                    options = json.loads(raw_options)
+                except Exception:
+                    options = []
+            if not options:
+                opt_texts_ar = request.POST.getlist('option_text_ar[]')
+                opt_texts_en = request.POST.getlist('option_text_en[]')
+                opt_values = request.POST.getlist('option_value[]')
+                for i in range(len(opt_texts_ar)):
+                    val = opt_values[i] if i < len(opt_values) and opt_values[i] else opt_texts_ar[i]
+                    en = opt_texts_en[i] if i < len(opt_texts_en) else ''
+                    if opt_texts_ar[i].strip():
+                        options.append({
+                            'text_ar': opt_texts_ar[i].strip(),
+                            'text_en': en.strip(),
+                            'value': val.strip()
+                        })
+
+        max_order = template.questions.count() + 1
+        question = VisitTemplateQuestion.objects.create(
+            template=template,
+            text_ar=text_ar,
+            text_en=text_en,
+            question_type=question_type,
+            options=options,
+            stage=stage,
+            is_required=is_required,
+            is_conditional=is_conditional,
+            conditional_parent_id=conditional_parent_id,
+            conditional_trigger_value=conditional_trigger_value,
+            order=max_order
+        )
+
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+        if is_ajax:
+            return JsonResponse({'success': True, 'question_id': question.id})
+
+        messages.success(request, f"تمت إضافة السؤال '{question.text_ar}' بنجاح.")
+        return redirect('visit_template_edit', pk=template_pk)
+
+
+@login_required
+def template_question_edit(request, question_pk):
+    """Edit an existing template question."""
+    if not can_manage_templates(request.user):
+        return JsonResponse({'success': False, 'message': 'غير مصرح.'}, status=403)
+
+    question = get_object_or_404(VisitTemplateQuestion, pk=question_pk)
+    template_pk = question.template_id
+
+    if request.method == 'POST':
+        text_ar = request.POST.get('text_ar', '').strip()
+        text_en = request.POST.get('text_en', '').strip()
+        question_type = request.POST.get('question_type', question.question_type)
+        stage = request.POST.get('stage', question.stage)
+        is_required = request.POST.get('is_required') in ['true', '1', 'on']
+        is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
+        conditional_parent_id = request.POST.get('conditional_parent') or None
+        conditional_trigger_value = request.POST.get('conditional_trigger_value', '').strip()
+
+        if text_ar:
+            question.text_ar = text_ar
+        question.text_en = text_en
+        question.question_type = question_type
+        question.stage = stage
+        question.is_required = is_required
+        question.is_conditional = is_conditional
+        question.conditional_parent_id = conditional_parent_id
+        question.conditional_trigger_value = conditional_trigger_value
+
+        # Build options list from POST
+        if question_type in ['single_choice', 'multiple_choice']:
+            raw_options = request.POST.get('options_json')
+            if raw_options:
+                try:
+                    question.options = json.loads(raw_options)
+                except Exception:
+                    pass
+            else:
+                opt_texts_ar = request.POST.getlist('option_text_ar[]')
+                opt_texts_en = request.POST.getlist('option_text_en[]')
+                opt_values = request.POST.getlist('option_value[]')
+                if opt_texts_ar:
+                    opts = []
+                    for i in range(len(opt_texts_ar)):
+                        val = opt_values[i] if i < len(opt_values) and opt_values[i] else opt_texts_ar[i]
+                        en = opt_texts_en[i] if i < len(opt_texts_en) else ''
+                        if opt_texts_ar[i].strip():
+                            opts.append({
+                                'text_ar': opt_texts_ar[i].strip(),
+                                'text_en': en.strip(),
+                                'value': val.strip()
+                            })
+                    question.options = opts
+
+        question.save()
+
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+        if is_ajax:
+            return JsonResponse({'success': True})
+
+        messages.success(request, f"تم تحديث السؤال '{question.text_ar}' بنجاح.")
+        return redirect('visit_template_edit', pk=template_pk)
+
+
+@login_required
+def template_question_delete(request, question_pk):
+    """Delete a template question."""
+    if not can_manage_templates(request.user):
+        return JsonResponse({'success': False, 'message': 'غير مصرح.'}, status=403)
+
+    question = get_object_or_404(VisitTemplateQuestion, pk=question_pk)
+    template_pk = question.template_id
+    question.delete()
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    if is_ajax:
+        return JsonResponse({'success': True})
+
+    messages.success(request, "تم حذف السؤال بنجاح.")
+    return redirect('visit_template_edit', pk=template_pk)
+
+
+@login_required
+def template_questions_reorder(request, template_pk):
+    """AJAX endpoint for drag-and-drop or order updates of questions."""
+    if not can_manage_templates(request.user):
+        return JsonResponse({'success': False, 'message': 'غير مصرح.'}, status=403)
+
+    template = get_object_or_404(VisitTemplate, pk=template_pk)
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            order_list = data.get('order', [])
+            for idx, q_id in enumerate(order_list):
+                VisitTemplateQuestion.objects.filter(id=q_id, template=template).update(order=idx + 1)
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)}, status=400)
+    return JsonResponse({'success': False, 'message': 'Invalid request method'}, status=405)
+
 

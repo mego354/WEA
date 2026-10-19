@@ -240,6 +240,87 @@
                 </div>
             </div>
 
+            <!-- SECTION 3.5: VISIT TEMPLATE QUESTIONNAIRE & PRODUCT DETAILING -->
+            <input type="hidden" name="detailed_products_submitted" value="1">
+            
+            <div id="template-questionnaire-section" class="space-y-4 pt-2">
+                <!-- Questionnaire Card -->
+                <div id="questionnaire-card" class="hidden bg-slate-50/70 rounded-2xl border border-slate-200/80 p-4 space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-brand-600">assignment</span>
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800" id="template-title-label">استبيان الزيارة</h3>
+                                <p class="text-[11px] text-slate-500" id="template-mode-label">إجابة أسئلة نموذج الزيارة المعتمد</p>
+                            </div>
+                        </div>
+                        <span id="template-questions-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                            0 أسئلة
+                        </span>
+                    </div>
+
+                    <!-- Stage 1: Start Questions (Check-in) -->
+                    <div id="start-questions-container" class="space-y-3 hidden">
+                        <div class="flex items-center gap-1.5 text-sky-800 text-xs font-bold pb-1 border-b border-sky-100">
+                            <span class="material-symbols-outlined text-sm">play_circle</span>
+                            <span>أسئلة بداية الزيارة (Check-in)</span>
+                        </div>
+                        <div id="start-questions-list" class="space-y-3">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Stage 2: Completion Questions (Check-out) -->
+                    <div id="completion-questions-container" class="space-y-3 hidden">
+                        <div class="flex items-center gap-1.5 text-slate-800 text-xs font-bold pb-1 border-b border-slate-200">
+                            <span class="material-symbols-outlined text-sm text-brand-600">fact_check</span>
+                            <span>استبيان نتائج ومحادثة الزيارة (Check-out)</span>
+                        </div>
+                        <div id="completion-questions-list" class="space-y-3">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Detailing Card (Shown if template enables detailing) -->
+                <div id="product-detailing-card" class="hidden p-4 bg-teal-50/40 rounded-2xl border border-teal-200/80 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-teal-100">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-teal-700">medication</span>
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-900">المنتجات المشروحة في الزيارة (Product Detailing)</h3>
+                                <p class="text-[11px] text-slate-500">حدد الأصناف التي تم تفصيلها وشرحها للطبيب أو الصيدلي</p>
+                            </div>
+                        </div>
+                        <input type="text" id="detailing-search-input" onkeyup="filterDetailingProducts(this.value)" placeholder="تصفية المنتجات..." class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 bg-white placeholder-slate-400 focus:border-brand-500 w-full sm:w-48">
+                    </div>
+
+                    <div id="detailing-products-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+                        {% for p in products %}
+                        <label class="detailing-product-item flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-teal-400 cursor-pointer text-xs font-bold text-slate-800 transition-colors" data-name="{{ p.name|lower }}">
+                            <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" {% if saved_detailed_products and p.id in saved_detailed_products %}checked{% endif %}>
+                            <span class="truncate">{{ p.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Visit Outcome Card (Shown if outcome mode is enabled) -->
+                <div id="visit-outcome-card" class="hidden p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2">
+                    <label class="block text-xs font-bold text-slate-800">نتيجة الزيارة (Visit Outcome)</label>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer">
+                            <input type="radio" name="visit_outcome" value="successful" {% if not visit or visit.visit_outcome == 'successful' or visit.is_successful %}checked{% endif %} class="text-emerald-600 focus:ring-emerald-500">
+                            <span>زيارة ناجحة (Successful)</span>
+                        </label>
+                        <label class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold cursor-pointer">
+                            <input type="radio" name="visit_outcome" value="unsuccessful" {% if visit and visit.visit_outcome == 'unsuccessful' %}checked{% endif %} class="text-slate-600 focus:ring-slate-500">
+                            <span>زيارة غير ناجحة (Unsuccessful)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <!-- SECTION 4: SAMPLES DISTRIBUTION (Optional) -->
             {% if products %}
             <div class="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
@@ -315,6 +396,9 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Automatically request browser GPS on page load
         acquireDeviceLocation();
+
+        // Load templates registry and dynamic questionnaires
+        loadTemplatesRegistry();
 
         // If Django select already has a value not represented in currentCustomer, sync it
         const djangoSelect = document.getElementById('visit-contact-select');
@@ -594,6 +678,7 @@
         if (card) card.classList.remove('hidden');
 
         updateGeofenceCheck();
+        filterTemplatesByCustomer(currentCustomer);
     }
 
     function clearCustomerSelection() {
@@ -665,5 +750,247 @@
         }
         return true;
     }
+
+    // =========================================================================
+    // VISIT TEMPLATES & QUESTIONNAIRE DYNAMICS
+    // =========================================================================
+    const savedAnswers = {{ saved_answers|safe|default:'{}' }};
+    const savedDetailedProducts = {{ saved_detailed_products|safe|default:'[]' }};
+    let allTemplates = [];
+    let currentTemplate = null;
+
+    async function loadTemplatesRegistry() {
+        try {
+            const res = await fetch('/api/templates/');
+            if (res.ok) {
+                const data = await res.json();
+                allTemplates = data.results || [];
+                if (currentCustomer) {
+                    filterTemplatesByCustomer(currentCustomer);
+                } else {
+                    const templateSelect = document.getElementById('visit-template-select');
+                    if (templateSelect && templateSelect.value) {
+                        onTemplateSelected(templateSelect.value);
+                    }
+                }
+            }
+        } catch(e) {
+            console.error('Failed to load templates registry', e);
+        }
+    }
+
+    function filterTemplatesByCustomer(c) {
+        const templateSelect = document.getElementById('visit-template-select');
+        if (!templateSelect) return;
+
+        const custType = ((c && (c.account_type || c.category)) || '').trim().toLowerCase();
+        let firstValidId = null;
+        let isCurrentSelectionValid = false;
+        const currentSelectedId = templateSelect.value;
+
+        Array.from(templateSelect.options).forEach(opt => {
+            if (!opt.value) return;
+            const tmpl = allTemplates.find(t => t.id == opt.value);
+            if (!tmpl) return;
+
+            const targetTypes = (tmpl.restrict_account_types || []).map(t => t.toLowerCase());
+            const isValid = !targetTypes.length || !custType || targetTypes.includes(custType);
+
+            if (isValid) {
+                opt.disabled = false;
+                opt.hidden = false;
+                if (!firstValidId) firstValidId = opt.value;
+                if (opt.value == currentSelectedId) isCurrentSelectionValid = true;
+            } else {
+                opt.disabled = true;
+                opt.hidden = true;
+            }
+        });
+
+        if (!isCurrentSelectionValid && firstValidId) {
+            templateSelect.value = firstValidId;
+        }
+
+        onTemplateSelected(templateSelect.value);
+    }
+
+    function onTemplateSelected(templateId) {
+        const questionnaireCard = document.getElementById('questionnaire-card');
+        const detailingCard = document.getElementById('product-detailing-card');
+        const outcomeCard = document.getElementById('visit-outcome-card');
+
+        if (!templateId) {
+            if (questionnaireCard) questionnaireCard.classList.add('hidden');
+            if (detailingCard) detailingCard.classList.add('hidden');
+            if (outcomeCard) outcomeCard.classList.add('hidden');
+            return;
+        }
+
+        currentTemplate = allTemplates.find(t => t.id == templateId);
+        if (!currentTemplate) return;
+
+        // Update Template Header Info
+        const titleLabel = document.getElementById('template-title-label');
+        const modeLabel = document.getElementById('template-mode-label');
+        const countBadge = document.getElementById('template-questions-count-badge');
+
+        if (titleLabel) titleLabel.textContent = currentTemplate.display_name_ar || currentTemplate.name;
+        if (modeLabel) modeLabel.textContent = `وضع القالب: ${currentTemplate.mode === 'checkin_checkout' ? 'Checkin and Checkout' : 'عادي'}`;
+        
+        const questions = currentTemplate.questions || [];
+        if (countBadge) countBadge.textContent = `${questions.length} أسئلة`;
+
+        // Render Start vs Completion Questions
+        const startQuestions = questions.filter(q => q.stage === 'start_only');
+        const completionQuestions = questions.filter(q => q.stage !== 'start_only');
+
+        const startContainer = document.getElementById('start-questions-container');
+        const startList = document.getElementById('start-questions-list');
+        const compContainer = document.getElementById('completion-questions-container');
+        const compList = document.getElementById('completion-questions-list');
+
+        if (startQuestions.length > 0) {
+            startContainer.classList.remove('hidden');
+            startList.innerHTML = startQuestions.map(q => renderQuestionField(q)).join('');
+        } else {
+            startContainer.classList.add('hidden');
+            startList.innerHTML = '';
+        }
+
+        if (completionQuestions.length > 0) {
+            compContainer.classList.remove('hidden');
+            compList.innerHTML = completionQuestions.map(q => renderQuestionField(q)).join('');
+        } else {
+            compContainer.classList.add('hidden');
+            compList.innerHTML = '';
+        }
+
+        if (questions.length > 0) {
+            questionnaireCard.classList.remove('hidden');
+        } else {
+            questionnaireCard.classList.add('hidden');
+        }
+
+        // Product Detailing Toggle
+        if (detailingCard) {
+            if (currentTemplate.enable_product_detailing) {
+                detailingCard.classList.remove('hidden');
+            } else {
+                detailingCard.classList.add('hidden');
+            }
+        }
+
+        // Visit Outcome Toggle
+        if (outcomeCard) {
+            if (currentTemplate.visit_outcome_mode && currentTemplate.visit_outcome_mode !== 'disabled') {
+                outcomeCard.classList.remove('hidden');
+            } else {
+                outcomeCard.classList.add('hidden');
+            }
+        }
+
+        evalConditions();
+    }
+
+    function renderQuestionField(q) {
+        const val = savedAnswers[String(q.id)] || '';
+        const requiredStar = q.is_required ? '<span class="text-rose-500">*</span>' : '';
+        const conditionalAttrs = `data-question-id="${q.id}" data-is-conditional="${q.is_conditional}" data-parent-id="${q.conditional_parent_id || ''}" data-trigger-val="${(q.conditional_trigger_value || '').toLowerCase()}"`;
+
+        let inputHtml = '';
+        if (q.question_type === 'single_choice') {
+            const options = q.options || [];
+            inputHtml = `
+                <div class="flex flex-wrap gap-2 pt-1">
+                    ${options.map(opt => {
+                        const optVal = opt.value || opt.text_ar;
+                        const isChecked = (val === optVal || (!val && opt.is_default)) ? 'checked' : '';
+                        return `
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="radio" name="question_${q.id}" value="${optVal}" ${isChecked} onchange="evalConditions()" class="text-teal-600 focus:ring-teal-500 question-input">
+                                <span>${opt.text_ar}</span>
+                            </label>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        } else if (q.question_type === 'multiple_choice') {
+            const options = q.options || [];
+            const selectedArr = Array.isArray(val) ? val : [val];
+            inputHtml = `
+                <div class="flex flex-wrap gap-2 pt-1">
+                    ${options.map(opt => {
+                        const optVal = opt.value || opt.text_ar;
+                        const isChecked = selectedArr.includes(optVal) ? 'checked' : '';
+                        return `
+                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+                                <input type="checkbox" name="question_${q.id}" value="${optVal}" ${isChecked} onchange="evalConditions()" class="text-teal-600 focus:ring-teal-500 rounded question-input">
+                                <span>${opt.text_ar}</span>
+                            </label>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        } else if (q.question_type === 'textarea') {
+            inputHtml = `<textarea name="question_${q.id}" rows="3" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500 question-input">${val}</textarea>`;
+        } else if (q.question_type === 'number') {
+            inputHtml = `<input type="number" name="question_${q.id}" value="${val}" placeholder="أدخل الرقم..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
+        } else if (q.question_type === 'date') {
+            inputHtml = `<input type="date" name="question_${q.id}" value="${val}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
+        } else {
+            inputHtml = `<input type="text" name="question_${q.id}" value="${val}" placeholder="اكتب الإجابة..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
+        }
+
+        return `
+            <div class="question-field-wrapper space-y-1.5 p-3 rounded-xl border border-slate-200 bg-white" id="field_wrapper_${q.id}" ${conditionalAttrs}>
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-800">
+                        ${q.text_ar} ${requiredStar}
+                    </label>
+                    ${q.is_conditional ? '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200">مشروط</span>' : ''}
+                </div>
+                ${inputHtml}
+            </div>
+        `;
+    }
+
+    function evalConditions() {
+        const wrappers = document.querySelectorAll('.question-field-wrapper[data-is-conditional="true"]');
+        wrappers.forEach(wrapper => {
+            const parentId = wrapper.getAttribute('data-parent-id');
+            const triggerVal = (wrapper.getAttribute('data-trigger-val') || '').trim().toLowerCase();
+
+            let parentVal = '';
+            const parentRadios = document.querySelectorAll(`input[name="question_${parentId}"]:checked`);
+            if (parentRadios.length > 0) {
+                parentVal = (parentRadios[0].value || '').trim().toLowerCase();
+            } else {
+                const parentInput = document.querySelector(`[name="question_${parentId}"]`);
+                if (parentInput) parentVal = (parentInput.value || '').trim().toLowerCase();
+            }
+
+            if (parentId && triggerVal && parentVal === triggerVal) {
+                wrapper.style.display = 'block';
+                wrapper.querySelectorAll('input, select, textarea').forEach(inp => inp.disabled = false);
+            } else {
+                wrapper.style.display = 'none';
+                wrapper.querySelectorAll('input, select, textarea').forEach(inp => inp.disabled = true);
+            }
+        });
+    }
+
+    function filterDetailingProducts(q) {
+        const query = (q || '').trim().toLowerCase();
+        const items = document.querySelectorAll('.detailing-product-item');
+        items.forEach(it => {
+            const name = it.getAttribute('data-name') || '';
+            if (!query || name.includes(query)) {
+                it.style.display = 'flex';
+            } else {
+                it.style.display = 'none';
+            }
+        });
+    }
 </script>
+
 {% endblock %}

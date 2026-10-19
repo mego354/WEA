@@ -398,7 +398,25 @@
                     </span>
                 `;
             }
+        // Filter templates according to customer's account type
+        const select = document.getElementById('unified-template-select');
+        if (select && unifiedModalCachedTemplates) {
+            const custType = (c.account_type || c.category || '').trim().toLowerCase();
+            select.innerHTML = '<option value="">اختر قالب الزيارة</option>';
+            unifiedModalCachedTemplates.forEach(t => {
+                const targetTypes = (t.restrict_account_types || []).map(x => x.toLowerCase());
+                if (!targetTypes.length || !custType || targetTypes.includes(custType)) {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.display_name_ar || t.name;
+                    select.appendChild(opt);
+                }
+            });
+            if (select.options.length === 2) {
+                select.selectedIndex = 1;
+            }
         }
+
         hideUnifiedModalError();
     }
 

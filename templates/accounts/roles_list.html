@@ -1,76 +1,115 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}الأدوار والصلاحيات - WEA Pharma ERP{% endblock %}
+{% block title %}أدوار المستخدمين - WEA Pharma ERP{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-medium text-slate-700">النظام والإعدادات</span>
+<span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-slate-900">الأدوار والصلاحيات</span>
+<span class="font-bold text-[#27bebe]">أدوار المستخدمين</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-4">
 
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">الأدوار والصلاحيات (RBAC)</h1>
-            <p class="text-sm text-slate-500 mt-0.5">مصفوفة الصلاحيات، قيود الفروع، وحسابات المناديب والمديرين</p>
-        </div>
-        <div class="flex items-center gap-2">
-            <a href="{% url 'users_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
-                <span class="material-symbols-outlined text-base text-slate-500">group</span>
-                <span>المستخدمين</span>
-            </a>
-        </div>
+    <!-- Top Action Bar matching Reference ERP (media_1792379956880.png) -->
+    <div class="flex items-center justify-between">
+        <!-- Right: Page Title -->
+        <h1 class="text-2xl font-bold text-[#27bebe]">أدوار المستخدمين</h1>
+
+        <!-- Left: Create Role Button -->
+        <a href="{% url 'role_create' %}" class="px-5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-lg border border-slate-200 shadow-xs transition-all flex items-center gap-2">
+            <span>إنشاء دور</span>
+        </a>
     </div>
 
-    <!-- Roles Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {% for r in roles %}
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div class="flex items-start justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl">admin_panel_settings</span>
-                    </div>
-                    <div>
-                        <h2 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors">{{ r.display_name|default:r.name }}</h2>
-                        <span class="text-xs font-mono font-bold text-slate-400">{{ r.name }}</span>
-                    </div>
-                </div>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
-                    {{ r.users_count }} مستخدم
-                </span>
-            </div>
+    <!-- Roles Table matching Reference ERP Columns & Layout -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/70 text-slate-600 text-xs font-bold border-b border-slate-200/80">
+                        <th class="py-3.5 px-6">المعرف</th>
+                        <th class="py-3.5 px-6">الاسم</th>
+                        <th class="py-3.5 px-6 text-center">مفعل</th>
+                        <th class="py-3.5 px-6 text-center">المستخدمون</th>
+                        <th class="py-3.5 px-6 text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-800">
+                    {% for r in roles %}
+                    <tr class="hover:bg-slate-50/60 transition-colors">
+                        <!-- Code / Identifier (المعرف) -->
+                        <td class="py-3.5 px-6 font-mono text-xs font-bold text-slate-800">
+                            {{ r.name }}
+                        </td>
 
-            <p class="text-xs text-slate-500 mt-3 leading-relaxed">
-                {{ r.description|default:"دور وظيفي مخصص داخل الهيكل الإداري." }}
-            </p>
+                        <!-- Display Name (الاسم) -->
+                        <td class="py-3.5 px-6 font-medium text-slate-800">
+                            <a href="{% url 'role_edit' r.pk %}" class="hover:text-[#27bebe] hover:underline transition-colors">
+                                {{ r.display_name }}
+                            </a>
+                        </td>
 
-            <!-- Flags Badges -->
-            <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-1.5">
-                {% if r.is_rep %}
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60">مندوب ميداني</span>
-                {% endif %}
-                {% if r.is_area_manager %}
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60">مدير منطقة</span>
-                {% endif %}
-                {% if r.can_hold_vault %}
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">عهدة نقدية</span>
-                {% endif %}
-                {% if r.is_system %}
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60">نظامي أساسي</span>
-                {% endif %}
-            </div>
+                        <!-- Active status checkmark (مفعل) -->
+                        <td class="py-3.5 px-6 text-center">
+                            {% if r.is_active %}
+                            <span class="material-symbols-outlined text-emerald-600 text-xl font-bold" title="مفعل">check</span>
+                            {% else %}
+                            <span class="material-symbols-outlined text-slate-300 text-xl" title="معطل">close</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Assigned Users Count -->
+                        <td class="py-3.5 px-6 text-center">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                                {{ r.users_count|default:0 }}
+                            </span>
+                        </td>
+
+                        <!-- Action Icons on left (Matching Reference ERP) -->
+                        <td class="py-3.5 px-6 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <!-- Duplicate / Copy Icon -->
+                                <a href="{% url 'role_duplicate' r.pk %}" onclick="return confirm('استنساخ الدور {{ r.display_name }}؟');"
+                                   class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                   title="استنساخ الدور (Copy)">
+                                    <span class="material-symbols-outlined text-lg">content_copy</span>
+                                </a>
+
+                                <!-- Edit Pencil Icon -->
+                                <a href="{% url 'role_edit' r.pk %}"
+                                   class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-teal-50 transition-colors"
+                                   title="تعديل الدور">
+                                    <span class="material-symbols-outlined text-lg">edit</span>
+                                </a>
+
+                                {% if not r.is_system and r.users_count == 0 %}
+                                <!-- Delete Trash Icon (Custom roles with zero users) -->
+                                <form method="POST" action="{% url 'role_delete' r.pk %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" onclick="return confirm('هل أنت متأكد من حذف هذا الدور المخصص؟');"
+                                            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                            title="حذف الدور">
+                                        <span class="material-symbols-outlined text-lg">delete</span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">security</span>
+                            <p class="font-medium text-slate-600">لا يوجد أدوار مسجلة</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% empty %}
-        <div class="col-span-full bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-400">
-            <p class="font-medium text-slate-600">لا توجد أدوار مسجلة</p>
-        </div>
-        {% endfor %}
     </div>
 
 </div>
