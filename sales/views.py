@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.core.exceptions import ValidationError
 
 from django.core.paginator import Paginator
+from master_data.pagination_utils import paginate_queryset
 from .models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
 from .services import SalesOrderService, CollectionService
 from contacts.models import Contact
@@ -22,11 +23,17 @@ def sales_orders_list(request):
 
     qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
 
+    active_filters = []
+
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
+        status_labels = dict(SalesOrder.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
     if customer_filter:
         qs = qs.filter(customer_id=customer_filter)
+        c_obj = Contact.objects.filter(id=customer_filter).first()
+        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_filter}', 'param': 'customer'})
 
     if search:
         qs = qs.filter(
@@ -34,23 +41,23 @@ def sales_orders_list(request):
             Q(serial_num__icontains=search) |
             Q(customer__name__icontains=search)
         )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    total_count = qs.count()
-    paginator = Paginator(qs, 40)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     # Scoped customer filter options (top 50 active)
     customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
 
     context = {
-        'orders': page_obj,
+        'orders': page_obj.object_list,
         'page_obj': page_obj,
+        'paginator': paginator,
         'current_status': status_filter,
         'selected_customer': customer_filter,
         'search_query': search,
         'customers': customers,
-        'total_count': total_count,
+        'active_filters': active_filters,
+        'total_count': paginator.count,
     }
     return render(request, 'sales/sales_orders_list.html', context)
 
@@ -162,8 +169,50 @@ def sales_order_action(request, pk, action):
 
 @login_required
 def collections_list(request):
-    collections = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
-    return render(request, 'sales/collections_list.html', {'collections': collections})
+    search = request.GET.get('search', '').strip()
+    customer_id = request.GET.get('customer')
+    vault_id = request.GET.get('vault')
+
+    qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+
+    active_filters = []
+
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+        c_obj = Contact.objects.filter(id=customer_id).first()
+        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer'})
+
+    if vault_id:
+        qs = qs.filter(vault_id=vault_id)
+        v_obj = Vault.objects.filter(id=vault_id).first()
+        active_filters.append({'label': f'الخزنة: {v_obj.name if v_obj else vault_id}', 'param': 'vault'})
+
+    if search:
+        qs = qs.filter(
+            Q(serial_num__icontains=search) |
+            Q(customer__name__icontains=search) |
+            Q(notes__icontains=search)
+        )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
+    vaults = Vault.objects.filter(is_active=True).order_by('name')
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+
+    context = {
+        'collections': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'customers': customers,
+        'vaults': vaults,
+        'search_query': search,
+        'selected_customer_id': customer_id,
+        'selected_vault_id': vault_id,
+        'active_filters': active_filters,
+        'total_count': paginator.count,
+    }
+    return render(request, 'sales/collections_list.html', context)
 
 
 @login_required
@@ -214,8 +263,28 @@ def accounting_customers_list(request):
     """
     Customer Statements & Balances (حسابات العملاء).
     """
-    accounts = CustomerAccount.objects.select_related('customer', 'customer__area').order_by('-current_balance')
-    return render(request, 'sales/accounting_customers_list.html', {'accounts': accounts})
+    search = request.GET.get('search', '').strip()
+    qs = CustomerAccount.objects.select_related('customer', 'customer__area').order_by('-current_balance')
+
+    active_filters = []
+    if search:
+        qs = qs.filter(
+            Q(customer__name__icontains=search) |
+            Q(customer__code__icontains=search)
+        )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+
+    context = {
+        'accounts': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'search_query': search,
+        'active_filters': active_filters,
+        'total_count': paginator.count,
+    }
+    return render(request, 'sales/accounting_customers_list.html', context)
 
 
 @login_required
@@ -224,17 +293,38 @@ def customer_transactions_list(request):
     Customer Ledger Transactions (عمليات العملاء).
     """
     customer_id = request.GET.get('customer_id')
+    search = request.GET.get('search', '').strip()
+
     qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial')
+
+    active_filters = []
 
     if customer_id:
         qs = qs.filter(account__customer_id=customer_id)
+        c_obj = Contact.objects.filter(id=customer_id).first()
+        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer_id'})
 
-    customers = Contact.objects.filter(is_customer=True)
+    if search:
+        qs = qs.filter(
+            Q(serial__icontains=search) |
+            Q(description__icontains=search) |
+            Q(account__customer__name__icontains=search)
+        )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
-        'transactions': qs,
+        'transactions': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
         'customers': customers,
         'selected_customer_id': customer_id,
+        'search_query': search,
+        'active_filters': active_filters,
+        'total_count': paginator.count,
     }
     return render(request, 'sales/customer_transactions_list.html', context)
 

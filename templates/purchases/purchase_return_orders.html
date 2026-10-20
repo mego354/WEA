@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}أوامر إرجاع المشتريات - Bricks Rep{% endblock %}
 
@@ -55,6 +55,9 @@
             </a>
         </div>
     </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
@@ -121,10 +124,8 @@
                 </tbody>
             </table>
         </div>
-        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
-            <span>Items per page: 40</span>
-            <span>{% if total_count > 0 %}1 – {{ returns|length }} of {{ total_count }}{% else %}0 of 0{% endif %}</span>
-        </div>
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
     <!-- Slide-out Filter Drawer -->

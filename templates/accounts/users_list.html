@@ -37,9 +37,19 @@
             <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
         </form>
 
+        <!-- Status Filter Dropdown -->
+        <div class="relative">
+            <select onchange="window.location.href='{% url 'users_list' %}?status=' + this.value + '&role={{ role_filter }}&q={{ query }}'"
+                    class="py-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                <option value="">جميع الحالات</option>
+                <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
+                <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
+            </select>
+        </div>
+
         <!-- Role Filter Dropdown -->
         <div class="relative">
-            <select onchange="window.location.href='{% url 'users_list' %}?role=' + this.value + '&q={{ query }}'"
+            <select onchange="window.location.href='{% url 'users_list' %}?role=' + this.value + '&status={{ status_filter }}&q={{ query }}'"
                     class="py-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
                 <option value="">جميع الأدوار</option>
                 {% for r in roles %}
@@ -47,11 +57,10 @@
                 {% endfor %}
             </select>
         </div>
-
-        <button type="button" class="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#27bebe] hover:bg-slate-50 shadow-xs transition-all" title="تصفية">
-            <span class="material-symbols-outlined text-xl">tune</span>
-        </button>
     </div>
+
+    <!-- Active Filters Chips -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Users Table matching Reference ERP Columns & Typography -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
@@ -106,14 +115,14 @@
                         <!-- Actions Menu -->
                         <td class="py-3.5 px-6 text-center">
                             <div class="flex items-center justify-center gap-2">
-                                <a href="{% url 'user_edit' u.pk %}" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="تعديل">
+                                <a href="{% url 'user_edit' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="تعديل">
                                     <span class="material-symbols-outlined text-lg">edit</span>
                                 </a>
 
                                 <form method="POST" action="{% url 'user_toggle_status' u.pk %}" class="inline">
                                     {% csrf_token %}
                                     <button type="submit" onclick="return confirm('هل أنت متأكد من تغيير حالة تفعيل المستخدم {{ u.name }}؟');"
-                                            class="w-8 h-8 rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
+                                            class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
                                             title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
                                         <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
                                     </button>
@@ -121,7 +130,7 @@
 
                                 {% if request.user.is_superuser or request.user.is_super_admin %}
                                 <a href="{% url 'user_toggle_bypass_location' u.pk %}"
-                                   class="w-8 h-8 rounded-lg flex items-center justify-center {% if u.bypass_location_verification %}text-[#27bebe] bg-teal-50{% else %}text-slate-400 hover:text-slate-600 hover:bg-slate-100{% endif %} transition-colors"
+                                   class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.bypass_location_verification %}text-[#27bebe] bg-teal-50{% else %}text-slate-400 hover:text-slate-600 hover:bg-slate-100{% endif %} transition-colors"
                                    title="تجاوز التحقق من الموقع">
                                     <span class="material-symbols-outlined text-lg">near_me</span>
                                 </a>
@@ -140,6 +149,9 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Server-side Pagination Component -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>

@@ -388,8 +388,8 @@
         category: "{{ selected_contact.customer_category|default:selected_contact.account_type|default:'عميل'|escapejs }}",
         specialty: "{{ selected_contact.specialty|default:'عام'|escapejs }}",
         area: "{{ selected_contact.area.name|default:'غير محددة'|escapejs }}",
-        lat: {% if selected_contact.latitude %}{{ selected_contact.latitude }}{% else %}null{% endif %},
-        lng: {% if selected_contact.longitude %}{{ selected_contact.longitude }}{% else %}null{% endif %}
+        lat: {% if selected_contact.latitude %}Number("{{ selected_contact.latitude|stringformat:'s' }}"){% else %}null{% endif %},
+        lng: {% if selected_contact.longitude %}Number("{{ selected_contact.longitude|stringformat:'s' }}"){% else %}null{% endif %}
     };
     {% endif %}
 

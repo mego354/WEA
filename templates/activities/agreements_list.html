@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}الاتفاقيات - Bricks Rep{% endblock %}
 
@@ -105,6 +105,9 @@
         <div id="bulk-ids-container"></div>
     </form>
 
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Agreements Table Container -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         <div class="overflow-x-auto">
@@ -184,32 +187,7 @@
         </div>
 
         <!-- Pagination Bar -->
-        {% if page_obj.has_other_pages %}
-        <div class="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-            <span class="text-xs text-slate-500 font-medium">
-                عرض {{ page_obj.start_index }} - {{ page_obj.end_index }} من أصل {{ total_count }}
-            </span>
-            <div class="flex items-center gap-1.5">
-                {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}&q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}"
-                   class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-white transition-colors">
-                    السابق
-                </a>
-                {% endif %}
-
-                <span class="px-3 py-1.5 bg-[#27bebe] text-white rounded-lg text-xs font-bold">
-                    {{ page_obj.number }}
-                </span>
-
-                {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}&q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}"
-                   class="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-white transition-colors">
-                    التالي
-                </a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>

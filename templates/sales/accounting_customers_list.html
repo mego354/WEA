@@ -1,4 +1,5 @@
 {% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
 
 {% block title %}حسابات وأرصدة العملاء - WEA Pharma ERP{% endblock %}
 
@@ -31,8 +32,40 @@
         </div>
     </div>
 
+    <!-- Search Toolbar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <form method="GET" class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم العميل أو الكود..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </div>
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-base">search</span>
+                <span>بحث</span>
+            </button>
+            {% if search_query %}
+            <a href="{% url 'accounting_customers_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+                إلغاء
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Accounts Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">account_balance_wallet</span>
+                <span>أرصدة حسابات العملاء</span>
+                <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
+                    {{ total_count }} عميل
+                </span>
+            </h2>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full text-right text-sm">
                 <thead>
@@ -93,6 +126,9 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>

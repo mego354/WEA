@@ -3,12 +3,15 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from .models import Product, ProductCategory, ProductVolumeDiscountTier, ProductPriceList
 from inventory.models import InventoryStock
 
+
+
+from master_data.pagination_utils import paginate_queryset
 
 
 @login_required
@@ -21,30 +24,32 @@ def products_list(request):
 
     qs = Product.objects.select_related('category').all().order_by('name')
 
-    active_filters_count = 0
+    active_filters = []
 
     if category_id:
         qs = qs.filter(category_id=category_id)
-        active_filters_count += 1
+        cat_obj = ProductCategory.objects.filter(pk=category_id).first()
+        if cat_obj:
+            active_filters.append({'label': 'التصنيف', 'value': cat_obj.name, 'param': 'category'})
 
     if sellable_filter in ['true', '1', 'yes']:
         qs = qs.filter(sellable=True)
-        active_filters_count += 1
+        active_filters.append({'label': 'متاح للبيع', 'value': 'نعم', 'param': 'sellable'})
     elif sellable_filter in ['false', '0', 'no']:
         qs = qs.filter(sellable=False)
-        active_filters_count += 1
+        active_filters.append({'label': 'متاح للبيع', 'value': 'لا', 'param': 'sellable'})
 
     if min_price:
         try:
             qs = qs.filter(retail_price__gte=Decimal(min_price))
-            active_filters_count += 1
+            active_filters.append({'label': 'السعر من', 'value': f"{min_price} ج.م", 'param': 'min_price'})
         except Exception:
             pass
 
     if max_price:
         try:
             qs = qs.filter(retail_price__lte=Decimal(max_price))
-            active_filters_count += 1
+            active_filters.append({'label': 'السعر إلى', 'value': f"{max_price} ج.م", 'param': 'max_price'})
         except Exception:
             pass
 
@@ -55,14 +60,12 @@ def products_list(request):
             Q(barcode__icontains=search) |
             Q(description__icontains=search)
         )
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     categories = ProductCategory.objects.all().order_by('name')
 
-    # Pagination: 40 per page matching reference ERP
-    page_size = int(request.GET.get('page_size', 40))
-    paginator = Paginator(qs, page_size)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    # Safe bounded server-side pagination (default 25)
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
     context = {
         'products': page_obj.object_list,
@@ -74,8 +77,9 @@ def products_list(request):
         'min_price': min_price,
         'max_price': max_price,
         'search_query': search,
-        'active_filters_count': active_filters_count,
-        'total_count': qs.count(),
+        'active_filters_count': len(active_filters),
+        'active_filters': active_filters,
+        'total_count': paginator.count,
     }
     return render(request, 'catalog/products_list.html', context)
 
@@ -569,7 +573,18 @@ def product_import(request):
 
 @login_required
 def categories_list(request):
-    categories = ProductCategory.objects.all().order_by('name')
+    search = request.GET.get('search', '').strip()
+    categories = ProductCategory.objects.annotate(products_count=Count('products')).all().order_by('name')
+
+    active_filters = []
+    if search:
+        categories = categories.filter(
+            Q(name__icontains=search) |
+            Q(code__icontains=search) |
+            Q(description__icontains=search)
+        )
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
+
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         code = request.POST.get('code', '').strip()
@@ -581,7 +596,15 @@ def categories_list(request):
             messages.error(request, "يرجى إدخال اسم التصنيف والكود.")
         return redirect('categories_list')
 
-    return render(request, 'catalog/categories_list.html', {'categories': categories})
+    paginator, page_obj = paginate_queryset(request, categories, default_per_page=25)
+
+    return render(request, 'catalog/categories_list.html', {
+        'categories': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'search_query': search,
+        'active_filters': active_filters,
+    })
 
 
 @login_required

@@ -1,0 +1,30 @@
+{% load erp_tags %}
+
+{% if active_filters and active_filters|length > 0 %}
+<div class="flex flex-wrap items-center gap-2 mb-4 p-2.5 bg-slate-100/70 border border-slate-200/80 rounded-xl text-xs">
+    <div class="flex items-center gap-1.5 text-slate-500 font-bold ml-1">
+        <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
+        <span>الفلاتر النشطة:</span>
+    </div>
+
+    {% for filter in active_filters %}
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 text-slate-700 rounded-lg shadow-2xs font-medium">
+        <span class="text-slate-400 font-normal">{{ filter.label }}:</span>
+        <span class="font-bold text-slate-900">{{ filter.value }}</span>
+        {% if filter.param %}
+        <a href="{% url_remove_param filter.param page=1 %}"
+           class="w-4 h-4 rounded flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+           title="إزالة الفلتر">
+            <span class="material-symbols-outlined text-xs">close</span>
+        </a>
+        {% endif %}
+    </span>
+    {% endfor %}
+
+    <a href="{{ request.path }}"
+       class="mr-auto inline-flex items-center gap-1 text-[#27bebe] hover:text-teal-700 font-bold hover:underline py-1 px-2 rounded hover:bg-teal-50 transition-colors">
+        <span class="material-symbols-outlined text-sm">restart_alt</span>
+        <span>إعادة تعيين الكل</span>
+    </a>
+</div>
+{% endif %}

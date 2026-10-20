@@ -1,4 +1,5 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
 {% block title %}المخازن - WEA Pharma ERP{% endblock %}
 
@@ -24,6 +25,24 @@
             <span>إضافة مخزن جديد</span>
         </button>
     </div>
+
+    <!-- Search Toolbar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <form method="GET" class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم المخزن أو الكود..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </div>
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-base">search</span>
+                <span>بحث</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Warehouses Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -68,6 +87,11 @@
             <p class="font-medium text-slate-600">لا توجد مخازن مسجلة حتى الآن</p>
         </div>
         {% endfor %}
+    </div>
+
+    <!-- Standardized Pagination -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        {% include 'components/pagination.html' %}
     </div>
 
     <!-- Add Warehouse Modal -->

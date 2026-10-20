@@ -235,7 +235,11 @@ class Command(BaseCommand):
             Contact.objects.filter(is_customer=True).delete()
 
             # Renumber baseline suppliers to avoid any serial number collisions with real customers
-            for idx, sup in enumerate(Contact.objects.filter(is_supplier=True), start=1):
+            suppliers = list(Contact.objects.filter(is_supplier=True))
+            for idx, sup in enumerate(suppliers, start=1):
+                sup.serial_num = 990000 + idx
+                sup.save(update_fields=['serial_num'])
+            for idx, sup in enumerate(suppliers, start=1):
                 sup.serial_num = 90000 + idx
                 sup.save(update_fields=['serial_num'])
 
@@ -665,6 +669,14 @@ class Command(BaseCommand):
                     ))
             SalesReturnOrderItem.objects.bulk_create(ret_items_prepared, batch_size=1000)
             self.stdout.write(f"  [OK] Bulk created {len(ret_items_prepared):,} Sales Return Order items.")
+
+            # Seed baseline activities & planned visits with newly imported real customers
+            self.stdout.write("\nSeeding baseline visits and planned visits with real imported customers...")
+            try:
+                from django.core.management import call_command
+                call_command('seed_activities')
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"Note on seed_activities: {e}"))
 
         # 8. Superuser Password Update
         self.stdout.write("\n" + "=" * 70)

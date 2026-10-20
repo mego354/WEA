@@ -1,175 +1,317 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load static %}
 
-{% block title %}لوحة التحكم الرئيسية{% endblock %}
+{% block title %}الرئيسية - Bricks Rep{% endblock %}
 
 {% block breadcrumb %}
     <span class="text-slate-400">نظام الموارد</span>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">الرئيسية (Dashboard)</span>
+    <span class="font-bold text-slate-800">الرئيسية</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-5 pb-12" dir="rtl">
 
-    <!-- Welcome Banner -->
-    <div class="bg-gradient-to-l from-brand-600 via-brand-500 to-teal-500 rounded-2xl p-6 text-white shadow-lg shadow-brand-500/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-black">مرحباً بك، {{ request.user.name|default:request.user.username }}</h1>
-            <p class="text-brand-100 text-xs sm:text-sm mt-1">نظام WEA Pharma - نظرة عامة على المشتريات والمخازن والسيولة النقدية والحسابات.</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <a href="{% url 'purchase_order_create' %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-white text-brand-700 hover:bg-brand-50 font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base">add_shopping_cart</span>
-                <span>أمر مشتريات جديد</span>
-            </a>
-            <a href="{% url 'vendor_payment_create' %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 bg-brand-700/60 hover:bg-brand-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base">payments</span>
-                <span>سداد مورد</span>
-            </a>
-        </div>
-    </div>
+    <!-- Top Controls: Date Range Selector (Aligned Right in RTL above Card 1) -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3">
+        <!-- Date Range Filter Trigger / Popover -->
+        <div class="relative" id="dateRangePickerContainer">
+            <button type="button" id="dateRangeBtn" class="w-full sm:w-auto min-w-[260px] inline-flex items-center justify-between gap-4 px-4 py-2.5 bg-white border border-slate-300 hover:border-brand-500 rounded-lg shadow-sm text-slate-700 text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                <span class="material-symbols-outlined text-slate-500 text-lg">calendar_month</span>
+                <div class="text-right flex-1">
+                    <span class="block text-[10px] text-slate-400 font-medium">أدخل نطاقاً زمنياً</span>
+                    <span class="font-semibold text-slate-800 tracking-wide text-xs sm:text-sm" id="displayRangeLabel">{{ display_range }}</span>
+                </div>
+                <span class="material-symbols-outlined text-slate-400 text-sm">expand_more</span>
+            </button>
 
-    <!-- METRIC CARDS -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <!-- Purchases Volume -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">حجم المشتريات المعتمدة</span>
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <span class="material-symbols-outlined">shopping_cart</span>
-                </div>
-            </div>
-            <div class="mt-4">
-                <div class="text-2xl font-black text-slate-900">{{ total_purchases_amount|intcomma }} <span class="text-xs font-semibold text-slate-500">ج.م</span></div>
-                <div class="flex items-center gap-1 text-xs text-blue-600 mt-1 font-semibold">
-                    <span>{{ orders_count }} أمر شراء إجمالي</span>
-                </div>
-            </div>
-        </div>
+            <!-- Dropdown Popover -->
+            <div id="dateRangeDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4 transition-all animate-fadeIn">
+                <form method="GET" action="{% url 'home' %}" id="dateFilterForm" class="space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <span class="text-xs font-bold text-slate-700">تحديد الفترة الزمنية</span>
+                        <button type="button" id="closeDateDropdown" class="text-slate-400 hover:text-slate-600">
+                            <span class="material-symbols-outlined text-base">close</span>
+                        </button>
+                    </div>
 
-        <!-- Supplier Payables -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">مديونيات ومستحقات الموردين</span>
-                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <span class="material-symbols-outlined">request_quote</span>
-                </div>
-            </div>
-            <div class="mt-4">
-                <div class="text-2xl font-black text-amber-600">{{ total_vendor_payables|intcomma }} <span class="text-xs font-semibold text-slate-500">ج.م</span></div>
-                <div class="flex items-center gap-1 text-xs text-amber-700 mt-1 font-semibold">
-                    <span>{{ suppliers_count }} مورد مسجل</span>
-                </div>
-            </div>
-        </div>
+                    <!-- Quick Preset Buttons -->
+                    <div class="grid grid-cols-2 gap-1.5 text-xs">
+                        <button type="button" onclick="setPreset('2026-10-01', '2026-10-31')" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
+                            أكتوبر 2026 (المرجعي)
+                        </button>
+                        <button type="button" onclick="setPreset('all', 'all')" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
+                            كل الوقت (All Time)
+                        </button>
+                        <button type="button" onclick="setPreset('2026-10-01', '2026-10-06')" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                            أول أسبوع أكتوبر
+                        </button>
+                        <button type="button" onclick="setPreset('2026-01-01', '2026-12-31')" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                            عام 2026
+                        </button>
+                    </div>
 
-        <!-- Treasury Liquidity -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">السيولة النقدية (الخزن)</span>
-                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <span class="material-symbols-outlined">account_balance_wallet</span>
-                </div>
-            </div>
-            <div class="mt-4">
-                <div class="text-2xl font-black text-emerald-600">{{ total_vault_cash|intcomma }} <span class="text-xs font-semibold text-slate-500">ج.م</span></div>
-                <div class="flex items-center gap-1 text-xs text-emerald-700 mt-1 font-semibold">
-                    <span>الخزينة الرئيسية والعهدة</span>
-                </div>
-            </div>
-        </div>
+                    <div class="space-y-2 pt-2 border-t border-slate-100">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1">من تاريخ</label>
+                            <input type="date" name="start_date" id="input_start_date" value="{{ start_date_str }}" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1">إلى تاريخ</label>
+                            <input type="date" name="end_date" id="input_end_date" value="{{ end_date_str }}" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                        </div>
+                    </div>
 
-        <!-- Inventory Valuation -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">تقييم المخزون الحالي</span>
-                <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                    <span class="material-symbols-outlined">inventory_2</span>
-                </div>
-            </div>
-            <div class="mt-4">
-                <div class="text-2xl font-black text-purple-700">{{ total_inventory_valuation|intcomma }} <span class="text-xs font-semibold text-slate-500">ج.م</span></div>
-                <div class="flex items-center gap-1 text-xs text-purple-600 mt-1 font-semibold">
-                    <span>{{ products_count }} صنف دوائي متاح</span>
-                </div>
+                    <input type="hidden" name="period" id="input_period" value="{{ period }}">
+
+                    <div class="flex items-center gap-2 pt-2">
+                        <button type="submit" class="flex-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition-colors">
+                            تطبيق
+                        </button>
+                        <a href="{% url 'home' %}?period=all" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors">
+                            الكل
+                        </a>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- RECENT PURCHASE ORDERS TABLE -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">receipt_long</span>
-                <h2 class="text-base font-bold text-slate-900">أحدث أوامر المشتريات (Recent Purchase Orders)</h2>
-            </div>
-            <a href="{% url 'purchase_orders_list' %}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
-                <span>عرض كافة الطلبات</span>
-                <span class="material-symbols-outlined text-sm">arrow_left</span>
-            </a>
+    <!-- 14 KPI METRIC CARDS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {% for card in kpi_cards %}
+            {% if forloop.counter <= 12 %}
+                <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 flex flex-col justify-between text-center min-h-[135px] hover:shadow-md transition-shadow">
+                    <span class="text-xs sm:text-sm text-slate-500 font-normal leading-tight">{{ card.title }}</span>
+                    <div class="my-auto py-1">
+                        {% if card.amount %}
+                            <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.amount }}</span>
+                            {% if card.subtitle %}
+                                <span class="text-xs text-slate-500 font-normal block mt-1 {% if 'واجب السداد' in card.subtitle %}text-amber-700 font-medium{% endif %}">{{ card.subtitle }}</span>
+                            {% endif %}
+                        {% else %}
+                            {% if card.subtitle %}
+                                <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.subtitle }}</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Row 4: 2 Additional Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Spacer for desktop RTL 2 right columns -->
+        <div class="hidden lg:block lg:col-span-2"></div>
+        
+        {% for card in kpi_cards %}
+            {% if forloop.counter > 12 %}
+                <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 flex flex-col justify-between text-center min-h-[135px] hover:shadow-md transition-shadow">
+                    <span class="text-xs sm:text-sm text-slate-500 font-normal leading-tight">{{ card.title }}</span>
+                    <div class="my-auto py-1">
+                        {% if card.amount %}
+                            <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.amount }}</span>
+                        {% endif %}
+                        {% if card.subtitle %}
+                            <span class="text-xs text-slate-500 font-normal block mt-1">{{ card.subtitle }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- 6 VISUALIZATION CHARTS (2-Column Grid matching Reference ERP) -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+        <!-- Chart 1: Collections by Area -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">التحصيلات حسب المنطقة</h3>
+            <div id="chart_collections_by_area" class="w-full h-[420px]"></div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
-                <thead class="bg-slate-50/70 text-slate-600 text-xs font-bold border-b border-slate-100">
-                    <tr>
-                        <th class="py-3 px-4">رقم المسلسل</th>
-                        <th class="py-3 px-4">المورد</th>
-                        <th class="py-3 px-4">تاريخ الطلب</th>
-                        <th class="py-3 px-4">المنشئ</th>
-                        <th class="py-3 px-4">الحالة</th>
-                        <th class="py-3 px-4">إجمالي القيمة</th>
-                        <th class="py-3 px-4 text-center">إجراءات</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-700">
-                    {% for po in recent_orders %}
-                    <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
-                            <a href="{% url 'purchase_order_detail' po.pk %}" class="text-brand-600 hover:underline">
-                                {{ po.order_number }}
-                            </a>
-                        </td>
-                        <td class="py-3.5 px-4 font-medium text-slate-900">
-                            {{ po.supplier.name }}
-                        </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-500">
-                            {{ po.order_date|date:"Y-m-d" }}
-                        </td>
-                        <td class="py-3.5 px-4 text-xs">
-                            <span class="px-2 py-0.5 rounded-md bg-slate-100 font-medium text-slate-700">{{ po.created_by.name|default:po.created_by.username }}</span>
-                        </td>
-                        <td class="py-3.5 px-4">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border {{ po.status_badge_class }}">
-                                {{ po.get_status_display }}
-                            </span>
-                        </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
-                            {{ po.grand_total|intcomma }} ج.م
-                        </td>
-                        <td class="py-3.5 px-4 text-center">
-                            <a href="{% url 'purchase_order_detail' po.pk %}" class="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors">
-                                <span class="material-symbols-outlined text-sm">visibility</span>
-                                <span>معاينة</span>
-                            </a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="7" class="py-12 text-center text-slate-400">
-                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">inbox</span>
-                            <p class="text-sm font-semibold">لا توجد أوامر مشتريات مسجلة بعد.</p>
-                            <a href="{% url 'purchase_order_create' %}" class="inline-block mt-3 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm">
-                                إنشاء أول أمر شراء
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <!-- Chart 2: Visits by Area -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الزيارات حسب المنطقة</h3>
+            <div id="chart_visits_by_area" class="w-full h-[420px]"></div>
+        </div>
+
+        <!-- Chart 3: Created Orders by Area -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المنشأة حسب المنطقة</h3>
+            <div id="chart_orders_created_by_area" class="w-full h-[420px]"></div>
+        </div>
+
+        <!-- Chart 4: Delivered Orders by Area -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المسملة حسب المنطقة</h3>
+            <div id="chart_orders_delivered_by_area" class="w-full h-[420px]"></div>
+        </div>
+
+        <!-- Chart 5: Customer Balance by Sales Rep -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">رصيد العملاء بالمندوبين</h3>
+            <div id="chart_reps_balance" class="w-full h-[420px]"></div>
+        </div>
+
+        <!-- Chart 6: Overdue Debt by Sales Rep -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">المديونية المتأخرة للعملاء بالمندوبين</h3>
+            <div id="chart_reps_overdue" class="w-full h-[420px]"></div>
         </div>
     </div>
 
 </div>
+
+<!-- Apache ECharts JS -->
+<script src="{% static 'libs/echarts.min.js' %}"></script>
+<script>
+    // Fallback if static echarts is not loaded
+    if (typeof echarts === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js';
+        document.head.appendChild(script);
+        script.onload = initAllCharts;
+    } else {
+        document.addEventListener('DOMContentLoaded', initAllCharts);
+    }
+
+    // Date Range Dropdown Toggle
+    const dateBtn = document.getElementById('dateRangeBtn');
+    const dateDropdown = document.getElementById('dateRangeDropdown');
+    const closeBtn = document.getElementById('closeDateDropdown');
+
+    if (dateBtn && dateDropdown) {
+        dateBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dateDropdown.classList.toggle('hidden');
+        });
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => dateDropdown.classList.add('hidden'));
+        }
+        document.addEventListener('click', (e) => {
+            if (!dateDropdown.contains(e.target) && !dateBtn.contains(e.target)) {
+                dateDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    function setPreset(start, end) {
+        if (start === 'all') {
+            document.getElementById('input_period').value = 'all';
+            document.getElementById('input_start_date').value = '';
+            document.getElementById('input_end_date').value = '';
+        } else {
+            document.getElementById('input_period').value = '';
+            document.getElementById('input_start_date').value = start;
+            document.getElementById('input_end_date').value = end;
+        }
+        document.getElementById('dateFilterForm').submit();
+    }
+
+    // Dashboard Charts Data from Django
+    const chartsData = {{ charts_json|safe }};
+
+    // Color palette matching reference ERP (mint green, soft orange, cool grey, yellow amber, soft purple, rose red, cyan)
+    const chartPalette = [
+        '#72c69e', '#f98c64', '#94a3b8', '#f5b041',
+        '#a78bfa', '#f87171', '#38bdf8', '#fb7185',
+        '#4ade80', '#fb923c', '#64748b', '#facc15'
+    ];
+
+    function createSunburstOption(data, unitName = 'جنيه') {
+        return {
+            color: chartPalette,
+            tooltip: {
+                trigger: 'item',
+                formatter: function (info) {
+                    const value = info.value || 0;
+                    const formatted = Number(value).toLocaleString('en-US', { maximumFractionDigits: 1 });
+                    return `<div style="font-family: inherit; font-size: 12px; text-align: right; direction: rtl;">
+                        <b>${info.name}</b><br/>
+                        ${formatted} ${unitName}
+                    </div>`;
+                }
+            },
+            series: [{
+                type: 'sunburst',
+                data: data,
+                radius: [0, '90%'],
+                sort: 'desc',
+                levels: [
+                    {},
+                    {
+                        r0: '18%',
+                        r: '42%',
+                        itemStyle: {
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        },
+                        label: {
+                            rotate: 'tangential',
+                            fontSize: 10,
+                            show: false
+                        }
+                    },
+                    {
+                        r0: '42%',
+                        r: '85%',
+                        itemStyle: {
+                            borderWidth: 1.5,
+                            borderColor: '#ffffff'
+                        },
+                        label: {
+                            align: 'right',
+                            fontSize: 9,
+                            show: false
+                        }
+                    }
+                ],
+                emphasis: {
+                    focus: 'ancestor'
+                }
+            }]
+        };
+    }
+
+    const chartInstances = [];
+
+    function initChart(domId, data, unitName = 'جنيه') {
+        const dom = document.getElementById(domId);
+        if (!dom) return;
+        const chart = echarts.init(dom);
+        chartInstances.push(chart);
+
+        if (!data || data.length === 0) {
+            chart.setOption({
+                title: {
+                    text: 'لا توجد بيانات متاحة لهذه الفترة',
+                    left: 'center',
+                    top: 'middle',
+                    textStyle: {
+                        color: '#94a3b8',
+                        fontSize: 13,
+                        fontWeight: 'normal'
+                    }
+                }
+            });
+            return;
+        }
+
+        chart.setOption(createSunburstOption(data, unitName));
+    }
+
+    function initAllCharts() {
+        initChart('chart_collections_by_area', chartsData.collections_by_area, 'جنيه');
+        initChart('chart_visits_by_area', chartsData.visits_by_area, 'زيارة');
+        initChart('chart_orders_created_by_area', chartsData.orders_created_by_area, 'جنيه');
+        initChart('chart_orders_delivered_by_area', chartsData.orders_delivered_by_area, 'جنيه');
+        initChart('chart_reps_balance', chartsData.reps_balance, 'جنيه');
+        initChart('chart_reps_overdue', chartsData.reps_overdue, 'جنيه');
+
+        window.addEventListener('resize', () => {
+            chartInstances.forEach(c => c.resize());
+        });
+    }
+</script>
 {% endblock %}

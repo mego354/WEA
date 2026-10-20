@@ -51,6 +51,9 @@ def logout_view(request):
 # USERS MANAGEMENT
 # ==========================================
 
+from master_data.pagination_utils import paginate_queryset
+
+
 @login_required
 @require_permission('users:users/list')
 def users_list(request):
@@ -62,7 +65,7 @@ def users_list(request):
     role_filter = request.GET.get('role', '').strip()
     status_filter = request.GET.get('status', '').strip()
 
-    users_qs = User.objects.select_related('role').order_by('-created_at')
+    users_qs = User.objects.select_related('role').prefetch_related('assigned_areas').order_by('-created_at')
 
     if query:
         users_qs = users_qs.filter(
@@ -80,16 +83,31 @@ def users_list(request):
     elif status_filter == 'inactive':
         users_qs = users_qs.filter(is_active=False)
 
+    active_filters = []
+    if query:
+        active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
+    if role_filter:
+        selected_role = Role.objects.filter(pk=role_filter).first()
+        if selected_role:
+            active_filters.append({'label': 'الدور', 'value': selected_role.display_name, 'param': 'role'})
+    if status_filter:
+        active_filters.append({'label': 'الحالة', 'value': 'مفعل' if status_filter == 'active' else 'معطل', 'param': 'status'})
+
+    paginator, page_obj = paginate_queryset(request, users_qs, default_per_page=25)
+
     roles = Role.objects.filter(is_active=True).order_by('display_name')
     areas = Area.objects.all().order_by('name')
 
     context = {
-        'users': users_qs,
+        'users': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
         'roles': roles,
         'areas': areas,
         'query': query,
         'role_filter': role_filter,
         'status_filter': status_filter,
+        'active_filters': active_filters,
     }
     return render(request, 'accounts/users_list.html', context)
 
@@ -343,8 +361,39 @@ def roles_list(request):
     Roles list matching reference ERP:
     Columns: المعرف, الاسم, مفعل, إجراءات (Edit pencil, Duplicate copy, Delete)
     """
-    roles = Role.objects.annotate(users_count=models.Count('users')).order_by('id')
-    return render(request, 'accounts/roles_list.html', {'roles': roles})
+    query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    roles = Role.objects.annotate(users_count=models.Count('users')).prefetch_related('tags').order_by('id')
+
+    if query:
+        roles = roles.filter(
+            Q(name__icontains=query) |
+            Q(display_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+
+    if status_filter == 'active':
+        roles = roles.filter(is_active=True)
+    elif status_filter == 'inactive':
+        roles = roles.filter(is_active=False)
+
+    active_filters = []
+    if query:
+        active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
+    if status_filter:
+        active_filters.append({'label': 'الحالة', 'value': 'مفعل' if status_filter == 'active' else 'معطل', 'param': 'status'})
+
+    paginator, page_obj = paginate_queryset(request, roles, default_per_page=25)
+
+    return render(request, 'accounts/roles_list.html', {
+        'roles': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'query': query,
+        'status_filter': status_filter,
+        'active_filters': active_filters,
+    })
 
 
 @login_required

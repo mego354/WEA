@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load static %}
+{% load static erp_tags %}
 
 {% block title %}قوالب الزيارات - الإعدادات{% endblock %}
 
@@ -57,6 +57,9 @@
             </div>
         </form>
     </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Templates Grid Cards -->
     {% if templates %}
@@ -172,6 +175,11 @@
             </div>
         </div>
         {% endfor %}
+    </div>
+
+    <!-- Pagination Bar -->
+    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+        {% include 'components/pagination.html' %}
     </div>
     {% else %}
     <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center">

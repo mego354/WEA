@@ -1,4 +1,5 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
 {% block title %}أوامر البيع - WEA Pharma ERP{% endblock %}
 
@@ -90,6 +91,9 @@
         </form>
     </div>
 
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Sales Orders Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
@@ -163,6 +167,8 @@
                 </tbody>
             </table>
         </div>
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>

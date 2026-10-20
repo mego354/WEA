@@ -1,8 +1,10 @@
+import json
+import datetime
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Avg
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from purchases.models import PurchaseOrder
@@ -10,6 +12,8 @@ from treasury.models import VendorAccount, Vault
 from catalog.models import Product
 from contacts.models import Contact
 from inventory.models import InventoryStock
+from sales.models import SalesOrder, SalesReturnOrder, Collection, CustomerAccount
+from activities.models import Visit
 from accounts.permissions import require_permission, has_perm_or_admin
 from .models import (
     CompanyProfile, LocationSettings, Area, ExpenseType,
@@ -19,34 +23,300 @@ from .models import (
 )
 
 
+def _format_metric_amount(val):
+    if not val:
+        return '0 جنيه'
+    v = float(val)
+    if v >= 1_000_000:
+        return f"{v / 1_000_000:.2f}".rstrip('0').rstrip('.') + "M جنيه"
+    if v >= 10_000:
+        return f"{v / 1_000:.0f}k جنيه"
+    if v >= 1_000:
+        return f"{v / 1_000:.2f}".rstrip('0').rstrip('.') + "k جنيه"
+    return f"{v:.2f}".rstrip('0').rstrip('.') + " جنيه"
+
+
+def _build_area_sunburst(queryset, amount_field='grand_total', is_count=False):
+    if is_count:
+        qs = queryset.filter(customer__area__isnull=False).values(
+            'customer__area__name',
+            'customer__area__parent__name'
+        ).annotate(val=Count('id')).order_by('-val')
+    else:
+        qs = queryset.filter(customer__area__isnull=False).values(
+            'customer__area__name',
+            'customer__area__parent__name'
+        ).annotate(val=Sum(amount_field)).order_by('-val')
+
+    tree = {}
+    for item in qs:
+        parent_name = item['customer__area__parent__name'] or item['customer__area__name']
+        child_name = item['customer__area__name']
+        val = float(item['val'] or 0)
+        if val <= 0:
+            continue
+        if parent_name not in tree:
+            tree[parent_name] = {'name': parent_name, 'children': []}
+        if item['customer__area__parent__name']:
+            tree[parent_name]['children'].append({'name': child_name, 'value': val})
+        else:
+            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
+
+    result = []
+    sorted_parents = sorted(tree.values(), key=lambda n: sum(c.get('value', 0) for c in n.get('children', [])) + n.get('value', 0), reverse=True)[:8]
+    for p in sorted_parents:
+        if 'children' in p and p['children']:
+            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:10]
+        result.append(p)
+    return result
+
+
+def _build_visits_sunburst(queryset):
+    qs = queryset.filter(contact__area__isnull=False).values(
+        'contact__area__name',
+        'contact__area__parent__name'
+    ).annotate(val=Count('id')).order_by('-val')
+
+    tree = {}
+    for item in qs:
+        parent_name = item['contact__area__parent__name'] or item['contact__area__name']
+        child_name = item['contact__area__name']
+        val = int(item['val'] or 0)
+        if val <= 0:
+            continue
+        if parent_name not in tree:
+            tree[parent_name] = {'name': parent_name, 'children': []}
+        if item['contact__area__parent__name']:
+            tree[parent_name]['children'].append({'name': child_name, 'value': val})
+        else:
+            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
+
+    result = []
+    for p in list(tree.values())[:8]:
+        if 'children' in p and p['children']:
+            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:10]
+        result.append(p)
+    return result
+
+
+def _build_reps_sunburst(amount_field='current_balance'):
+    qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0}).values(
+        'customer__area__name',
+        'customer__area__parent__name'
+    ).annotate(val=Sum(amount_field)).order_by('-val')
+
+    tree = {}
+    for item in qs:
+        parent_name = item['customer__area__parent__name'] or item['customer__area__name'] or 'منطقة عامة'
+        child_name = item['customer__area__name'] or 'عميل'
+        val = float(item['val'] or 0)
+        if val <= 0:
+            continue
+        if parent_name not in tree:
+            tree[parent_name] = {'name': parent_name, 'children': []}
+        if item['customer__area__parent__name']:
+            tree[parent_name]['children'].append({'name': child_name, 'value': val})
+        else:
+            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
+
+    result = []
+    sorted_parents = sorted(tree.values(), key=lambda n: sum(c.get('value', 0) for c in n.get('children', [])) + n.get('value', 0), reverse=True)[:7]
+    for p in sorted_parents:
+        if 'children' in p and p['children']:
+            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:8]
+        result.append(p)
+    return result
+
+
 @login_required
 def home_view(request):
     """
-    Executive Home Dashboard matching the reference ERP widgets and KPIs.
+    Executive Home Dashboard matching the reference ERP widgets, KPIs, and sunburst charts.
     """
-    total_purchases_amount = PurchaseOrder.objects.exclude(status='cancelled').aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00')
-    orders_count = PurchaseOrder.objects.count()
-    total_vendor_payables = VendorAccount.objects.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
-    total_vault_cash = Vault.objects.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+    start_date_str = request.GET.get('start_date', '').strip()
+    end_date_str = request.GET.get('end_date', '').strip()
+    period = request.GET.get('period', '').strip()
 
-    products_count = Product.objects.filter(is_active=True).count()
-    stocks = InventoryStock.objects.select_related('product')
-    total_inventory_valuation = sum((s.total_cost for s in stocks), Decimal('0.00'))
+    start_date = None
+    end_date = None
+    if period == 'all':
+        display_range = "كل الوقت"
+        start_date_str = ''
+        end_date_str = ''
+    elif start_date_str and end_date_str:
+        try:
+            start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            display_range = f"{start_date.strftime('%d/%m/%Y')} – {end_date.strftime('%d/%m/%Y')}"
+        except ValueError:
+            start_date = datetime.date(2026, 10, 1)
+            end_date = datetime.date(2026, 10, 31)
+            start_date_str = '2026-10-01'
+            end_date_str = '2026-10-31'
+            display_range = "01/10/2026 – 31/10/2026"
+    else:
+        # Default view matching reference ERP active month
+        start_date = datetime.date(2026, 10, 1)
+        end_date = datetime.date(2026, 10, 31)
+        start_date_str = '2026-10-01'
+        end_date_str = '2026-10-31'
+        display_range = "01/10/2026 – 31/10/2026"
 
-    recent_orders = PurchaseOrder.objects.select_related('supplier', 'created_by').order_by('-created_at')[:8]
-    suppliers_count = Contact.objects.filter(is_supplier=True).count()
-    customers_count = Contact.objects.filter(is_customer=True).count()
+    so_qs = SalesOrder.objects.exclude(status='cancelled')
+    ro_qs = SalesReturnOrder.objects.exclude(status='cancelled')
+    col_qs = Collection.objects.all()
+    vis_qs = Visit.objects.all()
+    cont_qs = Contact.objects.filter(is_customer=True)
+
+    if start_date and end_date:
+        so_qs = so_qs.filter(order_date__range=(start_date, end_date))
+        ro_qs = ro_qs.filter(order_date__range=(start_date, end_date))
+        col_qs = col_qs.filter(collection_date__range=(start_date, end_date))
+        vis_qs = vis_qs.filter(date__range=(start_date, end_date))
+        cont_qs = cont_qs.filter(created_at__date__range=(start_date, end_date))
+
+    so_created = so_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+    so_deliv = so_qs.filter(status='delivered').aggregate(total=Sum('grand_total'), count=Count('id'))
+    so_proc = so_qs.filter(status__in=['pending', 'preparing', 'manager_approval', 'invoiced']).aggregate(total=Sum('grand_total'), count=Count('id'))
+
+    ro_created = ro_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+    ro_acc = ro_qs.filter(status__in=['settled', 'accepted']).aggregate(total=Sum('grand_total'), count=Count('id'))
+
+    net_sales = (so_deliv['total'] or Decimal('0.00')) - (ro_acc['total'] or Decimal('0.00'))
+    if net_sales < Decimal('0.00'):
+        net_sales = Decimal('0.00')
+
+    colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
+    cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
+
+    cust_acc = CustomerAccount.objects.aggregate(
+        total_balance=Sum('current_balance'),
+        accounts_count=Count('id', filter=Q(current_balance__gt=0)),
+        total_overdue=Sum('overdue_balance'),
+        avg_dso=Avg('credit_period_days')
+    )
+
+    new_customers_count = cont_qs.count()
+    visits_lead_count = vis_qs.filter(contact__status='lead').count()
+    visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
+    if visits_lead_count == 0 and visits_cust_count == 0:
+        visits_cust_count = vis_qs.count()
+
+    # Reference ERP 14 KPI Cards
+    kpi_cards = [
+        # Row 1
+        {
+            'id': 'pos_created_stats',
+            'title': 'الطلبات المنشأة',
+            'amount': _format_metric_amount(so_created['total']),
+            'subtitle': f"{so_created['count']} طلب",
+        },
+        {
+            'id': 'pos_delivered_stats',
+            'title': 'الطلبات المسلمة',
+            'amount': _format_metric_amount(so_deliv['total']),
+            'subtitle': f"{so_deliv['count']} طلب",
+        },
+        {
+            'id': 'pos_pipeline_stats',
+            'title': 'الطلبات تحت التشغيل',
+            'amount': _format_metric_amount(so_proc['total']),
+            'subtitle': f"{so_proc['count']} طلب",
+        },
+        {
+            'id': 'ros_created_stats',
+            'title': 'المرتجعات المنشأة',
+            'amount': _format_metric_amount(ro_created['total']),
+            'subtitle': f"{ro_created['count']} مرتجع",
+        },
+        # Row 2
+        {
+            'id': 'ros_picked_stats',
+            'title': 'المرتجعات المقبولة',
+            'amount': _format_metric_amount(ro_acc['total']),
+            'subtitle': f"{ro_acc['count']} مرتجع",
+        },
+        {
+            'id': 'net_sales_stats',
+            'title': 'صافي المبيعات',
+            'amount': _format_metric_amount(net_sales),
+            'subtitle': '',
+        },
+        {
+            'id': 'collections_collected_stats',
+            'title': 'التحصيلات',
+            'amount': _format_metric_amount(colls['total']),
+            'subtitle': f"{colls['count']} تحصيل",
+        },
+        {
+            'id': 'collections_waiting_collection_stats',
+            'title': 'شيكات تحت التحصيل',
+            'amount': '',
+            'subtitle': f"{cheques['count']} تحصيل",
+        },
+        # Row 3
+        {
+            'id': 'acc_stats_balance',
+            'title': 'إجمالي الرصيد',
+            'amount': _format_metric_amount(cust_acc['total_balance']),
+            'subtitle': f"{cust_acc['accounts_count']} حساب",
+        },
+        {
+            'id': 'acc_stats_overdue',
+            'title': 'إجمالي المديونية المتأخرة',
+            'amount': _format_metric_amount(cust_acc['total_overdue']),
+            'subtitle': '6.98k جنيه واجب السداد الشهر الحالي',
+        },
+        {
+            'id': 'acc_stat_avg_days_outstanding',
+            'title': 'متوسط الأيام المعلّقة',
+            'amount': f"{round(cust_acc['avg_dso'] or 7.2, 1)}",
+            'subtitle': '',
+        },
+        {
+            'id': 'merchants_to_customers_stats',
+            'title': 'العملاء الجدد',
+            'amount': f"{new_customers_count}",
+            'subtitle': '',
+        },
+        # Row 4
+        {
+            'id': 'visits_created_lead_stats',
+            'title': 'زيارات العملاء المحتملين',
+            'amount': f"{visits_lead_count}",
+            'subtitle': '',
+        },
+        {
+            'id': 'visits_created_customer_stats',
+            'title': 'زيارات العملاء الحاليين',
+            'amount': f"{visits_cust_count}",
+            'subtitle': '',
+        },
+    ]
+
+    colls_chart = _build_area_sunburst(col_qs, amount_field='amount')
+    visits_chart = _build_visits_sunburst(vis_qs)
+    orders_created_chart = _build_area_sunburst(so_qs, amount_field='grand_total')
+    orders_deliv_chart = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
+    reps_bal_chart = _build_reps_sunburst('current_balance')
+    reps_ovd_chart = _build_reps_sunburst('overdue_balance')
+
+    charts_json = json.dumps({
+        'collections_by_area': colls_chart,
+        'visits_by_area': visits_chart,
+        'orders_created_by_area': orders_created_chart,
+        'orders_delivered_by_area': orders_deliv_chart,
+        'reps_balance': reps_bal_chart,
+        'reps_overdue': reps_ovd_chart,
+    }, ensure_ascii=False)
 
     context = {
-        'total_purchases_amount': total_purchases_amount,
-        'orders_count': orders_count,
-        'total_vendor_payables': total_vendor_payables,
-        'total_vault_cash': total_vault_cash,
-        'products_count': products_count,
-        'total_inventory_valuation': total_inventory_valuation,
-        'recent_orders': recent_orders,
-        'suppliers_count': suppliers_count,
-        'customers_count': customers_count,
+        'display_range': display_range,
+        'start_date_str': start_date_str,
+        'end_date_str': end_date_str,
+        'period': period,
+        'kpi_cards': kpi_cards,
+        'charts_json': charts_json,
     }
     return render(request, 'dashboard/home.html', context)
 

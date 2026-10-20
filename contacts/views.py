@@ -89,20 +89,44 @@ def contacts_list(request):
             Q(contact_person__icontains=search)
         ).distinct()
 
-    # Pagination: 40 items per page (matching reference ERP)
-    paginator = Paginator(qs, 40)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    from master_data.pagination_utils import paginate_queryset
+
+    # Active filters list for chips UI
+    active_filters = []
+    if search:
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
+    if relation and relation != 'all':
+        rel_labels = {'vendor': 'مورد', 'customer': 'عميل', 'other': 'أخرى'}
+        active_filters.append({'label': 'العلاقة', 'value': rel_labels.get(relation, relation), 'param': 'relation'})
+    if status and status != 'all':
+        active_filters.append({'label': 'الحالة', 'value': status, 'param': 'status'})
+    if area_id:
+        area_obj = Area.objects.filter(pk=area_id).first()
+        if area_obj:
+            active_filters.append({'label': 'المحافظة/المنطقة', 'value': area_obj.name, 'param': 'area_id'})
+    if sub_area:
+        active_filters.append({'label': 'المنطقة الفرعية', 'value': sub_area, 'param': 'sub_area'})
+    if category and category != 'all':
+        active_filters.append({'label': 'التصنيف', 'value': category, 'param': 'category'})
+    if specialty and specialty != 'all':
+        active_filters.append({'label': 'التخصص', 'value': specialty, 'param': 'specialty'})
+    if account_type and account_type != 'all':
+        active_filters.append({'label': 'نوع الحساب', 'value': account_type, 'param': 'account_type'})
+
+    # Pagination: safe server-side pagination (default 25)
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
     governorates = Area.objects.filter(area_type='governorate').order_by('name')
     if not governorates.exists():
         governorates = Area.objects.all().order_by('name')
 
     context = {
-        'contacts': page_obj,
+        'contacts': page_obj.object_list,
         'page_obj': page_obj,
-        'total_count': qs.count(),
-        'active_filters_count': active_filters_count,
+        'paginator': paginator,
+        'total_count': paginator.count,
+        'active_filters_count': len(active_filters),
+        'active_filters': active_filters,
         'current_relation': relation,
         'current_status': status,
         'search_query': search,

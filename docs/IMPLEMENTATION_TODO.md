@@ -11,6 +11,24 @@
 
 ---
 
+## Phase 7: Data Replacement, Full App Flow Testing & Reference Home Page Parity (2026-10-20)
+
+- [X] **FIX-01**: Fix "تسجيل زيارة خارج الخطة" (Unplanned Visit) button JS syntax error in `templates/components/customer_selection_modal.html` and Arabic decimal comma localization in `templates/activities/visit_form.html`.
+- [X] **FIX-02**: Fix Dual Floating Action Button (FAB) collision on all screen sizes (320px, 375px, 390px, 430px, 1280px) with `deltaY = 72px` vertical stacking.
+- [X] **DATA-06**: Verified SQLite backup creation (`backups/db_backup_import_20261020_064920.sqlite3`).
+- [X] **DATA-07**: Complete import of all 5 business data files from `data_folder/` (Contacts: 8,876, Orders: 7,088, Collections: 6,676, Agreements: 209, Returns: 270, Canonical Products).
+- [X] **DATA-08**: Customer accounts balance computation (`CustomerAccount` balance & overdue debt populated from actual transaction history).
+- [X] **FLOW-08**: Execute full application flow verification across all modules: 42/42 routes returned HTTP 200 OK (`scratch/test_whole_app_flow.py`).
+- [X] **FLOW-09**: Execute Playwright end-to-end UI smoke tests: 25/25 user workflows passed (`scratch/run_full_ui_smoke_test.py`).
+- [X] **HOME-01**: Inspect reference ERP home page DOM, layout, KPIs, and charts (`https://weapharma.bricks-rep.com/home`).
+- [X] **HOME-02**: Implement Date Range Selector with quick period filters and active month default in `master_data/views.py` and `templates/dashboard/home.html`.
+- [X] **HOME-03**: Implement all 14 reference KPI cards with exact Arabic titles, order, units (`k جنيه`), and formatting.
+- [X] **HOME-04**: Implement all 6 reference sunburst hierarchy charts (`type: 'sunburst'`) using local Apache ECharts bundle (`static/libs/echarts.min.js`).
+- [X] **HOME-05**: Responsive layout testing and screenshot verification on Mobile (375px), Tablet (768px), Laptop (1280px), Desktop (1600px).
+- [X] **TEST-03**: Run full Django test suite (`python manage.py test`): 131/131 tests passed with zero regressions.
+
+---
+
 ## Phase 6: Visit Templates & Lifecycle Integration (قوالب الزيارات)
 
 - [X] **DATA-01**: Extend `VisitTemplate` model with full settings and constraints matching Reference ERP.
@@ -172,3 +190,80 @@
   - [X] `docs/MOBILE_RESPONSIVENESS_AUDIT.md`
   - [X] `docs/IMPLEMENTATION_TODO.md`
   - [X] `docs/IMPLEMENTATION_REPORT.md`
+
+---
+
+## Phase 7: Full-App Pagination, Performance, Filtering, Navigation & Mobile Audit
+
+- [X] **PAG-01**: Implement reusable pagination engine `master_data/pagination_utils.py` with safe bounded parameters (default 25, max 100) and graceful exception recovery.
+- [X] **PAG-02**: Implement template tags `{% url_replace %}`, `{% url_remove_param %}`, and `{% smart_page_range %}` in `master_data/templatetags/erp_tags.py`.
+- [X] **PAG-03**: Create reusable RTL Arabic pagination UI component `templates/components/pagination.html` with range indicator, bounded `per_page` dropdown (15, 25, 50, 100), numbered buttons, and mobile indicator.
+- [X] **FILT-01**: Create reusable active filter chip component `templates/components/active_filters.html` with individual dismiss buttons and a "Clear All" reset link.
+- [X] **FILT-02**: Standardize active filter arrays and toolbars across all 18 major data list views.
+- [X] **MOD-01**: Upgrade Accounts module (`users_list`, `roles_list`) with `select_related`, `prefetch_related`, pagination, and filter chips.
+- [X] **MOD-02**: Upgrade Catalog module (`products_list`, `categories_list`) with Count annotations eliminating N+1, pagination, and filter chips.
+- [X] **MOD-03**: Upgrade Contacts module (`contacts_list`) in both Table and Card view modes.
+- [X] **MOD-04**: Upgrade Purchases module (`purchase_orders_list`, `purchase_return_orders_list`).
+- [X] **MOD-05**: Upgrade Inventory module (`inventory_stock_list`, `warehouses_list`, `inventory_memos_list` with `items_count` annotation).
+- [X] **MOD-06**: Upgrade Treasury module (`vendor_payments_list`, `accounting_vendors_list`, `vendor_transactions_list`, `vaults_list`, `vault_transactions_list`).
+- [X] **MOD-07**: Upgrade Sales module (`sales_orders_list`, `collections_list`, `accounting_customers_list`, `customer_transactions_list`).
+- [X] **MOD-08**: Upgrade Activities module (`agreements_list`, `visits_list`, `visit_templates_list`).
+- [X] **PERF-01**: Halved database count query overhead by replacing redundant `qs.count()` calls with `paginator.count`.
+- [X] **PERF-02**: Eliminated N+1 query loops across template iterations using `.annotate(Count(...))` and `select_related`/`prefetch_related`.
+- [X] **MOB-01**: Audited responsive layout and touch ergonomics across all mandatory viewports: 320px, 375px, 390px, 430px, 768px, 1024px, 1440px.
+- [X] **MOB-02**: Verified zero full-page horizontal overflow; tables scroll smoothly inside bounded container boxes.
+- [X] **MOB-03**: Verified mobile bottom navigation and slide-over drawer behavior on touch devices.
+- [X] **TEST-01**: Added automated unit test suite `master_data/test_pagination_filters.py` (14/14 tests PASSED).
+- [X] **TEST-02**: Ran full existing project regression suite (117/117 tests PASSED with 100% OK).
+- [X] **DOC-01**: Created `docs/APP_UX_PERFORMANCE_AUDIT.md`.
+- [X] **DOC-02**: Created `docs/PAGINATION_AND_FILTERS.md`.
+- [X] **DOC-03**: Created `docs/MOBILE_RESPONSIVE_GUIDE.md`.
+- [X] **DOC-04**: Created `docs/PERFORMANCE_FINDINGS.md`.
+- [X] **DOC-05**: Updated `docs/IMPLEMENTATION_TODO.md`.
+
+---
+
+## Phase 8: Visit & Contact UI Fixes, Full UI Smoke Tests & Data Reimport
+
+- [X] **BUG-01**: Investigate and fix "تسجيل زيارة خارج الخطة" button:
+  - [X] Fixed JS syntax error in `templates/components/customer_selection_modal.html` line 400 (missing closing brace `}`).
+  - [X] Replaced fragile inline `${JSON.stringify(c)}` attribute with safe in-memory `Map` lookup (`selectUnifiedCustomerById`).
+  - [X] Fixed Arabic comma decimal localization syntax error in `templates/activities/visit_form.html` (lines 391-392) using `Number("{{ ...|stringformat:'s' }}")`.
+  - [X] Verified complete flow: Global Quick-Add -> Unplanned Visit Modal -> Customer Search & Selection -> Redirect to `/visits/create/?contact_id=...`.
+- [X] **BUG-02**: Fix overlapping floating action plus buttons:
+  - [X] Removed hardcoded bottom-left inline style in `templates/layouts/base.html` line 422.
+  - [X] Implemented consistent responsive vertical-stacking: Global FAB at `fixed bottom-20 lg:bottom-6 left-4 lg:left-6 z-40` clearing mobile nav.
+  - [X] Placed page-level create button in `templates/contacts/contacts_list.html` at `fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 z-30` with `person_add` icon and emerald theme.
+  - [X] Applied identical stacking rule to `products_list.html` and `purchase_orders_list.html`.
+  - [X] Verified zero overlap across 320px, 375px, 390px, 430px, and 1280px viewports with Playwright bounding-box math.
+- [X] **SMOKE-01**: Build and execute comprehensive Playwright UI smoke test suite covering all modules and CRUD operations:
+  - [X] Auth & Navigation (Login, Dashboard, KPI cards).
+  - [X] Contacts CRUD (List, Search & Filter preservation, Create test contact, Read, Edit, Delete safeguard).
+  - [X] Catalog & Products (Products list, Categories list).
+  - [X] Purchases & Suppliers (Purchase Orders list, Return Orders list, Vendor Payments).
+  - [X] Activities & Visits (Planned visits calendar, Visits log, Unplanned visit form submission, Template auto-selection, Geolocation handling).
+  - [X] Settings (Users list, Roles list, Visit templates).
+  - [X] Mobile viewport responsiveness (320px, 375px, 390px, 430px).
+- [X] **DATA-01**: Inspect and analyze source files in `data_folder/`:
+  - [X] `لستة العملاء.xlsx` (8,876 customer records, 42 columns).
+  - [X] `اوامر البيع.xlsx` (12,516 lines, 7,088 unique orders, 72 columns).
+  - [X] `التحصيلات.xlsx` (6,676 collection receipts, 24 columns).
+  - [X] `الاتفاقيات.xlsx` (211 customer agreements, 13 columns).
+  - [X] `المرتجعات.xlsx` (432 return items, 270 return orders, 56 columns).
+- [X] **DATA-02**: Create comprehensive source-to-model mapping specification (`docs/DATA_IMPORT_MAPPING.md`).
+- [X] **DATA-03**: Create verified pre-replacement database backups:
+  - [X] `backups/db_pre_replacement_20261020_064511.sqlite3` (8,605,696 bytes, integrity check: ok).
+  - [X] `backups/db_backup_import_20261020_064920.sqlite3` (8,605,696 bytes, integrity check: ok).
+- [X] **DATA-04**: Execute safe atomic local data replacement (`python manage.py import_excel_data --confirm`):
+  - [X] Replaced only business data within import scope inside single atomic transaction (`transaction.atomic`).
+  - [X] Preserved migrations, permissions, content types, superuser, vaults, warehouses, and baseline suppliers.
+  - [X] Safely renumbered baseline suppliers with positive integers to prevent unique constraint collisions.
+  - [X] Updated superuser password to `Wea@4444` and verified authentication.
+- [X] **TEST-01**: Run full post-import Django automated regression test suite: 131/131 tests PASSED with 100% OK.
+- [X] **TEST-02**: Run post-import Playwright UI smoke tests verifying all workflows against replaced dataset: 25/25 PASSED with 100% OK.
+- [X] **DOC-01**: Created `docs/UI_SMOKE_TEST_REPORT.md`.
+- [X] **DOC-02**: Created `docs/DATA_IMPORT_MAPPING.md`.
+- [X] **DOC-03**: Created `docs/DATA_IMPORT_REPORT.md`.
+- [X] **DOC-04**: Updated `docs/IMPLEMENTATION_TODO.md`.
+
+

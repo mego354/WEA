@@ -307,17 +307,27 @@
         }
     }
 
+    let unifiedModalSearchResultsMap = new Map();
+
+    function selectUnifiedCustomerById(id) {
+        const c = unifiedModalSearchResultsMap.get(String(id));
+        if (c) selectUnifiedCustomer(c);
+    }
+
     function renderUnifiedSearchResults(contacts) {
         const listEl = document.getElementById('unified-customer-results-list');
         if (!listEl) return;
 
+        unifiedModalSearchResultsMap.clear();
         if (!contacts.length) {
             listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي عملاء مطابقين للبحث.</p>';
             return;
         }
 
+        contacts.forEach(c => unifiedModalSearchResultsMap.set(String(c.id), c));
+
         listEl.innerHTML = contacts.map(c => `
-            <div onclick="selectUnifiedCustomer(${JSON.stringify(c).replace(/"/g, '&quot;')})"
+            <div onclick="selectUnifiedCustomerById('${c.id}')"
                  class="flex items-center justify-between p-2.5 rounded-xl hover:bg-teal-50/60 cursor-pointer transition-colors">
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-8 h-8 rounded-full bg-[#27bebe] text-white font-bold text-xs flex items-center justify-center shrink-0">
@@ -398,6 +408,8 @@
                     </span>
                 `;
             }
+        }
+
         // Filter templates according to customer's account type
         const select = document.getElementById('unified-template-select');
         if (select && unifiedModalCachedTemplates) {

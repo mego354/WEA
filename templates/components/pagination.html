@@ -1,0 +1,120 @@
+{% load erp_tags %}
+
+{% if page_obj and page_obj.paginator.count > 0 %}
+<div class="px-4 py-3 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 rounded-b-2xl">
+    <!-- Records Count & Page Size Selector -->
+    <div class="flex items-center justify-between w-full sm:w-auto gap-4">
+        <!-- Range and Total -->
+        <div class="flex items-center gap-1.5 font-medium">
+            <span>عرض</span>
+            <span class="font-bold text-slate-900">{{ page_obj.start_index }}</span>
+            <span>إلى</span>
+            <span class="font-bold text-slate-900">{{ page_obj.end_index }}</span>
+            <span>من أصل</span>
+            <span class="font-bold text-[#27bebe]">{{ page_obj.paginator.count }}</span>
+            <span>سجل</span>
+        </div>
+
+        <!-- Page Size (Per Page) Selector -->
+        <div class="flex items-center gap-1.5 mr-auto sm:mr-4">
+            <label for="per_page_select" class="text-slate-400 hidden sm:inline">لكل صفحة:</label>
+            <select id="per_page_select"
+                    onchange="location.href=this.value;"
+                    class="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700 hover:border-slate-300 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] cursor-pointer">
+                <option value="{% url_replace per_page=15 page=1 %}" {% if page_obj.paginator.per_page == 15 %}selected{% endif %}>15</option>
+                <option value="{% url_replace per_page=25 page=1 %}" {% if page_obj.paginator.per_page == 25 %}selected{% endif %}>25</option>
+                <option value="{% url_replace per_page=50 page=1 %}" {% if page_obj.paginator.per_page == 50 %}selected{% endif %}>50</option>
+                <option value="{% url_replace per_page=100 page=1 %}" {% if page_obj.paginator.per_page == 100 %}selected{% endif %}>100</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Pagination Controls (Desktop + Mobile) -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav aria-label="Pagination Navigation" class="flex items-center gap-1 w-full sm:w-auto justify-center sm:justify-end">
+        <!-- First Page -->
+        {% if page_obj.number > 1 %}
+        <a href="{% url_replace page=1 %}"
+           class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+           title="الصفحة الأولى" aria-label="الصفحة الأولى">
+            <span class="material-symbols-outlined text-base">first_page</span>
+        </a>
+        {% else %}
+        <span class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed">
+            <span class="material-symbols-outlined text-base">first_page</span>
+        </span>
+        {% endif %}
+
+        <!-- Previous Page (in RTL: chevron_right) -->
+        {% if page_obj.has_previous %}
+        <a href="{% url_replace page=page_obj.previous_page_number %}"
+           class="min-w-[36px] min-h-[36px] px-2 flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+           title="الصفحة السابقة" aria-label="الصفحة السابقة">
+            <span class="material-symbols-outlined text-base">chevron_right</span>
+            <span class="hidden md:inline">السابق</span>
+        </a>
+        {% else %}
+        <span class="min-w-[36px] min-h-[36px] px-2 flex items-center justify-center gap-1 rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed font-medium">
+            <span class="material-symbols-outlined text-base">chevron_right</span>
+            <span class="hidden md:inline">السابق</span>
+        </span>
+        {% endif %}
+
+        <!-- Numbered Page Buttons (Desktop) -->
+        <div class="hidden sm:flex items-center gap-1">
+            {% smart_page_range page_obj.paginator page_obj.number as page_range %}
+            {% for p in page_range %}
+                {% if p == '...' %}
+                <span class="min-w-[32px] h-9 flex items-center justify-center text-slate-400 font-bold px-1 select-none">...</span>
+                {% elif p == page_obj.number %}
+                <span class="min-w-[36px] h-9 flex items-center justify-center rounded-lg bg-[#27bebe] text-white font-bold px-3 shadow-sm shadow-teal-500/20 select-none" aria-current="page">
+                    {{ p }}
+                </span>
+                {% else %}
+                <a href="{% url_replace page=p %}"
+                   class="min-w-[36px] h-9 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-semibold px-3">
+                    {{ p }}
+                </a>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Compact Page Indicator (Mobile) -->
+        <div class="sm:hidden px-2 text-xs font-semibold text-slate-700">
+            <span>صفحة</span>
+            <span class="font-bold text-[#27bebe]">{{ page_obj.number }}</span>
+            <span>من</span>
+            <span>{{ page_obj.paginator.num_pages }}</span>
+        </div>
+
+        <!-- Next Page (in RTL: chevron_left) -->
+        {% if page_obj.has_next %}
+        <a href="{% url_replace page=page_obj.next_page_number %}"
+           class="min-w-[36px] min-h-[36px] px-2 flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
+           title="الصفحة التالية" aria-label="الصفحة التالية">
+            <span class="hidden md:inline">التالي</span>
+            <span class="material-symbols-outlined text-base">chevron_left</span>
+        </a>
+        {% else %}
+        <span class="min-w-[36px] min-h-[36px] px-2 flex items-center justify-center gap-1 rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed font-medium">
+            <span class="hidden md:inline">التالي</span>
+            <span class="material-symbols-outlined text-base">chevron_left</span>
+        </span>
+        {% endif %}
+
+        <!-- Last Page -->
+        {% if page_obj.number < page_obj.paginator.num_pages %}
+        <a href="{% url_replace page=page_obj.paginator.num_pages %}"
+           class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+           title="الصفحة الأخيرة" aria-label="الصفحة الأخيرة">
+            <span class="material-symbols-outlined text-base">last_page</span>
+        </a>
+        {% else %}
+        <span class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed">
+            <span class="material-symbols-outlined text-base">last_page</span>
+        </span>
+        {% endif %}
+    </nav>
+    {% endif %}
+</div>
+{% endif %}

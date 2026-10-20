@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}المدفوعات وسندات الصرف (Vendor Payments){% endblock %}
 
@@ -19,14 +19,59 @@
 {% block content %}
 <div class="space-y-5">
 
+    <!-- Filters & Search Toolbar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <form method="GET" class="flex flex-col md:flex-row gap-3">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم السند، المورد، الشيك أو الملاحظات..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </div>
+
+            <div class="w-full md:w-56">
+                <select name="supplier" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                    <option value="">كافة الموردين</option>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}" {% if selected_supplier_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="w-full md:w-48">
+                <select name="vault" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                    <option value="">كافة الخزن</option>
+                    {% for v in vaults %}
+                    <option value="{{ v.id }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-base">filter_alt</span>
+                <span>تصفية</span>
+            </button>
+            {% if search_query or selected_supplier_id or selected_vault_id or selected_payment_method %}
+            <a href="{% url 'vendor_payments_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+                إلغاء
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">receipt</span>
                 <span>سندات صرف دفعات الموردين</span>
+                <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
+                    {{ total_count }} سند
+                </span>
             </h2>
             <div class="flex items-center gap-2">
-                <a href="{% url 'vendor_payments_export' %}"
+                <a href="{% url 'vendor_payments_export' %}?supplier={{ selected_supplier_id|default:'' }}"
                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
                    title="تصدير إلى Excel (.xlsx)">
                     <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
@@ -85,6 +130,9 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>
