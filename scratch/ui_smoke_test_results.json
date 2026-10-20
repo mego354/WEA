@@ -1,0 +1,152 @@
+[
+  {
+    "module": "Authentication",
+    "workflow": "Login with valid credentials",
+    "status": "PASS",
+    "notes": "Landed on http://127.0.0.1:8080/home/"
+  },
+  {
+    "module": "Dashboard",
+    "workflow": "Entry point & KPI cards",
+    "status": "PASS",
+    "notes": "Dashboard loaded with title and stats"
+  },
+  {
+    "module": "Global FAB",
+    "workflow": "Open quick-add sheet",
+    "status": "PASS",
+    "notes": "Quick-add sheet appeared"
+  },
+  {
+    "module": "Unplanned Visit",
+    "workflow": "Open customer selection modal",
+    "status": "PASS",
+    "notes": "Modal opened on button click"
+  },
+  {
+    "module": "Unplanned Visit",
+    "workflow": "Search customer in modal",
+    "status": "PASS",
+    "notes": "Found 53 results"
+  },
+  {
+    "module": "Unplanned Visit",
+    "workflow": "Customer dossier -> Visit form transition",
+    "status": "PASS",
+    "notes": "Navigated to http://127.0.0.1:8080/visits/create/?contact_id=9027"
+  },
+  {
+    "module": "Contacts",
+    "workflow": "Read / List View",
+    "status": "PASS",
+    "notes": "Contacts list loaded successfully"
+  },
+  {
+    "module": "Contacts UI",
+    "workflow": "Dual Floating Buttons (No Overlap)",
+    "status": "PASS",
+    "notes": "Global FAB at y=720, Contact FAB at y=648 (delta=72)"
+  },
+  {
+    "module": "Contacts",
+    "workflow": "Search & Filter State",
+    "status": "PASS",
+    "notes": "Search parameter reflected in URL and results filtered"
+  },
+  {
+    "module": "Contacts",
+    "workflow": "Create Contact",
+    "status": "PASS",
+    "notes": "Created contact SMOKE_TEST_CUSTOMER_1792471600"
+  },
+  {
+    "module": "Catalog",
+    "workflow": "Read Products List",
+    "status": "PASS",
+    "notes": "Products catalog loaded with cards/table"
+  },
+  {
+    "module": "Catalog",
+    "workflow": "Product Categories List",
+    "status": "PASS",
+    "notes": "Categories view loaded"
+  },
+  {
+    "module": "Purchases",
+    "workflow": "Purchase Orders List",
+    "status": "PASS",
+    "notes": "Purchase orders list loaded"
+  },
+  {
+    "module": "Purchases",
+    "workflow": "Purchase Return Orders List",
+    "status": "PASS",
+    "notes": "Purchase return orders list loaded"
+  },
+  {
+    "module": "Activities",
+    "workflow": "Planned Visits List",
+    "status": "PASS",
+    "notes": "Planned visits list loaded"
+  },
+  {
+    "module": "Activities",
+    "workflow": "Visits Log / List",
+    "status": "PASS",
+    "notes": "Visits log loaded"
+  },
+  {
+    "module": "Activities",
+    "workflow": "Visit Template Selection & Dynamic Questions",
+    "status": "PASS",
+    "notes": "Template auto-selected/loaded with value: "
+  },
+  {
+    "module": "Activities",
+    "workflow": "Submit Unplanned Visit",
+    "status": "PASS",
+    "notes": "Form submitted (URL: http://127.0.0.1:8080/visits/create/?contact_id=8884)"
+  },
+  {
+    "module": "Settings",
+    "workflow": "Users List",
+    "status": "PASS",
+    "notes": "Users management list loaded"
+  },
+  {
+    "module": "Settings",
+    "workflow": "Roles List",
+    "status": "PASS",
+    "notes": "Roles management list loaded"
+  },
+  {
+    "module": "Treasury",
+    "workflow": "Vendor Payments",
+    "status": "PASS",
+    "notes": "Vendor payments loaded"
+  },
+  {
+    "module": "Mobile UI",
+    "workflow": "FAB Stacking @ 320px",
+    "status": "PASS",
+    "notes": "No collision: deltaY=72.0px"
+  },
+  {
+    "module": "Mobile UI",
+    "workflow": "FAB Stacking @ 375px",
+    "status": "PASS",
+    "notes": "No collision: deltaY=72.0px"
+  },
+  {
+    "module": "Mobile UI",
+    "workflow": "FAB Stacking @ 390px",
+    "status": "PASS",
+    "notes": "No collision: deltaY=72.0px"
+  },
+  {
+    "module": "Mobile UI",
+    "workflow": "FAB Stacking @ 430px",
+    "status": "PASS",
+    "notes": "No collision: deltaY=72.0px"
+  }
+]

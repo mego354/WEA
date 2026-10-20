@@ -1,0 +1,26 @@
+Found 5 excel files in c:\D\Cooding\GENERAL\new\ERP\data_folder
+
+==========================================
+FILE: الاتفاقيات.xlsx (Sheets: ['Sheet1'])
+  Sheet 'Sheet1': 1 total rows (including header)
+  Headers: ('#',)
+
+==========================================
+FILE: التحصيلات.xlsx (Sheets: ['Sheet1'])
+  Sheet 'Sheet1': 1 total rows (including header)
+  Headers: ('ID',)
+
+==========================================
+FILE: المرتجعات.xlsx (Sheets: ['Sheet1'])
+  Sheet 'Sheet1': 1 total rows (including header)
+  Headers: ('المعرف',)
+
+==========================================
+FILE: اوامر البيع.xlsx (Sheets: ['Sheet1'])
+  Sheet 'Sheet1': 1 total rows (including header)
+  Headers: ('المعرف',)
+
+==========================================
+FILE: لستة العملاء.xlsx (Sheets: ['Sheet1'])
+  Sheet 'Sheet1': 1 total rows (including header)
+  Headers: ('المعرف',)

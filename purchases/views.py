@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from master_data.excel_utils import export_to_excel_response
+from master_data.pagination_utils import paginate_queryset
 
 from .models import (
     PurchaseOrder, PurchaseOrderItem, PurchaseOrderAttachment, PurchaseOrderComment,
@@ -34,23 +35,25 @@ def purchase_orders_list(request):
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
 
-    active_filters_count = 3  # Default 3 active filters matching reference sfql
+    active_filters = []
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
-        active_filters_count += 1
+        status_labels = dict(PurchaseOrder.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
-        active_filters_count += 1
+        s_obj = Contact.objects.filter(id=supplier_filter).first()
+        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
 
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
-        active_filters_count += 1
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
 
     if date_to:
         qs = qs.filter(order_date__lte=date_to)
-        active_filters_count += 1
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
         qs = qs.filter(
@@ -59,14 +62,12 @@ def purchase_orders_list(request):
             Q(supplier__name__icontains=search) |
             Q(supplier__area__name__icontains=search)
         )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
 
-    # Pagination: 40 per page matching reference ERP
-    page_size = int(request.GET.get('page_size', 40))
-    paginator = Paginator(qs, page_size)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    # Bounded server-side pagination (default 25)
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
         'orders': page_obj.object_list,
@@ -78,8 +79,9 @@ def purchase_orders_list(request):
         'date_from': date_from,
         'date_to': date_to,
         'suppliers': suppliers,
-        'active_filters_count': active_filters_count,
-        'total_count': qs.count(),
+        'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
+        'total_count': paginator.count,
     }
     return render(request, 'purchases/purchase_orders_list.html', context)
 
@@ -388,23 +390,25 @@ def purchase_return_orders_list(request):
         'supplier', 'supplier__area', 'warehouse', 'created_by'
     ).all().order_by('-serial_num')
 
-    active_filters_count = 0
+    active_filters = []
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
-        active_filters_count += 1
+        status_labels = dict(PurchaseReturnOrder.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
-        active_filters_count += 1
+        s_obj = Contact.objects.filter(id=supplier_filter).first()
+        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
 
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
-        active_filters_count += 1
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
 
     if date_to:
         qs = qs.filter(order_date__lte=date_to)
-        active_filters_count += 1
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
         qs = qs.filter(
@@ -412,13 +416,12 @@ def purchase_return_orders_list(request):
             Q(serial_num__icontains=search) |
             Q(supplier__name__icontains=search)
         )
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
 
-    page_size = int(request.GET.get('page_size', 40))
-    paginator = Paginator(qs, page_size)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    # Bounded server-side pagination (default 25)
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
         'returns': page_obj.object_list,
@@ -430,8 +433,9 @@ def purchase_return_orders_list(request):
         'date_from': date_from,
         'date_to': date_to,
         'suppliers': suppliers,
-        'active_filters_count': active_filters_count,
-        'total_count': qs.count(),
+        'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
+        'total_count': paginator.count,
     }
     return render(request, 'purchases/purchase_return_orders.html', context)
 

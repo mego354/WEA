@@ -1,0 +1,106 @@
+{
+  "title": "Home - Bricks Rep",
+  "bodyText": "home\nالرئيسية\nview_agenda\nجدول الاعمال\ncalendar_month\nالتقويم\nchecklist\nTodos\ncontacts\nجهات الاتصال\nconfirmation_number\nالمهام\nstore\nالمنتجات\nadd\ntimeline\nالأنشطة\nadd\nstorefront\nالمبيعات\nadd\nstorefront\nالمشتريات\nadd\ninventory\nالمخازن\nadd\naccount_balance_wallet\nالخزن\nadd\napproval\nالموافقات\nassessment\nالتقييمات\nattach_money\nالمصروفات\nmenu_book\nالمصادر\nscore\nالأهداف\nadd\nevent_busy\nخطة أيام العمل\ntrack_changes\nتتبع الموقع\ngroup\nالآداء\ntext_snippet\nالتقارير\nbug_report\nمشاكل تتبع الموقع\nsettings\nإعدادات\nadd\nDr.wael Atta (CEO)\nSuperAdmin\nnotifications_active\n12\nlogout\nworkspace: weapharma\nversion: 26.10.13-84efe84\nأدخل نطاقًا زمنيًا\n–\nالطلبات المنشأة\n177k جنيه\n82 طلب\nالطلبات المسلمة\n292k جنيه\n85 طلب\nالطلبات تحت التشغيل\n266k جنيه\n196 طلب\nالمرتجعات المنشأة\n4.11k جنيه\n4 مرتجع\nالمرتجعات المقبولة\n4.26k جنيه\n5 مرتجع\nصافي المبيعات\n288k جنيه\nالتحصيلات\n137k جنيه\n54 تحصيل\nشيكات تحت التحصيل\n0 تحصيل\nإجمالي الرصيد\n658k جنيه\n658 حساب\nإجمالي المديونية المتأخرة\n638k جنيه\n6.98k جنيه واجب السداد الشهر الحالي\nمتوسط الأيام المعلّقة\n7.2\nالعملاء الجدد\n69\nزيارات العملاء المحتملين\n0\nزيارات العملاء الحاليين\n62\nالتحصيلات حسب المنطقة\nالزيارات حسب المنطقة\nالطلبات المنشأة حسب المنطقة\nالطلبات المسملة حسب المنطقة\nرصيد العملاء بالمندوبين\nالمديونية المتأخرة للعملاء بالمندوبين\nadd",
+  "cards": [
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الطلبات المنشأة\n177k جنيه\n82 طلب"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الطلبات المسلمة\n292k جنيه\n85 طلب"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الطلبات تحت التشغيل\n266k جنيه\n196 طلب"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "المرتجعات المنشأة\n4.11k جنيه\n4 مرتجع"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "المرتجعات المقبولة\n4.26k جنيه\n5 مرتجع"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "صافي المبيعات\n288k جنيه"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "التحصيلات\n137k جنيه\n54 تحصيل"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "شيكات تحت التحصيل\n0 تحصيل"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "إجمالي الرصيد\n658k جنيه\n658 حساب"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "إجمالي المديونية المتأخرة\n638k جنيه\n6.98k جنيه واجب السداد الشهر الحالي"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "متوسط الأيام المعلّقة\n7.2"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "العملاء الجدد\n69"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "زيارات العملاء المحتملين\n0"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "زيارات العملاء الحاليين\n62"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "التحصيلات حسب المنطقة"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الزيارات حسب المنطقة"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الطلبات المنشأة حسب المنطقة"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "الطلبات المسملة حسب المنطقة"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "رصيد العملاء بالمندوبين"
+    },
+    {
+      "tag": "MAT-CARD",
+      "classes": "mat-mdc-card mdc-card u-padding--normal ng-star-inserted",
+      "text": "المديونية المتأخرة للعملاء بالمندوبين"
+    }
+  ]
+}

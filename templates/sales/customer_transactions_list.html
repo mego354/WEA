@@ -1,4 +1,5 @@
 {% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
 
 {% block title %}دفتر حركات وعمليات العملاء - WEA Pharma ERP{% endblock %}
 
@@ -27,10 +28,16 @@
         </div>
     </div>
 
-    <!-- Filter Form -->
+    <!-- Filter & Search Toolbar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-        <form method="GET" class="flex flex-col md:flex-row gap-3">
-            <div class="w-full md:w-80">
+        <form method="GET" class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم القيد، البيان، اسم العميل..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </div>
+
+            <div class="w-full sm:w-72">
                 <select name="customer_id" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
                     <option value="">جميع العملاء</option>
                     {% for c in customers %}
@@ -38,16 +45,33 @@
                     {% endfor %}
                 </select>
             </div>
-            {% if selected_customer_id %}
+
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-base">filter_alt</span>
+                <span>تصفية</span>
+            </button>
+            {% if search_query or selected_customer_id %}
             <a href="{% url 'customer_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
-                عرض كافة العملاء
+                إلغاء
             </a>
             {% endif %}
         </form>
     </div>
 
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Ledger Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">receipt_long</span>
+                <span>سجل الحركات والقيود</span>
+                <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
+                    {{ total_count }} حركة
+                </span>
+            </h2>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full text-right text-sm">
                 <thead>
@@ -101,6 +125,9 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>

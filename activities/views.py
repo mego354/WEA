@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
+from master_data.pagination_utils import paginate_queryset
 from django.db.models import Q, Sum, Count
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
@@ -90,10 +91,12 @@ def agreements_list(request):
     List agreements with search, filters, pagination, sum aggregation, and create modal.
     Matches https://weapharma.bricks-rep.com/agreements
     """
-    qs = Agreement.objects.select_related('customer', 'type', 'created_by').all()
+    qs = Agreement.objects.select_related('customer', 'type', 'created_by').all().order_by('-serial_num')
 
     # Search
     q = request.GET.get('q', '').strip()
+    active_filters = []
+
     if q:
         qs = qs.filter(
             Q(title__icontains=q) |
@@ -101,32 +104,40 @@ def agreements_list(request):
             Q(customer__name__icontains=q) |
             Q(customer__code__icontains=q)
         )
+        active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
 
     # Type Filter
     type_id = request.GET.get('type')
     if type_id:
         qs = qs.filter(type_id=type_id)
+        t_obj = AgreementType.objects.filter(id=type_id).first()
+        active_filters.append({'label': f'النوع: {t_obj.name if t_obj else type_id}', 'param': 'type'})
 
     # Status Filter
     status = request.GET.get('status')
     if status:
         qs = qs.filter(status=status)
+        status_labels = dict(Agreement.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
 
     # Assignee Filter (created_by)
     creator_id = request.GET.get('creator')
     if creator_id:
         qs = qs.filter(created_by_id=creator_id)
+        u_obj = User.objects.filter(id=creator_id).first()
+        active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else creator_id}', 'param': 'creator'})
 
     # Date Range Filters
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     if date_from:
         qs = qs.filter(date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
     if date_to:
         qs = qs.filter(date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     # Summary Metrics (matches reference aggregate API)
-    total_count = qs.count()
     total_amount = qs.aggregate(s=Sum('amount'))['s'] or 0.00
 
     # Handle inline Create via POST
@@ -145,10 +156,8 @@ def agreements_list(request):
     else:
         form = AgreementForm(initial={'date': timezone.now().date()})
 
-    # Pagination
-    paginator = Paginator(qs, 15)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    # Standardized bounded pagination
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     # Filter dropdown options
     agreement_types = AgreementType.objects.filter(is_active=True)
@@ -157,8 +166,9 @@ def agreements_list(request):
 
     context = {
         'page_obj': page_obj,
+        'paginator': paginator,
         'agreements': page_obj.object_list,
-        'total_count': total_count,
+        'total_count': paginator.count,
         'total_amount': total_amount,
         'form': form,
         'agreement_types': agreement_types,
@@ -170,6 +180,7 @@ def agreements_list(request):
         'selected_creator': creator_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user),
     }
     return render(request, 'activities/agreements_list.html', context)
@@ -709,10 +720,12 @@ def visits_list(request):
     Visits list with table & cards views, complete filters, status indicators, and export.
     Matches https://weapharma.bricks-rep.com/visits
     """
-    qs = Visit.objects.select_related('contact', 'template', 'owner', 'created_by').prefetch_related('samples__product').all()
+    qs = Visit.objects.select_related('contact', 'template', 'owner', 'created_by').prefetch_related('samples__product').all().order_by('-serial_num')
 
     # Search
     q = request.GET.get('q', '').strip()
+    active_filters = []
+
     if q:
         qs = qs.filter(
             Q(contact__name__icontains=q) |
@@ -721,52 +734,58 @@ def visits_list(request):
             Q(owner__first_name__icontains=q) |
             Q(owner__username__icontains=q)
         )
+        active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
 
     # Status
     status = request.GET.get('status')
     if status:
         qs = qs.filter(status=status)
+        status_labels = dict(Visit.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
 
     # Approval Status
     approval_status = request.GET.get('approval_status')
     if approval_status:
         qs = qs.filter(approval_status=approval_status)
+        approval_labels = dict(Visit.APPROVAL_CHOICES)
+        active_filters.append({'label': f'حالة الاعتماد: {approval_labels.get(approval_status, approval_status)}', 'param': 'approval_status'})
 
     # Representative (owner)
     rep_id = request.GET.get('owner')
     if rep_id:
         qs = qs.filter(owner_id=rep_id)
+        u_obj = User.objects.filter(id=rep_id).first()
+        active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else rep_id}', 'param': 'owner'})
 
     # Date Range
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     if date_from:
         qs = qs.filter(date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
     if date_to:
         qs = qs.filter(date__lte=date_to)
-
-    # Metrics
-    total_count = qs.count()
-    approved_count = qs.filter(approval_status='approved').count()
-    pending_count = qs.filter(approval_status='pending').count()
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     # View Mode: table or cards
     view_mode = request.GET.get('view', 'table')
 
-    # Pagination
-    paginator = Paginator(qs, 15)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
+    # Standardized bounded pagination
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     # Filter dropdowns
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
     contacts = Contact.objects.all().order_by('name')[:50]
     templates = VisitTemplate.objects.filter(active=True)
 
+    approved_count = qs.filter(approval_status='approved').count()
+    pending_count = qs.filter(approval_status='pending').count()
+
     context = {
         'page_obj': page_obj,
+        'paginator': paginator,
         'visits': page_obj.object_list,
-        'total_count': total_count,
+        'total_count': paginator.count,
         'approved_count': approved_count,
         'pending_count': pending_count,
         'view_mode': view_mode,
@@ -779,6 +798,7 @@ def visits_list(request):
         'selected_owner': rep_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user),
     }
     return render(request, 'activities/visits_list.html', context)
@@ -1198,28 +1218,37 @@ def visit_templates_list(request):
     ).order_by('id')
 
     q = request.GET.get('q', '').strip()
+    active_filters = []
+
     if q:
         qs = qs.filter(
             Q(name__icontains=q) |
             Q(display_name_ar__icontains=q) |
             Q(display_name_en__icontains=q)
         )
+        active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
 
     status = request.GET.get('status')
     if status == 'active':
         qs = qs.filter(active=True)
+        active_filters.append({'label': 'الحالة: مفعل', 'param': 'status'})
     elif status == 'inactive':
         qs = qs.filter(active=False)
+        active_filters.append({'label': 'الحالة: معطل', 'param': 'status'})
 
-    total_count = qs.count()
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+
     active_count = qs.filter(active=True).count()
 
     return render(request, 'activities/visit_templates_list.html', {
-        'templates': qs,
-        'total_count': total_count,
+        'templates': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'total_count': paginator.count,
         'active_count': active_count,
         'selected_q': q,
         'selected_status': status,
+        'active_filters': active_filters,
         'can_manage': can_manage_templates(request.user),
     })
 

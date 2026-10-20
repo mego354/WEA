@@ -1,0 +1,1693 @@
+{
+  "accounts.views.login_view": {
+    "module": "accounts.views",
+    "view_name": "login_view",
+    "url": "/login/",
+    "name": "login_root_alias",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/login.html",
+      "accounts/login.html"
+    ]
+  },
+  "accounts.views.logout_view": {
+    "module": "accounts.views",
+    "view_name": "logout_view",
+    "url": "/logout/",
+    "name": "logout_root_alias",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.users_list": {
+    "module": "accounts.views",
+    "view_name": "users_list",
+    "url": "/auth/users/",
+    "name": "users_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/users_list.html"
+    ]
+  },
+  "accounts.views.user_create": {
+    "module": "accounts.views",
+    "view_name": "user_create",
+    "url": "/auth/users/add/",
+    "name": "user_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.user_edit": {
+    "module": "accounts.views",
+    "view_name": "user_edit",
+    "url": "/auth/users/<int:pk>/edit/",
+    "name": "user_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/user_edit.html"
+    ]
+  },
+  "accounts.views.user_reset_password": {
+    "module": "accounts.views",
+    "view_name": "user_reset_password",
+    "url": "/auth/users/<int:pk>/reset-password/",
+    "name": "user_reset_password",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.user_toggle_status": {
+    "module": "accounts.views",
+    "view_name": "user_toggle_status",
+    "url": "/auth/users/<int:pk>/toggle-status/",
+    "name": "user_toggle_status",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.user_toggle_bypass_location": {
+    "module": "accounts.views",
+    "view_name": "user_toggle_bypass_location",
+    "url": "/auth/users/<int:pk>/toggle-bypass-location/",
+    "name": "user_toggle_bypass_location",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.users_export": {
+    "module": "accounts.views",
+    "view_name": "users_export",
+    "url": "/auth/users/export/",
+    "name": "users_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.roles_list": {
+    "module": "accounts.views",
+    "view_name": "roles_list",
+    "url": "/auth/roles/",
+    "name": "roles_list",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/roles_list.html"
+    ]
+  },
+  "accounts.views.role_create": {
+    "module": "accounts.views",
+    "view_name": "role_create",
+    "url": "/auth/roles/create/",
+    "name": "role_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/role_form.html"
+    ]
+  },
+  "accounts.views.role_edit": {
+    "module": "accounts.views",
+    "view_name": "role_edit",
+    "url": "/auth/roles/<int:pk>/edit/",
+    "name": "role_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "accounts/role_form.html"
+    ]
+  },
+  "accounts.views.role_duplicate": {
+    "module": "accounts.views",
+    "view_name": "role_duplicate",
+    "url": "/auth/roles/<int:pk>/duplicate/",
+    "name": "role_duplicate",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "accounts.views.role_delete": {
+    "module": "accounts.views",
+    "view_name": "role_delete",
+    "url": "/auth/roles/<int:pk>/delete/",
+    "name": "role_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.home_view": {
+    "module": "master_data.views",
+    "view_name": "home_view",
+    "url": "/",
+    "name": "home",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "dashboard/home.html"
+    ]
+  },
+  "master_data.urls.<lambda>": {
+    "module": "master_data.urls",
+    "view_name": "<lambda>",
+    "url": "/settings/",
+    "name": "settings_root",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.branding_settings_view": {
+    "module": "master_data.views",
+    "view_name": "branding_settings_view",
+    "url": "/settings/branding/",
+    "name": "branding_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/branding_settings.html"
+    ]
+  },
+  "master_data.views.location_settings_view": {
+    "module": "master_data.views",
+    "view_name": "location_settings_view",
+    "url": "/settings/location/",
+    "name": "location_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/location_settings.html"
+    ]
+  },
+  "master_data.views.geofence_settings_api": {
+    "module": "master_data.views",
+    "view_name": "geofence_settings_api",
+    "url": "/api/v1/geofence/settings",
+    "name": "geofence_settings_api",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.areas_settings_view": {
+    "module": "master_data.views",
+    "view_name": "areas_settings_view",
+    "url": "/settings/areas/",
+    "name": "areas_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "settings/areas_settings.html"
+    ]
+  },
+  "master_data.views.area_create": {
+    "module": "master_data.views",
+    "view_name": "area_create",
+    "url": "/settings/areas/add/",
+    "name": "area_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.area_edit": {
+    "module": "master_data.views",
+    "view_name": "area_edit",
+    "url": "/settings/areas/<int:pk>/edit/",
+    "name": "area_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.area_delete": {
+    "module": "master_data.views",
+    "view_name": "area_delete",
+    "url": "/settings/areas/<int:pk>/delete/",
+    "name": "area_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.expenses_settings_view": {
+    "module": "master_data.views",
+    "view_name": "expenses_settings_view",
+    "url": "/settings/expenses/",
+    "name": "expenses_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/expenses_settings.html"
+    ]
+  },
+  "master_data.views.expense_create": {
+    "module": "master_data.views",
+    "view_name": "expense_create",
+    "url": "/settings/expenses/add/",
+    "name": "expense_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.expense_edit": {
+    "module": "master_data.views",
+    "view_name": "expense_edit",
+    "url": "/settings/expenses/<int:pk>/edit/",
+    "name": "expense_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.expense_delete": {
+    "module": "master_data.views",
+    "view_name": "expense_delete",
+    "url": "/settings/expenses/<int:pk>/delete/",
+    "name": "expense_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.tickets_settings_view": {
+    "module": "master_data.views",
+    "view_name": "tickets_settings_view",
+    "url": "/settings/tickets/",
+    "name": "tickets_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/tickets_settings.html"
+    ]
+  },
+  "master_data.views.ticket_create": {
+    "module": "master_data.views",
+    "view_name": "ticket_create",
+    "url": "/settings/tickets/add/",
+    "name": "ticket_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.ticket_edit": {
+    "module": "master_data.views",
+    "view_name": "ticket_edit",
+    "url": "/settings/tickets/<int:pk>/edit/",
+    "name": "ticket_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.ticket_delete": {
+    "module": "master_data.views",
+    "view_name": "ticket_delete",
+    "url": "/settings/tickets/<int:pk>/delete/",
+    "name": "ticket_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.requests_settings_view": {
+    "module": "master_data.views",
+    "view_name": "requests_settings_view",
+    "url": "/settings/requests/",
+    "name": "requests_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/requests_settings.html"
+    ]
+  },
+  "master_data.views.request_type_create": {
+    "module": "master_data.views",
+    "view_name": "request_type_create",
+    "url": "/settings/requests/add/",
+    "name": "request_type_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.request_type_edit": {
+    "module": "master_data.views",
+    "view_name": "request_type_edit",
+    "url": "/settings/requests/<int:pk>/edit/",
+    "name": "request_type_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.request_type_delete": {
+    "module": "master_data.views",
+    "view_name": "request_type_delete",
+    "url": "/settings/requests/<int:pk>/delete/",
+    "name": "request_type_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.agreements_settings_view": {
+    "module": "master_data.views",
+    "view_name": "agreements_settings_view",
+    "url": "/settings/agreements/",
+    "name": "agreements_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/agreements_settings.html"
+    ]
+  },
+  "master_data.views.agreement_create": {
+    "module": "master_data.views",
+    "view_name": "agreement_create",
+    "url": "/settings/agreements/add/",
+    "name": "agreement_type_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.agreement_edit": {
+    "module": "master_data.views",
+    "view_name": "agreement_edit",
+    "url": "/settings/agreements/<int:pk>/edit/",
+    "name": "agreement_type_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.agreement_delete": {
+    "module": "master_data.views",
+    "view_name": "agreement_delete",
+    "url": "/settings/agreements/<int:pk>/delete/",
+    "name": "agreement_type_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "master_data.views.sales_settings_view": {
+    "module": "master_data.views",
+    "view_name": "sales_settings_view",
+    "url": "/settings/sales/",
+    "name": "sales_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/sales_settings.html"
+    ]
+  },
+  "master_data.views.purchase_settings_view": {
+    "module": "master_data.views",
+    "view_name": "purchase_settings_view",
+    "url": "/settings/purchase/",
+    "name": "purchase_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/purchase_settings.html"
+    ]
+  },
+  "master_data.views.inventory_settings_view": {
+    "module": "master_data.views",
+    "view_name": "inventory_settings_view",
+    "url": "/settings/inventory/",
+    "name": "inventory_settings",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/inventory_settings.html"
+    ]
+  },
+  "master_data.views.contacts_udf_view": {
+    "module": "master_data.views",
+    "view_name": "contacts_udf_view",
+    "url": "/settings/contacts-udf/",
+    "name": "contacts_udf",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/contacts_udf.html"
+    ]
+  },
+  "master_data.views.sync_data_view": {
+    "module": "master_data.views",
+    "view_name": "sync_data_view",
+    "url": "/settings/sync-data/",
+    "name": "sync_data",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "settings/sync_data.html"
+    ]
+  },
+  "master_data.views.sync_data_trigger": {
+    "module": "master_data.views",
+    "view_name": "sync_data_trigger",
+    "url": "/settings/sync-data/<str:sync_type>/sync/",
+    "name": "sync_data_trigger",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contacts_list": {
+    "module": "contacts.views",
+    "view_name": "contacts_list",
+    "url": "/contacts/",
+    "name": "contacts_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "contacts/contacts_list.html"
+    ]
+  },
+  "contacts.views.contact_create": {
+    "module": "contacts.views",
+    "view_name": "contact_create",
+    "url": "/contacts/create/",
+    "name": "contact_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contacts_export": {
+    "module": "contacts.views",
+    "view_name": "contacts_export",
+    "url": "/contacts/export/",
+    "name": "contacts_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contacts_import": {
+    "module": "contacts.views",
+    "view_name": "contacts_import",
+    "url": "/contacts/import/",
+    "name": "contacts_import",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "contacts/contacts_import.html",
+      "contacts/contacts_import.html",
+      "contacts/contacts_import.html",
+      "contacts/contacts_import.html"
+    ]
+  },
+  "contacts.views.contacts_import_template": {
+    "module": "contacts.views",
+    "view_name": "contacts_import_template",
+    "url": "/contacts/import/template/",
+    "name": "contacts_import_template",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.get_subareas": {
+    "module": "contacts.views",
+    "view_name": "get_subareas",
+    "url": "/contacts/api/subareas/",
+    "name": "contact_subareas_api",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.customers_search_api": {
+    "module": "contacts.views",
+    "view_name": "customers_search_api",
+    "url": "/contacts/api/search/",
+    "name": "customers_search_api",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_detail": {
+    "module": "contacts.views",
+    "view_name": "contact_detail",
+    "url": "/contacts/<int:pk>/",
+    "name": "contact_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "contacts/contact_detail.html"
+    ]
+  },
+  "contacts.views.contact_edit": {
+    "module": "contacts.views",
+    "view_name": "contact_edit",
+    "url": "/contacts/<int:pk>/edit/",
+    "name": "contact_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_delete": {
+    "module": "contacts.views",
+    "view_name": "contact_delete",
+    "url": "/contacts/<int:pk>/delete/",
+    "name": "contact_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_update_status": {
+    "module": "contacts.views",
+    "view_name": "contact_update_status",
+    "url": "/contacts/<int:pk>/status/",
+    "name": "contact_update_status",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_add_comment": {
+    "module": "contacts.views",
+    "view_name": "contact_add_comment",
+    "url": "/contacts/<int:pk>/comments/",
+    "name": "contact_add_comment",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_create_todo": {
+    "module": "contacts.views",
+    "view_name": "contact_create_todo",
+    "url": "/contacts/<int:pk>/todos/create/",
+    "name": "contact_create_todo",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_toggle_todo": {
+    "module": "contacts.views",
+    "view_name": "contact_toggle_todo",
+    "url": "/contacts/<int:pk>/todos/<int:todo_id>/toggle/",
+    "name": "contact_toggle_todo",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_upload_attachment": {
+    "module": "contacts.views",
+    "view_name": "contact_upload_attachment",
+    "url": "/contacts/<int:pk>/attachments/upload/",
+    "name": "contact_upload_attachment",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_add_address": {
+    "module": "contacts.views",
+    "view_name": "contact_add_address",
+    "url": "/contacts/<int:pk>/addresses/add/",
+    "name": "contact_add_address",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "contacts.views.contact_delete_address": {
+    "module": "contacts.views",
+    "view_name": "contact_delete_address",
+    "url": "/contacts/<int:pk>/addresses/<int:address_id>/delete/",
+    "name": "contact_delete_address",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "catalog.views.products_list": {
+    "module": "catalog.views",
+    "view_name": "products_list",
+    "url": "/catalog/",
+    "name": "products_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "catalog/products_list.html"
+    ]
+  },
+  "catalog.views.product_create": {
+    "module": "catalog.views",
+    "view_name": "product_create",
+    "url": "/catalog/create/",
+    "name": "product_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "catalog/product_form.html",
+      "catalog/product_form.html"
+    ]
+  },
+  "catalog.views.products_export": {
+    "module": "catalog.views",
+    "view_name": "products_export",
+    "url": "/catalog/export/",
+    "name": "products_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "catalog.views.product_import": {
+    "module": "catalog.views",
+    "view_name": "product_import",
+    "url": "/catalog/import/",
+    "name": "product_import",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "catalog/product_import.html",
+      "catalog/product_import.html",
+      "catalog/product_import.html",
+      "catalog/product_import.html"
+    ]
+  },
+  "catalog.views.product_import_template": {
+    "module": "catalog.views",
+    "view_name": "product_import_template",
+    "url": "/catalog/import/template/",
+    "name": "product_import_template",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "catalog.views.categories_list": {
+    "module": "catalog.views",
+    "view_name": "categories_list",
+    "url": "/catalog/categories/",
+    "name": "categories_list",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "catalog/categories_list.html"
+    ]
+  },
+  "catalog.views.category_edit": {
+    "module": "catalog.views",
+    "view_name": "category_edit",
+    "url": "/catalog/categories/<int:pk>/edit/",
+    "name": "category_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "catalog.views.category_delete": {
+    "module": "catalog.views",
+    "view_name": "category_delete",
+    "url": "/catalog/categories/<int:pk>/delete/",
+    "name": "category_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "catalog.views.product_detail": {
+    "module": "catalog.views",
+    "view_name": "product_detail",
+    "url": "/catalog/<int:pk>/",
+    "name": "product_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "catalog/product_detail.html"
+    ]
+  },
+  "catalog.views.product_edit": {
+    "module": "catalog.views",
+    "view_name": "product_edit",
+    "url": "/catalog/<int:pk>/edit/",
+    "name": "product_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "catalog/product_form.html"
+    ]
+  },
+  "catalog.views.product_delete": {
+    "module": "catalog.views",
+    "view_name": "product_delete",
+    "url": "/catalog/<int:pk>/delete/",
+    "name": "product_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_orders_list": {
+    "module": "purchases.views",
+    "view_name": "purchase_orders_list",
+    "url": "/purchases/",
+    "name": "purchase_orders_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_orders_list.html"
+    ]
+  },
+  "purchases.views.purchase_order_create": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_create",
+    "url": "/purchases/create/",
+    "name": "purchase_order_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_order_create.html"
+    ]
+  },
+  "purchases.views.purchase_orders_export": {
+    "module": "purchases.views",
+    "view_name": "purchase_orders_export",
+    "url": "/purchases/export/",
+    "name": "purchase_orders_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_return_orders_list": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_orders_list",
+    "url": "/purchases/returns/",
+    "name": "purchase_return_orders_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_return_orders.html"
+    ]
+  },
+  "purchases.views.purchase_return_order_create": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_order_create",
+    "url": "/purchases/returns/create/",
+    "name": "purchase_return_order_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_return_order_create.html"
+    ]
+  },
+  "purchases.views.purchase_return_orders_export": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_orders_export",
+    "url": "/purchases/returns/export/",
+    "name": "purchase_return_orders_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_return_order_detail": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_order_detail",
+    "url": "/purchases/returns/<int:pk>/",
+    "name": "purchase_return_order_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_return_order_detail.html"
+    ]
+  },
+  "purchases.views.purchase_return_order_action": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_order_action",
+    "url": "/purchases/returns/<int:pk>/action/<str:action>/",
+    "name": "purchase_return_order_action",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_return_order_print": {
+    "module": "purchases.views",
+    "view_name": "purchase_return_order_print",
+    "url": "/purchases/returns/<int:pk>/print/",
+    "name": "purchase_return_order_print",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_return_order_print.html"
+    ]
+  },
+  "purchases.views.purchase_order_detail": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_detail",
+    "url": "/purchases/<int:pk>/",
+    "name": "purchase_order_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_order_detail.html"
+    ]
+  },
+  "purchases.views.purchase_order_split": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_split",
+    "url": "/purchases/<int:pk>/split/",
+    "name": "purchase_order_split",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_order_action": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_action",
+    "url": "/purchases/<int:pk>/action/<str:action>/",
+    "name": "purchase_order_action",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_order_update_status_ajax": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_update_status_ajax",
+    "url": "/purchases/<int:pk>/status/update/",
+    "name": "purchase_order_update_status_ajax",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_order_add_comment": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_add_comment",
+    "url": "/purchases/<int:pk>/comments/add/",
+    "name": "purchase_order_add_comment",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_order_upload_attachment": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_upload_attachment",
+    "url": "/purchases/<int:pk>/attachments/upload/",
+    "name": "purchase_order_upload_attachment",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "purchases.views.purchase_order_print": {
+    "module": "purchases.views",
+    "view_name": "purchase_order_print",
+    "url": "/purchases/<int:pk>/print/",
+    "name": "purchase_order_print",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "purchases/purchase_order_print.html"
+    ]
+  },
+  "inventory.views.inventory_stock_list": {
+    "module": "inventory.views",
+    "view_name": "inventory_stock_list",
+    "url": "/inventory/",
+    "name": "inventory_stock_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "inventory/stock_list.html"
+    ]
+  },
+  "inventory.views.inventory_stock_export": {
+    "module": "inventory.views",
+    "view_name": "inventory_stock_export",
+    "url": "/inventory/export/",
+    "name": "inventory_stock_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "inventory.views.warehouses_list": {
+    "module": "inventory.views",
+    "view_name": "warehouses_list",
+    "url": "/inventory/warehouses/",
+    "name": "warehouses_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "inventory/warehouses_list.html"
+    ]
+  },
+  "inventory.views.inventory_memos_list": {
+    "module": "inventory.views",
+    "view_name": "inventory_memos_list",
+    "url": "/inventory/memos/",
+    "name": "inventory_memos_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "inventory/memos_list.html"
+    ]
+  },
+  "treasury.views.vendor_payments_list": {
+    "module": "treasury.views",
+    "view_name": "vendor_payments_list",
+    "url": "/treasury/payments/",
+    "name": "vendor_payments_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vendor_payments_list.html"
+    ]
+  },
+  "treasury.views.vendor_payments_export": {
+    "module": "treasury.views",
+    "view_name": "vendor_payments_export",
+    "url": "/treasury/payments/export/",
+    "name": "vendor_payments_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "treasury.views.vendor_payment_create": {
+    "module": "treasury.views",
+    "view_name": "vendor_payment_create",
+    "url": "/treasury/payments/create/",
+    "name": "vendor_payment_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vendor_payment_create.html"
+    ]
+  },
+  "treasury.views.vendor_payment_requests_list": {
+    "module": "treasury.views",
+    "view_name": "vendor_payment_requests_list",
+    "url": "/treasury/payment-requests/",
+    "name": "vendor_payment_requests_list",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vendor_payment_requests_list.html"
+    ]
+  },
+  "treasury.views.accounting_vendors_list": {
+    "module": "treasury.views",
+    "view_name": "accounting_vendors_list",
+    "url": "/treasury/vendors/",
+    "name": "accounting_vendors_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/accounting_vendors_list.html"
+    ]
+  },
+  "treasury.views.vendor_transactions_list": {
+    "module": "treasury.views",
+    "view_name": "vendor_transactions_list",
+    "url": "/treasury/vendor-transactions/",
+    "name": "vendor_transactions_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vendor_transactions_list.html"
+    ]
+  },
+  "treasury.views.vaults_list": {
+    "module": "treasury.views",
+    "view_name": "vaults_list",
+    "url": "/treasury/vaults/",
+    "name": "vaults_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vaults_list.html"
+    ]
+  },
+  "treasury.views.vault_transactions_list": {
+    "module": "treasury.views",
+    "view_name": "vault_transactions_list",
+    "url": "/treasury/vault-transactions/",
+    "name": "vault_transactions_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "treasury/vault_transactions_list.html"
+    ]
+  },
+  "sales.views.sales_orders_list": {
+    "module": "sales.views",
+    "view_name": "sales_orders_list",
+    "url": "/sales/",
+    "name": "sales_orders_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/sales_orders_list.html"
+    ]
+  },
+  "sales.views.sales_orders_export": {
+    "module": "sales.views",
+    "view_name": "sales_orders_export",
+    "url": "/sales/export/",
+    "name": "sales_orders_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "sales.views.sales_order_create": {
+    "module": "sales.views",
+    "view_name": "sales_order_create",
+    "url": "/sales/create/",
+    "name": "sales_order_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/sales_order_create.html"
+    ]
+  },
+  "sales.views.sales_order_detail": {
+    "module": "sales.views",
+    "view_name": "sales_order_detail",
+    "url": "/sales/<int:pk>/",
+    "name": "sales_order_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "sales/sales_order_detail.html"
+    ]
+  },
+  "sales.views.sales_order_action": {
+    "module": "sales.views",
+    "view_name": "sales_order_action",
+    "url": "/sales/<int:pk>/action/<str:action>/",
+    "name": "sales_order_action",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "sales.views.collections_list": {
+    "module": "sales.views",
+    "view_name": "collections_list",
+    "url": "/sales/collections/",
+    "name": "collections_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/collections_list.html"
+    ]
+  },
+  "sales.views.collections_export": {
+    "module": "sales.views",
+    "view_name": "collections_export",
+    "url": "/sales/collections/export/",
+    "name": "collections_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "sales.views.collection_create": {
+    "module": "sales.views",
+    "view_name": "collection_create",
+    "url": "/sales/collections/create/",
+    "name": "collection_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/collection_create.html"
+    ]
+  },
+  "sales.views.accounting_customers_list": {
+    "module": "sales.views",
+    "view_name": "accounting_customers_list",
+    "url": "/sales/customers/",
+    "name": "accounting_customers_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/accounting_customers_list.html"
+    ]
+  },
+  "sales.views.customer_transactions_list": {
+    "module": "sales.views",
+    "view_name": "customer_transactions_list",
+    "url": "/sales/customer-transactions/",
+    "name": "customer_transactions_list",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "sales/customer_transactions_list.html"
+    ]
+  },
+  "activities.views.agreements_list": {
+    "module": "activities.views",
+    "view_name": "agreements_list",
+    "url": "/activities/agreements/",
+    "name": "agreements_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/agreements_list.html"
+    ]
+  },
+  "activities.views.agreements_bulk_status": {
+    "module": "activities.views",
+    "view_name": "agreements_bulk_status",
+    "url": "/activities/agreements/bulk-status/",
+    "name": "agreements_bulk_status",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.agreement_create": {
+    "module": "activities.views",
+    "view_name": "agreement_create",
+    "url": "/activities/agreements/create/",
+    "name": "agreement_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/agreement_form.html"
+    ]
+  },
+  "activities.views.agreements_export": {
+    "module": "activities.views",
+    "view_name": "agreements_export",
+    "url": "/activities/agreements/export/",
+    "name": "agreements_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.agreement_detail": {
+    "module": "activities.views",
+    "view_name": "agreement_detail",
+    "url": "/activities/agreements/<int:pk>/",
+    "name": "agreement_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/agreement_detail.html"
+    ]
+  },
+  "activities.views.agreement_edit": {
+    "module": "activities.views",
+    "view_name": "agreement_edit",
+    "url": "/activities/agreements/<int:pk>/edit/",
+    "name": "agreement_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/agreement_form.html"
+    ]
+  },
+  "activities.views.agreement_delete": {
+    "module": "activities.views",
+    "view_name": "agreement_delete",
+    "url": "/activities/agreements/<int:pk>/delete/",
+    "name": "agreement_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.agreement_action": {
+    "module": "activities.views",
+    "view_name": "agreement_action",
+    "url": "/activities/agreements/<int:pk>/action/<str:action>/",
+    "name": "agreement_action",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.planned_visits_list": {
+    "module": "activities.views",
+    "view_name": "planned_visits_list",
+    "url": "/activities/planned-visits/",
+    "name": "planned_visits_list",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/planned_visits_list.html"
+    ]
+  },
+  "activities.views.planned_visit_add_item": {
+    "module": "activities.views",
+    "view_name": "planned_visit_add_item",
+    "url": "/activities/planned-visits/add-item/",
+    "name": "planned_visit_add_item",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.planned_visits_export": {
+    "module": "activities.views",
+    "view_name": "planned_visits_export",
+    "url": "/activities/planned-visits/export/",
+    "name": "planned_visits_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.planned_visit_item_delete": {
+    "module": "activities.views",
+    "view_name": "planned_visit_item_delete",
+    "url": "/activities/planned-visits/item/<int:pk>/delete/",
+    "name": "planned_visit_item_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.planned_visit_item_execute": {
+    "module": "activities.views",
+    "view_name": "planned_visit_item_execute",
+    "url": "/activities/planned-visits/item/<int:pk>/execute/",
+    "name": "planned_visit_item_execute",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.visits_list": {
+    "module": "activities.views",
+    "view_name": "visits_list",
+    "url": "/activities/visits/",
+    "name": "visits_list",
+    "has_paginator": true,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/visits_list.html"
+    ]
+  },
+  "activities.views.visit_create": {
+    "module": "activities.views",
+    "view_name": "visit_create",
+    "url": "/activities/visits/create/",
+    "name": "visit_create",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_form.html"
+    ]
+  },
+  "activities.views.visits_export": {
+    "module": "activities.views",
+    "view_name": "visits_export",
+    "url": "/activities/visits/export/",
+    "name": "visits_export",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.visit_detail": {
+    "module": "activities.views",
+    "view_name": "visit_detail",
+    "url": "/activities/visits/<int:pk>/",
+    "name": "visit_detail",
+    "has_paginator": false,
+    "has_select_related": true,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_detail.html"
+    ]
+  },
+  "activities.views.visit_edit": {
+    "module": "activities.views",
+    "view_name": "visit_edit",
+    "url": "/activities/visits/<int:pk>/edit/",
+    "name": "visit_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_form.html"
+    ]
+  },
+  "activities.views.visit_action": {
+    "module": "activities.views",
+    "view_name": "visit_action",
+    "url": "/activities/visits/<int:pk>/action/<str:action>/",
+    "name": "visit_action",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.visit_templates_api": {
+    "module": "activities.views",
+    "view_name": "visit_templates_api",
+    "url": "/activities/api/templates/",
+    "name": "visit_templates_api",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.visit_templates_list": {
+    "module": "activities.views",
+    "view_name": "visit_templates_list",
+    "url": "/activities/settings/visits/templates/",
+    "name": "visit_templates_list",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_templates_list.html"
+    ]
+  },
+  "activities.views.visit_template_create": {
+    "module": "activities.views",
+    "view_name": "visit_template_create",
+    "url": "/activities/settings/visits/templates/create/",
+    "name": "visit_template_create",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_template_form.html"
+    ]
+  },
+  "activities.views.visit_template_edit": {
+    "module": "activities.views",
+    "view_name": "visit_template_edit",
+    "url": "/activities/settings/visits/templates/<int:pk>/edit/",
+    "name": "visit_template_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_template_form.html"
+    ]
+  },
+  "activities.views.visit_template_preview": {
+    "module": "activities.views",
+    "view_name": "visit_template_preview",
+    "url": "/activities/settings/visits/templates/<int:pk>/preview/",
+    "name": "visit_template_preview",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": true,
+    "is_html_view": true,
+    "templates": [
+      "activities/visit_template_preview.html"
+    ]
+  },
+  "activities.views.visit_template_delete": {
+    "module": "activities.views",
+    "view_name": "visit_template_delete",
+    "url": "/activities/settings/visits/templates/<int:pk>/delete/",
+    "name": "visit_template_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.visit_template_toggle_status": {
+    "module": "activities.views",
+    "view_name": "visit_template_toggle_status",
+    "url": "/activities/settings/visits/templates/<int:pk>/toggle-status/",
+    "name": "visit_template_toggle_status",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.template_question_add": {
+    "module": "activities.views",
+    "view_name": "template_question_add",
+    "url": "/activities/settings/visits/templates/<int:template_pk>/questions/add/",
+    "name": "template_question_add",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.template_question_edit": {
+    "module": "activities.views",
+    "view_name": "template_question_edit",
+    "url": "/activities/settings/visits/templates/questions/<int:question_pk>/edit/",
+    "name": "template_question_edit",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.template_question_delete": {
+    "module": "activities.views",
+    "view_name": "template_question_delete",
+    "url": "/activities/settings/visits/templates/questions/<int:question_pk>/delete/",
+    "name": "template_question_delete",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  },
+  "activities.views.template_questions_reorder": {
+    "module": "activities.views",
+    "view_name": "template_questions_reorder",
+    "url": "/activities/settings/visits/templates/<int:template_pk>/questions/reorder/",
+    "name": "template_questions_reorder",
+    "has_paginator": false,
+    "has_select_related": false,
+    "has_prefetch_related": false,
+    "is_html_view": false,
+    "templates": []
+  }
+}

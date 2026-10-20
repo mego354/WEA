@@ -6,22 +6,32 @@
 <div class="relative min-h-[calc(100vh-5rem)]">
 
     <!-- Header Bar -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-4">
         <div class="flex items-center gap-3">
             <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">التصنيفات</h1>
             <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                {{ categories.count }} تصنيف
+                {{ paginator.count|default:categories|length }} تصنيف
             </span>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Search Form -->
+            <form method="GET" action="{% url 'categories_list' %}" class="relative flex-1 sm:w-64">
+                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالاسم أو الكود..."
+                       class="w-full py-2 pr-9 pl-4 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent">
+                <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
+            </form>
+
             <button onclick="openModal('create-cat-modal')"
-                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[38px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إنشاء تصنيف</span>
             </button>
         </div>
     </div>
+
+    <!-- Active Filters Chips -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Categories Table -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
@@ -78,6 +88,9 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Server-side Pagination Component -->
+        {% include 'components/pagination.html' %}
     </div>
 
     <!-- CREATE CATEGORY MODAL -->

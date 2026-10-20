@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}جهات الاتصال{% endblock %}
 
@@ -172,34 +172,8 @@
         </div>
     </div>
 
-    <!-- Active Filter Chips Bar (if filters applied) -->
-    {% if current_relation != 'all' or current_status != 'all' or search_query or current_area_id or current_category != 'all' %}
-    <div class="flex flex-wrap items-center gap-2 mb-4 bg-brand-50/50 p-2.5 rounded-xl border border-brand-100">
-        <span class="text-xs font-bold text-brand-800 flex items-center gap-1">
-            <span class="material-symbols-outlined text-sm">tune</span>
-            <span>الفلاتر النشطة:</span>
-        </span>
-        {% if search_query %}
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-white text-slate-700 border border-slate-200 shadow-sm">
-            <span>البحث: {{ search_query }}</span>
-            <a href="?relation={{ current_relation }}&status={{ current_status }}&view={{ view_mode }}" class="text-slate-400 hover:text-red-500">×</a>
-        </span>
-        {% endif %}
-        {% if current_relation != 'all' %}
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-white text-slate-700 border border-slate-200 shadow-sm">
-            <span>العلاقة: {% if current_relation == 'customer' %}عميل{% elif current_relation == 'vendor' %}مورد{% else %}أخرى{% endif %}</span>
-            <a href="?relation=all&status={{ current_status }}&search={{ search_query }}&view={{ view_mode }}" class="text-slate-400 hover:text-red-500">×</a>
-        </span>
-        {% endif %}
-        {% if current_status != 'all' %}
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-white text-slate-700 border border-slate-200 shadow-sm">
-            <span>الحالة: {{ current_status }}</span>
-            <a href="?relation={{ current_relation }}&status=all&search={{ search_query }}&view={{ view_mode }}" class="text-slate-400 hover:text-red-500">×</a>
-        </span>
-        {% endif %}
-        <a href="{% url 'contacts_list' %}" class="text-xs font-bold text-brand-600 hover:text-brand-800 mr-auto">إعادة ضبط الكل</a>
-    </div>
-    {% endif %}
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
 
     <!-- Data Table View -->
     {% if view_mode == 'table' %}
@@ -353,39 +327,8 @@
             </table>
         </div>
 
-        <!-- Reference ERP Pagination Footer -->
-        <div class="px-6 py-3 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-            <div class="flex items-center gap-2">
-                <span>Items per page:</span>
-                <span class="font-bold text-slate-700">40</span>
-            </div>
-            <div class="flex items-center gap-6">
-                <span>
-                    {{ page_obj.start_index|default:0 }} – {{ page_obj.end_index|default:0 }} of {{ total_count }}
-                </span>
-                <div class="flex items-center gap-1">
-                    {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&view={{ view_mode }}&relation={{ current_relation }}&search={{ search_query }}" class="p-1 rounded hover:bg-slate-100 text-slate-700">
-                        <span class="material-symbols-outlined text-base">chevron_right</span>
-                    </a>
-                    {% else %}
-                    <span class="p-1 text-slate-300 cursor-not-allowed">
-                        <span class="material-symbols-outlined text-base">chevron_right</span>
-                    </span>
-                    {% endif %}
-
-                    {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&view={{ view_mode }}&relation={{ current_relation }}&search={{ search_query }}" class="p-1 rounded hover:bg-slate-100 text-slate-700">
-                        <span class="material-symbols-outlined text-base">chevron_left</span>
-                    </a>
-                    {% else %}
-                    <span class="p-1 text-slate-300 cursor-not-allowed">
-                        <span class="material-symbols-outlined text-base">chevron_left</span>
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
     {% endif %}
 
@@ -431,11 +374,16 @@
         </div>
         {% endfor %}
     </div>
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+        {% include 'components/pagination.html' %}
+    </div>
     {% endif %}
 
-    <!-- Floating Action Button '+' (matching reference ERP) -->
-    <a href="{% url 'contact_create' %}" class="fixed bottom-6 left-6 w-14 h-14 rounded-full bg-[#27bebe] hover:bg-[#1fa8a8] text-white flex items-center justify-center shadow-xl shadow-brand-500/30 transition-transform hover:scale-105 z-30" title="انشئ جهة اتصال">
-        <span class="material-symbols-outlined text-3xl font-bold">add</span>
+    <!-- Floating Action Button for Contact Creation (Positioned above Global FAB) -->
+    <a href="{% url 'contact_create' %}"
+       class="fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xl shadow-emerald-600/30 transition-transform hover:scale-105 z-30"
+       title="انشئ جهة اتصال" aria-label="انشئ جهة اتصال">
+        <span class="material-symbols-outlined text-2xl font-bold">person_add</span>
     </a>
 
 </div>

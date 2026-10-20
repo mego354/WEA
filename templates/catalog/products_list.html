@@ -63,6 +63,9 @@
         </div>
     </div>
 
+    <!-- Active Filters Chips -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Products Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
         <div class="overflow-x-auto">
@@ -178,54 +181,15 @@
             </table>
         </div>
 
-        <!-- Reference ERP Pagination Footer -->
-        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-            <div class="flex items-center gap-2">
-                <span>Items per page:</span>
-                <select onchange="location.href='?page_size=' + this.value + '&search={{ search_query }}&category={{ selected_category|default:'' }}'"
-                        class="border border-slate-200 rounded px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-white">
-                    <option value="40" {% if paginator.per_page == 40 %}selected{% endif %}>40</option>
-                    <option value="20" {% if paginator.per_page == 20 %}selected{% endif %}>20</option>
-                    <option value="100" {% if paginator.per_page == 100 %}selected{% endif %}>100</option>
-                </select>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <span>
-                    {{ page_obj.start_index }} – {{ page_obj.end_index }} of {{ paginator.count }}
-                </span>
-                <div class="flex items-center gap-1">
-                    {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&search={{ search_query }}&category={{ selected_category|default:'' }}"
-                       class="p-1 rounded text-slate-600 hover:bg-slate-100">
-                        <span class="material-symbols-outlined text-sm">chevron_right</span>
-                    </a>
-                    {% else %}
-                    <span class="p-1 rounded text-slate-300 cursor-not-allowed">
-                        <span class="material-symbols-outlined text-sm">chevron_right</span>
-                    </span>
-                    {% endif %}
-
-                    {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&search={{ search_query }}&category={{ selected_category|default:'' }}"
-                       class="p-1 rounded text-slate-600 hover:bg-slate-100">
-                        <span class="material-symbols-outlined text-sm">chevron_left</span>
-                    </a>
-                    {% else %}
-                    <span class="p-1 rounded text-slate-300 cursor-not-allowed">
-                        <span class="material-symbols-outlined text-sm">chevron_left</span>
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+        <!-- Reusable Server-Side Pagination Component -->
+        {% include 'components/pagination.html' %}
     </div>
 
-    <!-- Floating Action Button (FAB +) bottom-left -->
+    <!-- Floating Action Button for Product Creation (Positioned above Global FAB) -->
     <a href="{% url 'product_create' %}"
-       class="fixed bottom-6 left-6 w-14 h-14 bg-[#27bebe] hover:bg-[#20a3a3] text-white rounded-full flex items-center justify-center shadow-lg shadow-[#27bebe]/40 hover:scale-105 transition-all z-30"
-       title="إضافة منتج جديد">
-        <span class="material-symbols-outlined text-2xl font-bold">add</span>
+       class="fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/40 hover:scale-105 transition-all z-30"
+       title="إضافة منتج جديد" aria-label="إضافة منتج جديد">
+        <span class="material-symbols-outlined text-2xl font-bold">add_box</span>
     </a>
 
     <!-- SLIDE-OUT FILTER DRAWER -->
