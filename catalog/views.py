@@ -211,7 +211,15 @@ def product_edit(request, pk):
         product.packing_boxes = packing_boxes
         product.packing_cartons = packing_cartons
 
-        if request.FILES.get('thumbnail'):
+        clear_thumbnail = request.POST.get('clear_thumbnail') == '1'
+        if clear_thumbnail:
+            if product.thumbnail:
+                try:
+                    product.thumbnail.delete(save=False)
+                except Exception:
+                    pass
+            product.thumbnail = None
+        elif request.FILES.get('thumbnail'):
             product.thumbnail = request.FILES['thumbnail']
 
         product.save()

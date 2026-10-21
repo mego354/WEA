@@ -268,24 +268,92 @@
 
         <!-- Product Images Card -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
-            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
-                <span class="material-symbols-outlined text-[#27bebe]">image</span>
-                <span>صور المنتج</span>
-            </h2>
-
-            <div class="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-slate-50/30 hover:bg-slate-50/80 transition-colors cursor-pointer"
-                 onclick="document.getElementById('thumbnail_input').click()">
-                <input type="file" id="thumbnail_input" name="thumbnail" accept="image/*" class="hidden">
-                <span class="material-symbols-outlined text-4xl text-[#27bebe] mb-2 block">cloud_upload</span>
-                <p class="text-xs font-bold text-slate-700">اسحب الصور هنا أو تصفح</p>
-                <p class="text-[11px] text-slate-400 mt-1">PNG, JPG حتى 5 ميجابايت</p>
-                {% if product.thumbnail %}
-                <div class="mt-4 inline-flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
-                    <img src="{{ product.thumbnail.url }}" alt="Preview" class="w-12 h-12 rounded object-cover">
-                    <span class="text-xs text-slate-600 font-medium">الصورة الحالية محملة</span>
-                </div>
-                {% endif %}
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">image</span>
+                    <span>صورة المنتج (Thumbnail)</span>
+                </h2>
+                <span class="text-[11px] text-slate-400">JPG, PNG, WEBP حتى 5 ميجابايت</span>
             </div>
+
+            <!-- Hidden inputs -->
+            <input type="file" id="thumbnail_input" name="thumbnail" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden">
+            <input type="hidden" id="clear_thumbnail_input" name="clear_thumbnail" value="0">
+
+            <!-- Current Image (if exists) -->
+            {% if product.thumbnail %}
+            <div id="current_image_container" class="p-4 bg-slate-50/70 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3.5">
+                    <img src="{{ product.thumbnail.url }}" alt="{{ product.name }}" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shadow-sm shrink-0 bg-white">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-800">الصورة الحالية للمنتج</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">محفوظة</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5 font-mono truncate max-w-xs">{{ product.thumbnail.name }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('thumbnail_input').click()" class="px-3 py-1.5 border border-slate-200 hover:bg-white text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-sm">cached</span>
+                        <span>استبدال</span>
+                    </button>
+                    <button type="button" onclick="markDeleteCurrentImage()" class="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                        <span>حذف</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="delete_alert" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+                <div class="flex items-center gap-2 text-xs text-amber-800 font-bold">
+                    <span class="material-symbols-outlined text-base">warning</span>
+                    <span>سيتم حذف الصورة نهائياً عند حفظ المنتج.</span>
+                </div>
+                <button type="button" onclick="undoDeleteCurrentImage()" class="text-xs text-amber-900 underline font-bold hover:text-amber-700">
+                    تراجع
+                </button>
+            </div>
+            {% endif %}
+
+            <!-- New Image Live Preview (shown when a new file is picked) -->
+            <div id="new_preview_container" class="hidden p-4 bg-teal-50/40 rounded-xl border-2 border-[#27bebe] flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3.5">
+                    <img id="new_preview_img" src="#" alt="Preview" class="w-16 h-16 rounded-xl object-cover border border-[#27bebe]/30 shadow-sm shrink-0 bg-white">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-800" id="new_preview_name">صورة جديدة</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#27bebe]/10 text-[#20a3a3] border border-[#27bebe]/20">جاهزة للحفظ</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5" id="new_preview_size"></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('thumbnail_input').click()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-sm">cached</span>
+                        <span>اختيار أخرى</span>
+                    </button>
+                    <button type="button" onclick="cancelNewImage()" class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-red-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-sm">close</span>
+                        <span>إلغاء</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Drop Zone (clickable & draggable) -->
+            <div id="drop_zone"
+                 class="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-slate-50/40 hover:bg-slate-50 hover:border-[#27bebe] transition-all cursor-pointer group"
+                 onclick="document.getElementById('thumbnail_input').click()">
+                <div class="w-12 h-12 mx-auto rounded-full bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] mb-3 group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-2xl">cloud_upload</span>
+                </div>
+                <p class="text-xs font-bold text-slate-800">
+                    اسحب الصورة وأفلتها هنا، أو <span class="text-[#27bebe] underline">تصفح من جهازك</span>
+                </p>
+                <p class="text-[11px] text-slate-400 mt-1">الحد الأقصى لحجم الملف 5 ميجابايت (PNG, JPG, WEBP)</p>
+            </div>
+            
+            <p id="upload_error_msg" class="hidden text-xs text-red-600 font-bold bg-red-50 p-2.5 rounded-lg border border-red-200"></p>
         </div>
 
         <!-- Bottom Actions -->
@@ -348,6 +416,131 @@ function addPriceListRow() {
         </td>
     `;
     tbody.appendChild(tr);
+}
+
+// ================= Image Upload & Preview Handling =================
+const fileInput = document.getElementById('thumbnail_input');
+const dropZone = document.getElementById('drop_zone');
+const newPreviewContainer = document.getElementById('new_preview_container');
+const newPreviewImg = document.getElementById('new_preview_img');
+const newPreviewName = document.getElementById('new_preview_name');
+const newPreviewSize = document.getElementById('new_preview_size');
+const uploadErrorMsg = document.getElementById('upload_error_msg');
+const clearInput = document.getElementById('clear_thumbnail_input');
+const currentImgContainer = document.getElementById('current_image_container');
+const deleteAlert = document.getElementById('delete_alert');
+
+function showError(msg) {
+    if (uploadErrorMsg) {
+        uploadErrorMsg.textContent = msg;
+        uploadErrorMsg.classList.remove('hidden');
+    }
+}
+
+function clearError() {
+    if (uploadErrorMsg) {
+        uploadErrorMsg.textContent = '';
+        uploadErrorMsg.classList.add('hidden');
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function handleSelectedFile(file) {
+    clearError();
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showError('يرجى اختيار ملف صورة صالح (JPG, PNG, WEBP).');
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        showError('حجم الصورة كبير جداً، الحد الأقصى 5 ميجابايت.');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        newPreviewImg.src = e.target.result;
+        newPreviewName.textContent = file.name;
+        newPreviewSize.textContent = formatBytes(file.size);
+        newPreviewContainer.classList.remove('hidden');
+        dropZone.classList.add('hidden');
+
+        // Reset delete flag if was previously set
+        if (clearInput) clearInput.value = '0';
+        if (deleteAlert) deleteAlert.classList.add('hidden');
+        if (currentImgContainer) currentImgContainer.classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+}
+
+if (fileInput) {
+    fileInput.addEventListener('change', function(e) {
+        if (this.files && this.files[0]) {
+            handleSelectedFile(this.files[0]);
+        }
+    });
+}
+
+// Drag & Drop
+if (dropZone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('border-[#27bebe]', 'bg-teal-50/60');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('border-[#27bebe]', 'bg-teal-50/60');
+        });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+            fileInput.files = files;
+            handleSelectedFile(files[0]);
+        }
+    });
+}
+
+function cancelNewImage() {
+    fileInput.value = '';
+    newPreviewContainer.classList.add('hidden');
+    dropZone.classList.remove('hidden');
+    clearError();
+
+    // If there is a current image and it was not marked for deletion, show it back
+    if (currentImgContainer && (!clearInput || clearInput.value === '0')) {
+        currentImgContainer.classList.remove('hidden');
+    }
+}
+
+function markDeleteCurrentImage() {
+    if (clearInput) clearInput.value = '1';
+    if (currentImgContainer) currentImgContainer.classList.add('hidden');
+    if (deleteAlert) deleteAlert.classList.remove('hidden');
+    cancelNewImage();
+}
+
+function undoDeleteCurrentImage() {
+    if (clearInput) clearInput.value = '0';
+    if (currentImgContainer) currentImgContainer.classList.remove('hidden');
+    if (deleteAlert) deleteAlert.classList.add('hidden');
 }
 </script>
 {% endblock %}
