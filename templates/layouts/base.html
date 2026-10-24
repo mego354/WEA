@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load erp_tags %}<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -104,12 +104,15 @@
             </a>
 
             <!-- Contacts -->
+            {% if request.user|can_access_module:'contacts' and request.user|has_permission:'contacts:contacts/list' %}
             <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
                 <span class="material-symbols-outlined text-xl {% if 'contacts' in request.path %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
                 <span>جهات الاتصال</span>
             </a>
+            {% endif %}
 
             <!-- Products (المنتجات) -->
+            {% if request.user|can_access_module:'catalog' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'catalog' in request.path or 'products' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -119,18 +122,24 @@
                     <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if 'catalog' in request.path or 'products' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'catalog:products/list' %}
                     <a href="{% url 'products_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">store</span>
                         <span>المنتجات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'catalog:categories/list' %}
                     <a href="{% url 'categories_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">category</span>
                         <span>التصنيفات</span>
                     </a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Activities (الأنشطة) -->
+            {% if request.user|can_access_module:'activities' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-activities')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -140,22 +149,51 @@
                     <span id="arrow-activities" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-activities" class="pr-9 pl-2 space-y-1 {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'activities:planned/list' %}
                     <a href="{% url 'planned_visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'planned-visits' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">calendar_today</span>
                         <span>خطة الزيارات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'activities:visits/list' %}
                     <a href="{% url 'visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'visits' in request.path and 'planned' not in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">room</span>
                         <span>الزيارات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'activities:agreements/list' %}
                     <a href="{% url 'agreements_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'agreements' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">handshake</span>
                         <span>الاتفاقيات</span>
                     </a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
+
+            <!-- Approvals (مركز الموافقات) -->
+            {% if request.user|is_manager or request.user|has_permission:'activities:visits/approve' or request.user|has_permission:'sales:orders/approve' %}
+            <a href="{% url 'approvals_hub' %}" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'approvals' in request.path %}bg-amber-50 text-amber-800 font-bold border border-amber-200/60{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-xl {% if 'approvals' in request.path %}text-amber-600 material-symbols-fill{% endif %}">verified_user</span>
+                    <span>الموافقات والاعتمادات</span>
+                </div>
+            </a>
+            {% endif %}
+
+            <!-- Regional Dashboard (لوحة قيادة المنطقة) -->
+            {% if request.user|is_manager %}
+            <a href="{% url 'regional_dashboard' %}" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'regional' in request.path %}bg-brand-50 text-brand-700 font-bold border border-brand-200/60{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-xl {% if 'regional' in request.path %}text-brand-600 material-symbols-fill{% endif %}">map</span>
+                    <span>لوحة قيادة المنطقة</span>
+                </div>
+            </a>
+            {% endif %}
+
 
             <!-- Purchases (المشتريات) -->
+            {% if request.user|can_access_module:'purchases' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -165,34 +203,48 @@
                     <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'purchases:orders/list' %}
                     <a href="{% url 'purchase_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
                         <span class="material-symbols-outlined text-base">shopping_cart</span>
                         <span>الطلبات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'purchases:returns/list' %}
                     <a href="{% url 'purchase_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">refresh</span>
                         <span>المرتجعات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'treasury:payments/list' %}
                     <a href="{% url 'vendor_payments_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">receipt</span>
                         <span>المدفوعات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'treasury:payments/requests' %}
                     <a href="{% url 'vendor_payment_requests_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">request_quote</span>
                         <span>طلبات الدفع</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'treasury:vendors/accounting' %}
                     <a href="{% url 'accounting_vendors_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">attach_money</span>
                         <span>حسابات الموردين</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'treasury:vendors/transactions' %}
                     <a href="{% url 'vendor_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
                         <span class="material-symbols-outlined text-base">receipt_long</span>
                         <span>عمليات الموردين</span>
                     </a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Warehouses & Inventory -->
+            {% if request.user|can_access_module:'inventory' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -202,13 +254,21 @@
                     <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if 'inventory' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'inventory:stocks/view' %}
                     <a href="{% url 'inventory_stock_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أرصدة المخزون والتشغيلات</a>
+                    {% endif %}
+                    {% if request.user|has_permission:'inventory:warehouses/manage' %}
                     <a href="{% url 'warehouses_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">المخازن</a>
+                    {% endif %}
+                    {% if request.user|has_permission:'inventory:memos/manage' %}
                     <a href="{% url 'inventory_memos_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أذونات المخزن (إضافة وصرف)</a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Treasury / Vaults -->
+            {% if request.user|can_access_module:'treasury' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -218,12 +278,18 @@
                     <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if 'vault' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'treasury:vaults/view' %}
                     <a href="{% url 'vaults_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الخزن النقدية والحسابات</a>
+                    {% endif %}
+                    {% if request.user|has_permission:'treasury:vaults/transactions' %}
                     <a href="{% url 'vault_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حركات النقدية</a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Sales (P1) -->
+            {% if request.user|can_access_module:'sales' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -233,13 +299,21 @@
                     <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'sales:orders/list' %}
                     <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أوامر البيع</a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:collections/list' %}
                     <a href="{% url 'collections_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">التحصيلات</a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:customers/accounting' %}
                     <a href="{% url 'accounting_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حسابات العملاء</a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Settings -->
+            {% if request.user|can_access_module:'settings' or request.user|is_super_admin %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -248,7 +322,8 @@
                     </div>
                     <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
-                <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if 'settings' in request.path %}block{% else %}hidden{% endif %}">
+                <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if 'settings' in request.path or 'users' in request.path or 'roles' in request.path %}block{% else %}hidden{% endif %}">
+                    {% if request.user|is_super_admin %}
                     <a href="{% url 'users_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'users' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">group</span>
                         <span>المستخدمون</span>
@@ -257,61 +332,92 @@
                         <span class="material-symbols-outlined text-base">shield_person</span>
                         <span>الأدوار والصلاحيات</span>
                     </a>
+                    <a href="{% url 'audit_logs_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'audit-logs' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">history</span>
+                        <span>سجل التدقيق الأمني</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:visitsTemplates/manage' %}
                     <a href="{% url 'visit_templates_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'visits/templates' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">assignment</span>
                         <span>قوالب الزيارات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:branding/edit' %}
                     <a href="{% url 'branding_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'branding' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">domain</span>
                         <span>بيانات الشركة والفاتورة</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:location/manage' %}
                     <a href="{% url 'location_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'location' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">gps_fixed</span>
                         <span>إعدادات الموقع</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:areas/manage' %}
                     <a href="{% url 'areas_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'areas' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">map</span>
                         <span>المناطق</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:expenses/manage' %}
                     <a href="{% url 'expenses_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'expenses' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">payments</span>
                         <span>انواع المصروفات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:tickets/manage' %}
                     <a href="{% url 'tickets_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'tickets' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">task_alt</span>
                         <span>انواع المهام</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:requests/manage' %}
                     <a href="{% url 'requests_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'requests' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">fact_check</span>
                         <span>انواع الموافقات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:agreements/manage' %}
                     <a href="{% url 'agreements_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'agreements' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">handshake</span>
                         <span>انواع الاتفاقيات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:sales/manage' %}
                     <a href="{% url 'sales_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sales' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">point_of_sale</span>
                         <span>إعدادات المبيعات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:purchase/manage' %}
                     <a href="{% url 'purchase_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'purchase' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">shopping_basket</span>
                         <span>إعدادات المشتريات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:inventory/manage' %}
                     <a href="{% url 'inventory_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'inventory' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">inventory</span>
                         <span>إعدادات المخازن</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:contactsUdf/manage' %}
                     <a href="{% url 'contacts_udf' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'contacts-udf' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">tune</span>
                         <span>تخصيص الحقول</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:syncData/manage' %}
                     <a href="{% url 'sync_data' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sync-data' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">sync</span>
                         <span>مزامنة البيانات</span>
                     </a>
+                    {% endif %}
                 </div>
-
             </div>
+            {% endif %}
         </div>
 
         <!-- User Profile Footer -->
@@ -359,10 +465,12 @@
 
                 <!-- Quick Action Button -->
                 {% block top_actions %}
+                {% if request.user|has_permission:'purchases:orders/create' %}
                 <a href="{% url 'purchase_order_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                     <span class="material-symbols-outlined text-base">add</span>
                     <span>أمر مشتريات جديد</span>
                 </a>
+                {% endif %}
                 {% endblock %}
             </div>
         </header>
@@ -394,22 +502,28 @@
         </a>
 
         <!-- Contacts -->
+        {% if request.user|can_access_module:'contacts' and request.user|has_permission:'contacts:contacts/list' %}
         <a href="{% url 'contacts_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'contacts' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
             <span class="material-symbols-outlined text-2xl {% if 'contacts' in request.path %}material-symbols-fill{% endif %}">contacts</span>
             <span class="text-[10px] mt-0.5">جهات الاتصال</span>
         </a>
+        {% endif %}
 
         <!-- Catalog -->
+        {% if request.user|can_access_module:'catalog' and request.user|has_permission:'catalog:products/list' %}
         <a href="{% url 'products_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
             <span class="material-symbols-outlined text-2xl {% if 'catalog' in request.path or 'products' in request.path %}material-symbols-fill{% endif %}">store</span>
             <span class="text-[10px] mt-0.5">المنتجات</span>
         </a>
+        {% endif %}
 
         <!-- Purchases -->
+        {% if request.user|can_access_module:'purchases' and request.user|has_permission:'purchases:orders/list' %}
         <a href="{% url 'purchase_orders_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'purchase' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
             <span class="material-symbols-outlined text-2xl {% if 'purchase' in request.path %}material-symbols-fill{% endif %}">shopping_cart</span>
             <span class="text-[10px] mt-0.5">المشتريات</span>
         </a>
+        {% endif %}
 
         <!-- Menu Drawer Toggle -->
         <button type="button" onclick="toggleSidebar()" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] text-slate-500 hover:text-brand-600 transition-colors">
@@ -434,28 +548,36 @@
         <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto my-3"></div>
         <div class="divide-y divide-slate-100 text-right">
             <!-- 1. تسجيل زيارة خارج الخطة -->
-            <button type="button" onclick="closeQuickAddBottomSheet(); openUnplannedVisitModal();" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors">
+            {% if request.user|has_permission:'activities:visits/create' %}
+            <a href="{% url 'visit_create' %}" onclick="closeQuickAddBottomSheet();" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-[#27bebe]">room</span>
                 <span class="text-sm font-bold text-slate-800">تسجيل زيارة خارج الخطة</span>
-            </button>
+            </a>
+            {% endif %}
 
             <!-- 2. امر بيع جديد -->
-            <a href="{% url 'sales_orders_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+            {% if request.user|has_permission:'sales:orders/create' %}
+            <a href="{% url 'sales_order_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-slate-600">shopping_cart</span>
                 <span class="text-sm font-bold text-slate-800">امر بيع جديد</span>
             </a>
+            {% endif %}
 
             <!-- 3. مرتجع جديد -->
-            <a href="{% url 'purchase_return_orders_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+            {% if request.user|has_permission:'purchases:returns/create' %}
+            <a href="{% url 'purchase_return_order_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-slate-600">refresh</span>
                 <span class="text-sm font-bold text-slate-800">مرتجع جديد</span>
             </a>
+            {% endif %}
 
             <!-- 4. تحصيل جديد -->
-            <a href="{% url 'collections_list' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+            {% if request.user|has_permission:'sales:collections/create' %}
+            <a href="{% url 'collection_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-slate-600">receipt</span>
                 <span class="text-sm font-bold text-slate-800">تحصيل جديد</span>
             </a>
+            {% endif %}
 
             <!-- 5. الغاء -->
             <button type="button" onclick="closeQuickAddBottomSheet()" class="w-full py-4 text-center text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors">

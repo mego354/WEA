@@ -8,9 +8,21 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
-from .models import User, Role, RoleTag
+from .models import User, Role, RoleTag, SecurityAuditLog
 from master_data.models import Area
-from .permissions import require_permission, has_perm_or_admin
+from .permissions import require_permission, require_super_admin, has_perm_or_admin
+from master_data.pagination_utils import paginate_queryset
+from .permission_registry import ERP_PERMISSIONS_CATALOG
+
+
+def _get_client_ip(request):
+    """Utility to extract client IP address for security audit logs."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
 
 
 def login_view(request):
@@ -51,15 +63,12 @@ def logout_view(request):
 # USERS MANAGEMENT
 # ==========================================
 
-from master_data.pagination_utils import paginate_queryset
-
-
 @login_required
 @require_permission('users:users/list')
 def users_list(request):
     """
     User accounts list matching reference ERP:
-    Columns: الاسم, البريد الإلكتروني, مفعل, الدور
+    Columns: الاسم, البريد الإلكتروني, مفعل, الدور, إجراءات
     """
     query = request.GET.get('q', '').strip()
     role_filter = request.GET.get('role', '').strip()
@@ -116,8 +125,7 @@ def users_list(request):
 @require_permission('users:users/create')
 def user_create(request):
     """
-    Handles user creation from modal or dedicated form:
-    Fields: الاسم*, البريد الإلكتروني*, الكود, كلمة المرور*, الدور*
+    Handles user creation with privilege escalation safeguards and audit logging.
     """
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -142,6 +150,11 @@ def user_create(request):
             messages.error(request, "الدور الوظيفي المحدد غير موجود.")
             return redirect('users_list')
 
+        # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
+        if role.is_super and not getattr(request.user, 'is_super_admin', False):
+            messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin). هذا الإجراء مقصور على مدراء النظام الأعلى.")
+            return redirect('users_list')
+
         # Create user
         user = User.objects.create_user(
             username=email,
@@ -159,6 +172,17 @@ def user_create(request):
         if area_ids:
             user.assigned_areas.set(area_ids)
 
+        # Record Security Audit Log
+        SecurityAuditLog.objects.create(
+            actor=request.user,
+            action_type='USER_CREATED',
+            target_user=user,
+            target_role=role,
+            description=f"إنشاء حساب مستخدم جديد: {user.name} ({user.email}) وتعيين الدور: {role.display_name}",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+
         messages.success(request, f"تم إنشاء حساب المستخدم '{user.name}' بنجاح.")
         return redirect('users_list')
 
@@ -169,9 +193,14 @@ def user_create(request):
 @require_permission('users:users/edit')
 def user_edit(request, pk):
     """
-    Edit user profile, role, status, code, and assigned areas.
+    Edit user profile, role, status, code, and assigned areas with privilege escalation protection.
     """
     target_user = get_object_or_404(User, pk=pk)
+
+    # Protect target superadmin: only superadmin can edit another superadmin
+    if target_user.is_super_admin and not getattr(request.user, 'is_super_admin', False):
+        messages.error(request, "عذراً، لا تمتلك الصلاحية الكافية لتعديل حساب مدير النظام الأعلى.")
+        return redirect('users_list')
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -194,9 +223,10 @@ def user_edit(request, pk):
         if target_user.is_superuser and not is_active:
             active_superusers = User.objects.filter(is_superuser=True, is_active=True).exclude(pk=target_user.pk).count()
             if active_superusers == 0:
-                messages.error(request, "لا يمكن تعطيل مدير النظام الأعلى الأخير للنظام!")
+                messages.error(request, "لا يمكن تعطيل مدير النظام الأعلى الأخير للنظام لمنع قفل النظام!")
                 return redirect('user_edit', pk=pk)
 
+        old_role = target_user.role
         target_user.name = name
         target_user.email = email
         target_user.username = email
@@ -206,17 +236,35 @@ def user_edit(request, pk):
 
         if role_id:
             try:
-                target_user.role = Role.objects.get(pk=role_id)
+                new_role = Role.objects.get(pk=role_id)
+                # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
+                if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
+                    messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
+                    return redirect('user_edit', pk=pk)
+                target_user.role = new_role
             except Role.DoesNotExist:
                 pass
         else:
-            target_user.role = None
+            if not target_user.is_superuser:
+                target_user.role = None
 
         target_user.save()
+        target_user.clear_perm_cache()
 
         # Update assigned areas
         area_ids = request.POST.getlist('assigned_areas')
         target_user.assigned_areas.set(area_ids)
+
+        # Record Security Audit Log
+        SecurityAuditLog.objects.create(
+            actor=request.user,
+            action_type='USER_UPDATED',
+            target_user=target_user,
+            target_role=target_user.role,
+            description=f"تحديث بيانات المستخدم: {target_user.name} (الدور السابق: {old_role}, الدور الجديد: {target_user.role}, الحالة: {'مفعل' if is_active else 'معطل'})",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
 
         messages.success(request, f"تم تحديث بيانات المستخدم '{target_user.name}' بنجاح.")
         return redirect('users_list')
@@ -234,9 +282,14 @@ def user_edit(request, pk):
 @require_permission('users:users/edit')
 def user_reset_password(request, pk):
     """
-    Reset user password with server-side validation.
+    Reset user password with server-side validation and audit logging.
     """
     target_user = get_object_or_404(User, pk=pk)
+
+    if target_user.is_super_admin and not getattr(request.user, 'is_super_admin', False):
+        messages.error(request, "عذراً، لا تمتلك الصلاحية لتغيير كلمة مرور مدير النظام الأعلى.")
+        return redirect('users_list')
+
     if request.method == 'POST':
         new_password = request.POST.get('new_password', '').strip()
         confirm_password = request.POST.get('confirm_password', '').strip()
@@ -251,6 +304,17 @@ def user_reset_password(request, pk):
 
         target_user.set_password(new_password)
         target_user.save()
+
+        # Record Security Audit Log
+        SecurityAuditLog.objects.create(
+            actor=request.user,
+            action_type='USER_PASSWORD_RESET',
+            target_user=target_user,
+            description=f"إعادة تعيين كلمة المرور للمستخدم: {target_user.name} ({target_user.email})",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+
         messages.success(request, f"تم تغيير كلمة المرور للمستخدم '{target_user.name}' بنجاح.")
         return redirect('user_edit', pk=pk)
 
@@ -261,7 +325,7 @@ def user_reset_password(request, pk):
 @require_permission('users:users/edit')
 def user_toggle_status(request, pk):
     """
-    Toggles is_active on user with superuser lockout safeguard.
+    Toggles is_active on user with superuser lockout safeguard and audit logging.
     """
     target_user = get_object_or_404(User, pk=pk)
 
@@ -274,20 +338,58 @@ def user_toggle_status(request, pk):
 
     target_user.is_active = not target_user.is_active
     target_user.save()
+    target_user.clear_perm_cache()
+
     status_str = "تفعيل" if target_user.is_active else "تعطيل"
+
+    # Record Security Audit Log
+    SecurityAuditLog.objects.create(
+        actor=request.user,
+        action_type='USER_STATUS_TOGGLED',
+        target_user=target_user,
+        description=f"{status_str} حساب المستخدم: {target_user.name} ({target_user.email})",
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    )
+
     messages.success(request, f"تم {status_str} حساب المستخدم '{target_user.name}' بنجاح.")
     return redirect('users_list')
 
 
 @login_required
-@require_permission('users:users/list')
+@require_super_admin(redirect_url='users_list')
+def user_toggle_bypass_location(request, pk):
+    """
+    SuperAdmin-only control to toggle bypass_location_verification for a user.
+    """
+    target_user = get_object_or_404(User, pk=pk)
+    target_user.bypass_location_verification = not target_user.bypass_location_verification
+    target_user.save()
+
+    status_str = "تفعيل" if target_user.bypass_location_verification else "تعطيل"
+
+    SecurityAuditLog.objects.create(
+        actor=request.user,
+        action_type='USER_BYPASS_LOCATION_TOGGLED',
+        target_user=target_user,
+        description=f"{status_str} تجاوز التحقق من الموقع الجغرافي للمستخدم: {target_user.name}",
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    )
+
+    messages.success(request, f"تم {status_str} تجاوز التحقق من الموقع للمستخدم {target_user.name or target_user.username} بنجاح.")
+    return redirect('users_list')
+
+
+@login_required
+@require_permission('users:users/export')
 def users_export(request):
     """
     Exports users list to CSV with UTF-8 BOM for Arabic Excel compatibility.
     """
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="users_list.csv"'
-    response.write('\ufeff'.encode('utf8')) # UTF-8 BOM for Excel
+    response.write('\ufeff'.encode('utf8'))
 
     writer = csv.writer(response)
     writer.writerow(['المعرف', 'الاسم', 'البريد الإلكتروني', 'الكود', 'الدور الوظيفي', 'الحالة', 'الهاتف', 'تاريخ الإنشاء'])
@@ -301,64 +403,76 @@ def users_export(request):
 
 
 @login_required
-def user_toggle_bypass_location(request, pk):
+@require_super_admin()
+def user_effective_permissions(request, pk):
     """
-    Superuser-only control to toggle bypass_location_verification for a user.
+    SuperAdmin inspector to view a user's effective permissions,
+    including role attributes, assigned areas, tags, and active module/action trees.
     """
-    if not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
-        messages.error(request, "عذراً، هذه الصلاحية مقصورة حصرياً على مدراء النظام (SuperAdmin).")
-        return redirect('users_list')
+    target_user = get_object_or_404(User.objects.select_related('role').prefetch_related('assigned_areas', 'role__tags'), pk=pk)
+    effective_codenames = target_user.get_effective_permission_codenames()
 
-    target_user = get_object_or_404(User, pk=pk)
-    target_user.bypass_location_verification = not target_user.bypass_location_verification
-    target_user.save()
+    modules_tree = get_grouped_permissions()
 
-    status_str = "تفعيل" if target_user.bypass_location_verification else "تعطيل"
-    messages.success(request, f"تم {status_str} تجاوز التحقق من الموقع للمستخدم {target_user.name or target_user.username} بنجاح.")
-    return redirect('users_list')
+    return render(request, 'accounts/effective_permissions.html', {
+        'target_user': target_user,
+        'effective_codenames': effective_codenames,
+        'modules_tree': modules_tree,
+    })
 
 
 # ==========================================
-# ROLES & PERMISSIONS MANAGEMENT
+# ROLES & PERMISSIONS MANAGEMENT (SUPERADMIN ONLY)
 # ==========================================
 
 def get_grouped_permissions():
     """
-    Helper to group permissions into domains/modules matching reference ERP.
+    Helper returning the hierarchical permission matrix structured by Module -> Pages -> Actions,
+    hydrated with database Permission objects.
     """
-    MODULE_MAPPING = {
-        'accounting': 'الحسابات والخزن (Accounting & Vaults)',
-        'purchases': 'المشتريات والموردين (Purchases & Vendors)',
-        'sales': 'المبيعات والعملاء (Sales & Customers)',
-        'inventory': 'المخازن والأصناف (Inventory & Stocks)',
-        'contacts': 'جهات الاتصال (Contacts)',
-        'catalog': 'دليل المنتجات (Product Catalog)',
-        'treasury': 'الخزينة والمدفوعات (Treasury & Cash)',
-        'activities': 'الأنشطة والزيارات (Activities & Visits)',
-        'master_data': 'الإعدادات والبيانات الأساسية (Settings & Master Data)',
-        'accounts': 'المستخدمون والصلاحيات (Users & RBAC)',
-    }
+    db_perms = {p.codename: p for p in Permission.objects.all()}
 
-    perms = Permission.objects.select_related('content_type').order_by('content_type__app_label', 'codename')
-    grouped = {}
+    modules_tree = []
+    for mod_key, mod_info in ERP_PERMISSIONS_CATALOG.items():
+        root_perm = db_perms.get(mod_info['root_perm'])
 
-    for p in perms:
-        app_label = p.content_type.app_label
-        if app_label in ['admin', 'sessions', 'contenttypes']:
-            continue
-        group_name = MODULE_MAPPING.get(app_label, app_label)
-        if group_name not in grouped:
-            grouped[group_name] = []
-        grouped[group_name].append(p)
+        pages_list = []
+        for page_key, page_info in mod_info['pages'].items():
+            actions_list = []
+            for codename, name_ar, action_type in page_info['actions']:
+                p_obj = db_perms.get(codename)
+                if p_obj:
+                    actions_list.append({
+                        'perm': p_obj,
+                        'codename': codename,
+                        'name': name_ar,
+                        'action_type': action_type,
+                    })
+            if actions_list:
+                pages_list.append({
+                    'code': page_key,
+                    'name_ar': page_info['name_ar'],
+                    'actions': actions_list,
+                })
 
-    return grouped
+        modules_tree.append({
+            'code': mod_key,
+            'name_ar': mod_info['name_ar'],
+            'name_en': mod_info['name_en'],
+            'icon': mod_info['icon'],
+            'root_perm': root_perm,
+            'pages': pages_list,
+            'total_perms': sum(len(p['actions']) for p in pages_list) + (1 if root_perm else 0),
+        })
+
+    return modules_tree
 
 
 @login_required
-@require_permission('system:rbac/manage')
+@require_super_admin()
 def roles_list(request):
     """
-    Roles list matching reference ERP:
+    Roles list matching reference ERP (SuperAdmin only):
     Columns: المعرف, الاسم, مفعل, إجراءات (Edit pencil, Duplicate copy, Delete)
     """
     query = request.GET.get('q', '').strip()
@@ -397,10 +511,10 @@ def roles_list(request):
 
 
 @login_required
-@require_permission('system:rbac/manage')
+@require_super_admin()
 def role_create(request):
     """
-    Create a new role with attributes, tags, and permissions.
+    Create a new role with attributes, tags, and hierarchical permissions (SuperAdmin only).
     """
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -415,12 +529,17 @@ def role_create(request):
             messages.error(request, f"الدور '{name}' موجود بالفعل.")
             return redirect('role_create')
 
+        is_super = request.POST.get('is_super') == 'on'
+        if is_super and not getattr(request.user, 'is_super_admin', False):
+            messages.error(request, "لا يمكن إنشاء دور سوبر إلا بواسطة مدير النظام الأعلى.")
+            return redirect('roles_list')
+
         role = Role.objects.create(
             name=name,
             display_name=display_name,
             description=description,
             is_active=request.POST.get('is_active') == 'on',
-            is_super=request.POST.get('is_super') == 'on',
+            is_super=is_super,
             is_sales_team=request.POST.get('is_sales_team') == 'on',
             is_area_manager=request.POST.get('is_area_manager') == 'on',
             is_sub_area_manager=request.POST.get('is_sub_area_manager') == 'on',
@@ -442,21 +561,31 @@ def role_create(request):
         if perm_ids:
             role.permissions.set(perm_ids)
 
+        # Record Security Audit Log
+        SecurityAuditLog.objects.create(
+            actor=request.user,
+            action_type='ROLE_CREATED',
+            target_role=role,
+            description=f"إنشاء دور صلاحيات جديد: {role.display_name} ({role.name}) وتعيين {role.permissions.count()} صلاحية.",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+
         messages.success(request, f"تم إنشاء الدور '{role.display_name}' بنجاح.")
         return redirect('roles_list')
 
     all_tags = RoleTag.objects.all().order_by('tag')
-    grouped_perms = get_grouped_permissions()
+    modules_tree = get_grouped_permissions()
     return render(request, 'accounts/role_form.html', {
         'role': None,
         'all_tags': all_tags,
-        'grouped_perms': grouped_perms,
+        'modules_tree': modules_tree,
         'is_create': True,
     })
 
 
 @login_required
-@require_permission('system:rbac/manage')
+@require_super_admin()
 def role_edit(request, pk):
     """
     Role edit dossier matching reference ERP (/settings/roles/edit/<id>):
@@ -465,12 +594,19 @@ def role_edit(request, pk):
     role = get_object_or_404(Role, pk=pk)
 
     if request.method == 'POST':
+        # Protect system SuperAdmin role
+        if role.name == 'SuperAdmin':
+            # Cannot rename or de-escalate SuperAdmin
+            role.is_active = True
+            role.is_super = True
+        else:
+            role.is_active = request.POST.get('is_active') == 'on'
+            role.is_super = request.POST.get('is_super') == 'on'
+
         role.display_name = request.POST.get('display_name', role.display_name).strip()
         role.description = request.POST.get('description', '').strip()
 
         # Update attributes switches
-        role.is_active = request.POST.get('is_active') == 'on'
-        role.is_super = request.POST.get('is_super') == 'on'
         role.is_sales_team = request.POST.get('is_sales_team') == 'on'
         role.is_area_manager = request.POST.get('is_area_manager') == 'on'
         role.is_sub_area_manager = request.POST.get('is_sub_area_manager') == 'on'
@@ -490,33 +626,46 @@ def role_edit(request, pk):
         perm_ids = request.POST.getlist('permissions')
         role.permissions.set(perm_ids)
 
+        # Invalidate cached permissions across existing sessions/users for this role
+        for u in role.users.all():
+            u.clear_perm_cache()
+
+        # Record Security Audit Log
+        SecurityAuditLog.objects.create(
+            actor=request.user,
+            action_type='ROLE_UPDATED',
+            target_role=role,
+            description=f"تعديل دور الصلاحيات: {role.display_name} ({role.name}) - تم حفظ {role.permissions.count()} صلاحية.",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+
         messages.success(request, f"تم حفظ تعديلات الدور '{role.display_name}' بنجاح.")
         return redirect('roles_list')
 
     all_tags = RoleTag.objects.all().order_by('tag')
     role_tag_ids = set(role.tags.values_list('id', flat=True))
     role_perm_ids = set(role.permissions.values_list('id', flat=True))
-    grouped_perms = get_grouped_permissions()
+    modules_tree = get_grouped_permissions()
 
     return render(request, 'accounts/role_form.html', {
         'role': role,
         'all_tags': all_tags,
         'role_tag_ids': role_tag_ids,
         'role_perm_ids': role_perm_ids,
-        'grouped_perms': grouped_perms,
+        'modules_tree': modules_tree,
         'is_create': False,
     })
 
 
 @login_required
-@require_permission('system:rbac/manage')
+@require_super_admin()
 def role_duplicate(request, pk):
     """
     Duplicates an existing role deeply with all attributes, tags, and permissions.
     """
     original = get_object_or_404(Role, pk=pk)
-    
-    # Generate unique name
+
     base_name = f"{original.name}_copy"
     counter = 1
     new_name = base_name
@@ -532,7 +681,7 @@ def role_duplicate(request, pk):
         description=original.description,
         is_system=False,
         is_active=original.is_active,
-        is_super=original.is_super,
+        is_super=False, # Clones are never super by default
         is_sales_team=original.is_sales_team,
         is_area_manager=original.is_area_manager,
         is_sub_area_manager=original.is_sub_area_manager,
@@ -544,23 +693,30 @@ def role_duplicate(request, pk):
         is_sub_area_bound=original.is_sub_area_bound,
     )
 
-    # Copy tags
     clone.tags.set(original.tags.all())
-    # Copy permissions
     clone.permissions.set(original.permissions.all())
+
+    SecurityAuditLog.objects.create(
+        actor=request.user,
+        action_type='ROLE_DUPLICATED',
+        target_role=clone,
+        description=f"استنساخ دور صلاحيات من '{original.display_name}' إلى '{clone.display_name}' ({clone.name})",
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    )
 
     messages.success(request, f"تم استنساخ الدور بنجاح: '{clone.display_name}'.")
     return redirect('role_edit', pk=clone.pk)
 
 
 @login_required
-@require_permission('system:rbac/manage')
+@require_super_admin()
 def role_delete(request, pk):
     """
     Delete custom role (safeguarded against deleting system roles or roles with assigned users).
     """
     role = get_object_or_404(Role, pk=pk)
-    if role.is_system:
+    if role.is_system or role.name == 'SuperAdmin':
         messages.error(request, "لا يمكن حذف الأدوار النظامية الأساسية.")
         return redirect('roles_list')
 
@@ -569,6 +725,64 @@ def role_delete(request, pk):
         return redirect('roles_list')
 
     name = role.display_name
+    role_id = role.id
     role.delete()
+
+    SecurityAuditLog.objects.create(
+        actor=request.user,
+        action_type='ROLE_DELETED',
+        description=f"حذف دور الصلاحيات: {name} (ID: {role_id})",
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    )
+
     messages.success(request, f"تم حذف الدور '{name}' بنجاح.")
     return redirect('roles_list')
+
+
+# ==========================================
+# SECURITY AUDIT LOGS (SUPERADMIN ONLY)
+# ==========================================
+
+@login_required
+@require_super_admin()
+def audit_logs_list(request):
+    """
+    Audit history for security-sensitive administrative operations.
+    Filterable by action_type, search query, and date range.
+    """
+    action_filter = request.GET.get('action', '').strip()
+    query = request.GET.get('q', '').strip()
+
+    logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
+
+    if action_filter:
+        logs_qs = logs_qs.filter(action_type=action_filter)
+
+    if query:
+        logs_qs = logs_qs.filter(
+            Q(description__icontains=query) |
+            Q(actor__name__icontains=query) |
+            Q(actor__email__icontains=query) |
+            Q(target_user__name__icontains=query) |
+            Q(ip_address__icontains=query)
+        )
+
+    active_filters = []
+    if action_filter:
+        action_dict = dict(SecurityAuditLog.ACTION_CHOICES)
+        active_filters.append({'label': 'نوع العملية', 'value': action_dict.get(action_filter, action_filter), 'param': 'action'})
+    if query:
+        active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
+
+    paginator, page_obj = paginate_queryset(request, logs_qs, default_per_page=25)
+
+    return render(request, 'accounts/audit_logs.html', {
+        'logs': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'action_choices': SecurityAuditLog.ACTION_CHOICES,
+        'action_filter': action_filter,
+        'query': query,
+        'active_filters': active_filters,
+    })

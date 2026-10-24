@@ -13,15 +13,20 @@ from contacts.models import Contact
 from catalog.models import Product
 from inventory.models import Warehouse
 from treasury.models import Vault
+from accounts.permissions import (
+    require_permission, has_perm_or_admin, render_forbidden_response,
+    get_scoped_queryset, can_user_access_object
+)
 
 
-@login_required
+@require_permission('sales:orders/list')
 def sales_orders_list(request):
     status_filter = request.GET.get('status', 'all')
     customer_filter = request.GET.get('customer')
     search = request.GET.get('search', '').strip()
 
     qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
+    qs = get_scoped_queryset(qs, request.user, 'salesorder')
 
     active_filters = []
 
@@ -62,7 +67,7 @@ def sales_orders_list(request):
     return render(request, 'sales/sales_orders_list.html', context)
 
 
-@login_required
+@require_permission('sales:orders/create')
 def sales_order_create(request):
     if request.method == 'POST':
         customer_id = request.POST.get('customer')
@@ -128,25 +133,95 @@ def sales_order_create(request):
     return render(request, 'sales/sales_order_create.html', context)
 
 
-@login_required
+@require_permission('sales:orders/view')
 def sales_order_detail(request, pk):
     order = get_object_or_404(
         SalesOrder.objects.select_related(
-            'customer', 'customer__area', 'source_warehouse', 'created_by', 'memo'
+            'customer', 'customer__area', 'source_warehouse', 'created_by', 'approved_by', 'memo'
         ).prefetch_related('items__product'),
         pk=pk
     )
-    return render(request, 'sales/sales_order_detail.html', {'order': order})
+    if not can_user_access_object(request.user, order, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+
+    can_approve = has_perm_or_admin(request.user, 'sales:orders/approve') and can_user_access_object(request.user, order, 'approve')
+    can_edit = has_perm_or_admin(request.user, 'sales:orders/edit') and can_user_access_object(request.user, order, 'edit')
+    is_owner = (order.created_by_id == request.user.id)
+    can_resubmit = is_owner and order.status == 'rejected'
+
+    approval_history = order.approval_history.select_related('actor').order_by('-created_at')
+
+    return render(request, 'sales/sales_order_detail.html', {
+        'order': order,
+        'can_approve': can_approve,
+        'can_edit': can_edit,
+        'can_resubmit': can_resubmit,
+        'approval_history': approval_history,
+    })
 
 
 @login_required
 def sales_order_action(request, pk, action):
+    action_perm_map = {
+        'approve': 'sales:orders/approve',
+        'reject': 'sales:orders/approve',
+        'disapprove': 'sales:orders/approve',
+        'resubmit': 'sales:orders/create',
+        'prepare': 'sales:orders/unstock',
+        'deliver': 'sales:orders/unstock',
+        'invoice': 'sales:orders/invoice',
+        'cancel': 'sales:orders/cancel',
+    }
+    needed_perm = action_perm_map.get(action, 'sales:orders/edit')
+    if not has_perm_or_admin(request.user, needed_perm):
+        return render_forbidden_response(request, f"ليس لديك صلاحية لتنفيذ هذا الإجراء ({needed_perm})", perm_codename=needed_perm)
+
     order = get_object_or_404(SalesOrder, pk=pk)
+
+    # Scoping and self-approval checks
+    if action in ['approve', 'reject', 'disapprove']:
+        if not can_user_access_object(request.user, order, action):
+            if order.created_by_id == request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+                messages.error(request, "لا يمكن للمندوب اعتماد أو رفض أمر البيع الخاص به كمنشئ أو مسؤول.")
+                return redirect('sales_order_detail', pk=order.pk)
+            return render_forbidden_response(request, "لا يمكنك اعتماد أو رفض هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+    else:
+        if not can_user_access_object(request.user, order, 'edit'):
+            return render_forbidden_response(request, "لا يمكنك تعديل هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
 
     try:
         if action == 'approve':
-            SalesOrderService.approve_order(order, request.user)
-            messages.success(request, f"تم اعتماد أمر البيع {order.order_number} بنجاح.")
+            notes = request.POST.get('approval_notes', '') or request.POST.get('notes', '')
+            SalesOrderService.approve_order(order, request.user, notes=notes)
+            msg = f"تم اعتماد أمر البيع {order.order_number} بنجاح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.success(request, msg)
+
+        elif action in ['reject', 'disapprove']:
+            reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', '') or request.POST.get('approval_notes', '')
+            if not (reason or '').strip():
+                msg = "يرجى توضيح سبب رفض أمر البيع."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message': msg}, status=400)
+                messages.error(request, msg)
+                return redirect(request.META.get('HTTP_REFERER', f'/sales/{order.pk}/'))
+
+            SalesOrderService.reject_order(order, request.user, reason=reason)
+            msg = f"تم رفض أمر البيع {order.order_number}."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.error(request, msg)
+
+        elif action == 'resubmit':
+            SalesOrderService.resubmit_order(order, request.user)
+            msg = f"تمت إعادة تقديم أمر البيع {order.order_number} للاعتماد بنجاح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.success(request, msg)
+
         elif action == 'prepare':
             SalesOrderService.prepare_order(order, request.user)
             messages.success(request, f"تم حجز البضاعة بالمخزن وتغيير حالة الطلب إلى (جاري التجهيز).")
@@ -162,12 +237,15 @@ def sales_order_action(request, pk, action):
         else:
             messages.error(request, "إجراء غير معروف.")
     except ValidationError as e:
-        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        err_msg = str(e.message if hasattr(e, 'message') else e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
 
-    return redirect('sales_order_detail', pk=order.pk)
+    return redirect(request.META.get('HTTP_REFERER', f'/sales/{order.pk}/'))
 
 
-@login_required
+@require_permission('sales:collections/list')
 def collections_list(request):
     search = request.GET.get('search', '').strip()
     customer_id = request.GET.get('customer')
@@ -215,7 +293,7 @@ def collections_list(request):
     return render(request, 'sales/collections_list.html', context)
 
 
-@login_required
+@require_permission('sales:collections/create')
 def collection_create(request):
     if request.method == 'POST':
         customer_id = request.POST.get('customer')
@@ -258,7 +336,7 @@ def collection_create(request):
     return render(request, 'sales/collection_create.html', context)
 
 
-@login_required
+@require_permission('sales:customers/accounting')
 def accounting_customers_list(request):
     """
     Customer Statements & Balances (حسابات العملاء).
@@ -287,7 +365,7 @@ def accounting_customers_list(request):
     return render(request, 'sales/accounting_customers_list.html', context)
 
 
-@login_required
+@require_permission('sales:customers/transactions')
 def customer_transactions_list(request):
     """
     Customer Ledger Transactions (عمليات العملاء).
@@ -332,13 +410,14 @@ def customer_transactions_list(request):
 from master_data.excel_utils import export_to_excel_response
 
 
-@login_required
+@require_permission('sales:orders/export')
 def sales_orders_export(request):
     status_filter = request.GET.get('status', 'all')
     customer_filter = request.GET.get('customer')
     search = request.GET.get('search', '').strip()
 
     qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'salesorder')
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
@@ -366,7 +445,7 @@ def sales_orders_export(request):
     return export_to_excel_response(qs, columns, filename="sales_orders_export", sheet_title="أوامر البيع")
 
 
-@login_required
+@require_permission('sales:collections/export')
 def collections_export(request):
     customer_id = request.GET.get('customer')
     qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
@@ -385,3 +464,4 @@ def collections_export(request):
     ]
 
     return export_to_excel_response(qs, columns, filename="collections_export", sheet_title="التحصيلات النقدية")
+

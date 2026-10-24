@@ -81,8 +81,7 @@ class SettingsViewsTests(TestCase):
         ]
         for ep in endpoints:
             response = self.client.get(reverse(ep))
-            self.assertEqual(response.status_code, 302, f"Failed for endpoint {ep}")
-            self.assertEqual(response.url, reverse('home'))
+            self.assertEqual(response.status_code, 403, f"Failed for endpoint {ep}")
 
     def test_admin_can_access_all_settings(self):
         self.client.login(username='admin@example.com', password='AdminPassword123!')

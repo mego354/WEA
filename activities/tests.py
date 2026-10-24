@@ -263,13 +263,15 @@ class VisitAndLocationParityTestCase(TestCase):
             is_staff=True,
             is_superuser=True
         )
+        rep_role = Role.objects.filter(is_rep=True).first()
         self.rep = User.objects.create_user(
             username='rep_user',
             email='rep@wea.com',
             password='RepPassword123!',
             is_staff=False,
             is_superuser=False,
-            bypass_location_verification=False
+            bypass_location_verification=False,
+            role=rep_role
         )
         self.client.login(username='admin_user', password='AdminPassword123!')
 
@@ -419,8 +421,7 @@ class VisitAndLocationParityTestCase(TestCase):
         # 2. Regular rep is denied access
         self.client.login(username='rep_user', password='RepPassword123!')
         res_rep = self.client.get('/settings/location/')
-        self.assertEqual(res_rep.status_code, 302)
-        self.assertIn('/', res_rep.url)
+        self.assertEqual(res_rep.status_code, 403)
 
     def test_superuser_only_user_bypass_toggle(self):
         """Only superusers can toggle bypass_location_verification on users."""
@@ -869,8 +870,7 @@ class VisitTemplatesManagementTestCase(TestCase):
     def test_rep_cannot_manage_templates(self):
         self.client.force_login(self.rep)
         res = self.client.get(reverse('visit_template_create'))
-        self.assertEqual(res.status_code, 302)
-        self.assertRedirects(res, reverse('visit_templates_list'))
+        self.assertEqual(res.status_code, 403)
 
 
 class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
@@ -1021,14 +1021,25 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
     def test_unplanned_visit_validation_enforces_required_fields(self):
         today = timezone.now().date()
 
-        # Missing required answer to q_meet
-        post_data = {
+        # Step 1: Create visit first with minimal information (Create First, Answer Later)
+        create_res = self.client.post(reverse('visit_create'), {
             'contact': self.clinic_customer.id,
             'template': self.tmpl_dr.id,
             'owner': self.user.id,
             'date': today.strftime('%Y-%m-%d'),
+        })
+        self.assertEqual(create_res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.clinic_customer, template=self.tmpl_dr).first()
+        self.assertIsNotNone(visit)
+        self.assertEqual(visit.status, 'started')
+
+        # Step 2: Attempt to complete visit without answering required question q_meet
+        post_data = {
+            'action': 'complete',
+            'latitude': '31.2001',
+            'longitude': '29.9187',
         }
-        res = self.client.post(reverse('visit_create'), post_data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        res = self.client.post(reverse('visit_detail', args=[visit.pk]), post_data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(res.status_code, 400)
         data = res.json()
         self.assertFalse(data.get('success'))
@@ -1073,6 +1084,734 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         self.assertIsNotNone(plan_item.visit)
         self.assertEqual(plan_item.visit.is_planned, True)
         self.assertEqual(plan_item.visit.questionnaire_answers.get(str(self.q_reason_not.id)), 'الطبيب في مؤتمر علمي بالخارج')
+
+
+from io import BytesIO
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+
+def generate_test_image_file(name="evidence.jpg"):
+    """Generate a valid test JPEG image file in memory."""
+    buf = BytesIO()
+    img = Image.new('RGB', (100, 100), color=(39, 190, 190))
+    img.save(buf, format='JPEG')
+    return SimpleUploadedFile(name, buf.getvalue(), content_type="image/jpeg")
+
+
+class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
+    """
+    Comprehensive acceptance test suite verifying all 12 Codex Requirements:
+    1. Visit Template Account-Type Restrictions
+    2. Audit & Enforce Visit Settings and Permissions
+    3. Standardize Visit Lifecycle (Create First, Answer Later)
+    4. Distinguish Planned and Unplanned Visits
+    5. Lock Representative Assignment to Authenticated User
+    6. Photo Evidence of Location & Superuser Audited Bypass
+    7. Restrict المنتجات المشروحة to exactly 3 template types
+    """
+
+    def setUp(self):
+        self.client = Client()
+
+        # Roles
+        self.admin_role = Role.objects.create(name='admin_test_role', display_name='مدير عام', is_rep=False, is_area_manager=True)
+        self.rep_role = Role.objects.create(name='rep_test_role', display_name='مندوب دعاية', is_rep=True, is_area_manager=False)
+        med_rep = Role.objects.filter(is_rep=True).exclude(pk=self.rep_role.pk).first()
+        if med_rep:
+            self.rep_role.permissions.set(med_rep.permissions.all())
+
+        # Users
+        self.superuser = User.objects.create_superuser(
+            username='admin_boss', email='boss@example.com', password='Password123!',
+            first_name='Boss', last_name='Admin'
+        )
+        self.rep_user = User.objects.create_user(
+            username='field_rep_ahmed', email='ahmed@example.com', password='Password123!',
+            first_name='Ahmed', last_name='Rep', role=self.rep_role
+        )
+        self.other_rep = User.objects.create_user(
+            username='field_rep_sara', email='sara@example.com', password='Password123!',
+            first_name='Sara', last_name='Rep', role=self.rep_role
+        )
+
+        # Contacts / Accounts
+        self.pharmacy_contact = Contact.objects.create(
+            name='صيدلية الشفاء الكبرى', code='PHARM01', account_type='Pharmacy',
+            latitude=Decimal('31.2001'), longitude=Decimal('29.9187'), is_customer=True
+        )
+        self.clinic_contact = Contact.objects.create(
+            name='عيادة الأمل التخصصية', code='CLINIC01', account_type='Clinic',
+            latitude=Decimal('31.2005'), longitude=Decimal('29.9190'), is_customer=True
+        )
+        self.hospital_contact = Contact.objects.create(
+            name='مستشفى السلام الدولي', code='HOSP01', account_type='Hospital',
+            latitude=Decimal('31.2010'), longitude=Decimal('29.9200'), is_customer=True
+        )
+
+        # Products
+        self.cat = ProductCategory.objects.create(name='أدوية عامة')
+        self.product_a = Product.objects.create(category=self.cat, name='Medicine Alpha', sku_code='MED-A', is_active=True)
+        self.product_b = Product.objects.create(category=self.cat, name='Medicine Beta', sku_code='MED-B', is_active=True)
+
+        # Template 1: Pharmacy Only
+        self.tmpl_pharmacy_only = VisitTemplate.objects.create(
+            name='single_visit_pharmacy',
+            display_name_ar='زيارة صيدلية فردية',
+            mode='checkin_checkout',
+            restrict_account_types=['Pharmacy'],
+            active=True
+        )
+        self.q_stock = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_pharmacy_only,
+            text_ar='هل الصنف متوفر في المخزون؟',
+            question_type='boolean',
+            is_required=True,
+            order=1
+        )
+
+        # Template 2: Clinics & Hospitals
+        self.tmpl_clinics_hospitals = VisitTemplate.objects.create(
+            name='single_visit_dr',
+            display_name_ar='زيارة فردية لطبيب',
+            mode='checkin_checkout',
+            restrict_account_types=['Clinic', 'Hospital'],
+            active=True
+        )
+        self.q_prescribe = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_clinics_hospitals,
+            text_ar='هل الطبيب يكتب الصنف؟',
+            question_type='boolean',
+            is_required=True,
+            order=1
+        )
+
+        # Template 3: Healthy Day
+        self.tmpl_healthy_day = VisitTemplate.objects.create(
+            name='healthy_day',
+            display_name_ar='اليوم الصحي',
+            mode='checkin_checkout',
+            restrict_account_types=['Pharmacy', 'Clinic', 'Hospital'],
+            active=True
+        )
+
+        # Template 4: Coaching / General (does NOT support product detailing)
+        self.tmpl_coaching = VisitTemplate.objects.create(
+            name='coaching_visit',
+            display_name_ar='زيارة مرافقة وتدريب',
+            mode='checkin_checkout',
+            active=True
+        )
+
+    # -------------------------------------------------------------------------
+    # 1. TEMPLATE ACCOUNT-TYPE RESTRICTIONS
+    # -------------------------------------------------------------------------
+    def test_account_type_restrictions_persistence_and_enforcement(self):
+        """A pharmacy-only template accepts pharmacies and rejects clinics/hospitals."""
+        # Check model methods
+        self.assertTrue(self.tmpl_pharmacy_only.is_contact_eligible(self.pharmacy_contact))
+        self.assertFalse(self.tmpl_pharmacy_only.is_contact_eligible(self.clinic_contact))
+        self.assertFalse(self.tmpl_pharmacy_only.is_contact_eligible(self.hospital_contact))
+
+        self.assertTrue(self.tmpl_clinics_hospitals.is_contact_eligible(self.clinic_contact))
+        self.assertTrue(self.tmpl_clinics_hospitals.is_contact_eligible(self.hospital_contact))
+        self.assertFalse(self.tmpl_clinics_hospitals.is_contact_eligible(self.pharmacy_contact))
+
+        # Test VisitForm clean() backend rejection
+        self.client.login(username='admin_boss', password='Password123!')
+        today = timezone.now().date()
+
+        # Ineligible submission: Pharmacy template with Clinic contact -> rejected with error
+        bad_res = self.client.post(reverse('visit_create'), {
+            'contact': self.clinic_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2005',
+            'longitude': '29.9190',
+        })
+        self.assertEqual(bad_res.status_code, 200)
+        self.assertContains(bad_res, 'غير مخصص لنوع حساب العميل')
+
+        # Eligible submission: Pharmacy template with Pharmacy contact -> accepted
+        good_res = self.client.post(reverse('visit_create'), {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+        })
+        self.assertEqual(good_res.status_code, 302)
+
+    def test_unauthorized_user_cannot_modify_template_settings(self):
+        """Field representatives are forbidden from creating or modifying templates."""
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+
+        create_res = self.client.post(reverse('visit_template_create'), {
+            'name': 'hacked_tmpl', 'display_name_ar': 'قالب غير مصرح'
+        })
+        self.assertIn(create_res.status_code, [302, 403])
+        self.assertFalse(VisitTemplate.objects.filter(name='hacked_tmpl').exists())
+
+        edit_res = self.client.post(reverse('visit_template_edit', args=[self.tmpl_pharmacy_only.pk]), {
+            'display_name_ar': 'قالب ملعوب به'
+        })
+        self.assertIn(edit_res.status_code, [302, 403])
+        self.tmpl_pharmacy_only.refresh_from_db()
+        self.assertEqual(self.tmpl_pharmacy_only.display_name_ar, 'زيارة صيدلية فردية')
+
+    # -------------------------------------------------------------------------
+    # 2. CREATE FIRST, ANSWER LATER LIFECYCLE
+    # -------------------------------------------------------------------------
+    def test_create_first_answer_later_lifecycle(self):
+        """
+        Visits are created first with status='started' with minimal fields,
+        then answered and completed on the detail screen.
+        """
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+        today = timezone.now().date()
+
+        # Step 1: Create minimal visit record
+        create_res = self.client.post(reverse('visit_create'), {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+        })
+        self.assertEqual(create_res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).first()
+        self.assertIsNotNone(visit)
+        self.assertEqual(visit.status, 'started')
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertRedirects(create_res, reverse('visit_detail', args=[visit.pk]))
+
+        # Step 2: Open visit detail screen (answering screen)
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertContains(detail_res, 'الزيارة جارية وقيد التوثيق')
+        self.assertContains(detail_res, self.q_stock.text_ar)
+
+        # Step 3: Save partial answers as draft (status remains 'started')
+        draft_res = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'save_draft',
+            f'question_{self.q_stock.id}': 'Yes',
+            'feedback': 'مسودة مبدئية أثناء التواجد بالصيدلية'
+        })
+        self.assertEqual(draft_res.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_stock.id)), 'Yes')
+        self.assertEqual(visit.feedback, 'مسودة مبدئية أثناء التواجد بالصيدلية')
+
+        # Step 4: Complete visit with photo evidence
+        photo = generate_test_image_file("pharmacy_checkin.jpg")
+        complete_res = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            f'question_{self.q_stock.id}': 'Yes',
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+            'location_photo': photo,
+            'visit_outcome': 'successful',
+            'feedback': 'تم الانتهاء بنجاح ومراجعة طلبيات الصيدلية'
+        })
+        self.assertEqual(complete_res.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        self.assertTrue(visit.has_photo_evidence)
+        self.assertEqual(visit.verification_status, 'verified')
+        self.assertIsNotNone(visit.ended_at)
+
+    def test_duplicate_submission_protection(self):
+        """Repeated rapid submission does not create duplicate in-progress visits."""
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+        today = timezone.now().date()
+
+        post_data = {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+        }
+        res1 = self.client.post(reverse('visit_create'), post_data)
+        self.assertEqual(res1.status_code, 302)
+        count_after_1 = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).count()
+
+        # Immediate repeat click
+        res2 = self.client.post(reverse('visit_create'), post_data)
+        self.assertEqual(res2.status_code, 302)
+        count_after_2 = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).count()
+        self.assertEqual(count_after_1, count_after_2)
+
+    # -------------------------------------------------------------------------
+    # 3. PLANNED VS UNPLANNED CLASSIFICATION
+    # -------------------------------------------------------------------------
+    def test_planned_and_unplanned_classification_and_filters(self):
+        """Visits are persistently classified as planned or unplanned and filtered cleanly."""
+        today = timezone.now().date()
+
+        # Unplanned visit
+        v_unplanned = Visit.objects.create(
+            contact=self.pharmacy_contact,
+            owner=self.rep_user,
+            date=today,
+            is_planned=False,
+            status='finished',
+            created_by=self.rep_user
+        )
+
+        # Planned visit linked to planned item
+        plan_day = PlannedVisitDay.objects.create(assignee=self.rep_user, date=today, created_by=self.rep_user)
+        plan_item = PlannedVisitItem.objects.create(
+            plan_day=plan_day, contact=self.clinic_contact, template=self.tmpl_clinics_hospitals, order=1
+        )
+        v_planned = Visit.objects.create(
+            contact=self.clinic_contact,
+            owner=self.rep_user,
+            date=today,
+            is_planned=True,
+            status='finished',
+            created_by=self.rep_user
+        )
+        plan_item.is_executed = True
+        plan_item.visit = v_planned
+        plan_item.save()
+
+        # Verify model badges
+        self.assertEqual(v_planned.plan_type_display_ar, 'زيارة مخططة')
+        self.assertEqual(v_unplanned.plan_type_display_ar, 'زيارة خارج الخطة')
+
+        # Test Filter: plan_type=planned
+        self.client.login(username='admin_boss', password='Password123!')
+        res_planned = self.client.get(reverse('visits_list') + '?plan_type=planned')
+        self.assertEqual(res_planned.status_code, 200)
+        self.assertContains(res_planned, f'#{v_planned.serial_num}')
+        self.assertNotContains(res_planned, f'#{v_unplanned.serial_num}')
+
+        # Test Filter: plan_type=unplanned
+        res_unplanned = self.client.get(reverse('visits_list') + '?plan_type=unplanned')
+        self.assertEqual(res_unplanned.status_code, 200)
+        self.assertContains(res_unplanned, f'#{v_unplanned.serial_num}')
+        self.assertNotContains(res_unplanned, f'#{v_planned.serial_num}')
+
+    # -------------------------------------------------------------------------
+    # 4. LOCKED REPRESENTATIVE ASSIGNMENT
+    # -------------------------------------------------------------------------
+    def test_representative_assignment_locked_for_field_reps(self):
+        """Field representatives are locked to themselves and cannot spoof other reps."""
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+        today = timezone.now().date()
+
+        # Ahmed attempts to assign the visit to Sara
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'owner': self.other_rep.id,  # Tampered assignment attempt
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.pharmacy_contact).latest('id')
+        # Backend overrides/ignores spoofed owner -> assigns authenticated user Ahmed
+        self.assertEqual(visit.owner, self.rep_user)
+        self.assertNotEqual(visit.owner, self.other_rep)
+
+    def test_superuser_can_assign_other_representative(self):
+        """Superuser/Manager can assign visits to other representatives."""
+        self.client.login(username='admin_boss', password='Password123!')
+        today = timezone.now().date()
+
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'owner': self.other_rep.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.pharmacy_contact).latest('id')
+        self.assertEqual(visit.owner, self.other_rep)
+
+    # -------------------------------------------------------------------------
+    # 5. PHOTO EVIDENCE & AUDITED SUPERUSER BYPASS
+    # -------------------------------------------------------------------------
+    def test_evidence_photo_protected_endpoint(self):
+        """Evidence photo endpoint serves file to owner/manager and rejects unauthorized users with 403."""
+        today = timezone.now().date()
+        photo = generate_test_image_file("private_evidence.jpg")
+
+        visit = Visit.objects.create(
+            contact=self.pharmacy_contact,
+            owner=self.rep_user,
+            created_by=self.rep_user,
+            date=today,
+            status='finished',
+            location_photo=photo
+        )
+
+        # Owner Ahmed can view photo
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+        owner_res = self.client.get(reverse('visit_evidence_photo', args=[visit.pk]))
+        self.assertEqual(owner_res.status_code, 200)
+
+        # Other rep Sara is forbidden (403)
+        self.client.login(username='field_rep_sara', password='Password123!')
+        unauth_res = self.client.get(reverse('visit_evidence_photo', args=[visit.pk]))
+        self.assertEqual(unauth_res.status_code, 403)
+
+        # Superuser boss can view photo
+        self.client.login(username='admin_boss', password='Password123!')
+        admin_res = self.client.get(reverse('visit_evidence_photo', args=[visit.pk]))
+        self.assertEqual(admin_res.status_code, 200)
+
+    def test_superuser_bypass_audit_trail(self):
+        """Authorized superuser bypass records bypassed_by, bypassed_at, and bypass_reason."""
+        self.client.login(username='admin_boss', password='Password123!')
+        today = timezone.now().date()
+
+        visit = Visit.objects.create(
+            contact=self.clinic_contact,
+            owner=self.superuser,
+            created_by=self.superuser,
+            date=today,
+            status='started'
+        )
+
+        bypass_res = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'force_bypass_location': '1',
+            'bypass_reason': 'ضعف إشارة GPS داخل العيادة وتم التحقق هاتفياً'
+        })
+        self.assertEqual(bypass_res.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.verification_status, 'force_bypassed')
+        self.assertEqual(visit.bypassed_by, self.superuser)
+        self.assertIsNotNone(visit.bypassed_at)
+        self.assertEqual(visit.bypass_reason, 'ضعف إشارة GPS داخل العيادة وتم التحقق هاتفياً')
+
+    # -------------------------------------------------------------------------
+    # 6. PRODUCT DETAILING (المنتجات المشروحة) STRICT RESTRICTION
+    # -------------------------------------------------------------------------
+    def test_product_detailing_strictly_restricted_to_three_templates(self):
+        """
+        المنتجات المشروحة is supported only for:
+        1. Single visit (DR)
+        2. Single visit (Pharmacy)
+        3. Healthy day
+        Unsupported templates automatically clear and reject detailing.
+        """
+        # 1. DR visit supports detailing
+        self.assertTrue(self.tmpl_clinics_hospitals.is_product_detailing_supported())
+        self.assertTrue(self.tmpl_pharmacy_only.is_product_detailing_supported())
+        self.assertTrue(self.tmpl_healthy_day.is_product_detailing_supported())
+        self.assertFalse(self.tmpl_coaching.is_product_detailing_supported())
+
+        today = timezone.now().date()
+
+        # Detailing saved for DR visit
+        v_dr = Visit.objects.create(
+            contact=self.clinic_contact, template=self.tmpl_clinics_hospitals,
+            owner=self.superuser, date=today, status='started'
+        )
+        self.client.login(username='admin_boss', password='Password123!')
+        self.client.post(reverse('visit_detail', args=[v_dr.pk]), {
+            'action': 'save_draft',
+            'detailed_products': [self.product_a.id, self.product_b.id]
+        })
+        v_dr.refresh_from_db()
+        self.assertEqual(v_dr.detailed_products.count(), 2)
+
+        # Detailing cleared/hidden for coaching visit
+        v_coaching = Visit.objects.create(
+            contact=self.clinic_contact, template=self.tmpl_coaching,
+            owner=self.superuser, date=today, status='started'
+        )
+        self.client.post(reverse('visit_detail', args=[v_coaching.pk]), {
+            'action': 'save_draft',
+            'detailed_products': [self.product_a.id]
+        })
+        v_coaching.refresh_from_db()
+        self.assertEqual(v_coaching.detailed_products.count(), 0)
+
+    # -------------------------------------------------------------------------
+    # 8. QUESTION REMOVAL & DUPLICATE OUTCOME QUESTION SAFEGUARD
+    # -------------------------------------------------------------------------
+    def test_duplicate_outcome_question_completely_removed_from_active_workflow(self):
+        """
+        'هل كان يوم ناجح ؟ *' must never appear in active visit creation, answering,
+        or preview screens, and must not block completion, while preserving historical answers.
+        """
+        # Deactivate / exclude duplicate question
+        q_dup, _ = VisitTemplateQuestion.objects.get_or_create(
+            template=self.tmpl_healthy_day,
+            text_ar='هل كان يوم ناجح ؟',
+            defaults={'question_type': 'single_choice', 'is_active': False, 'is_required': True, 'order': 1}
+        )
+        q_dup.is_active = False
+        q_dup.save()
+
+        q_valid = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_healthy_day,
+            text_ar='ما هي نتائج اليوم الطبية والبيعية؟',
+            question_type='text',
+            is_active=True,
+            is_required=True,
+            order=2
+        )
+
+        # 1. Model get_active_questions excludes duplicate question
+        active_qs = list(self.tmpl_healthy_day.get_active_questions())
+        self.assertNotIn(q_dup, active_qs)
+        self.assertIn(q_valid, active_qs)
+
+        # 2. Template preview does not render the duplicate question
+        self.client.login(username='admin_boss', password='Password123!')
+        prev_res = self.client.get(reverse('visit_template_preview', args=[self.tmpl_healthy_day.pk]))
+        self.assertEqual(prev_res.status_code, 200)
+        self.assertNotContains(prev_res, 'هل كان يوم ناجح')
+
+        # 3. Active visit detail answering screen does not render the duplicate question
+        today = timezone.now().date()
+        v_active = Visit.objects.create(
+            contact=self.clinic_contact,
+            template=self.tmpl_healthy_day,
+            owner=self.superuser,
+            date=today,
+            status='started'
+        )
+        detail_res = self.client.get(reverse('visit_detail', args=[v_active.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertNotContains(detail_res, 'هل كان يوم ناجح')
+
+        # 4. Finishing visit without answering duplicate question succeeds
+        test_img = generate_test_image_file("healthy.jpg")
+        complete_res = self.client.post(reverse('visit_detail', args=[v_active.pk]), {
+            'action': 'complete',
+            f'question_{q_valid.id}': 'تم تحقيق المستهدف بالكامل',
+            'visit_outcome': 'successful',
+            'latitude': '31.2005',
+            'longitude': '29.9190',
+            'device_accuracy': '15.0',
+            'location_photo': test_img
+        })
+        self.assertEqual(complete_res.status_code, 302)
+        v_active.refresh_from_db()
+        self.assertEqual(v_active.status, 'finished')
+        self.assertEqual(v_active.questionnaire_answers.get(str(q_valid.id)), 'تم تحقيق المستهدف بالكامل')
+        self.assertNotIn(str(q_dup.id), v_active.questionnaire_answers)
+
+        # 5. Historical records with past answers remain viewable for auditability
+        v_hist = Visit.objects.create(
+            contact=self.clinic_contact,
+            template=self.tmpl_healthy_day,
+            owner=self.superuser,
+            date=today,
+            status='finished',
+            questionnaire_answers={str(q_dup.id): 'Yes', str(q_valid.id): 'سجل تاريخي ممتاز'}
+        )
+        hist_res = self.client.get(reverse('visit_detail', args=[v_hist.pk]))
+        self.assertEqual(hist_res.status_code, 200)
+        self.assertContains(hist_res, 'سجل تاريخي ممتاز')
+
+    # -------------------------------------------------------------------------
+    # 9. SAMPLE DISTRIBUTION FEATURE REMOVAL
+    # -------------------------------------------------------------------------
+    def test_sample_distribution_completely_removed_from_active_workflow(self):
+        """
+        'توزيع عينة طبية (اختياري)' must be stripped from active visit forms and APIs.
+        Submitting samples in active requests is ignored and creates no VisitSampleItem.
+        Existing historical samples remain intact for auditability.
+        """
+        self.client.login(username='admin_boss', password='Password123!')
+
+        # 1. Active form does not contain sample distribution section or input
+        create_page = self.client.get(reverse('visit_create'))
+        self.assertEqual(create_page.status_code, 200)
+        self.assertNotContains(create_page, 'توزيع عينة طبية')
+        self.assertNotContains(create_page, 'name="sample_product"')
+        self.assertNotContains(create_page, 'name="sample_quantity"')
+
+        # 2. Submitting sample fields does not create VisitSampleItem
+        today = timezone.now().date()
+        post_data = {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'owner': self.superuser.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+            'device_accuracy': '10.0',
+            'sample_product': self.product_a.id,
+            'sample_quantity': '10'
+        }
+        res = self.client.post(reverse('visit_create'), post_data)
+        self.assertEqual(res.status_code, 302)
+        created_visit = Visit.objects.filter(contact=self.pharmacy_contact).order_by('-id').first()
+        self.assertIsNotNone(created_visit)
+        self.assertEqual(created_visit.samples.count(), 0)
+
+        # 3. Historical visit with samples preserves them and renders read-only dossier
+        v_hist = Visit.objects.create(
+            contact=self.pharmacy_contact,
+            template=self.tmpl_pharmacy_only,
+            owner=self.superuser,
+            date=today,
+            status='finished'
+        )
+        VisitSampleItem.objects.create(visit=v_hist, product=self.product_b, quantity=5, notes='عينة سابقة')
+        hist_res = self.client.get(reverse('visit_detail', args=[v_hist.pk]))
+        self.assertEqual(hist_res.status_code, 200)
+        self.assertContains(hist_res, 'Medicine Beta')
+        self.assertContains(hist_res, 'عينة سابقة')
+
+    # -------------------------------------------------------------------------
+    # 10. UNIFIED VISIT CREATION ROUTE & CLASSIFICATION
+    # -------------------------------------------------------------------------
+    def test_unified_visit_creation_route_and_classification_enforcement(self):
+        """
+        Both planned and unplanned visits use canonical /visits/create/.
+        Planned visits associate the plan item and show 'زيارة مخططة'.
+        Unplanned visits set is_planned=False and show 'زيارة خارج الخطة'.
+        Tampered plan items or other rep's plans are securely rejected.
+        """
+        today = timezone.now().date()
+
+        # 1. Planned visit from planned-visits/
+        plan_day = PlannedVisitDay.objects.create(assignee=self.rep_user, date=today, created_by=self.superuser)
+        plan_item = PlannedVisitItem.objects.create(
+            plan_day=plan_day,
+            contact=self.pharmacy_contact,
+            template=self.tmpl_pharmacy_only,
+            order=1
+        )
+
+        # Rep executes planned item -> redirects to /visits/create/
+        self.client.login(username='field_rep_ahmed', password='Password123!')
+        exec_res = self.client.get(reverse('planned_visit_item_execute', args=[plan_item.pk]))
+        self.assertEqual(exec_res.status_code, 302)
+        self.assertIn('/visits/create/', exec_res.url)
+        self.assertIn(f'planned_item_id={plan_item.pk}', exec_res.url)
+
+        # Canonical creation page displays 'زيارة مخططة'
+        create_planned_page = self.client.get(exec_res.url)
+        self.assertEqual(create_planned_page.status_code, 200)
+        self.assertContains(create_planned_page, 'زيارة مخططة')
+
+        # Submit planned visit
+        post_planned = {
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_pharmacy_only.id,
+            'planned_item_id': plan_item.pk,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+            'device_accuracy': '10.0'
+        }
+        res_planned = self.client.post(reverse('visit_create'), post_planned)
+        self.assertEqual(res_planned.status_code, 302)
+        v_planned = Visit.objects.filter(contact=self.pharmacy_contact, is_planned=True).first()
+        self.assertIsNotNone(v_planned)
+        self.assertTrue(v_planned.is_planned)
+        self.assertEqual(v_planned.plan_type_display_ar, 'زيارة مخططة')
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed)
+        self.assertEqual(plan_item.visit, v_planned)
+
+        # 2. Unplanned visit creation directly at /visits/create/
+        create_unplanned_page = self.client.get(reverse('visit_create'))
+        self.assertEqual(create_unplanned_page.status_code, 200)
+        self.assertContains(create_unplanned_page, 'زيارة خارج الخطة')
+
+        post_unplanned = {
+            'contact': self.clinic_contact.id,
+            'template': self.tmpl_clinics_hospitals.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2005',
+            'longitude': '29.9190',
+            'device_accuracy': '12.0'
+        }
+        res_unplanned = self.client.post(reverse('visit_create'), post_unplanned)
+        self.assertEqual(res_unplanned.status_code, 302)
+        v_unplanned = Visit.objects.filter(contact=self.clinic_contact, is_planned=False).first()
+        self.assertIsNotNone(v_unplanned)
+        self.assertFalse(v_unplanned.is_planned)
+        self.assertEqual(v_unplanned.plan_type_display_ar, 'زيارة خارج الخطة')
+
+        # 3. Security: non-manager cannot execute another rep's plan item
+        other_plan_day = PlannedVisitDay.objects.create(assignee=self.other_rep, date=today, created_by=self.superuser)
+        other_item = PlannedVisitItem.objects.create(
+            plan_day=other_plan_day,
+            contact=self.hospital_contact,
+            template=self.tmpl_clinics_hospitals,
+            order=1
+        )
+        unauth_exec = self.client.get(reverse('planned_visit_item_execute', args=[other_item.pk]))
+        self.assertEqual(unauth_exec.status_code, 403)
+
+        # Security: non-manager tampering by submitting another rep's plan_item_id is rejected
+        tampered_post = {
+            'contact': self.hospital_contact.id,
+            'template': self.tmpl_clinics_hospitals.id,
+            'planned_item_id': other_item.pk,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '31.2010',
+            'longitude': '29.9200',
+            'device_accuracy': '10.0'
+        }
+        tampered_res = self.client.post(reverse('visit_create'), tampered_post)
+        self.assertRedirects(tampered_res, reverse('visits_list'))
+        self.assertFalse(Visit.objects.filter(contact=self.hospital_contact).exists())
+
+    # -------------------------------------------------------------------------
+    # 11. STANDARDIZE CLIENT DISPLAY (NAMES WITHOUT CODES)
+    # -------------------------------------------------------------------------
+    def test_client_display_names_without_codes(self):
+        """
+        Contact names must be displayed cleanly without appended/prepended codes
+        in selectors, list views, cards, and detail pages, while preserving codes in DB
+        and enabling internal searching by code.
+        """
+        # 1. Model __str__ and display_tag return clean name
+        self.assertEqual(str(self.pharmacy_contact), self.pharmacy_contact.name)
+        self.assertEqual(self.pharmacy_contact.display_tag, self.pharmacy_contact.name)
+        self.assertNotIn(self.pharmacy_contact.code, str(self.pharmacy_contact))
+
+        # 2. CustomerModelChoiceField returns clean name
+        from activities.forms import CustomerModelChoiceField
+        field = CustomerModelChoiceField(queryset=Contact.objects.all())
+        self.assertEqual(field.label_from_instance(self.pharmacy_contact), self.pharmacy_contact.name)
+        self.assertNotIn(self.pharmacy_contact.code, field.label_from_instance(self.pharmacy_contact))
+
+        # 3. Visit detail renders client name cleanly
+        today = timezone.now().date()
+        v = Visit.objects.create(
+            contact=self.pharmacy_contact,
+            template=self.tmpl_pharmacy_only,
+            owner=self.superuser,
+            date=today,
+            status='started'
+        )
+        self.client.login(username='admin_boss', password='Password123!')
+        detail_res = self.client.get(reverse('visit_detail', args=[v.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertContains(detail_res, self.pharmacy_contact.name)
+        # Verify no 'كود: PHARM01' block rendered in client dossier
+        self.assertNotContains(detail_res, f'كود: {self.pharmacy_contact.code}')
+
+        # 4. Search API supports search by code, but displays name without code tags
+        search_res = self.client.get('/contacts/api/search/', {'q': self.pharmacy_contact.code})
+        self.assertEqual(search_res.status_code, 200)
+        data = search_res.json()
+        self.assertGreater(data.get('count', 0), 0)
+        found_item = data['results'][0]
+        self.assertEqual(found_item['display_tag'], self.pharmacy_contact.name)
+        self.assertEqual(found_item['name'], self.pharmacy_contact.name)
+        # Database code preserved internally
+        self.assertEqual(found_item['code'], self.pharmacy_contact.code)
+
 
 
 

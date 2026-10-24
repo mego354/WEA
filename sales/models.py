@@ -71,6 +71,7 @@ class SalesOrder(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending / قيد المراجعة'),
         ('manager_approval', 'Manager Approval / معتمد من الإدارة'),
+        ('rejected', 'Rejected / مرفوض'),
         ('preparing', 'Preparing / جاري التجهيز بالمخزن'),
         ('delivered', 'Delivered / تم التسليم'),
         ('invoiced', 'Invoiced / تمت الفوترة'),
@@ -91,6 +92,9 @@ class SalesOrder(models.Model):
     
     grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="إجمالي القيمة (ج.م)")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    rejection_reason = models.TextField(blank=True, default='', verbose_name="سبب الرفض")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_sales_orders", verbose_name="معتمد بواسطة")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_sales_orders", verbose_name="المندوب / المنشئ")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -99,6 +103,32 @@ class SalesOrder(models.Model):
         verbose_name = "أمر بيع"
         verbose_name_plural = "أوامر البيع"
         ordering = ['-serial_num']
+
+    @property
+    def status_display_ar(self):
+        mapping = {
+            'pending': 'قيد المراجعة والاعتماد',
+            'manager_approval': 'معتمد من الإدارة',
+            'rejected': 'مرفوض',
+            'preparing': 'جاري التجهيز بالمخزن',
+            'delivered': 'تم التسليم',
+            'invoiced': 'تمت الفوترة',
+            'cancelled': 'ملغي',
+        }
+        return mapping.get(self.status, self.get_status_display())
+
+    @property
+    def status_badge_class(self):
+        mapping = {
+            'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+            'manager_approval': 'bg-teal-100 text-teal-800 border-teal-300',
+            'rejected': 'bg-rose-100 text-rose-800 border-rose-300',
+            'preparing': 'bg-sky-100 text-sky-800 border-sky-300',
+            'delivered': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'invoiced': 'bg-purple-100 text-purple-800 border-purple-300',
+            'cancelled': 'bg-slate-100 text-slate-800 border-slate-300',
+        }
+        return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
 
     def save(self, *args, **kwargs):
         if not self.serial_num:

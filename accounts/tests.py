@@ -101,8 +101,7 @@ class UserManagementViewTests(TestCase):
     def test_restricted_user_cannot_access_users_list(self):
         self.client.login(username='staff@example.com', password='StaffPassword123!')
         response = self.client.get(reverse('users_list'))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('home'))
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_user_can_access_users_list(self):
         self.client.login(username='admin@example.com', password='AdminPassword123!')
@@ -249,3 +248,216 @@ class RoleManagementViewTests(TestCase):
         response = self.client.get(reverse('role_delete', args=[self.test_role.pk]))
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Role.objects.filter(pk=self.test_role.pk).exists())
+
+
+class ERPAuthorizationSecurityTests(TestCase):
+    """
+    Comprehensive test suite validating:
+    - 403 Forbidden enforcement on protected routes.
+    - Module-level inheritance (disabling module blocks all child actions).
+    - SuperAdmin restriction and privilege escalation prevention.
+    - Last superadmin lockout safeguard.
+    - ABAC territorial and IDOR object-level protection.
+    - Security audit logging for permission changes.
+    - Cache invalidation and immediate policy reflection.
+    """
+    def setUp(self):
+        self.client = Client()
+
+        # Create Roles
+        self.super_role = Role.objects.create(
+            name='superadmin_role',
+            display_name='مدير نظام رئيسي',
+            is_super=True,
+            is_active=True
+        )
+        self.rep_role = Role.objects.create(
+            name='sales_rep_role',
+            display_name='مندوب مبيعات',
+            is_rep=True,
+            is_active=True
+        )
+        self.manager_role = Role.objects.create(
+            name='sales_manager_role',
+            display_name='مدير مبيعات',
+            is_active=True
+        )
+
+        # Create Users
+        self.super_user = User.objects.create_superuser(
+            username='root@example.com',
+            email='root@example.com',
+            password='RootPassword123!',
+            name='المدير العام',
+            role=self.super_role
+        )
+        self.rep_user = User.objects.create_user(
+            username='rep_a@example.com',
+            email='rep_a@example.com',
+            password='RepPassword123!',
+            name='مندوب أ',
+            role=self.rep_role
+        )
+        self.rep_user_b = User.objects.create_user(
+            username='rep_b@example.com',
+            email='rep_b@example.com',
+            password='RepPassword123!',
+            name='مندوب ب',
+            role=self.rep_role
+        )
+
+    def test_anonymous_redirect_on_all_domains(self):
+        """Anonymous access to protected routes redirects to login."""
+        protected_urls = [
+            reverse('purchase_orders_list'),
+            reverse('purchase_order_create'),
+            reverse('sales_orders_list'),
+            reverse('products_list'),
+            reverse('contacts_list'),
+            reverse('visits_list'),
+            reverse('vaults_list'),
+            reverse('roles_list'),
+            reverse('audit_logs_list'),
+        ]
+        for url in protected_urls:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 302, f"URL {url} did not redirect anonymous user")
+            self.assertIn('login', res.url)
+
+    def test_unauthorized_user_gets_403_forbidden(self):
+        """Authenticated user without specific permissions gets 403 Forbidden."""
+        self.client.login(username='rep_a@example.com', password='RepPassword123!')
+        
+        # Rep has no purchases permissions
+        res = self.client.get(reverse('purchase_orders_list'))
+        self.assertEqual(res.status_code, 403)
+        self.assertTemplateUsed(res, '403.html')
+
+        res_post = self.client.post(reverse('purchase_order_create'), {})
+        self.assertEqual(res_post.status_code, 403)
+
+    def test_module_level_inheritance_enforcement(self):
+        """
+        Disabling root module permission blocks all child actions
+        even if child permission is explicitly assigned to role.
+        """
+        p_child = Permission.objects.get(codename='purchases:orders/list')
+        p_module = Permission.objects.get(codename='module:purchases')
+
+        # Assign child only (WITHOUT module root)
+        self.rep_role.permissions.add(p_child)
+        self.rep_user.clear_perm_cache()
+
+        self.assertFalse(self.rep_user.has_permission('purchases:orders/list'))
+
+        self.client.login(username='rep_a@example.com', password='RepPassword123!')
+        res = self.client.get(reverse('purchase_orders_list'))
+        self.assertEqual(res.status_code, 403)
+
+        # Now enable module root
+        self.rep_role.permissions.add(p_module)
+        self.rep_user.clear_perm_cache()
+
+        self.assertTrue(self.rep_user.has_permission('purchases:orders/list'))
+        res_ok = self.client.get(reverse('purchase_orders_list'))
+        self.assertEqual(res_ok.status_code, 200)
+
+    def test_superadmin_exclusive_settings_protection(self):
+        """Only superadmins can access user/role/audit settings; other users receive 403."""
+        # Non-superadmin
+        self.client.login(username='rep_a@example.com', password='RepPassword123!')
+        for url in [reverse('roles_list'), reverse('role_create'), reverse('audit_logs_list')]:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 403)
+
+        # SuperAdmin
+        self.client.login(username='root@example.com', password='RootPassword123!')
+        for url in [reverse('roles_list'), reverse('role_create'), reverse('audit_logs_list')]:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 200)
+
+    def test_privilege_escalation_prevention(self):
+        """Non-superadmins cannot create or edit roles to grant is_super."""
+        self.client.login(username='rep_a@example.com', password='RepPassword123!')
+        data = {
+            'name': 'hacked_role',
+            'display_name': 'Hacked',
+            'is_super': 'on',
+        }
+        res = self.client.post(reverse('role_create'), data)
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(Role.objects.filter(name='hacked_role').exists())
+
+    def test_last_superadmin_lockout_protection(self):
+        """System strictly prevents deactivating or deleting the last active superadmin."""
+        self.client.login(username='root@example.com', password='RootPassword123!')
+        
+        # Attempt to toggle status of only active superadmin
+        res = self.client.get(reverse('user_toggle_status', args=[self.super_user.pk]))
+        self.assertEqual(res.status_code, 302)
+        self.super_user.refresh_from_db()
+        self.assertTrue(self.super_user.is_active)
+
+    def test_security_audit_logging_on_role_changes(self):
+        """SecurityAuditLog records actor, action, timestamp, and metadata on role updates."""
+        from accounts.models import SecurityAuditLog
+        initial_count = SecurityAuditLog.objects.count()
+
+        self.client.login(username='root@example.com', password='RootPassword123!')
+        p_module = Permission.objects.get(codename='module:catalog')
+        p_view = Permission.objects.get(codename='catalog:products/list')
+
+        data = {
+            'name': 'audited_role',
+            'display_name': 'دور مراجع',
+            'is_active': 'on',
+            'permissions': [p_module.pk, p_view.pk]
+        }
+        res = self.client.post(reverse('role_create'), data)
+        self.assertEqual(res.status_code, 302)
+
+        self.assertGreater(SecurityAuditLog.objects.count(), initial_count)
+        log = SecurityAuditLog.objects.latest('id')
+        self.assertEqual(log.actor, self.super_user)
+        self.assertEqual(log.action_type, 'ROLE_CREATED')
+        self.assertIn('إنشاء دور', log.description)
+
+    def test_immediate_cache_invalidation(self):
+        """Permission revocation reflects immediately in active session via clear_perm_cache."""
+        p_mod = Permission.objects.get(codename='module:contacts')
+        p_list = Permission.objects.get(codename='contacts:contacts/list')
+        self.rep_role.permissions.add(p_mod, p_list)
+        self.rep_user.clear_perm_cache()
+
+        self.assertTrue(self.rep_user.has_permission('contacts:contacts/list'))
+
+        # Revoke permission
+        self.rep_role.permissions.remove(p_list)
+        self.rep_user.clear_perm_cache()
+
+        self.assertFalse(self.rep_user.has_permission('contacts:contacts/list'))
+
+    def test_abac_object_access_and_idor_protection(self):
+        """Field representative cannot access another representative's visit record."""
+        from contacts.models import Contact
+        from activities.models import Visit
+
+        contact = Contact.objects.create(name='عميل تجريبي', code='C-TEST-01', is_customer=True)
+        visit_b = Visit.objects.create(
+            contact=contact,
+            owner=self.rep_user_b,
+            created_by=self.rep_user_b,
+            date='2026-10-24',
+            status='started'
+        )
+
+        # Grant rep_a visits viewing permission
+        p_mod = Permission.objects.get(codename='module:activities')
+        p_view = Permission.objects.get(codename='activities:visits/view')
+        self.rep_role.permissions.add(p_mod, p_view)
+        self.rep_user.clear_perm_cache()
+
+        # Rep A attempts to access Visit B
+        self.client.login(username='rep_a@example.com', password='RepPassword123!')
+        res = self.client.get(reverse('visit_detail', args=[visit_b.pk]))
+        self.assertEqual(res.status_code, 403)

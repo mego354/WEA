@@ -66,7 +66,7 @@ class Contact(models.Model):
         ordering = ['-serial_num']
 
     def __str__(self):
-        return f"{self.name} (#{self.serial_num})"
+        return self.name
 
     def __init__(self, *args, **kwargs):
         temp_lat = kwargs.pop('latitude', None)
@@ -98,7 +98,7 @@ class Contact(models.Model):
 
     @property
     def display_tag(self):
-        return f"[#{self.serial_num}] {self.name}"
+        return self.name
 
     @property
     def initials(self):

@@ -1,7 +1,13 @@
 from django.urls import path
 from . import views
+from . import approvals_views
+from . import regional_views
 
 urlpatterns = [
+    # Approvals & Regional Management Hub
+    path('approvals/', approvals_views.approvals_hub, name='approvals_hub'),
+    path('regional/', regional_views.regional_dashboard, name='regional_dashboard'),
+    path('regional/dashboard/', regional_views.regional_dashboard, name='regional_dashboard_alt'),
     # Agreements
     path('agreements/', views.agreements_list, name='agreements_list'),
     path('agreements/bulk-status/', views.agreements_bulk_status, name='agreements_bulk_status'),
@@ -25,6 +31,7 @@ urlpatterns = [
     path('visits/export/', views.visits_export, name='visits_export'),
     path('visits/<int:pk>/', views.visit_detail, name='visit_detail'),
     path('visits/<int:pk>/edit/', views.visit_edit, name='visit_edit'),
+    path('visits/<int:pk>/evidence/photo/', views.visit_evidence_photo, name='visit_evidence_photo'),
     path('visits/<int:pk>/action/<str:action>/', views.visit_action, name='visit_action'),
 
     # APIs

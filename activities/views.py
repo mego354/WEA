@@ -1,13 +1,16 @@
 import datetime
 import json
+import mimetypes
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from master_data.pagination_utils import paginate_queryset
+from django.db import transaction
 from django.db.models import Q, Sum, Count
 from django.utils import timezone
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, FileResponse, Http404, HttpResponseForbidden
 from django.contrib.auth import get_user_model
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -15,7 +18,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from .models import (
     Agreement, AgreementType, VisitTemplate, VisitTemplateQuestion,
     PlannedVisitDay, PlannedVisitItem, Visit,
-    VisitSampleItem, VisitExpense
+    VisitSampleItem, VisitExpense, ApprovalAuditLog
 )
 from .forms import (
     AgreementForm, PlannedVisitItemForm, VisitForm,
@@ -25,59 +28,42 @@ from contacts.models import Contact
 from master_data.models import Area
 from catalog.models import Product
 from .services import verify_visit_location
+from accounts.permissions import (
+    require_permission, has_perm_or_admin, render_forbidden_response,
+    get_scoped_queryset, can_user_access_object
+)
 
 User = get_user_model()
 
 
-
-
-def can_manage_approvals(user):
+def can_manage_approvals(user, module_type='visits'):
     """
     Check if the user is authorized to approve/disapprove or change approval status
-    of visits and agreements.
-    Managers, superusers, and admins have access.
-    Field Medical Reps (role.is_rep without manager status) do not.
+    of visits and agreements using centralized permission architecture.
     """
     if not user.is_authenticated:
         return False
-    if user.is_superuser or user.is_staff:
-        return True
-    if hasattr(user, 'is_super_admin') and user.is_super_admin:
-        return True
-    if user.role:
-        if user.role.is_area_manager:
-            return True
-        role_name = (user.role.name or '').lower()
-        role_display = (user.role.display_name or '').lower()
-        if any(term in role_name for term in ['manager', 'admin', 'supervisor', 'director']):
-            return True
-        if any(term in role_display for term in ['مدير', 'مشرف']):
-            return True
-        if user.role.is_rep:
-            return False
-    return False
+    if module_type == 'agreements':
+        return has_perm_or_admin(user, 'activities:agreements/approve')
+    return has_perm_or_admin(user, 'activities:visits/approve')
 
 
 def can_manage_templates(user):
+    """Check if user has permission to manage visit templates."""
+    return has_perm_or_admin(user, 'settings:visitsTemplates/manage')
+
+
+def can_assign_other_representative(user):
     """
-    Check if the user is authorized to manage visit templates.
-    Admins, Superusers, and Managers have access.
+    Standard representatives cannot change the assigned representative.
+    Superusers and authorized managers/admins can select another representative.
     """
     if not user.is_authenticated:
         return False
-    if user.is_superuser or user.is_staff or getattr(user, 'is_super_admin', False):
+    if user.is_superuser or getattr(user, 'is_super_admin', False):
         return True
-    if user.role:
-        if user.role.is_area_manager:
-            return True
-        role_name = (user.role.name or '').lower()
-        role_display = (user.role.display_name or '').lower()
-        if any(term in role_name for term in ['manager', 'admin', 'supervisor', 'director']):
-            return True
-        if any(term in role_display for term in ['مدير', 'مشرف']):
-            return True
-        if user.role.permissions.filter(codename__in=['change_visittemplate', 'add_visittemplate', 'delete_visittemplate']).exists():
-            return True
+    if user.role and (user.role.is_area_manager or user.role.is_sub_area_manager):
+        return True
     return False
 
 
@@ -85,13 +71,14 @@ def can_manage_templates(user):
 # AGREEMENTS MODULE
 # -----------------------------------------------------------------------------
 
-@login_required
+@require_permission('activities:agreements/list')
 def agreements_list(request):
     """
     List agreements with search, filters, pagination, sum aggregation, and create modal.
     Matches https://weapharma.bricks-rep.com/agreements
     """
     qs = Agreement.objects.select_related('customer', 'type', 'created_by').all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'agreement')
 
     # Search
     q = request.GET.get('q', '').strip()
@@ -186,7 +173,7 @@ def agreements_list(request):
     return render(request, 'activities/agreements_list.html', context)
 
 
-@login_required
+@require_permission('activities:agreements/approve')
 def agreements_bulk_status(request):
     """
     Update status of multiple selected agreements in bulk.
@@ -196,7 +183,7 @@ def agreements_bulk_status(request):
     if request.method != 'POST':
         return redirect('agreements_list')
 
-    if not can_manage_approvals(request.user):
+    if not can_manage_approvals(request.user, 'agreements'):
         messages.error(request, "عذراً، لا تملك صلاحية تغيير حالة الاتفاقيات (خاص بالمدراء).")
         return redirect('agreements_list')
 
@@ -231,17 +218,20 @@ def agreements_bulk_status(request):
     return redirect('agreements_list')
 
 
-@login_required
+@require_permission('activities:agreements/view')
 def agreement_detail(request, pk):
     """View details of a specific agreement."""
     agreement = get_object_or_404(Agreement.objects.select_related('customer', 'type', 'created_by', 'updated_by'), pk=pk)
+    if not can_user_access_object(request.user, agreement, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+
     return render(request, 'activities/agreement_detail.html', {
         'agreement': agreement,
-        'can_manage_approvals': can_manage_approvals(request.user),
+        'can_manage_approvals': can_manage_approvals(request.user, 'agreements'),
     })
 
 
-@login_required
+@require_permission('activities:agreements/create')
 def agreement_create(request):
     """Full-page agreement creation."""
     if request.method == 'POST':
@@ -259,10 +249,13 @@ def agreement_create(request):
     return render(request, 'activities/agreement_form.html', {'form': form, 'title': 'إضافة اتفاقية جديدة'})
 
 
-@login_required
+@require_permission('activities:agreements/edit')
 def agreement_edit(request, pk):
     """Edit agreement (allowed if status is new)."""
     agreement = get_object_or_404(Agreement, pk=pk)
+    if not can_user_access_object(request.user, agreement, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+
     if agreement.status not in ['new']:
         messages.warning(request, "لا يمكن تعديل الاتفاقية بعد اعتمادها أو إنجازها.")
         return redirect('agreement_detail', pk=agreement.pk)
@@ -280,10 +273,10 @@ def agreement_edit(request, pk):
     return render(request, 'activities/agreement_form.html', {'form': form, 'agreement': agreement, 'title': f'تعديل الاتفاقية #{agreement.serial_num}'})
 
 
-@login_required
+@require_permission('activities:agreements/approve')
 def agreement_action(request, pk, action):
     """Status transitions: approve, disapprove, done, reopen."""
-    if not can_manage_approvals(request.user):
+    if not can_manage_approvals(request.user, 'agreements'):
         messages.error(request, "عذراً، لا تملك صلاحية تغيير حالة الاعتماد (خاص بالمدراء ومسؤولي النظام).")
         next_url = request.GET.get('next', 'agreement_detail')
         if next_url == 'list':
@@ -291,6 +284,9 @@ def agreement_action(request, pk, action):
         return redirect('agreement_detail', pk=pk)
 
     agreement = get_object_or_404(Agreement, pk=pk)
+    if not can_user_access_object(request.user, agreement, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تغيير حالة هذه الاتفاقية.")
+
     if action == 'approve':
         agreement.status = 'approved'
         agreement.updated_by = request.user
@@ -320,10 +316,13 @@ def agreement_action(request, pk, action):
     return redirect('agreement_detail', pk=agreement.pk)
 
 
-@login_required
+@require_permission('activities:agreements/delete')
 def agreement_delete(request, pk):
     """Delete an agreement if in new state."""
     agreement = get_object_or_404(Agreement, pk=pk)
+    if not can_user_access_object(request.user, agreement, 'delete'):
+        return render_forbidden_response(request, "لا يمكنك حذف هذه الاتفاقية.")
+
     if agreement.status != 'new' and not request.user.is_superuser:
         messages.error(request, "لا يمكن حذف اتفاقية معتمدة.")
         return redirect('agreement_detail', pk=agreement.pk)
@@ -334,10 +333,11 @@ def agreement_delete(request, pk):
     return redirect('agreements_list')
 
 
-@login_required
+@require_permission('activities:agreements/export')
 def agreements_export(request):
     """Export filtered agreements to Excel (.xlsx) with styled formatting."""
     qs = Agreement.objects.select_related('customer', 'type', 'created_by').all()
+    qs = get_scoped_queryset(qs, request.user, 'agreement')
 
     # Apply same filters
     q = request.GET.get('q', '').strip()
@@ -412,15 +412,21 @@ def agreements_export(request):
 # PLANNED VISITS MODULE (خطة الزيارات)
 # -----------------------------------------------------------------------------
 
-@login_required
+@require_permission('activities:planned/list')
 def planned_visits_list(request):
     """
     Day-by-day accordion planner view for selected representative and date range.
     Matches https://weapharma.bricks-rep.com/planned-visits
     """
-    # Selected representative (defaults to current user)
+    # Selected representative (rep scoping: non-managers can only view their own plan)
+    can_view_others = (
+        request.user.is_superuser or
+        getattr(request.user, 'is_super_admin', False) or
+        (request.user.role and request.user.role.is_manager_role) or
+        has_perm_or_admin(request.user, 'activities:planned/manage')
+    )
     rep_id = request.GET.get('assignee')
-    if rep_id:
+    if rep_id and can_view_others:
         selected_rep = get_object_or_404(User, pk=rep_id)
     else:
         selected_rep = request.user
@@ -497,7 +503,10 @@ def planned_visits_list(request):
     drawer_contacts = contacts_qs.order_by('name')[:40]
 
     # Dropdowns for UI
-    all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    if can_view_others:
+        all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    else:
+        all_reps = User.objects.filter(id=request.user.id)
     areas = Area.objects.all().order_by('name')
     visit_templates = VisitTemplate.objects.filter(active=True)
 
@@ -517,16 +526,17 @@ def planned_visits_list(request):
     return render(request, 'activities/planned_visits_list.html', context)
 
 
-@login_required
+@require_permission(['activities:visits/create', 'activities:visits/list', 'activities:planned/list', 'settings:visitsTemplates/manage'])
 def visit_templates_api(request):
     """
     API endpoint returning active visit templates.
     Supports filtering by contact_id or account_type.
-    Returns template metadata and questions schema for dynamic frontend rendering.
+    Returns template metadata, questions schema, and product detailing capabilities.
     """
     contact_id = request.GET.get('contact_id') or request.GET.get('contact')
     account_type = request.GET.get('account_type', '').strip().lower()
 
+    contact = None
     if contact_id:
         contact = Contact.objects.filter(pk=contact_id).first()
         if contact and contact.account_type:
@@ -536,12 +546,19 @@ def visit_templates_api(request):
 
     results = []
     for tmpl in qs:
-        # Check target account types
-        target_types = [t.lower() for t in (tmpl.restrict_account_types or [])]
-        # Include template if it has no restrictions or if account_type matches
-        if not target_types or not account_type or account_type in target_types:
+        # Centralized check via model method
+        if not tmpl.is_user_eligible(request.user):
+            continue
+        if contact:
+            is_eligible = tmpl.is_contact_eligible(contact, user=request.user)
+        elif account_type:
+            is_eligible = tmpl.is_account_type_eligible(account_type)
+        else:
+            is_eligible = True
+
+        if is_eligible:
             questions_data = []
-            for q in tmpl.questions.filter(is_active=True).order_by('order', 'id'):
+            for q in tmpl.get_active_questions():
                 questions_data.append({
                     'id': q.id,
                     'text_ar': q.text_ar,
@@ -564,6 +581,7 @@ def visit_templates_api(request):
                 'allow_unplanned': tmpl.allow_unplanned,
                 'auto_approve_unplanned': tmpl.auto_approve_unplanned,
                 'enable_product_detailing': tmpl.enable_product_detailing,
+                'supports_product_detailing': tmpl.is_product_detailing_supported(),
                 'visit_outcome_mode': tmpl.visit_outcome_mode,
                 'restrict_account_types': tmpl.restrict_account_types or [],
                 'questions': questions_data
@@ -573,7 +591,7 @@ def visit_templates_api(request):
 
 
 
-@login_required
+@require_permission('activities:planned/manage')
 def planned_visit_add_item(request):
     """Add a contact to a specific day's plan with strict parity and duplicate checks."""
     if request.method == 'POST':
@@ -609,8 +627,29 @@ def planned_visit_add_item(request):
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
         assignee = get_object_or_404(User, pk=assignee_id)
+        # Rep permission check: non-managers cannot add items to another representative's plan
+        can_manage_others = (
+            request.user.is_superuser or
+            getattr(request.user, 'is_super_admin', False) or
+            (request.user.role and request.user.role.is_manager_role)
+        )
+        if assignee != request.user and not can_manage_others:
+            msg = "غير مصرح لك بإضافة زيارات لخطة مندوب آخر."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
         contact = get_object_or_404(Contact, pk=contact_id)
         template = VisitTemplate.objects.filter(pk=template_id).first() if template_id else None
+
+        if template and not template.is_contact_eligible(contact, user=request.user):
+            allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
+            msg = f"قالب الزيارة '{template.display_name_ar}' غير مصرح به لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
         # Get or create PlannedVisitDay
         plan_day, _ = PlannedVisitDay.objects.get_or_create(
@@ -642,10 +681,19 @@ def planned_visit_add_item(request):
     return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
 
-@login_required
+@require_permission('activities:planned/manage')
 def planned_visit_item_delete(request, pk):
     """Remove a planned visit item."""
     item = get_object_or_404(PlannedVisitItem, pk=pk)
+    is_owner = (item.plan_day.assignee == request.user)
+    can_override = (
+        request.user.is_superuser or
+        getattr(request.user, 'is_super_admin', False) or
+        (request.user.role and request.user.role.is_manager_role)
+    )
+    if not (is_owner or can_override):
+        return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب آخر.")
+
     contact_name = item.contact.name
     date_str = item.plan_day.date.strftime('%Y-%m-%d')
     item.delete()
@@ -653,15 +701,26 @@ def planned_visit_item_delete(request, pk):
     return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
 
-@login_required
+@require_permission('activities:visits/create')
 def planned_visit_item_execute(request, pk):
     """
     Route planned visit execution into the canonical visit registration workflow
     with prefilled customer, template, and plan day context.
     """
-    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day', 'contact', 'template'), pk=pk)
+    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'template'), pk=pk)
     
+    # Permission check: only assigned rep or manager/superuser can execute
+    is_owner = (item.plan_day.assignee == request.user)
+    can_override = (
+        request.user.is_superuser or
+        getattr(request.user, 'is_super_admin', False) or
+        (request.user.role and request.user.role.name in ['manager', 'admin'])
+    )
+    if not (is_owner or can_override):
+        return render_forbidden_response(request, "غير مصرح لك بتنفيذ خطة زيارة تابعة لمندوب آخر.")
+
     if item.is_executed and item.visit:
+        messages.info(request, f"تم تنفيذ هذه الزيارة المخططة مسبقاً (زيارة #{item.visit.serial_num}).")
         return redirect('visit_detail', pk=item.visit.pk)
 
     template_param = f"&template_id={item.template.id}" if item.template else ""
@@ -669,10 +728,18 @@ def planned_visit_item_execute(request, pk):
 
 
 
-@login_required
+@require_permission('activities:planned/export')
 def planned_visits_export(request):
     """Export planned visits list to Excel."""
     items = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact__area', 'template', 'visit').all().order_by('plan_day__date', 'order')
+
+    can_view_all = (
+        request.user.is_superuser or
+        getattr(request.user, 'is_super_admin', False) or
+        (request.user.role and request.user.role.is_manager_role)
+    )
+    if not can_view_all:
+        items = items.filter(plan_day__assignee=request.user)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -714,13 +781,14 @@ def planned_visits_export(request):
 # VISITS MODULE (الزيارات)
 # -----------------------------------------------------------------------------
 
-@login_required
+@require_permission('activities:visits/list')
 def visits_list(request):
     """
     Visits list with table & cards views, complete filters, status indicators, and export.
     Matches https://weapharma.bricks-rep.com/visits
     """
     qs = Visit.objects.select_related('contact', 'template', 'owner', 'created_by').prefetch_related('samples__product').all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'visit')
 
     # Search
     q = request.GET.get('q', '').strip()
@@ -749,6 +817,15 @@ def visits_list(request):
         qs = qs.filter(approval_status=approval_status)
         approval_labels = dict(Visit.APPROVAL_CHOICES)
         active_filters.append({'label': f'حالة الاعتماد: {approval_labels.get(approval_status, approval_status)}', 'param': 'approval_status'})
+
+    # Planned vs Unplanned Classification Filter (Requirement 5)
+    plan_type = request.GET.get('plan_type')
+    if plan_type == 'planned':
+        qs = qs.filter(is_planned=True)
+        active_filters.append({'label': 'النوع: زيارة مخططة', 'param': 'plan_type'})
+    elif plan_type == 'unplanned':
+        qs = qs.filter(is_planned=False)
+        active_filters.append({'label': 'النوع: زيارة خارج الخطة', 'param': 'plan_type'})
 
     # Representative (owner)
     rep_id = request.GET.get('owner')
@@ -780,6 +857,8 @@ def visits_list(request):
 
     approved_count = qs.filter(approval_status='approved').count()
     pending_count = qs.filter(approval_status='pending').count()
+    planned_count = Visit.objects.filter(is_planned=True).count()
+    unplanned_count = Visit.objects.filter(is_planned=False).count()
 
     context = {
         'page_obj': page_obj,
@@ -788,6 +867,8 @@ def visits_list(request):
         'total_count': paginator.count,
         'approved_count': approved_count,
         'pending_count': pending_count,
+        'planned_count': planned_count,
+        'unplanned_count': unplanned_count,
         'view_mode': view_mode,
         'users': users,
         'contacts': contacts,
@@ -795,6 +876,7 @@ def visits_list(request):
         'selected_q': q,
         'selected_status': status,
         'selected_approval_status': approval_status,
+        'selected_plan_type': plan_type,
         'selected_owner': rep_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
@@ -804,21 +886,203 @@ def visits_list(request):
     return render(request, 'activities/visits_list.html', context)
 
 
-@login_required
+@require_permission('activities:visits/view')
 def visit_detail(request, pk):
-    """View visit dossier, questionnaire answers, samples, and approval actions."""
+    """
+    Standardized Visit Lifecycle Screen (Create First, Answer Later).
+    Allows viewing dossier, answering template questions, uploading location photo,
+    verifying GPS, saving draft progress, completing, cancelling, and manager approvals.
+    """
     visit = get_object_or_404(
         Visit.objects.select_related('contact', 'template', 'owner', 'approved_by', 'created_by')
         .prefetch_related('samples__product', 'expenses', 'detailed_products'),
         pk=pk
     )
 
-    # Prepare structured questionnaire answers for display
+    if not can_user_access_object(request.user, visit, 'view'):
+        return render_forbidden_response(request, "غير مصرح لك بالوصول إلى تفاصيل هذه الزيارة.")
+
+    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    template = visit.template
+    supports_detailing = template.is_product_detailing_supported() if template else False
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'complete').strip()
+
+        if action == 'cancel':
+            visit.status = 'cancelled'
+            visit.save()
+            messages.warning(request, f"تم إلغاء الزيارة #{visit.serial_num}.")
+            return redirect('visit_detail', pk=visit.pk)
+
+        # Process Questionnaire Answers
+        answers = dict(visit.questionnaire_answers or {})
+        validation_errors = []
+
+        if template:
+            questions = template.get_active_questions()
+            parent_answers = {}
+
+            # First pass: collect parent answers
+            for q in questions:
+                field_name = f'question_{q.id}'
+                val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                if isinstance(val, list) and len(val) == 1:
+                    val = val[0]
+                elif isinstance(val, list) and len(val) == 0:
+                    val = ''
+                if q.question_type == 'multiple_choice':
+                    val = request.POST.getlist(field_name)
+                if val:
+                    parent_answers[q.id] = val
+
+            for q in questions:
+                # Conditional visibility check
+                is_visible = True
+                if q.is_conditional and q.conditional_parent_id:
+                    parent_val = parent_answers.get(q.conditional_parent_id, '')
+                    trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                    if str(parent_val).strip().lower() != trigger_val:
+                        is_visible = False
+
+                if not is_visible:
+                    # Remove hidden conditional answers to prevent submitting incompatible answers
+                    answers.pop(str(q.id), None)
+                    continue
+
+                field_name = f'question_{q.id}'
+                val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                if isinstance(val, list) and len(val) == 1:
+                    val = val[0]
+                elif isinstance(val, list) and len(val) == 0:
+                    val = ''
+                if q.question_type == 'multiple_choice':
+                    val = request.POST.getlist(field_name)
+
+                # Validate required questions strictly when completing
+                if action == 'complete' and q.is_required and (val is None or val == '' or val == []):
+                    validation_errors.append(f"السؤال '{q.text_ar}' إلزامي لإتمام الزيارة.")
+
+                if val is not None and val != '':
+                    answers[str(q.id)] = val
+
+        # Handle Location & Photo Evidence
+        lat = request.POST.get('latitude') or visit.latitude
+        lng = request.POST.get('longitude') or visit.longitude
+        acc = request.POST.get('device_accuracy') or visit.device_accuracy
+        photo_file = request.FILES.get('location_photo')
+        force_bypass = bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps)
+        bypass_reason = request.POST.get('bypass_reason', '')
+
+        from master_data.models import LocationSettings
+        location_settings = LocationSettings.get_settings()
+
+        # Enforce GPS and Photo requirement when completing visit (Requirement 7)
+        if action == 'complete' and location_settings.verify_visits and not force_bypass and not can_bypass_gps:
+            if not lat or not lng:
+                validation_errors.append("تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لإنهاء الزيارة.")
+            if not photo_file and not visit.location_photo:
+                validation_errors.append("التقاط صورة إثبات الموقع الحالية إلزامي لإنهاء الزيارة.")
+
+        if validation_errors:
+            # Preserve answers when a validation error occurs! (Requirement 4)
+            visit.questionnaire_answers = answers
+            visit.save()
+            is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+            if is_ajax:
+                return JsonResponse({
+                    'success': False,
+                    'message': validation_errors[0],
+                    'errors': validation_errors
+                }, status=400)
+            for err in validation_errors:
+                messages.error(request, err)
+        else:
+            with transaction.atomic():
+                visit.questionnaire_answers = answers
+                feedback = request.POST.get('feedback', '')
+                if feedback:
+                    visit.feedback = feedback
+
+                # Outcome
+                visit_outcome = request.POST.get('visit_outcome', '').strip()
+                if visit_outcome:
+                    visit.visit_outcome = visit_outcome
+                    visit.is_successful = (visit_outcome == 'successful')
+
+                # Location & Photo Evidence Verification
+                try:
+                    verify_visit_location(
+                        visit, request.user, visit.contact,
+                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                        photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
+                    )
+                except Exception as e:
+                    messages.error(request, f"خطأ في معالجة الموقع أو الصورة: {str(e)}")
+
+                # Product Detailing (Requirement 8): Restricted to the three templates
+                if template and template.is_product_detailing_supported():
+                    detailed_product_ids = request.POST.getlist('detailed_products')
+                    if detailed_product_ids:
+                        visit.detailed_products.set(detailed_product_ids)
+                    elif 'detailed_products_submitted' in request.POST:
+                        visit.detailed_products.clear()
+                else:
+                    visit.detailed_products.clear()
+
+                if action == 'complete':
+                    visit.status = 'finished'
+                    visit.ended_at = timezone.now()
+                    if visit.started_at:
+                        visit.duration = max(60, int((visit.ended_at - visit.started_at).total_seconds()))
+                    else:
+                        visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
+                        visit.duration = 900
+
+                    if not visit.is_planned and template and template.auto_approve_unplanned:
+                        visit.approval_status = 'approved'
+                        visit.approved_by = request.user
+                        visit.approved_at = timezone.now()
+                    else:
+                        visit.approval_status = 'pending'
+
+                    visit.save()
+                    ApprovalAuditLog.objects.create(
+                        record_type='visit',
+                        visit=visit,
+                        action='submitted',
+                        actor=request.user,
+                        status_before='started',
+                        status_after=visit.approval_status,
+                        reason='تقديم الزيارة بعد إكمال وتوثيق الإجراءات',
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
+                    messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح.")
+                else:
+                    # Save Draft (Status remains 'started', resumable)
+                    visit.save()
+                    messages.success(request, f"تم حفظ مسودة إجابات الزيارة #{visit.serial_num} بنجاح (الزيارة لا تزال جارية).")
+
+            is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'status': visit.status,
+                    'serial_num': visit.serial_num,
+                    'message': "تم حفظ البيانات بنجاح."
+                })
+            return redirect('visit_detail', pk=visit.pk)
+
+    # GET Request: prepare structured questionnaire answers and questions
     questionnaire_responses = []
+    all_questions = []
     if visit.template:
-        questions = visit.template.questions.filter(is_active=True).order_by('order', 'id')
+        if visit.status == 'started':
+            all_questions = list(visit.template.get_active_questions())
+        else:
+            all_questions = list(visit.template.questions.all().order_by('order', 'id'))
         answers = visit.questionnaire_answers or {}
-        for q in questions:
+        for q in all_questions:
             ans = answers.get(str(q.id))
             if ans is not None and ans != '':
                 if isinstance(ans, list):
@@ -835,150 +1099,165 @@ def visit_detail(request, pk):
                     'is_meeting_question': ('meet' in q.text_ar.lower() or 'قابلت' in q.text_ar)
                 })
 
+    from master_data.models import LocationSettings
+    location_settings = LocationSettings.get_settings()
+    products = Product.objects.filter(is_active=True).order_by('name')
+
+    can_approve = can_manage_approvals(request.user) and can_user_access_object(request.user, visit, 'approve')
+    can_resubmit = (visit.approval_status in ('disapproved', 'rejected')) and (
+        visit.owner == request.user or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    )
+    approval_history = visit.approval_history.select_related('actor').all()
+
     return render(request, 'activities/visit_detail.html', {
         'visit': visit,
         'questionnaire_responses': questionnaire_responses,
+        'all_questions': all_questions,
+        'products': products,
+        'supports_detailing': supports_detailing,
+        'can_bypass_gps': can_bypass_gps,
+        'verify_visits_enabled': location_settings.verify_visits,
+        'gps_tolerance': location_settings.tolerance,
         'can_manage_approvals': can_manage_approvals(request.user),
+        'can_approve': can_approve,
+        'can_resubmit': can_resubmit,
+        'approval_history': approval_history,
     })
 
 
-@login_required
+@require_permission('activities:visits/create')
 def visit_create(request):
     """
-    Canonical Visit Registration endpoint and workflow.
-    Reused across ALL entry points:
-    1. Visits list create button
-    2. Planned visits item execution (بدء الزيارة)
-    3. Contact dossier (تسجيل زيارة)
-    4. FAB Action 1 (تسجيل زيارة خارج الخطة)
-    5. Dashboard / shortcuts
-
-    Enforces customer authorization scoping, location verification, template questions validation,
-    product detailing persistence, and duplicate prevention.
+    Standardized Unified Visit Registration endpoint: /visits/create/
+    Used by both planned visits (via planned-visits/ with planned_item_id)
+    and unplanned visits (via floating '+' or quick add without planned_item_id).
+    Validates permissions, template restrictions, representative locking, and persists
+    the visit record first with status='started' before directing to questionnaire.
     """
     planned_item_id = request.POST.get('planned_item_id') or request.GET.get('planned_item_id')
+    planned_item = None
+    if planned_item_id:
+        try:
+            planned_item = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'template').get(pk=planned_item_id)
+            is_owner = (planned_item.plan_day.assignee == request.user)
+            can_override = (
+                request.user.is_superuser or
+                getattr(request.user, 'is_super_admin', False) or
+                (request.user.role and request.user.role.name in ['manager', 'admin'])
+            )
+            if not (is_owner or can_override):
+                messages.error(request, "غير مصرح لك بتسجيل أو تنفيذ خطة زيارة تابعة لمندوب آخر.")
+                return redirect('visits_list')
+            if planned_item.is_executed and planned_item.visit:
+                messages.info(request, f"تم تنفيذ هذه الزيارة المخططة مسبقاً (زيارة #{planned_item.visit.serial_num}).")
+                return redirect('visit_detail', pk=planned_item.visit.pk)
+        except PlannedVisitItem.DoesNotExist:
+            messages.error(request, "عنصر الخطة المطلوب غير موجود أو غير صالح.")
+            return redirect('visits_list')
+
+    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
 
     if request.method == 'POST':
-        form = VisitForm(request.POST, user=request.user)
+        form = VisitForm(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             contact = form.cleaned_data['contact']
-            owner = form.cleaned_data.get('owner') or request.user
             template = form.cleaned_data.get('template')
 
-            # Process Questionnaire Answers & Dynamic Validation
-            answers = {}
-            validation_errors = []
-            if template:
-                questions = template.questions.filter(is_active=True).order_by('order', 'id')
-                parent_answers = {}
-
-                for q in questions:
-                    is_visible = True
-                    if q.is_conditional and q.conditional_parent_id:
-                        parent_val = parent_answers.get(q.conditional_parent_id, '')
-                        trigger_val = (q.conditional_trigger_value or '').strip().lower()
-                        if str(parent_val).strip().lower() != trigger_val:
-                            is_visible = False
-
-                    if not is_visible:
-                        continue
-
-                    field_name = f'question_{q.id}'
-                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
-                    if isinstance(val, list) and len(val) == 1:
-                        val = val[0]
-                    elif isinstance(val, list) and len(val) == 0:
-                        val = ''
-
-                    if q.question_type == 'multiple_choice':
-                        val = request.POST.getlist(field_name)
-
-                    if q.is_required and (val is None or val == '' or val == []):
-                        validation_errors.append(f"السؤال '{q.text_ar}' إلزامي.")
-
-                    if val is not None and val != '':
-                        answers[str(q.id)] = val
-                        parent_answers[q.id] = val
-
-            if validation_errors:
-                is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
-                if is_ajax:
-                    return JsonResponse({
-                        'success': False,
-                        'message': validation_errors[0],
-                        'errors': validation_errors
-                    }, status=400)
-                for err in validation_errors:
-                    messages.error(request, err)
-                # Form error
-                form.add_error(None, validation_errors[0])
+            # Backend Eligibility Validation
+            if template and not template.is_contact_eligible(contact):
+                allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
+                form.add_error('template', f"قالب الزيارة '{template.display_name_ar}' غير مصرح به لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}.")
+                messages.error(request, form.errors.as_text())
             else:
+                # Representative Assignment Locking
+                if can_assign_other_representative(request.user):
+                    owner = form.cleaned_data.get('owner') or request.user
+                else:
+                    owner = request.user
+
                 # Anti-duplicate check (within last 60 seconds)
                 recent_duplicate = Visit.objects.filter(
                     contact=contact,
                     owner=owner,
+                    status='started',
                     created_at__gte=timezone.now() - datetime.timedelta(seconds=60)
                 ).first()
                 if recent_duplicate:
-                    messages.warning(request, f"تم تسجيل هذه الزيارة بالفعل منذ لحظات (زيارة #{recent_duplicate.serial_num}).")
+                    messages.warning(request, f"يوجد زيارة جارية بالفعل تم بدؤها منذ لحظات (زيارة #{recent_duplicate.serial_num}).")
                     return redirect('visit_detail', pk=recent_duplicate.pk)
 
-                visit = form.save(commit=False)
-                visit.created_by = request.user
-                visit.owner = owner
-                visit.is_planned = bool(planned_item_id)
-                visit.status = 'finished'
-                visit.approval_status = 'pending'
-                visit.ended_at = timezone.now()
-                visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
-                visit.duration = 900
-                visit.questionnaire_answers = answers
+                with transaction.atomic():
+                    visit = form.save(commit=False)
+                    visit.created_by = request.user
+                    visit.owner = owner
+                    visit.is_planned = bool(planned_item)
+                    if planned_item:
+                        visit.date = planned_item.plan_day.date
+                    visit.status = 'started'  # Initial status: in progress / جارية
+                    visit.approval_status = 'pending'
+                    visit.started_at = timezone.now()
 
-                # Outcome
-                visit_outcome = request.POST.get('visit_outcome', '').strip()
-                if visit_outcome:
-                    visit.visit_outcome = visit_outcome
-                    visit.is_successful = (visit_outcome == 'successful')
+                    # Save and verify GPS coordinates if provided at check-in
+                    lat = request.POST.get('latitude') or form.cleaned_data.get('latitude')
+                    lng = request.POST.get('longitude') or form.cleaned_data.get('longitude')
+                    acc = request.POST.get('device_accuracy') or form.cleaned_data.get('device_accuracy')
+                    photo_file = request.FILES.get('location_photo')
+                    force_bypass = bool(
+                        (request.POST.get('force_bypass_location') == '1' and can_bypass_gps) or
+                        (can_bypass_gps and (not lat or not lng))
+                    )
+                    bypass_reason = request.POST.get('bypass_reason', '')
 
-                # Auto-approve unplanned visit if configured on template
-                if not planned_item_id and template and template.auto_approve_unplanned:
-                    visit.approval_status = 'approved'
-                    visit.approved_by = request.user
+                    try:
+                        verify_visit_location(
+                            visit, request.user, contact,
+                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                            photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
+                        )
+                    except Exception:
+                        pass
 
-                # Location Verification with Haversine distance engine
-                lat = request.POST.get('latitude') or form.cleaned_data.get('latitude')
-                lng = request.POST.get('longitude') or form.cleaned_data.get('longitude')
-                acc = request.POST.get('device_accuracy') or form.cleaned_data.get('device_accuracy')
-                verify_visit_location(visit, request.user, contact, lat, lng, acc)
+                    # Save optional initial answers if submitted (excluding duplicate outcome questions)
+                    initial_answers = {}
+                    if template:
+                        for q in template.get_active_questions():
+                            f_name = f'question_{q.id}'
+                            val = request.POST.get(f_name) or request.POST.getlist(f_name)
+                            if isinstance(val, list) and len(val) == 1:
+                                val = val[0]
+                            elif isinstance(val, list) and len(val) == 0:
+                                val = ''
+                            if q.question_type == 'multiple_choice':
+                                val = request.POST.getlist(f_name)
+                            if val:
+                                initial_answers[str(q.id)] = val
+                    if initial_answers:
+                        visit.questionnaire_answers = initial_answers
 
-                visit.save()
+                    visit_outcome = request.POST.get('visit_outcome', '').strip()
+                    if visit_outcome:
+                        visit.visit_outcome = visit_outcome
+                        visit.is_successful = (visit_outcome == 'successful')
 
-                # Associate planned item if execution came from planned visits
-                if planned_item_id:
-                    planned_item = PlannedVisitItem.objects.filter(pk=planned_item_id).first()
+                    if not visit.is_planned and template and template.auto_approve_unplanned:
+                        visit.approval_status = 'approved'
+                        visit.approved_by = request.user
+
+                    visit.save()
+
+                    # Associate planned item if execution came from planned visits
                     if planned_item:
                         planned_item.is_executed = True
                         planned_item.visit = visit
                         planned_item.save()
 
-                # Handle product detailing
-                detailed_product_ids = request.POST.getlist('detailed_products')
-                if detailed_product_ids:
-                    visit.detailed_products.set(detailed_product_ids)
+                    # Handle product detailing only if supported
+                    if template and template.is_product_detailing_supported():
+                        detailed_product_ids = request.POST.getlist('detailed_products')
+                        if detailed_product_ids:
+                            visit.detailed_products.set(detailed_product_ids)
 
-                # Handle samples if provided
-                product_id = request.POST.get('sample_product')
-                quantity = request.POST.get('sample_quantity', 1)
-                if product_id:
-                    product = Product.objects.filter(pk=product_id).first()
-                    if product:
-                        try:
-                            qty = max(1, int(quantity))
-                            VisitSampleItem.objects.create(visit=visit, product=product, quantity=qty)
-                        except (ValueError, TypeError):
-                            pass
-
-                messages.success(request, f"تم تسجيل الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح.")
+                messages.success(request, f"تم بدء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. يمكنك الآن الإجابة على الاستبيان وتوثيق تفاصيل الزيارة.")
                 return redirect('visit_detail', pk=visit.pk)
         else:
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
@@ -994,20 +1273,28 @@ def visit_create(request):
         contact_id = request.GET.get('contact') or request.GET.get('contact_id')
         template_id = request.GET.get('template') or request.GET.get('template_id')
         initial = {'date': timezone.now().date(), 'owner': request.user}
-        if contact_id:
-            initial['contact'] = contact_id
-        if template_id:
-            initial['template'] = template_id
-        if planned_item_id:
-            initial['planned_item_id'] = planned_item_id
+        if planned_item:
+            initial['contact'] = planned_item.contact.id
+            if planned_item.template:
+                initial['template'] = planned_item.template.id
+            initial['date'] = planned_item.plan_day.date
+            initial['planned_item_id'] = planned_item.pk
+        else:
+            if contact_id:
+                initial['contact'] = contact_id
+            if template_id:
+                initial['template'] = template_id
 
         form = VisitForm(initial=initial, user=request.user)
 
     # Preselected customer details for rich card
     selected_contact = None
-    contact_id = request.POST.get('contact') or request.GET.get('contact') or request.GET.get('contact_id')
-    if contact_id:
-        selected_contact = Contact.objects.filter(pk=contact_id).select_related('area').first()
+    if planned_item:
+        selected_contact = planned_item.contact
+    else:
+        contact_id = request.POST.get('contact') or request.GET.get('contact') or request.GET.get('contact_id')
+        if contact_id:
+            selected_contact = Contact.objects.filter(pk=contact_id).select_related('area').first()
 
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
@@ -1020,28 +1307,34 @@ def visit_create(request):
         'products': products,
         'templates': templates,
         'selected_contact': selected_contact,
-        'planned_item_id': planned_item_id,
+        'planned_item': planned_item,
+        'planned_item_id': planned_item.pk if planned_item else None,
+        'is_planned_visit': bool(planned_item),
         'can_bypass_gps': can_bypass_gps,
         'verify_visits_enabled': location_settings.verify_visits,
         'gps_tolerance': location_settings.tolerance,
-        'title': 'تسجيل زيارة جديدة'
+        'title': 'تسجيل زيارة مخططة' if planned_item else 'تسجيل زيارة خارج الخطة'
     })
 
 
-@login_required
+
+@require_permission('activities:visits/edit')
 def visit_edit(request, pk):
     """Edit visit feedback, template answers, and detailed products."""
     visit = get_object_or_404(Visit, pk=pk)
+    if not can_user_access_object(request.user, visit, 'edit'):
+        return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
+
     if request.method == 'POST':
-        form = VisitForm(request.POST, instance=visit)
+        form = VisitForm(request.POST, request.FILES, instance=visit, user=request.user)
         if form.is_valid():
             visit = form.save(commit=False)
             template = visit.template
 
             # Process Questionnaire Answers
-            answers = visit.questionnaire_answers or {}
+            answers = dict(visit.questionnaire_answers or {})
             if template:
-                questions = template.questions.filter(is_active=True).order_by('order', 'id')
+                questions = template.get_active_questions()
                 parent_answers = {}
                 for q in questions:
                     is_visible = True
@@ -1052,6 +1345,7 @@ def visit_edit(request, pk):
                             is_visible = False
 
                     if not is_visible:
+                        answers.pop(str(q.id), None)
                         continue
 
                     field_name = f'question_{q.id}'
@@ -1074,16 +1368,20 @@ def visit_edit(request, pk):
                 visit.is_successful = (visit_outcome == 'successful')
             visit.save()
 
-            detailed_product_ids = request.POST.getlist('detailed_products')
-            if detailed_product_ids:
-                visit.detailed_products.set(detailed_product_ids)
-            elif 'detailed_products_submitted' in request.POST:
+            # Handle product detailing only if supported (Requirement 8)
+            if template and template.is_product_detailing_supported():
+                detailed_product_ids = request.POST.getlist('detailed_products')
+                if detailed_product_ids:
+                    visit.detailed_products.set(detailed_product_ids)
+                elif 'detailed_products_submitted' in request.POST:
+                    visit.detailed_products.clear()
+            else:
                 visit.detailed_products.clear()
 
             messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num}.")
             return redirect('visit_detail', pk=visit.pk)
     else:
-        form = VisitForm(instance=visit)
+        form = VisitForm(instance=visit, user=request.user)
 
     products = Product.objects.filter(is_active=True).order_by('name')
     templates = VisitTemplate.objects.filter(active=True).order_by('name')
@@ -1110,41 +1408,175 @@ def visit_edit(request, pk):
     })
 
 
+@require_permission('activities:visits/evidence')
+def visit_evidence_photo(request, pk):
+    """
+    Secure Evidence Photo Access (Requirement 7).
+    Prevents unauthorized access to another representative's private evidence photo.
+    Authorized users:
+    - Visit owner (conducted by)
+    - Visit creator
+    - Area managers / supervisors
+    - Superusers and staff
+    """
+    visit = get_object_or_404(Visit, pk=pk)
+    if not visit.location_photo:
+        raise Http404("لا توجد صورة إثبات موقع مسجلة لهذه الزيارة.")
+
+    user = request.user
+    can_view = (
+        user.is_superuser or
+        getattr(user, 'is_super_admin', False) or
+        visit.owner_id == user.pk or
+        visit.created_by_id == user.pk or
+        (user.role and user.role.is_area_manager) or
+        can_manage_approvals(user)
+    )
+
+    if not can_view:
+        return HttpResponseForbidden("عذراً، غير مصرح لك بالوصول إلى صورة الإثبات الخاصة بزيارة مستخدم آخر.")
+
+    try:
+        content_type, _ = mimetypes.guess_type(visit.location_photo.name)
+        return FileResponse(visit.location_photo.open('rb'), content_type=content_type or 'image/jpeg')
+    except Exception:
+        raise Http404("تعذر فتح ملف صورة الإثبات.")
+
+
 
 @login_required
 def visit_action(request, pk, action):
-    """Approve or disapprove visit."""
-    if not can_manage_approvals(request.user):
-        messages.error(request, "عذراً، لا تملك صلاحية اعتماد أو رفض الزيارات (خاص بالمدراء).")
-        return redirect('visit_detail', pk=pk)
-
+    """
+    Approve, disapprove/reject, or resubmit visit.
+    Enforces regional authority, prevents representative self-approval,
+    records audit trail, and handles resubmission workflow.
+    """
     visit = get_object_or_404(Visit, pk=pk)
-    notes = request.POST.get('approval_notes', '')
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
 
-    if action == 'approve':
-        visit.approval_status = 'approved'
-        visit.approved_by = request.user
-        if notes:
+    if action in ('approve', 'disapprove', 'reject'):
+        if not can_manage_approvals(request.user):
+            msg = "عذراً، لا تملك صلاحية اعتماد أو رفض الزيارات (خاص بالمدراء والمشرفين)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect('visit_detail', pk=pk)
+
+        if not can_user_access_object(request.user, visit, action):
+            msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو لا يمكن للمندوب اعتماد زيارته الخاصة)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect('visit_detail', pk=pk)
+
+        notes = request.POST.get('approval_notes', '').strip() or request.POST.get('reason', '').strip()
+
+        if action == 'approve':
+            status_before = visit.approval_status
+            visit.approval_status = 'approved'
+            visit.approved_by = request.user
+            visit.approved_at = timezone.now()
+            if notes:
+                visit.approval_notes = notes
+            visit.save()
+
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='approved',
+                actor=request.user,
+                status_before=status_before,
+                status_after='approved',
+                reason=notes or 'تم اعتماد الزيارة من قبل المدير الإقليمي',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            msg = f"تم اعتماد الزيارة #{visit.serial_num} بنجاح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': 'approved'})
+            messages.success(request, msg)
+
+        elif action in ('disapprove', 'reject'):
+            if not notes:
+                msg = "يرجى توضيح سبب الرفض لتحديد التعديلات المطلوبة من قبل المندوب."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message': msg}, status=400)
+                messages.error(request, msg)
+                return redirect('visit_detail', pk=visit.pk)
+
+            status_before = visit.approval_status
+            visit.approval_status = 'disapproved'
+            visit.approved_by = request.user
+            visit.approved_at = timezone.now()
             visit.approval_notes = notes
+            visit.save()
+
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='rejected',
+                actor=request.user,
+                status_before=status_before,
+                status_after='disapproved',
+                reason=notes,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            msg = f"تم رفض الزيارة #{visit.serial_num} وإعادتها للمندوب للمراجعة والتصحيح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': 'disapproved'})
+            messages.error(request, msg)
+
+    elif action == 'resubmit':
+        is_owner = (visit.owner == request.user)
+        can_resubmit_override = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+        if not (is_owner or can_resubmit_override):
+            msg = "غير مصرح لك بإعادة تقديم هذه الزيارة (فقط المندوب المسؤول عن الزيارة يمكنه إعادة تقديمها)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect('visit_detail', pk=pk)
+
+        if visit.approval_status not in ('disapproved', 'rejected'):
+            msg = "لا يمكن إعادة تقديم زيارة إلا إذا كانت مرفوضة بحاجة لتصحيح."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.warning(request, msg)
+            return redirect('visit_detail', pk=pk)
+
+        status_before = visit.approval_status
+        visit.approval_status = 'pending'
+        visit.approved_by = None
+        visit.approved_at = None
+        resubmit_notes = request.POST.get('notes', '').strip() or request.POST.get('approval_notes', '').strip() or "إعادة تقديم بعد مراجعة الملاحظات وتصحيحها"
         visit.save()
-        messages.success(request, f"تم اعتماد الزيارة #{visit.serial_num} بنجاح.")
-    elif action == 'disapprove':
-        visit.approval_status = 'disapproved'
-        visit.approved_by = request.user
-        if notes:
-            visit.approval_notes = notes
-        visit.save()
-        messages.error(request, f"تم رفض الزيارة #{visit.serial_num}.")
+
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='resubmitted',
+            actor=request.user,
+            status_before=status_before,
+            status_after='pending',
+            reason=resubmit_notes,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        msg = f"تمت إعادة تقديم الزيارة #{visit.serial_num} للمدير للاعتماد."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg, 'status': 'pending'})
+        messages.success(request, msg)
     else:
-        messages.error(request, "إجراء غير معروف.")
+        msg = "إجراء غير معروف."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
 
     return redirect('visit_detail', pk=visit.pk)
 
 
-@login_required
+@require_permission('activities:visits/export')
 def visits_export(request):
     """Export visits to Excel (.xlsx)."""
     qs = Visit.objects.select_related('contact', 'template', 'owner').prefetch_related('samples__product').all()
+    qs = get_scoped_queryset(qs, request.user, 'visit')
 
     # Same filters
     q = request.GET.get('q', '').strip()
@@ -1206,8 +1638,10 @@ def visits_export(request):
 # -----------------------------------------------------------------------------
 # VISIT TEMPLATES MODULE (إدارة قوالب الزيارات)
 # -----------------------------------------------------------------------------
+# VISIT TEMPLATES & QUESTION BUILDER MODULE (قوالب الزيارات)
+# -----------------------------------------------------------------------------
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_templates_list(request):
     """
     List visit templates with status badges, questions count, mode, and target accounts.
@@ -1253,7 +1687,7 @@ def visit_templates_list(request):
     })
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_template_create(request):
     """Create a new visit template with accordions for settings, location, and constraints."""
     if not can_manage_templates(request.user):
@@ -1278,7 +1712,7 @@ def visit_template_create(request):
     })
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_template_edit(request, pk):
     """
     Edit an existing visit template and manage its questions, choices, conditionals, and stages.
@@ -1313,11 +1747,11 @@ def visit_template_edit(request, pk):
     })
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_template_preview(request, pk):
     """Interactive questionnaire preview simulating representative mobile/tablet device screen."""
     template = get_object_or_404(VisitTemplate.objects.prefetch_related('questions'), pk=pk)
-    questions = template.questions.filter(is_active=True).order_by('order', 'id')
+    questions = template.get_active_questions()
     products = Product.objects.filter(is_active=True)[:10]
 
     start_questions = [q for q in questions if q.stage == 'start_only']
@@ -1333,7 +1767,7 @@ def visit_template_preview(request, pk):
     })
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_template_delete(request, pk):
     """
     Delete or deactivate template.
@@ -1362,7 +1796,7 @@ def visit_template_delete(request, pk):
     return redirect('visit_templates_list')
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def visit_template_toggle_status(request, pk):
     """Fast toggle active status of visit template."""
     if not can_manage_templates(request.user):
@@ -1385,7 +1819,7 @@ def visit_template_toggle_status(request, pk):
 # QUESTION BUILDER AJAX & FORM ENDPOINTS
 # -----------------------------------------------------------------------------
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def template_question_add(request, template_pk):
     """Add a question to a template with options and conditional logic."""
     if not can_manage_templates(request.user):
@@ -1453,7 +1887,7 @@ def template_question_add(request, template_pk):
         return redirect('visit_template_edit', pk=template_pk)
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def template_question_edit(request, question_pk):
     """Edit an existing template question."""
     if not can_manage_templates(request.user):
@@ -1517,7 +1951,7 @@ def template_question_edit(request, question_pk):
         return redirect('visit_template_edit', pk=template_pk)
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def template_question_delete(request, question_pk):
     """Delete a template question."""
     if not can_manage_templates(request.user):
@@ -1535,7 +1969,7 @@ def template_question_delete(request, question_pk):
     return redirect('visit_template_edit', pk=template_pk)
 
 
-@login_required
+@require_permission('settings:visitsTemplates/manage')
 def template_questions_reorder(request, template_pk):
     """AJAX endpoint for drag-and-drop or order updates of questions."""
     if not can_manage_templates(request.user):

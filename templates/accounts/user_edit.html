@@ -1,4 +1,4 @@
-ر   {% extends 'layouts/base.html' %}
+{% extends 'layouts/base.html' %}
 
 {% block title %}تعديل بيانات المستخدم: {{ target_user.name|default:target_user.username }} - WEA Pharma ERP{% endblock %}
 
@@ -16,15 +16,21 @@
 <div class="max-w-4xl mx-auto space-y-6">
 
     <!-- Header -->
-    <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
         <div>
             <h1 class="text-2xl font-bold text-[#27bebe]">تعديل بيانات المستخدم</h1>
             <p class="text-xs text-slate-500 mt-1">تحديث بيانات الحساب، الدور الوظيفي، والمناطق الجغرافية المعينة</p>
         </div>
-        <a href="{% url 'users_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs">
-            <span class="material-symbols-outlined text-base">arrow_forward</span>
-            <span>العودة لقائمة المستخدمين</span>
-        </a>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'user_effective_permissions' target_user.pk %}" class="px-4 py-2 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-base">rule</span>
+                <span>فحص الصلاحيات الفعلية</span>
+            </a>
+            <a href="{% url 'users_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>العودة لقائمة المستخدمين</span>
+            </a>
+        </div>
     </div>
 
     <!-- Edit Profile Form -->

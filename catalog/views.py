@@ -8,13 +8,13 @@ from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from .models import Product, ProductCategory, ProductVolumeDiscountTier, ProductPriceList
 from inventory.models import InventoryStock
-
+from accounts.permissions import require_permission, has_perm_or_admin, render_forbidden_response
 
 
 from master_data.pagination_utils import paginate_queryset
 
 
-@login_required
+@require_permission('catalog:products/list')
 def products_list(request):
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category')
@@ -84,7 +84,7 @@ def products_list(request):
     return render(request, 'catalog/products_list.html', context)
 
 
-@login_required
+@require_permission('catalog:products/create')
 def product_create(request):
     categories = ProductCategory.objects.all().order_by('name')
     if request.method == 'POST':
@@ -171,7 +171,7 @@ def product_create(request):
     })
 
 
-@login_required
+@require_permission('catalog:products/edit')
 def product_edit(request, pk):
     product = get_object_or_404(Product, pk=pk)
     categories = ProductCategory.objects.all().order_by('name')
@@ -266,7 +266,7 @@ def product_edit(request, pk):
 
 
 
-@login_required
+@require_permission('catalog:products/view')
 def product_detail(request, pk):
     product = get_object_or_404(
         Product.objects.select_related('category', 'created_by').prefetch_related('volume_discounts', 'price_lists'),
@@ -285,7 +285,7 @@ def product_detail(request, pk):
     return render(request, 'catalog/product_detail.html', context)
 
 
-@login_required
+@require_permission('catalog:products/delete')
 def product_delete(request, pk):
     product = get_object_or_404(Product, pk=pk)
     if request.method == 'POST':
@@ -297,27 +297,6 @@ def product_delete(request, pk):
     return redirect('product_detail', pk=pk)
 
 
-@login_required
-def products_export(request):
-    search = request.GET.get('search', '').strip()
-    category_id = request.GET.get('category')
-    sellable_filter = request.GET.get('sellable')
-
-    qs = Product.objects.select_related('category').all().order_by('name')
-
-    if category_id:
-        qs = qs.filter(category_id=category_id)
-    if sellable_filter in ['true', '1']:
-        qs = qs.filter(sellable=True)
-    elif sellable_filter in ['false', '0']:
-        qs = qs.filter(sellable=False)
-    if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(sku_code__icontains=search) |
-            Q(barcode__icontains=search)
-        )
-
 from master_data.excel_utils import (
     export_to_excel_response,
     generate_excel_template_response,
@@ -328,7 +307,7 @@ from master_data.excel_utils import (
 from django.db import transaction
 
 
-@login_required
+@require_permission('catalog:products/export')
 def products_export(request):
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category')
@@ -365,7 +344,7 @@ def products_export(request):
     return export_to_excel_response(qs, columns, filename="products_export", sheet_title="المنتجات")
 
 
-@login_required
+@require_permission('catalog:products/import')
 def product_import_template(request):
     columns = [
         {'header': 'كود المنتج (SKU)', 'width': 18},
@@ -386,7 +365,7 @@ def product_import_template(request):
     return generate_excel_template_response(columns, sample_rows=sample_rows, filename="products_import_template", sheet_title="نموذج المنتجات")
 
 
-@login_required
+@require_permission('catalog:products/import')
 def product_import(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -579,7 +558,7 @@ def product_import(request):
     return render(request, 'catalog/product_import.html', {'preview_mode': False})
 
 
-@login_required
+@require_permission('catalog:categories/list')
 def categories_list(request):
     search = request.GET.get('search', '').strip()
     categories = ProductCategory.objects.annotate(products_count=Count('products')).all().order_by('name')
@@ -615,7 +594,7 @@ def categories_list(request):
     })
 
 
-@login_required
+@require_permission('catalog:categories/edit')
 def category_edit(request, pk):
     cat = get_object_or_404(ProductCategory, pk=pk)
     if request.method == 'POST':
@@ -634,7 +613,7 @@ def category_edit(request, pk):
     return redirect('categories_list')
 
 
-@login_required
+@require_permission('catalog:categories/delete')
 def category_delete(request, pk):
     cat = get_object_or_404(ProductCategory, pk=pk)
     if request.method == 'POST':

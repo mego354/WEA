@@ -168,6 +168,17 @@ def home_view(request):
     vis_qs = Visit.objects.all()
     cont_qs = Contact.objects.filter(is_customer=True)
 
+    # Scoping for field reps (ABAC territorial/owner filtering)
+    if not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False) or (request.user.role and request.user.role.is_manager_role)):
+        so_qs = so_qs.filter(Q(sales_rep=request.user) | Q(created_by=request.user))
+        ro_qs = ro_qs.filter(created_by=request.user)
+        col_qs = col_qs.filter(collected_by=request.user)
+        vis_qs = vis_qs.filter(owner=request.user)
+        if request.user.assigned_areas.exists():
+            cont_qs = cont_qs.filter(area__in=request.user.assigned_areas.all())
+        else:
+            cont_qs = cont_qs.filter(created_by=request.user)
+
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
         ro_qs = ro_qs.filter(order_date__range=(start_date, end_date))
@@ -382,7 +393,7 @@ def location_settings_view(request):
     return render(request, 'settings/location_settings.html', {'settings': loc_settings})
 
 
-@login_required
+@require_permission(['settings:location/manage', 'activities:visits/create', 'activities:visits/edit', 'activities:visits/view'])
 def geofence_settings_api(request):
     """API endpoint returning geofence settings, matching /api/v1/geofence/settings."""
     loc_settings = LocationSettings.get_settings()

@@ -21,9 +21,10 @@ from contacts.models import Contact, ContactAddress
 from catalog.models import Product
 from inventory.models import Warehouse
 from treasury.models import VendorTransaction
+from accounts.permissions import require_permission, has_perm_or_admin, render_forbidden_response
 
 
-@login_required
+@require_permission('purchases:orders/list')
 def purchase_orders_list(request):
     status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
@@ -86,7 +87,7 @@ def purchase_orders_list(request):
     return render(request, 'purchases/purchase_orders_list.html', context)
 
 
-@login_required
+@require_permission('purchases:orders/create')
 def purchase_order_create(request):
     if request.method == 'POST':
         supplier_id = request.POST.get('supplier')
@@ -172,7 +173,7 @@ def purchase_order_create(request):
     return render(request, 'purchases/purchase_order_create.html', context)
 
 
-@login_required
+@require_permission('purchases:orders/view')
 def purchase_order_detail(request, pk):
     order = get_object_or_404(
         PurchaseOrder.objects.select_related(
@@ -213,6 +214,16 @@ def purchase_order_update_status_ajax(request, pk):
         new_status = request.POST.get('status', '').strip().lower()
         valid_statuses = dict(PurchaseOrder.STATUS_CHOICES).keys()
         if new_status in valid_statuses:
+            status_perm_map = {
+                'approved': 'purchases:orders/approve',
+                'picked': 'purchases:orders/stock',
+                'settled': 'purchases:orders/invoice',
+                'cancelled': 'purchases:orders/cancel',
+            }
+            needed_perm = status_perm_map.get(new_status, 'purchases:orders/edit')
+            if not has_perm_or_admin(request.user, needed_perm):
+                return render_forbidden_response(request, f"ليس لديك صلاحية لتنفيذ هذا الإجراء ({needed_perm})", perm_codename=needed_perm)
+
             try:
                 if new_status == 'approved' and order.status == 'pending':
                     PurchaseOrderService.approve_order(order, request.user)
@@ -243,7 +254,7 @@ def purchase_order_update_status_ajax(request, pk):
     return redirect('purchase_order_detail', pk=pk)
 
 
-@login_required
+@require_permission('purchases:orders/edit')
 def purchase_order_add_comment(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
     if request.method == 'POST':
@@ -260,7 +271,7 @@ def purchase_order_add_comment(request, pk):
     return redirect('purchase_order_detail', pk=pk)
 
 
-@login_required
+@require_permission('purchases:orders/edit')
 def purchase_order_upload_attachment(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
     if request.method == 'POST' and request.FILES.get('file'):
@@ -279,6 +290,17 @@ def purchase_order_upload_attachment(request, pk):
 
 @login_required
 def purchase_order_action(request, pk, action):
+    action_perm_map = {
+        'approve': 'purchases:orders/approve',
+        'stock': 'purchases:orders/stock',
+        'invoice': 'purchases:orders/invoice',
+        'undo_invoice': 'purchases:orders/undoInvoice',
+        'cancel': 'purchases:orders/cancel',
+    }
+    needed_perm = action_perm_map.get(action, 'purchases:orders/edit')
+    if not has_perm_or_admin(request.user, needed_perm):
+        return render_forbidden_response(request, f"ليس لديك صلاحية لتنفيذ هذا الإجراء ({needed_perm})", perm_codename=needed_perm)
+
     order = get_object_or_404(PurchaseOrder, pk=pk)
 
     try:
@@ -305,7 +327,7 @@ def purchase_order_action(request, pk, action):
     return redirect('purchase_order_detail', pk=order.pk)
 
 
-@login_required
+@require_permission('purchases:orders/view')
 def purchase_order_print(request, pk):
     order = get_object_or_404(
         PurchaseOrder.objects.select_related('supplier', 'supplier__area', 'target_warehouse', 'created_by').prefetch_related('items__product'),
@@ -314,7 +336,7 @@ def purchase_order_print(request, pk):
     return render(request, 'purchases/purchase_order_print.html', {'order': order})
 
 
-@login_required
+@require_permission('purchases:orders/export')
 def purchase_orders_export(request):
     status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
@@ -350,7 +372,7 @@ def purchase_orders_export(request):
     return export_to_excel_response(qs, columns, filename="purchase_orders_export", sheet_title="طلبات الشراء")
 
 
-@login_required
+@require_permission('purchases:orders/edit')
 def purchase_order_split(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
     if request.method == 'POST':
@@ -377,7 +399,7 @@ def purchase_order_split(request, pk):
     return redirect('purchase_order_detail', pk=pk)
 
 
-@login_required
+@require_permission('purchases:returns/list')
 def purchase_return_orders_list(request):
     """View matching /purchase-return-orders in reference ERP."""
     status_filter = request.GET.get('status', 'all')
@@ -440,7 +462,7 @@ def purchase_return_orders_list(request):
     return render(request, 'purchases/purchase_return_orders.html', context)
 
 
-@login_required
+@require_permission('purchases:returns/create')
 def purchase_return_order_create(request):
     """Form to create a new purchase return order."""
     if request.method == 'POST':
@@ -520,7 +542,7 @@ def purchase_return_order_create(request):
     return render(request, 'purchases/purchase_return_order_create.html', context)
 
 
-@login_required
+@require_permission('purchases:returns/view')
 def purchase_return_order_detail(request, pk):
     return_order = get_object_or_404(
         PurchaseReturnOrder.objects.select_related(
@@ -544,7 +566,7 @@ def purchase_return_order_detail(request, pk):
     return render(request, 'purchases/purchase_return_order_detail.html', context)
 
 
-@login_required
+@require_permission('purchases:returns/manage')
 def purchase_return_order_action(request, pk, action):
     return_order = get_object_or_404(PurchaseReturnOrder, pk=pk)
 
@@ -569,7 +591,7 @@ def purchase_return_order_action(request, pk, action):
     return redirect('purchase_return_order_detail', pk=return_order.pk)
 
 
-@login_required
+@require_permission('purchases:returns/view')
 def purchase_return_order_print(request, pk):
     return_order = get_object_or_404(
         PurchaseReturnOrder.objects.select_related('supplier', 'supplier__area', 'warehouse', 'created_by').prefetch_related('items__product'),
@@ -578,7 +600,7 @@ def purchase_return_order_print(request, pk):
     return render(request, 'purchases/purchase_return_order_print.html', {'return_order': return_order})
 
 
-@login_required
+@require_permission('purchases:returns/export')
 def purchase_return_orders_export(request):
     status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')

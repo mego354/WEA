@@ -61,6 +61,10 @@ The entire application was transformed to provide a purpose-built mobile applica
 | 26 | Vendor Transactions & Ledgers | `templates/treasury/vendor_transactions_list.html` | Ledger | **COMPLETED** | Bounded horizontal container. |
 | 27 | Users & Roles Management | `templates/accounts/users_list.html` | Table | **COMPLETED** | Responsive user cards and permission grids. |
 | 28 | Branding Settings | `templates/dashboard/branding_settings.html` | Form | **COMPLETED** | Stacked settings fields, responsive image preview. |
+| 29 | Role & Permission Matrix Form | `templates/accounts/role_form.html` | Form / Accordion | **COMPLETED** | Mobile-optimized collapsible module accordions, live permission search, 44px preset touch buttons, sticky bottom save bar. |
+| 30 | Effective Permissions Inspector | `templates/accounts/effective_permissions.html` | Dossier / Cards | **COMPLETED** | Responsive user summary header, mobile-adapted module cards, status pills, and direct editing shortcuts. |
+| 31 | Security Audit Logs | `templates/accounts/audit_logs.html` | Dual View | **COMPLETED** | Responsive breakpoint switching: Full data table on `>= 768px`, compact actionable event cards on `< 768px`. |
+| 32 | Access Denied Error Page | `templates/403.html` | Status Screen | **COMPLETED** | Mobile-centered security icon, user-friendly explanation, and 48px return button. |
 
 ---
 

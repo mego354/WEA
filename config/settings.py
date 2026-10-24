@@ -58,6 +58,9 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'master_data.context_processors.company_context',
             ],
+            'builtins': [
+                'master_data.templatetags.erp_tags',
+            ],
         },
     },
 ]
