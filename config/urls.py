@@ -7,6 +7,8 @@ import contacts.views as contacts_views
 
 
 import accounts.views as accounts_views
+import activities.approvals_views as approvals_views
+import activities.regional_views as regional_views
 
 
 urlpatterns = [
@@ -17,6 +19,9 @@ urlpatterns = [
     path('settings/', include('accounts.urls')),
     path('users/', accounts_views.users_list, name='users_list_root_alias'),
     path('roles/', accounts_views.roles_list, name='roles_list_root_alias'),
+    path('approvals/', approvals_views.approvals_hub, name='approvals_hub_root'),
+    path('regional/', regional_views.regional_dashboard, name='regional_dashboard_root'),
+    path('regional/dashboard/', regional_views.regional_dashboard, name='regional_dashboard_alt_root'),
     path('', include('master_data.urls')),
     path('home/', include('master_data.urls')),
     path('contacts/', include('contacts.urls')),

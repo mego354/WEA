@@ -114,10 +114,16 @@
 
                         <!-- Actions Menu -->
                         <td class="py-3.5 px-6 text-center">
-                            <div class="flex items-center justify-center gap-2">
+                            <div class="flex items-center justify-center gap-1.5">
                                 <a href="{% url 'user_edit' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="تعديل">
                                     <span class="material-symbols-outlined text-lg">edit</span>
                                 </a>
+
+                                {% if request.user.is_superuser or request.user.is_super_admin %}
+                                <a href="{% url 'user_effective_permissions' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="فحص الصلاحيات الفعلية">
+                                    <span class="material-symbols-outlined text-lg">rule</span>
+                                </a>
+                                {% endif %}
 
                                 <form method="POST" action="{% url 'user_toggle_status' u.pk %}" class="inline">
                                     {% csrf_token %}

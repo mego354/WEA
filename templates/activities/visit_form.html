@@ -46,10 +46,17 @@
                 <p class="text-xs text-slate-500 font-medium">تسجيل وتوثيق تفاصيل الزيارة الميدانية مع التحقق من الموقع الجغرافي</p>
             </div>
         </div>
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-[#27bebe] border border-teal-100">
-            <span class="material-symbols-outlined text-sm">verified</span>
-            <span>نموذج موحد</span>
+        {% if is_planned_visit or planned_item %}
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            <span class="material-symbols-outlined text-sm">event_available</span>
+            <span>زيارة مخططة</span>
         </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <span class="material-symbols-outlined text-sm">room</span>
+            <span>زيارة خارج الخطة</span>
+        </span>
+        {% endif %}
     </div>
 
     <!-- Main Registration Card -->
@@ -60,8 +67,25 @@
             <div class="flex items-center gap-2.5">
                 <span class="material-symbols-outlined text-2xl">location_on</span>
                 <div>
-                    <h2 class="text-sm font-bold">تسجيل بيانات الزيارة</h2>
-                    <p class="text-xs text-white/80">توثيق نتائج الزيارة والعينات والتحقق من النطاق الجغرافي المعتمد (300 متر).</p>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-bold">تسجيل بيانات الزيارة</h2>
+                        {% if is_planned_visit or planned_item %}
+                        <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-600 text-white border border-blue-400">
+                            زيارة مخططة
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-600 text-white border border-purple-400">
+                            زيارة خارج الخطة
+                        </span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-white/80">
+                        {% if planned_item %}
+                        مرتبطة بجدول الزيارات ليوم {{ planned_item.plan_day.date|date:"d/m/Y" }} (ترتيب: #{{ planned_item.order }})
+                        {% else %}
+                        توثيق تفاصيل الزيارة الميدانية المباشرة والتحقق من النطاق الجغرافي (300 متر).
+                        {% endif %}
+                    </p>
                 </div>
             </div>
             <div id="gps-quick-indicator" class="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/20 text-white text-xs font-semibold backdrop-blur-xs">
@@ -109,7 +133,7 @@
                             <div>
                                 <div class="flex items-center gap-2">
                                     <h3 class="text-sm font-black text-slate-900" id="customer-display-name">
-                                        {% if selected_contact %}[{{ selected_contact.formatted_number|default:selected_contact.code|default:selected_contact.id }}] {{ selected_contact.name }}{% endif %}
+                                        {% if selected_contact %}{{ selected_contact.name }}{% endif %}
                                     </h3>
                                     <span id="customer-category-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-[#1a8b8b]">
                                         {% if selected_contact %}{{ selected_contact.customer_category|default:selected_contact.account_type|default:"عميل" }}{% else %}عميل{% endif %}
@@ -213,7 +237,15 @@
             <!-- SECTION 3: VISIT CORE DETAILS -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول (المندوب) *</label>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                        <span>المسؤول (المندوب) *</span>
+                        {% if form.fields.owner.disabled %}
+                        <span class="text-[11px] text-teal-700 font-semibold inline-flex items-center gap-0.5 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                            <span class="material-symbols-outlined text-xs">lock</span>
+                            <span>مثبت للمستخدم الحالي</span>
+                        </span>
+                        {% endif %}
+                    </label>
                     {{ form.owner }}
                     {% if form.owner.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.owner.errors.0 }}</p>{% endif %}
                 </div>
@@ -321,33 +353,6 @@
                 </div>
             </div>
 
-            <!-- SECTION 4: SAMPLES DISTRIBUTION (Optional) -->
-            {% if products %}
-            <div class="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-sm text-[#27bebe]">medication</span>
-                        <span>توزيع عينة طبية (اختياري)</span>
-                    </h3>
-                    <span class="text-[11px] text-slate-400">تحديث فوري لرصيد العينات</span>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div class="sm:col-span-2">
-                        <select name="sample_product" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                            <option value="">اختر المنتج / العينة من القائمة...</option>
-                            {% for p in products %}
-                            <option value="{{ p.id }}">{{ p.name }} {% if p.code %}({{ p.code }}){% endif %}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <input type="number" name="sample_quantity" value="1" min="1" placeholder="الكمية"
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
             <!-- SECTION 5: NOTES & FEEDBACK -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">الملاحظات والنتائج</label>
@@ -358,8 +363,8 @@
             <!-- SUBMISSION BUTTONS (With Double-Click Protection) -->
             <div class="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100">
                 <button type="submit" id="submit-visit-btn" class="w-full sm:w-auto px-8 py-3 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-base">save</span>
-                    <span id="submit-btn-text">حفظ الزيارة</span>
+                    <span class="material-symbols-outlined text-base">play_arrow</span>
+                    <span id="submit-btn-text">بدء الزيارة والانتقال للاستبيان</span>
                 </button>
                 <a href="{% url 'visits_list' %}" class="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl text-center transition-colors">
                     إلغاء
@@ -590,7 +595,7 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-bold text-slate-900">${c.formatted_number || c.code ? '[' + (c.formatted_number || c.code) + '] ' : ''}${c.name}</span>
+                            <span class="text-xs font-bold text-slate-900">${c.name}</span>
                             <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.account_type || c.customer_category || 'عميل'}</span>
                         </div>
                         <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
@@ -631,7 +636,7 @@
                 }
             }
             if (!optionExists) {
-                const opt = new Option(`[${currentCustomer.code}] ${c.name}`, c.id, true, true);
+                const opt = new Option(c.name, c.id, true, true);
                 djangoSelect.add(opt);
             }
         }
@@ -648,7 +653,7 @@
         const gpsEl = document.getElementById('customer-gps-status');
         const linkEl = document.getElementById('customer-profile-link');
 
-        if (nameEl) nameEl.textContent = `[${currentCustomer.code}] ${currentCustomer.name}`;
+        if (nameEl) nameEl.textContent = currentCustomer.name;
         if (avatarEl) avatarEl.textContent = c.initials || (c.name ? c.name.substring(0, 2) : 'CL');
         if (catEl) catEl.textContent = currentCustomer.category;
         if (specEl) specEl.textContent = `تخصص: ${currentCustomer.specialty}`;
@@ -788,13 +793,39 @@
         let isCurrentSelectionValid = false;
         const currentSelectedId = templateSelect.value;
 
+        const aliasMap = {
+            'store': ['drug store', 'store', 'warehouse'],
+            'drug store': ['drug store', 'store'],
+            'clinic': ['clinic', 'physician'],
+            'pharmacy': ['pharmacy', 'pharmacist'],
+            'center': ['center', 'medical center'],
+            'polyclinic': ['polyclinic'],
+            'hospital': ['hospital'],
+            'distributor': ['distributor'],
+            'physician': ['clinic', 'physician'],
+            'pharmacist': ['pharmacy', 'pharmacist']
+        };
+
         Array.from(templateSelect.options).forEach(opt => {
             if (!opt.value) return;
             const tmpl = allTemplates.find(t => t.id == opt.value);
             if (!tmpl) return;
 
             const targetTypes = (tmpl.restrict_account_types || []).map(t => t.toLowerCase());
-            const isValid = !targetTypes.length || !custType || targetTypes.includes(custType);
+            let isValid = !targetTypes.length || !custType;
+            if (!isValid && custType) {
+                if (targetTypes.includes(custType)) {
+                    isValid = true;
+                } else {
+                    for (const tt of targetTypes) {
+                        const aliases = aliasMap[tt] || [tt];
+                        if (aliases.includes(custType)) {
+                            isValid = true;
+                            break;
+                        }
+                    }
+                }
+            }
 
             if (isValid) {
                 opt.disabled = false;
@@ -807,8 +838,8 @@
             }
         });
 
-        if (!isCurrentSelectionValid && firstValidId) {
-            templateSelect.value = firstValidId;
+        if (!isCurrentSelectionValid) {
+            templateSelect.value = firstValidId || '';
         }
 
         onTemplateSelected(templateSelect.value);

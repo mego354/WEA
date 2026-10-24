@@ -12,9 +12,13 @@ from treasury.models import VendorAccount
 from sales.models import CustomerAccount
 from accounts.models import User
 from .constants import CUSTOMER_CATEGORIES, SPECIALTIES, ACCOUNT_TYPES, COUNTRY_CODES
+from accounts.permissions import (
+    require_permission, has_perm_or_admin, render_forbidden_response,
+    get_scoped_queryset, can_user_access_object
+)
 
 
-@login_required
+@require_permission('contacts:contacts/list')
 def contacts_list(request):
     relation = request.GET.get('relation', 'all').strip()
     status = request.GET.get('status', 'all').strip()
@@ -29,6 +33,7 @@ def contacts_list(request):
     show_inactive = request.GET.get('inactive', 'no').strip()
 
     qs = Contact.objects.select_related('area', 'created_by').prefetch_related('addresses__area').all()
+    qs = get_scoped_queryset(qs, request.user, 'contact')
 
     # Active filters counter
     active_filters_count = 0
@@ -147,13 +152,15 @@ def contacts_list(request):
     return render(request, 'contacts/contacts_list.html', context)
 
 
-@login_required
+@require_permission('contacts:contacts/view')
 def contact_detail(request, pk):
     contact = get_object_or_404(
         Contact.objects.select_related('area', 'created_by', 'parent_org')
         .prefetch_related('addresses__area', 'assigned_team', 'branches'),
         pk=pk
     )
+    if not can_user_access_object(request.user, contact, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض جهة الاتصال خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
 
     active_tab = request.GET.get('tab', 'overview').strip()
 
@@ -201,7 +208,7 @@ def contact_detail(request, pk):
     return render(request, 'contacts/contact_detail.html', context)
 
 
-@login_required
+@require_permission('contacts:contacts/create')
 def contact_create(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -339,9 +346,11 @@ def render_create_form(request, errors=None):
     return render(request, 'contacts/contact_create.html', context)
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_edit(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل جهة الاتصال خارج نطاق منطقتك الجغرافية أو اختصاصك.")
     
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -469,9 +478,12 @@ def render_edit_form(request, contact, errors=None):
     return render(request, 'contacts/contact_edit.html', context)
 
 
-@login_required
+@require_permission('contacts:contacts/delete')
 def contact_delete(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'delete'):
+        return render_forbidden_response(request, "لا يمكنك حذف جهة الاتصال خارج نطاق منطقتك الجغرافية أو اختصاصك.")
+
     if request.method == 'POST':
         name = contact.name
         serial = contact.serial_num
@@ -481,9 +493,12 @@ def contact_delete(request, pk):
     return redirect('contact_detail', pk=pk)
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_update_status(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل حالة جهة الاتصال.")
+
     if request.method == 'POST':
         new_status = request.POST.get('status', '').strip().lower()
         if new_status in ['lead', 'customer', 'inactive', 'active']:
@@ -495,9 +510,12 @@ def contact_update_status(request, pk):
     return redirect('contact_detail', pk=pk)
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_add_comment(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك إضافة تعليق لهذه الجهة.")
+
     if request.method == 'POST':
         text = request.POST.get('comment', '').strip()
         if text:
@@ -512,9 +530,12 @@ def contact_add_comment(request, pk):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_create_todo(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك إضافة مهمة لهذه الجهة.")
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         if title:
@@ -527,9 +548,12 @@ def contact_create_todo(request, pk):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=Todos")
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_toggle_todo(request, pk, todo_id):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل مهام هذه الجهة.")
+
     todo = get_object_or_404(ContactTodo, pk=todo_id, contact=contact)
     todo.is_completed = not todo.is_completed
     todo.save()
@@ -538,9 +562,12 @@ def contact_toggle_todo(request, pk, todo_id):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=Todos")
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_upload_attachment(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك رفع ملفات لهذه الجهة.")
+
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
         ContactAttachment.objects.create(
@@ -553,9 +580,12 @@ def contact_upload_attachment(request, pk):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=المرفقات")
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_add_address(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك إضافة عنوان لهذه الجهة.")
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         area_id = request.POST.get('area_id')
@@ -579,35 +609,18 @@ def contact_add_address(request, pk):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
 
 
-@login_required
+@require_permission('contacts:contacts/edit')
 def contact_delete_address(request, pk, address_id):
     contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك حذف عنوان لهذه الجهة.")
+
     address = get_object_or_404(ContactAddress, pk=address_id, contact=contact)
     if request.method == 'POST':
         address.delete()
         messages.success(request, "تم حذف العنوان بنجاح.")
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
 
-
-@login_required
-def contacts_export(request):
-    relation = request.GET.get('relation', 'all')
-    search = request.GET.get('search', '').strip()
-
-    qs = Contact.objects.select_related('area').all()
-    if relation == 'vendor':
-        qs = qs.filter(is_supplier=True)
-    elif relation == 'customer':
-        qs = qs.filter(is_customer=True)
-
-    if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(mobile__icontains=search) |
-            Q(tax_id__icontains=search) |
-            Q(code__icontains=search)
-        )
 
 from master_data.excel_utils import (
     export_to_excel_response,
@@ -620,13 +633,14 @@ from sales.models import CustomerAccount
 from django.db import transaction
 
 
-@login_required
+@require_permission('contacts:contacts/export')
 def contacts_export(request):
     relation = request.GET.get('relation', 'all').strip()
     status = request.GET.get('status', 'all').strip()
     search = request.GET.get('search', '').strip() or request.GET.get('q', '').strip()
 
     qs = Contact.objects.select_related('area').prefetch_related('addresses__area').all()
+    qs = get_scoped_queryset(qs, request.user, 'contact')
 
     if status != 'all' and status:
         qs = qs.filter(status=status)
@@ -664,7 +678,7 @@ def contacts_export(request):
     return export_to_excel_response(qs, columns, filename="contacts_export", sheet_title="جهات الاتصال")
 
 
-@login_required
+@require_permission('contacts:contacts/import')
 def contacts_import_template(request):
     columns = [
         {'header': 'المسلسل', 'width': 14},
@@ -687,7 +701,7 @@ def contacts_import_template(request):
     return generate_excel_template_response(columns, sample_rows=sample_rows, filename="contacts_import_template", sheet_title="نموذج جهات الاتصال")
 
 
-@login_required
+@require_permission('contacts:contacts/import')
 def contacts_import(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -959,7 +973,7 @@ def contacts_import(request):
     return render(request, 'contacts/contacts_import.html', {'preview_mode': False})
 
 
-@login_required
+@require_permission('contacts:contacts/list')
 def get_subareas(request):
     area_id = request.GET.get('area_id')
     if not area_id:
@@ -968,7 +982,7 @@ def get_subareas(request):
     return JsonResponse({'subareas': subareas})
 
 
-@login_required
+@require_permission('contacts:contacts/list')
 def customers_search_api(request):
     """
     Search and list authorized customers for Visit Registration and selectors.
@@ -1042,7 +1056,7 @@ def customers_search_api(request):
             'serial_num': c.serial_num,
             'name': c.name,
             'code': c.code or f"#{c.serial_num}",
-            'display_tag': f"[{c.code}] {c.name}" if c.code else f"[#{c.serial_num}] {c.name}",
+            'display_tag': c.name,
             'initials': c.initials,
             'contact_type': c.contact_type,
             'contact_type_display': 'شخص' if c.contact_type == 'person' else 'منظمة',

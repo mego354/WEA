@@ -7,12 +7,20 @@
 <div class="relative min-h-[calc(100vh-5rem)]">
 
     <!-- Top Action Bar -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div class="flex items-center gap-3">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2">
             <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الزيارات</h1>
             <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
                 {{ total_count }} زيارة
             </span>
+            <a href="?plan_type=planned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+               class="text-xs px-2.5 py-1 {% if selected_plan_type == 'planned' %}bg-blue-600 text-white font-black shadow-xs{% else %}bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold{% endif %} rounded-full border border-blue-200 transition-colors">
+                {{ planned_count }} زيارة مخططة
+            </a>
+            <a href="?plan_type=unplanned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+               class="text-xs px-2.5 py-1 {% if selected_plan_type == 'unplanned' %}bg-purple-600 text-white font-black shadow-xs{% else %}bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold{% endif %} rounded-full border border-purple-200 transition-colors">
+                {{ unplanned_count }} خارج الخطة
+            </a>
             <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">
                 {{ approved_count }} معتمدة
             </span>
@@ -26,6 +34,7 @@
             <form method="GET" class="relative">
                 {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
                 {% if selected_approval_status %}<input type="hidden" name="approval_status" value="{{ selected_approval_status }}">{% endif %}
+                {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
                 {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
                 {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
                 {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
@@ -83,6 +92,7 @@
                 <thead>
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
                         <th class="py-3.5 px-4 w-16">زيارة</th>
+                        <th class="py-3.5 px-4 text-center">النوع</th>
                         <th class="py-3.5 px-4">جهة الاتصال</th>
                         <th class="py-3.5 px-4">التاريخ</th>
                         <th class="py-3.5 px-4">بدأ في</th>
@@ -107,9 +117,17 @@
                                 {% if v.verification_status == 'verified' %}
                                 <span class="material-symbols-outlined text-xs text-emerald-500" title="تم التحقق من الموقع (ضمن النطاق)">gpp_good</span>
                                 {% elif v.verification_status == 'force_bypassed' %}
-                                <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاهل التحقق بالقوة">gpp_maybe</span>
+                                <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاوز التحقق بموافقة إدارية">gpp_maybe</span>
+                                {% endif %}
+                                {% if v.has_photo_evidence %}
+                                <span class="material-symbols-outlined text-xs text-sky-600" title="تم التقاط صورة إثبات الموقع">photo_camera</span>
                                 {% endif %}
                             </div>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
+                                {{ v.plan_type_display_ar }}
+                            </span>
                         </td>
                         <td class="py-3 px-4">
                             <div class="flex items-center gap-2">
@@ -118,9 +136,6 @@
                                     <a href="{% url 'visit_detail' v.pk %}" class="font-bold text-slate-900 hover:text-[#27bebe] block">
                                         {{ v.contact.name }}
                                     </a>
-                                    {% if v.contact.code %}
-                                    <span class="text-[10px] text-slate-400 font-mono">[{{ v.contact.code }}]</span>
-                                    {% endif %}
                                 </div>
                             </div>
                         </td>
@@ -197,10 +212,20 @@
         {% for v in visits %}
         <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#27bebe]/50 transition-all space-y-3">
             <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <span class="font-mono font-bold text-slate-900 text-sm">#{{ v.serial_num }}</span>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
-                    {{ v.approval_display_ar }}
-                </span>
+                <div class="flex items-center gap-1.5">
+                    <span class="font-mono font-bold text-slate-900 text-sm">#{{ v.serial_num }}</span>
+                    {% if v.has_photo_evidence %}
+                    <span class="material-symbols-outlined text-xs text-sky-600" title="يوجد صورة إثبات للموقع">photo_camera</span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
+                        {{ v.plan_type_display_ar }}
+                    </span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
+                        {{ v.approval_display_ar }}
+                    </span>
+                </div>
             </div>
 
             <div>
@@ -288,12 +313,22 @@
                 </div>
 
                 <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تصنيف التخطيط (النوع)</label>
+                    <select name="plan_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع التصنيفات</option>
+                        <option value="planned" {% if selected_plan_type == 'planned' %}selected{% endif %}>زيارة مخططة (Planned)</option>
+                        <option value="unplanned" {% if selected_plan_type == 'unplanned' %}selected{% endif %}>زيارة خارج الخطة (Unplanned)</option>
+                    </select>
+                </div>
+
+                <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الزيارة</label>
                     <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                         <option value="">جميع الحالات</option>
                         <option value="finished" {% if selected_status == 'finished' %}selected{% endif %}>منتهية (Finished)</option>
                         <option value="started" {% if selected_status == 'started' %}selected{% endif %}>جارية (Started)</option>
                         <option value="planned" {% if selected_status == 'planned' %}selected{% endif %}>مخططة (Planned)</option>
+                        <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>ملغاة (Cancelled)</option>
                     </select>
                 </div>
 

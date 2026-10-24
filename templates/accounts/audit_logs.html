@@ -1,0 +1,183 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}سجل التدقيق الأمني - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">سجل التدقيق الأمني</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-bold text-[#27bebe] flex items-center gap-2">
+                <span class="material-symbols-outlined">history_toggle_off</span>
+                <span>سجل التدقيق الأمني للعمليات الإدارية</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">تتبع دقيق لكافة العمليات الحساسة (إنشاء وتعديل الأدوار، تعيين الصلاحيات، تغيير أدوار المستخدمين، وإعادة تعيين كلمات المرور).</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5 min-h-[40px]">
+                <span class="material-symbols-outlined text-base text-teal-600">security</span>
+                <span>إجمالي السجلات: {{ paginator.count }}</span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4">
+        <form method="GET" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <!-- Search -->
+            <div class="relative flex-1">
+                <input type="text" name="q" value="{{ query }}" placeholder="بحث في السجل (المسؤول، المستخدم، IP، الوصف)..."
+                       class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[44px]">
+                <span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-lg">search</span>
+            </div>
+
+            <!-- Action Type Filter -->
+            <select name="action" class="px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[44px]">
+                <option value="">جميع أنواع العمليات</option>
+                {% for code, label in action_choices %}
+                <option value="{{ code }}" {% if action_filter == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">filter_list</span>
+                <span>تصفية</span>
+            </button>
+
+            {% if query or action_filter %}
+            <a href="{% url 'audit_logs_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all flex items-center justify-center min-h-[44px]">
+                إلغاء
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Logs Table / Mobile Cards -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <!-- Desktop Table (hidden on mobile < 768px) -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-right border-collapse">
+                <thead>
+                    <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] font-bold">
+                        <th class="p-3.5">التاريخ والوقت</th>
+                        <th class="p-3.5">نوع العملية</th>
+                        <th class="p-3.5">المسؤول المنفذ</th>
+                        <th class="p-3.5">المستهدف</th>
+                        <th class="p-3.5">عنوان IP</th>
+                        <th class="p-3.5">التفاصيل</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs">
+                    {% for log in logs %}
+                    <tr class="hover:bg-slate-50/60 transition-colors">
+                        <td class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            {{ log.created_at|date:"Y-m-d H:i:s" }}
+                        </td>
+                        <td class="p-3.5 whitespace-nowrap">
+                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold
+                                {% if 'ROLE' in log.action_type %}bg-purple-50 text-purple-700 border border-purple-200
+                                {% elif 'PASSWORD' in log.action_type %}bg-rose-50 text-rose-700 border border-rose-200
+                                {% elif 'STATUS' in log.action_type %}bg-amber-50 text-amber-700 border border-amber-200
+                                {% else %}bg-teal-50 text-teal-700 border border-teal-200{% endif %}">
+                                {{ log.get_action_type_display }}
+                            </span>
+                        </td>
+                        <td class="p-3.5 whitespace-nowrap">
+                            {% if log.actor %}
+                            <span class="font-bold text-slate-800">{{ log.actor.name|default:log.actor.username }}</span>
+                            {% else %}
+                            <span class="text-slate-400 italic">النظام تلقائياً</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3.5 whitespace-nowrap">
+                            {% if log.target_user %}
+                            <span class="text-slate-700">{{ log.target_user.name|default:log.target_user.username }}</span>
+                            {% elif log.target_role %}
+                            <span class="text-slate-700">دور: {{ log.target_role.display_name }}</span>
+                            {% else %}
+                            <span class="text-slate-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            {{ log.ip_address|default:"-" }}
+                        </td>
+                        <td class="p-3.5 text-slate-600 max-w-md">
+                            {{ log.description }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="p-12 text-center text-slate-400">
+                            لا توجد أحداث أمنية مسجلة مطابقة للبحث.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Card View (< 768px) -->
+        <div class="md:hidden divide-y divide-slate-100">
+            {% for log in logs %}
+            <div class="p-4 space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                        {% if 'ROLE' in log.action_type %}bg-purple-50 text-purple-700
+                        {% elif 'PASSWORD' in log.action_type %}bg-rose-50 text-rose-700
+                        {% elif 'STATUS' in log.action_type %}bg-amber-50 text-amber-700
+                        {% else %}bg-teal-50 text-teal-700{% endif %}">
+                        {{ log.get_action_type_display }}
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400">{{ log.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+
+                <div class="text-xs">
+                    <span class="font-bold text-slate-800">المنفذ: </span>
+                    <span class="text-slate-600">
+                        {% if log.actor %}{{ log.actor.name|default:log.actor.username }}{% else %}النظام تلقائياً{% endif %}
+                    </span>
+                </div>
+
+                <p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    {{ log.description }}
+                </p>
+
+                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-1">
+                    <span>IP: {{ log.ip_address|default:"-" }}</span>
+                    {% if log.target_user %}<span>مستهدف: {{ log.target_user.name|default:log.target_user.username }}</span>{% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="p-8 text-center text-slate-400 text-xs">
+                لا توجد أحداث أمنية مسجلة.
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if paginator.num_pages > 1 %}
+        <div class="p-4 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">صفحة {{ page_obj.number }} من {{ paginator.num_pages }}</span>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">السابق</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">التالي</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

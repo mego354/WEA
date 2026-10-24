@@ -1,0 +1,674 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}مركز الموافقات والاعتمادات - WEA PHARMA{% endblock %}
+
+{% block content %}
+<div class="space-y-5 pb-12">
+
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#27bebe] to-teal-400 flex items-center justify-center text-white shadow-md shadow-teal-500/20">
+                    <span class="material-symbols-outlined text-2xl">verified_user</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black text-slate-900 tracking-tight">مركز الموافقات والاعتمادات الإقليمية</h1>
+                    <p class="text-xs text-slate-500 mt-0.5">مراجعة واعتماد الزيارات الميدانية وأوامر البيع للمندوبين التابعين لنطاقك الجغرافي</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                إجمالي المعلق: {{ total_pending }}
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                زيارات معلقة: {{ pending_visits_count }}
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                طلبات معلقة: {{ pending_orders_count }}
+            </span>
+            <a href="{% url 'regional_dashboard' %}" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">
+                <span class="material-symbols-outlined text-base">dashboard</span>
+                <span>لوحة قيادة المنطقة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Navigation Tabs -->
+    <div class="flex flex-wrap border-b border-slate-200 gap-2 bg-white px-4 pt-3 rounded-t-2xl shadow-2xs">
+        <a href="?tab=visits&status={{ status_filter }}&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+           class="flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all {% if active_tab == 'visits' %}border-[#27bebe] text-[#27bebe]{% else %}border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-lg">room</span>
+            <span>الزيارات الميدانية</span>
+            {% if pending_visits_count > 0 %}
+            <span class="px-2 py-0.5 text-xs font-black rounded-full bg-amber-500 text-white shadow-2xs">
+                {{ pending_visits_count }}
+            </span>
+            {% endif %}
+        </a>
+
+        <a href="?tab=orders&status={{ status_filter }}&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+           class="flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all {% if active_tab == 'orders' %}border-[#27bebe] text-[#27bebe]{% else %}border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-lg">shopping_cart</span>
+            <span>أوامر البيع</span>
+            {% if pending_orders_count > 0 %}
+            <span class="px-2 py-0.5 text-xs font-black rounded-full bg-amber-500 text-white shadow-2xs">
+                {{ pending_orders_count }}
+            </span>
+            {% endif %}
+        </a>
+
+        <a href="?tab=audit&q={{ q }}"
+           class="flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all {% if active_tab == 'audit' %}border-[#27bebe] text-[#27bebe]{% else %}border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-lg">history</span>
+            <span>سجل تدقيق الاعتمادات</span>
+        </a>
+    </div>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="bg-white p-4 rounded-b-2xl border-x border-b border-slate-200/80 shadow-xs space-y-4">
+        <!-- Status Filter Pills -->
+        {% if active_tab != 'audit' %}
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-bold text-slate-500 ml-1">حالة الاعتماد:</span>
+                <a href="?tab={{ active_tab }}&status=pending&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if status_filter == 'pending' %}bg-amber-500 text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    قيد المراجعة والاعتماد
+                    {% if active_tab == 'visits' %}({{ pending_visits_count }}){% else %}({{ pending_orders_count }}){% endif %}
+                </a>
+                <a href="?tab={{ active_tab }}&status=approved&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if status_filter == 'approved' %}bg-emerald-600 text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    المعتمدة
+                    {% if active_tab == 'visits' %}({{ approved_visits_count }}){% else %}({{ approved_orders_count }}){% endif %}
+                </a>
+                <a href="?tab={{ active_tab }}&status=rejected&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if status_filter == 'rejected' %}bg-rose-600 text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    المرفوضة
+                    {% if active_tab == 'visits' %}({{ rejected_visits_count }}){% else %}({{ rejected_orders_count }}){% endif %}
+                </a>
+                <a href="?tab={{ active_tab }}&status=all&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}"
+                   class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if status_filter == 'all' %}bg-slate-800 text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    جميع السجلات
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Filter Form -->
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <input type="hidden" name="tab" value="{{ active_tab }}">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+
+            <!-- Search Field -->
+            <div class="relative">
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">بحث نصي</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ q }}" placeholder="بحث بالعميل، المندوب، الرقم..."
+                           class="w-full pr-8 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-all">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-base">search</span>
+                </div>
+            </div>
+
+            {% if active_tab != 'audit' %}
+            <!-- Representative Scoped Filter -->
+            <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">المندوب (نطاق منطقتك)</label>
+                <select name="representative" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white">
+                    <option value="">جميع المندوبين التابعين</option>
+                    {% for rep in managed_reps %}
+                    <option value="{{ rep.id }}" {% if rep_filter == rep.id|stringformat:"s" %}selected{% endif %}>
+                        {{ rep.get_full_name|default:rep.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Regional Area / Subregion Scoped Filter -->
+            <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">المنطقة / المحافظة</label>
+                <select name="area" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white">
+                    <option value="">جميع المناطق المتاحة</option>
+                    {% for area in managed_areas %}
+                    <option value="{{ area.id }}" {% if area_filter == area.id|stringformat:"s" %}selected{% endif %}>
+                        {% if area.area_type == 'governorate' %}📍 المحافظة: {{ area.name }}{% else %}&nbsp;&nbsp;↳ {{ area.name }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Date From -->
+            <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">من تاريخ</label>
+                <input type="date" name="date_from" value="{{ date_from }}"
+                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white">
+            </div>
+
+            <!-- Date To -->
+            <div>
+                <label class="block text-[11px] font-bold text-slate-500 mb-1">إلى تاريخ</label>
+                <div class="flex items-center gap-2">
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white">
+                    <button type="submit" class="px-3.5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold transition-all shadow-2xs">
+                        تطبيق
+                    </button>
+                    {% if q or rep_filter or area_filter or date_from or date_to %}
+                    <a href="?tab={{ active_tab }}&status={{ status_filter }}" class="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100" title="إعادة تعيين">
+                        <span class="material-symbols-outlined text-base">restart_alt</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="flex items-end">
+                <button type="submit" class="px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold transition-all">
+                    بحث في السجل
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Data Presentation: Tab 1 - Visits -->
+    {% if active_tab == 'visits' %}
+        {% if page_obj and page_obj.object_list %}
+        <!-- Desktop Table View -->
+        <div class="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs font-bold">
+                            <th class="py-3 px-4">رقم الزيارة</th>
+                            <th class="py-3 px-4">العميل</th>
+                            <th class="py-3 px-4">المنطقة</th>
+                            <th class="py-3 px-4">المندوب</th>
+                            <th class="py-3 px-4">القالب المستخدم</th>
+                            <th class="py-3 px-4">التاريخ والمدة</th>
+                            <th class="py-3 px-4">الحالة</th>
+                            <th class="py-3 px-4 text-center">إجراءات المراجعة</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                        {% for visit in page_obj.object_list %}
+                        <tr class="hover:bg-teal-50/20 transition-colors">
+                            <td class="py-3.5 px-4 font-bold text-slate-900">
+                                <a href="{% url 'visit_detail' visit.pk %}" class="text-[#27bebe] hover:underline font-black">
+                                    #{{ visit.serial_num }}
+                                </a>
+                                <span class="block text-[10px] text-slate-400">{{ visit.plan_type_display_ar }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="font-bold text-slate-900 block">{{ visit.contact.name }}</span>
+                                <span class="text-[10px] text-slate-500 font-mono">{{ visit.contact.code|default:"-" }} · {{ visit.contact.account_type|default:"عميل" }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="inline-flex items-center gap-1 text-slate-600">
+                                    <span class="material-symbols-outlined text-xs text-slate-400">location_on</span>
+                                    {{ visit.contact.area.name|default:"غير محدد" }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="font-bold text-slate-800">{{ visit.owner.get_full_name|default:visit.owner.username }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px]">
+                                    {{ visit.template.display_name_ar|default:"زيارة عامة" }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <div>{{ visit.date|date:"Y-m-d" }}</div>
+                                <span class="text-[10px] text-slate-400">{{ visit.duration }} ثانية</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border {{ visit.approval_badge_class }}">
+                                    {{ visit.approval_display_ar }}
+                                </span>
+                                {% if visit.approval_notes %}
+                                <span class="block text-[10px] text-slate-500 truncate max-w-[150px]" title="{{ visit.approval_notes }}">
+                                    ملاحظة: {{ visit.approval_notes }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                <div class="inline-flex items-center gap-1.5 justify-center">
+                                    <a href="{% url 'visit_detail' visit.pk %}" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors" title="عرض التفاصيل">
+                                        عرض
+                                    </a>
+                                    {% if visit.approval_status == 'pending' and can_approve_visits %}
+                                        <button type="button" onclick="openApproveModal('visit', '{{ visit.pk }}', '#{{ visit.serial_num }} - {{ visit.contact.name|escapejs }}')"
+                                                class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs">
+                                            اعتماد
+                                        </button>
+                                        <button type="button" onclick="openRejectModal('visit', '{{ visit.pk }}', '#{{ visit.serial_num }} - {{ visit.contact.name|escapejs }}')"
+                                                class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
+                                            رفض
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mobile Responsive Cards View (Touch-friendly 320px–430px) -->
+        <div class="block md:hidden space-y-3">
+            {% for visit in page_obj.object_list %}
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'visit_detail' visit.pk %}" class="text-sm font-black text-[#27bebe]">
+                                #{{ visit.serial_num }}
+                            </a>
+                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold {{ visit.approval_badge_class }}">
+                                {{ visit.approval_display_ar }}
+                            </span>
+                        </div>
+                        <h3 class="font-bold text-slate-900 text-sm mt-0.5">{{ visit.contact.name }}</h3>
+                        <p class="text-[11px] text-slate-500">{{ visit.contact.area.name|default:"المنطقة غير محددة" }} · {{ visit.contact.account_type|default:"عميل" }}</p>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono">{{ visit.date|date:"Y-m-d" }}</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl">
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">المندوب المسؤول</span>
+                        <span class="font-bold text-slate-800">{{ visit.owner.get_full_name|default:visit.owner.username }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">قالب الزيارة</span>
+                        <span class="font-bold text-slate-800 truncate block">{{ visit.template.display_name_ar|default:"عام" }}</span>
+                    </div>
+                </div>
+
+                {% if visit.approval_notes %}
+                <div class="p-2 bg-rose-50 border border-rose-100 rounded-xl text-[11px] text-rose-800">
+                    <span class="font-bold">ملاحظات / سبب الرفض:</span> {{ visit.approval_notes }}
+                </div>
+                {% endif %}
+
+                <!-- Action Buttons: Minimum 44px touch targets -->
+                <div class="flex items-center gap-2 pt-1">
+                    <a href="{% url 'visit_detail' visit.pk %}" class="flex-1 min-h-[44px] flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">
+                        التفاصيل
+                    </a>
+                    {% if visit.approval_status == 'pending' and can_approve_visits %}
+                    <button type="button" onclick="openApproveModal('visit', '{{ visit.pk }}', '#{{ visit.serial_num }} - {{ visit.contact.name|escapejs }}')"
+                            class="flex-1 min-h-[44px] flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors">
+                        اعتماد
+                    </button>
+                    <button type="button" onclick="openRejectModal('visit', '{{ visit.pk }}', '#{{ visit.serial_num }} - {{ visit.contact.name|escapejs }}')"
+                            class="flex-1 min-h-[44px] flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-colors">
+                        رفض
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-2xl p-12 text-center border border-slate-200">
+            <span class="material-symbols-outlined text-5xl text-slate-300">task_alt</span>
+            <h3 class="text-base font-bold text-slate-800 mt-2">لا توجد زيارات تطابق معايير الفلترة المحددة</h3>
+            <p class="text-xs text-slate-500 mt-1">يمكنك تغيير حالة الفلتر أو البحث لعرض سجلات أخرى.</p>
+        </div>
+        {% endif %}
+
+    <!-- Data Presentation: Tab 2 - Sales Orders -->
+    {% elif active_tab == 'orders' %}
+        {% if page_obj and page_obj.object_list %}
+        <!-- Desktop Table View -->
+        <div class="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs font-bold">
+                            <th class="py-3 px-4">رقم الطلب</th>
+                            <th class="py-3 px-4">العميل</th>
+                            <th class="py-3 px-4">المندوب المنشئ</th>
+                            <th class="py-3 px-4">المستودع</th>
+                            <th class="py-3 px-4">القيمة الإجمالية</th>
+                            <th class="py-3 px-4">تاريخ الإنشاء</th>
+                            <th class="py-3 px-4">الحالة</th>
+                            <th class="py-3 px-4 text-center">إجراءات المراجعة</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                        {% for order in page_obj.object_list %}
+                        <tr class="hover:bg-teal-50/20 transition-colors">
+                            <td class="py-3.5 px-4 font-bold text-slate-900">
+                                <a href="{% url 'sales_order_detail' order.pk %}" class="text-[#27bebe] hover:underline font-black">
+                                    {{ order.order_number }}
+                                </a>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="font-bold text-slate-900 block">{{ order.customer.name }}</span>
+                                <span class="text-[10px] text-slate-500 font-mono">{{ order.customer.code|default:"-" }} · {{ order.customer.area.name|default:"غير محدد" }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="font-bold text-slate-800">{{ order.created_by.get_full_name|default:order.created_by.username }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px]">
+                                    {{ order.warehouse.name|default:"الرئيسي" }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="font-bold text-slate-900">{{ order.total|floatformat:2|intcomma }} ر.س</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <div>{{ order.created_at|date:"Y-m-d" }}</div>
+                                <span class="text-[10px] text-slate-400">{{ order.created_at|date:"H:i" }}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border {{ order.status_badge_class }}">
+                                    {{ order.status_display_ar }}
+                                </span>
+                                {% if order.rejection_reason %}
+                                <span class="block text-[10px] text-rose-600 truncate max-w-[150px]" title="{{ order.rejection_reason }}">
+                                    السبب: {{ order.rejection_reason }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                <div class="inline-flex items-center gap-1.5 justify-center">
+                                    <a href="{% url 'sales_order_detail' order.pk %}" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors">
+                                        عرض
+                                    </a>
+                                    {% if order.status == 'pending' and can_approve_orders %}
+                                        <button type="button" onclick="openApproveModal('order', '{{ order.pk }}', '{{ order.order_number }} - {{ order.customer.name|escapejs }}')"
+                                                class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs">
+                                            اعتماد
+                                        </button>
+                                        <button type="button" onclick="openRejectModal('order', '{{ order.pk }}', '{{ order.order_number }} - {{ order.customer.name|escapejs }}')"
+                                                class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
+                                            رفض
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mobile Responsive Cards View (320px–430px) -->
+        <div class="block md:hidden space-y-3">
+            {% for order in page_obj.object_list %}
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'sales_order_detail' order.pk %}" class="text-sm font-black text-[#27bebe]">
+                                {{ order.order_number }}
+                            </a>
+                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold {{ order.status_badge_class }}">
+                                {{ order.status_display_ar }}
+                            </span>
+                        </div>
+                        <h3 class="font-bold text-slate-900 text-sm mt-0.5">{{ order.customer.name }}</h3>
+                        <p class="text-[11px] text-slate-500">{{ order.customer.area.name|default:"المنطقة غير محددة" }}</p>
+                    </div>
+                    <span class="text-xs font-black text-slate-900">{{ order.total|floatformat:2|intcomma }} ر.س</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl">
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">المندوب المنشئ</span>
+                        <span class="font-bold text-slate-800">{{ order.created_by.get_full_name|default:order.created_by.username }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">تاريخ الإنشاء</span>
+                        <span class="font-bold text-slate-800">{{ order.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+
+                {% if order.rejection_reason %}
+                <div class="p-2 bg-rose-50 border border-rose-100 rounded-xl text-[11px] text-rose-800">
+                    <span class="font-bold">سبب الرفض:</span> {{ order.rejection_reason }}
+                </div>
+                {% endif %}
+
+                <!-- Touch-friendly actions min 44px -->
+                <div class="flex items-center gap-2 pt-1">
+                    <a href="{% url 'sales_order_detail' order.pk %}" class="flex-1 min-h-[44px] flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">
+                        التفاصيل
+                    </a>
+                    {% if order.status == 'pending' and can_approve_orders %}
+                    <button type="button" onclick="openApproveModal('order', '{{ order.pk }}', '{{ order.order_number }} - {{ order.customer.name|escapejs }}')"
+                            class="flex-1 min-h-[44px] flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors">
+                        اعتماد
+                    </button>
+                    <button type="button" onclick="openRejectModal('order', '{{ order.pk }}', '{{ order.order_number }} - {{ order.customer.name|escapejs }}')"
+                            class="flex-1 min-h-[44px] flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-colors">
+                        رفض
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-2xl p-12 text-center border border-slate-200">
+            <span class="material-symbols-outlined text-5xl text-slate-300">order_approve</span>
+            <h3 class="text-base font-bold text-slate-800 mt-2">لا توجد أوامر بيع تطابق معايير الفلترة المحددة</h3>
+            <p class="text-xs text-slate-500 mt-1">تأكد من اختيار الحالة المطلوبة أو المندوب التابع.</p>
+        </div>
+        {% endif %}
+
+    <!-- Data Presentation: Tab 3 - Approval Audit Log -->
+    {% elif active_tab == 'audit' %}
+        {% if page_obj and page_obj.object_list %}
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-right border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold">
+                            <th class="py-3 px-4">التاريخ والوقت</th>
+                            <th class="py-3 px-4">نوع السجل</th>
+                            <th class="py-3 px-4">السجل المستهدف</th>
+                            <th class="py-3 px-4">الإجراء</th>
+                            <th class="py-3 px-4">المستخدم المنفذ</th>
+                            <th class="py-3 px-4">الحالة (قبل ➔ بعد)</th>
+                            <th class="py-3 px-4">السبب / الملاحظات</th>
+                            <th class="py-3 px-4">IP</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                        {% for log in page_obj.object_list %}
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="py-3 px-4 font-mono text-[11px] text-slate-500">
+                                {{ log.created_at|date:"Y-m-d H:i:s" }}
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded-md font-bold text-[10px] {% if log.record_type == 'visit' %}bg-teal-50 text-teal-700 border border-teal-200{% else %}bg-blue-50 text-blue-700 border border-blue-200{% endif %}">
+                                    {{ log.get_record_type_display }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 font-bold text-slate-900">
+                                {% if log.visit %}
+                                    <a href="{% url 'visit_detail' log.visit.pk %}" class="text-[#27bebe] hover:underline">
+                                        زيارة #{{ log.visit.serial_num }} ({{ log.visit.contact.name }})
+                                    </a>
+                                {% elif log.sales_order %}
+                                    <a href="{% url 'sales_order_detail' log.sales_order.pk %}" class="text-blue-600 hover:underline">
+                                        طلب {{ log.sales_order.order_number }} ({{ log.sales_order.customer.name }})
+                                    </a>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded-full font-bold text-[10px]
+                                    {% if log.action == 'approved' %}bg-emerald-100 text-emerald-800
+                                    {% elif log.action == 'rejected' %}bg-rose-100 text-rose-800
+                                    {% elif log.action == 'resubmitted' %}bg-sky-100 text-sky-800
+                                    {% else %}bg-amber-100 text-amber-800{% endif %}">
+                                    {{ log.get_action_display }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 font-bold text-slate-800">
+                                {{ log.actor.get_full_name|default:log.actor.username|default:"النظام" }}
+                            </td>
+                            <td class="py-3 px-4 font-mono text-[11px] text-slate-500">
+                                {{ log.status_before|default:"-" }} ➔ {{ log.status_after|default:"-" }}
+                            </td>
+                            <td class="py-3 px-4 text-slate-600 max-w-xs truncate" title="{{ log.reason }}">
+                                {{ log.reason|default:"-" }}
+                            </td>
+                            <td class="py-3 px-4 font-mono text-[10px] text-slate-400">
+                                {{ log.ip_address|default:"-" }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-white rounded-2xl p-12 text-center border border-slate-200">
+            <span class="material-symbols-outlined text-5xl text-slate-300">history</span>
+            <h3 class="text-base font-bold text-slate-800 mt-2">لا توجد حركات تدقيق مسجلة حتى الآن</h3>
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <!-- Server-Side Pagination Controls -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div class="text-xs text-slate-500">
+            عرض <span class="font-bold text-slate-800">{{ page_obj.start_index }}</span> إلى <span class="font-bold text-slate-800">{{ page_obj.end_index }}</span> من إجمالي <span class="font-bold text-slate-800">{{ paginator.count }}</span> سجل
+        </div>
+        <div class="flex items-center gap-1.5">
+            {% if page_obj.has_previous %}
+            <a href="?tab={{ active_tab }}&status={{ status_filter }}&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page_obj.previous_page_number }}"
+               class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                السابق
+            </a>
+            {% endif %}
+            <span class="px-3 py-1.5 text-xs font-bold text-[#27bebe] bg-teal-50 rounded-lg border border-teal-200">
+                {{ page_obj.number }} / {{ paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?tab={{ active_tab }}&status={{ status_filter }}&representative={{ rep_filter }}&area={{ area_filter }}&q={{ q }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page_obj.next_page_number }}"
+               class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                التالي
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- APPROVAL MODAL -->
+<div id="approveModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">check_circle</span>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">تأكيد الاعتماد والموافقة</h3>
+                <p id="approveModalTarget" class="text-xs text-slate-500 font-medium"></p>
+            </div>
+        </div>
+
+        <form id="approveForm" method="POST">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">ملاحظات الاعتماد (اختياري)</label>
+                <textarea name="approval_notes" rows="2" placeholder="أدخل أي ملاحظات توجيهية للمندوب..."
+                          class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-3">
+                <button type="button" onclick="closeApproveModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl min-h-[44px]">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm min-h-[44px]">
+                    تأكيد الاعتماد الآن
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- REJECT MODAL (MANDATORY REASON) -->
+<div id="rejectModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">cancel</span>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">رفض السجل وإعادته للتصحيح</h3>
+                <p id="rejectModalTarget" class="text-xs text-slate-500 font-medium"></p>
+            </div>
+        </div>
+
+        <form id="rejectForm" method="POST">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">
+                    سبب الرفض والتعديلات المطلوبة <span class="text-rose-500 font-black">*</span>
+                </label>
+                <textarea id="rejectionReasonInput" name="reason" rows="3" required placeholder="يرجى توضيح سبب الرفض بدقة لتمكين المندوب من تصحيح السجل وإعادة تقديمه..."
+                          class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-3">
+                <button type="button" onclick="closeRejectModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl min-h-[44px]">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm min-h-[44px]">
+                    رفض وإرسال الملاحظات
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openApproveModal(type, id, targetName) {
+    document.getElementById('approveModalTarget').innerText = targetName;
+    const form = document.getElementById('approveForm');
+    if (type === 'visit') {
+        form.action = `/visits/${id}/action/approve/`;
+    } else {
+        form.action = `/sales/${id}/action/approve/`;
+    }
+    document.getElementById('approveModal').classList.remove('hidden');
+}
+
+function closeApproveModal() {
+    document.getElementById('approveModal').classList.add('hidden');
+}
+
+function openRejectModal(type, id, targetName) {
+    document.getElementById('rejectModalTarget').innerText = targetName;
+    const form = document.getElementById('rejectForm');
+    document.getElementById('rejectionReasonInput').value = '';
+    if (type === 'visit') {
+        form.action = `/visits/${id}/action/disapprove/`;
+    } else {
+        form.action = `/sales/${id}/action/reject/`;
+    }
+    document.getElementById('rejectModal').classList.remove('hidden');
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}غير مصرح بالوصول (403 Forbidden) - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-rose-600">خطأ في الصلاحيات (403)</span>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-white rounded-2xl border border-slate-200/80 shadow-xl p-8 text-center space-y-6">
+        <div class="w-20 h-20 mx-auto rounded-3xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shadow-inner">
+            <span class="material-symbols-outlined text-4xl">lock</span>
+        </div>
+
+        <div class="space-y-2">
+            <h1 class="text-2xl font-bold text-slate-900">عذراً، الوصول غير مصرح</h1>
+            <p class="text-sm text-slate-500 leading-relaxed">
+                لا تمتلك الصلاحية الكافية للوصول إلى هذه الصفحة أو تنفيذ هذا الإجراء. إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع مسؤول النظام الأعلى لتعديل صلاحيات دورك الوظيفي.
+            </p>
+        </div>
+
+        {% if perm_codename %}
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-600">
+            مفتاح الصلاحية المطلوبة: <span class="text-rose-600 font-bold">{{ perm_codename }}</span>
+        </div>
+        {% endif %}
+
+        <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button onclick="history.back()" type="button" class="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>الرجوع للخلف</span>
+            </button>
+            <a href="{% url 'home' %}" class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold shadow-md shadow-teal-500/20 transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-base">home</span>
+                <span>الرئيسية</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

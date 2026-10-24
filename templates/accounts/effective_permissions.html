@@ -1,0 +1,184 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}فحص الصلاحيات الفعلية: {{ target_user.name }} - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'users_list' %}" class="hover:text-[#27bebe] transition-colors">المستخدمون</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">فحص الصلاحيات الفعلية</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-bold text-[#27bebe] flex items-center gap-2">
+                <span class="material-symbols-outlined">rule</span>
+                <span>فحص الصلاحيات الفعلية للمستخدم</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">عرض الصلاحيات المطبقة فعلياً على حساب المستخدم بناءً على الدور الوظيفي وقواعد الوراثة الهرمية.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'user_edit' target_user.pk %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل المستخدم</span>
+            </a>
+            <a href="{% url 'users_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>قائمة المستخدمين</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- User Dossier Summary Card -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-full bg-teal-50 text-[#27bebe] border border-teal-200 flex items-center justify-center font-bold text-lg">
+                    {{ target_user.name|default:target_user.username|slice:":2" }}
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">{{ target_user.name }}</h2>
+                    <p class="text-xs text-slate-500 font-mono">{{ target_user.email }}</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                {% if target_user.is_superuser or target_user.is_super_admin %}
+                <span class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-full flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">stars</span>
+                    <span>مدير نظام أعلى (SuperAdmin)</span>
+                </span>
+                {% endif %}
+
+                {% if target_user.is_active %}
+                <span class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-full flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                    <span>الحساب نشط</span>
+                </span>
+                {% else %}
+                <span class="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold rounded-full flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">cancel</span>
+                    <span>الحساب معطل</span>
+                </span>
+                {% endif %}
+
+                <span class="px-3 py-1 bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold rounded-full">
+                    الدور: {{ target_user.role.display_name|default:"غير محدد" }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Role Attributes & Assigned Areas -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-xs">
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                <span class="font-bold text-slate-700 block">المناطق الجغرافية المعينة:</span>
+                <div class="flex flex-wrap gap-1.5">
+                    {% for area in target_user.assigned_areas.all %}
+                    <span class="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-slate-700 font-semibold text-[11px]">{{ area.name }}</span>
+                    {% empty %}
+                    <span class="text-slate-400">لا توجد مناطق جغرافية معينة (رؤية عامة).</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                <span class="font-bold text-slate-700 block">سمات الدور والعلامات:</span>
+                <div class="flex flex-wrap gap-1.5">
+                    {% if target_user.role.is_sales_team %}<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">فريق مبيعات</span>{% endif %}
+                    {% if target_user.role.is_area_manager %}<span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">مدير منطقة</span>{% endif %}
+                    {% if target_user.role.is_rep %}<span class="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">مندوب</span>{% endif %}
+                    {% if target_user.role.can_hold_vault %}<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">عهدة نقدية</span>{% endif %}
+                    {% if target_user.can_bypass_location %}<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">تجاوز الـ GPS</span>{% endif %}
+                    {% for tag in target_user.role.tags.all %}
+                    <span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[10px]">{{ tag.tag }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Effective Permissions Matrix -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+                <h2 class="text-xl font-bold text-[#27bebe] flex items-center gap-2">
+                    <span class="material-symbols-outlined">security</span>
+                    <span>جدول الصلاحيات الفعالة (Effective Permissions)</span>
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">الصلاحيات المضاءة بالأخضر هي المتاحة فعلياً لهذا المستخدم في النظام.</p>
+            </div>
+            <span class="text-xs font-bold px-3 py-1 bg-teal-50 text-[#27bebe] rounded-full border border-teal-200">
+                إجمالي المتاح: {{ effective_codenames|length }}
+            </span>
+        </div>
+
+        <div class="space-y-4">
+            {% for mod in modules_tree %}
+            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                <!-- Module Header -->
+                <div class="p-3.5 bg-slate-50 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="material-symbols-outlined text-xl text-[#27bebe]">{{ mod.icon }}</span>
+                        <span class="text-sm font-bold text-slate-800">{{ mod.name_ar }}</span>
+                    </div>
+
+                    {% if mod.root_perm.codename in effective_codenames %}
+                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">check</span>
+                        <span>الموديول مفعل</span>
+                    </span>
+                    {% else %}
+                    <span class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-xs font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">close</span>
+                        <span>الموديول محجوب</span>
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Pages & Actions -->
+                <div class="p-4 space-y-3">
+                    {% for page in mod.pages %}
+                    <div class="bg-slate-50/60 p-3 rounded-lg border border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm text-slate-400">subdirectory_arrow_left</span>
+                            <span>{{ page.name_ar }}</span>
+                        </h4>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {% for act in page.actions %}
+                            {% if act.codename in effective_codenames %}
+                            <div class="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between text-right">
+                                <div class="overflow-hidden">
+                                    <span class="text-xs font-bold text-emerald-900 block truncate">{{ act.name }}</span>
+                                    <span class="text-[10px] font-mono text-emerald-600 block truncate" dir="ltr">{{ act.codename }}</span>
+                                </div>
+                                <span class="material-symbols-outlined text-emerald-600 text-base shrink-0">check_circle</span>
+                            </div>
+                            {% else %}
+                            <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/60 flex items-center justify-between text-right opacity-60">
+                                <div class="overflow-hidden">
+                                    <span class="text-xs text-slate-500 block truncate">{{ act.name }}</span>
+                                    <span class="text-[10px] font-mono text-slate-400 block truncate" dir="ltr">{{ act.codename }}</span>
+                                </div>
+                                <span class="material-symbols-outlined text-slate-400 text-base shrink-0">block</span>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

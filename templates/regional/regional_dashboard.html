@@ -1,0 +1,299 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}لوحة قيادة المنطقة - WEA PHARMA{% endblock %}
+
+{% block content %}
+<div class="space-y-6 pb-12">
+
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                <span class="material-symbols-outlined text-3xl">map</span>
+            </div>
+            <div>
+                <h1 class="text-xl font-black text-slate-900 tracking-tight">لوحة قيادة المنطقة والمسؤولية الإقليمية</h1>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    إدارة ومتابعة المندوبين، الزيارات، المبيعات والتحصيلات في النطاق الجغرافي المخصص
+                </p>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'approvals_hub' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs min-h-[44px]">
+                <span class="material-symbols-outlined text-base">verified_user</span>
+                <span>طابور الموافقات</span>
+                {% if pending_visits > 0 or pending_orders > 0 %}
+                <span class="px-2 py-0.5 rounded-full bg-white text-amber-800 text-[10px] font-black">
+                    {{ pending_visits|add:pending_orders }}
+                </span>
+                {% endif %}
+            </a>
+            <a href="{% url 'visits_list' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">room</span>
+                <span>سجل الزيارات</span>
+            </a>
+            <a href="{% url 'sales_orders_list' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">shopping_cart</span>
+                <span>أوامر البيع</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Subregion Filter Bar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-slate-500 ml-1">تصفية حسب المنطقة الفرعية:</span>
+            <a href="?" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if not selected_subregion %}bg-[#27bebe] text-white shadow-xs{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                كامل نطاق المنطقة (الكل)
+            </a>
+            {% for sub in subareas %}
+            <a href="?subregion={{ sub.id }}" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all {% if selected_subregion.id == sub.id %}bg-[#27bebe] text-white shadow-xs{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                📍 {{ sub.name }} {% if sub.parent %}<span class="text-[10px] opacity-75">({{ sub.parent.name }})</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% if selected_subregion %}
+        <div class="text-xs font-bold text-slate-500">
+            العرض الحالي: <span class="text-[#27bebe] font-black">{{ selected_subregion.name }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Regional KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Managed Reps -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold text-slate-400">المندوبين التابعين</p>
+                <h3 class="text-2xl font-black text-slate-900 mt-1">{{ total_reps }}</h3>
+                <p class="text-[11px] text-teal-600 mt-0.5 font-bold">بكامل المناطق الفرعية</p>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-teal-50 text-[#27bebe] flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">badge</span>
+            </div>
+        </div>
+
+        <!-- Registered Contacts -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold text-slate-400">العملاء في النطاق</p>
+                <h3 class="text-2xl font-black text-slate-900 mt-1">{{ total_contacts }}</h3>
+                <p class="text-[11px] text-slate-500 mt-0.5">صيدليات، عيادات، مراكز</p>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">contacts</span>
+            </div>
+        </div>
+
+        <!-- Field Visits & Approvals -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold text-slate-400">إجمالي الزيارات الميدانية</p>
+                <h3 class="text-2xl font-black text-slate-900 mt-1">{{ total_visits }}</h3>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                    <span class="text-[11px] font-bold text-amber-600">{{ pending_visits }} قيد الاعتماد</span>
+                    <span class="text-[10px] text-slate-300">·</span>
+                    <span class="text-[11px] font-bold text-emerald-600">{{ approved_visits }} معتمدة</span>
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">room</span>
+            </div>
+        </div>
+
+        <!-- Sales Orders & Financials -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold text-slate-400">المبيعات المعتمدة</p>
+                <h3 class="text-xl font-black text-slate-900 mt-1">{{ total_sales_value|floatformat:0|intcomma }} ر.س</h3>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                    <span class="text-[11px] font-bold text-amber-600">{{ pending_orders }} طلب معلق</span>
+                    <span class="text-[10px] text-slate-300">·</span>
+                    <span class="text-[11px] font-bold text-slate-500">{{ total_orders_count }} طلب كلي</span>
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">payments</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Managed Representatives Performance Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <div>
+                <h2 class="text-base font-bold text-slate-900">المندوبين تحت الإشراف الإقليمي</h2>
+                <p class="text-xs text-slate-500 mt-0.5">مؤشرات الأداء الميداني والمالي للمندوبين الموزعين على مناطق المحافظة</p>
+            </div>
+            <span class="px-3 py-1 bg-teal-50 text-[#27bebe] font-bold text-xs rounded-full border border-teal-200">
+                {{ reps_data|length }} مندوب
+            </span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+                <thead>
+                    <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold">
+                        <th class="py-3.5 px-4">المندوب</th>
+                        <th class="py-3.5 px-4">المنطقة المعينة</th>
+                        <th class="py-3.5 px-4 text-center">الزيارات (إجمالي / معلق)</th>
+                        <th class="py-3.5 px-4 text-center">الطلبات (إجمالي / معلق)</th>
+                        <th class="py-3.5 px-4">المبيعات المعتمدة</th>
+                        <th class="py-3.5 px-4">التحصيلات المعتمدة</th>
+                        <th class="py-3.5 px-4">آخر نشاط</th>
+                        <th class="py-3.5 px-4 text-center">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                    {% for item in reps_data %}
+                    <tr class="hover:bg-slate-50/50 transition-colors">
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-700 to-slate-900 text-white font-bold flex items-center justify-center text-xs">
+                                    {{ item.name|slice:":1"|upper }}
+                                </div>
+                                <div>
+                                    <span class="font-bold text-slate-900 block">{{ item.name }}</span>
+                                    <span class="text-[10px] text-slate-400 font-mono">@{{ item.user.username }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            {% if item.assigned_area %}
+                            <span class="inline-flex items-center gap-1 text-slate-700">
+                                <span class="material-symbols-outlined text-xs text-[#27bebe]">location_on</span>
+                                {{ item.assigned_area.name }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 italic">غير محدد</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="font-bold text-slate-900">{{ item.visits_total }}</span>
+                            {% if item.visits_pending > 0 %}
+                            <span class="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold mr-1">
+                                {{ item.visits_pending }} معلق
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="font-bold text-slate-900">{{ item.orders_total }}</span>
+                            {% if item.orders_pending > 0 %}
+                            <span class="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold mr-1">
+                                {{ item.orders_pending }} معلق
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ item.sales_amount|floatformat:2|intcomma }} ر.س
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-emerald-700">
+                            {{ item.collections_amount|floatformat:2|intcomma }} ر.س
+                        </td>
+                        <td class="py-3.5 px-4 font-mono text-slate-500">
+                            {{ item.last_active|date:"Y-m-d"|default:"لا يوجد" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <div class="inline-flex items-center gap-1 justify-center">
+                                <a href="{% url 'approvals_hub' %}?representative={{ item.user.id }}" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg transition-colors" title="فحص الموافقات للمندوب">
+                                    موافقات ({{ item.visits_pending|add:item.orders_pending }})
+                                </a>
+                                <a href="{% url 'visits_list' %}?owner={{ item.user.id }}" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors" title="سجل الزيارات">
+                                    زيارات
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="py-8 text-center text-slate-400">
+                            لا يوجد مندوبين مسجلين تحت هذا النطاق الإقليمي حالياً.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Review Grid for Pending Items -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <!-- Recent Pending Visits -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-amber-600">notification_important</span>
+                    <h3 class="text-sm font-bold text-slate-900">أحدث الزيارات المعلقة للاعتماد</h3>
+                </div>
+                <a href="{% url 'approvals_hub' %}?tab=visits&status=pending" class="text-xs font-bold text-[#27bebe] hover:underline">
+                    عرض الكل ({{ pending_visits }})
+                </a>
+            </div>
+
+            <div class="space-y-2">
+                {% for visit in recent_pending_visits %}
+                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-teal-50/30 transition-colors border border-slate-100">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'visit_detail' visit.pk %}" class="font-bold text-xs text-slate-900 hover:text-[#27bebe]">
+                                #{{ visit.serial_num }} · {{ visit.contact.name }}
+                            </a>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            بواسطة: {{ visit.owner.get_full_name|default:visit.owner.username }} · {{ visit.date|date:"Y-m-d" }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <a href="{% url 'visit_detail' visit.pk %}" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+                            فحص
+                        </a>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 text-center py-4">لا توجد زيارات معلقة للاعتماد في هذا النطاق.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recent Pending Sales Orders -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600">pending_actions</span>
+                    <h3 class="text-sm font-bold text-slate-900">أحدث أوامر البيع المعلقة للاعتماد</h3>
+                </div>
+                <a href="{% url 'approvals_hub' %}?tab=orders&status=pending" class="text-xs font-bold text-[#27bebe] hover:underline">
+                    عرض الكل ({{ pending_orders }})
+                </a>
+            </div>
+
+            <div class="space-y-2">
+                {% for order in recent_pending_orders %}
+                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/30 transition-colors border border-slate-100">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'sales_order_detail' order.pk %}" class="font-bold text-xs text-slate-900 hover:text-[#27bebe]">
+                                {{ order.order_number }} · {{ order.customer.name }}
+                            </a>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            القيمة: <span class="font-bold text-slate-800">{{ order.total|floatformat:2|intcomma }} ر.س</span> · بواسطة: {{ order.created_by.get_full_name|default:order.created_by.username }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <a href="{% url 'sales_order_detail' order.pk %}" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+                            فحص
+                        </a>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 text-center py-4">لا توجد أوامر بيع معلقة للاعتماد في هذا النطاق.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -4,10 +4,11 @@ from django.contrib import messages
 from django.db.models import Q, Count
 from master_data.excel_utils import export_to_excel_response
 from master_data.pagination_utils import paginate_queryset
+from accounts.permissions import require_permission
 from .models import Warehouse, InventoryStock, InventoryLot, InventoryMemo
 
 
-@login_required
+@require_permission('inventory:stocks/view')
 def inventory_stock_list(request):
     warehouse_id = request.GET.get('warehouse')
     search = request.GET.get('search', '').strip()
@@ -45,7 +46,7 @@ def inventory_stock_list(request):
     return render(request, 'inventory/stock_list.html', context)
 
 
-@login_required
+@require_permission('inventory:stocks/export')
 def inventory_stock_export(request):
     warehouse_id = request.GET.get('warehouse')
     search = request.GET.get('search', '').strip()
@@ -78,7 +79,7 @@ def inventory_stock_export(request):
     return export_to_excel_response(qs, columns, filename="inventory_stock_export", sheet_title="أرصدة المخزون")
 
 
-@login_required
+@require_permission('inventory:warehouses/manage')
 def warehouses_list(request):
     search = request.GET.get('search', '').strip()
     qs = Warehouse.objects.select_related('manager').all().order_by('name')
@@ -110,7 +111,7 @@ def warehouses_list(request):
     return render(request, 'inventory/warehouses_list.html', context)
 
 
-@login_required
+@require_permission('inventory:memos/manage')
 def inventory_memos_list(request):
     search = request.GET.get('search', '').strip()
     warehouse_id = request.GET.get('warehouse')

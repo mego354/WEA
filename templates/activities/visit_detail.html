@@ -1,124 +1,522 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize static %}
 
 {% block title %}زيارة #{{ visit.serial_num }} - Bricks Rep{% endblock %}
 
+{% block extra_head %}
+<style>
+    .photo-preview-container {
+        position: relative;
+        border-radius: 1rem;
+        overflow: hidden;
+        border: 2px dashed #cbd5e1;
+        background-color: #f8fafc;
+        transition: all 0.2s ease;
+    }
+    .photo-preview-container.has-image {
+        border-style: solid;
+        border-color: #27bebe;
+        background-color: #ffffff;
+    }
+    .photo-preview-img {
+        width: 100%;
+        max-height: 280px;
+        object-fit: cover;
+        border-radius: 0.75rem;
+    }
+    .gps-pulse {
+        animation: gpsPulse 2s infinite;
+    }
+    @keyframes gpsPulse {
+        0% { transform: scale(0.95); opacity: 0.8; }
+        50% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(0.95); opacity: 0.8; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-5xl mx-auto space-y-6 pb-16">
 
     <!-- Top Navigation & Action Header -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div class="flex items-center gap-3">
-            <a href="{% url 'visits_list' %}" class="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors">
+            <a href="{% url 'visits_list' %}" class="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </a>
             <div>
-                <div class="flex items-center gap-2.5">
+                <div class="flex flex-wrap items-center gap-2">
                     <h1 class="text-2xl font-black text-slate-900 tracking-tight">زيارة #{{ visit.serial_num }}</h1>
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ visit.approval_badge_class }}">
+                    <!-- Status Badge -->
+                    <span class="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-bold border {{ visit.status_badge_class }}">
+                        {{ visit.status_display_ar }}
+                    </span>
+                    <!-- Plan Type Badge (Requirement 5) -->
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border {{ visit.plan_type_badge_class }}">
+                        {{ visit.plan_type_display_ar }}
+                    </span>
+                    <!-- Approval Badge -->
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border {{ visit.approval_badge_class }}">
                         {{ visit.approval_display_ar }}
                     </span>
-                    {% if visit.is_planned %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#27bebe] border border-teal-200">
-                        مخططة
-                    </span>
-                    {% else %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                        غير مخططة
-                    </span>
-                    {% endif %}
                 </div>
-                <p class="text-xs text-slate-500 font-medium mt-0.5">
-                    {{ visit.contact.name }} • {{ visit.date|date:"d/m/Y" }}
+                <p class="text-xs text-slate-500 font-medium mt-1">
+                    {{ visit.contact.name }} • {{ visit.date|date:"d/m/Y" }} • المسؤول: {{ visit.owner.get_full_name|default:visit.owner.username }}
                 </p>
             </div>
         </div>
 
-        <!-- Manager Approval Action Buttons -->
+        <!-- Top Header Action Buttons -->
         <div class="flex flex-wrap items-center gap-2">
-            {% if can_manage_approvals %}
+            {% if can_approve and visit.status == 'finished' %}
                 {% if visit.approval_status == 'pending' %}
                 <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
                     {% csrf_token %}
-                    <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                         <span class="material-symbols-outlined text-base">check_circle</span>
                         <span>اعتماد الزيارة</span>
                     </button>
                 </form>
-                <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>رفض الزيارة</span>
                 </button>
-                {% else %}
-                <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
-                        <span class="material-symbols-outlined text-base">refresh</span>
-                        <span>تغيير حالة الاعتماد</span>
-                    </button>
-                </form>
                 {% endif %}
             {% endif %}
 
-            <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+            {% if can_resubmit %}
+            <form method="POST" action="{% url 'visit_action' visit.pk 'resubmit' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">replay</span>
+                    <span>إعادة تقديم الزيارة للاعتماد</span>
+                </button>
+            </form>
+            {% endif %}
+
+            {% if visit.status == 'finished' %}
+            <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل الملاحظات</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Details Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Rejection Alert Banner (Requirement 3) -->
+    {% if visit.approval_status in 'disapproved,rejected' %}
+    <div class="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 sm:p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-2xl">error</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-rose-800">تم رفض هذه الزيارة من قبل الإدارة / المشرف</h3>
+                <p class="text-xs text-rose-700 mt-1">
+                    <span class="font-bold">سبب الرفض والتعديلات المطلوبة:</span>
+                    {{ visit.approval_notes|default:"يرجى مراجعة وتعديل بيانات الزيارة وإعادة تقديمها للاعتماد." }}
+                </p>
+                {% if visit.approved_by %}
+                <p class="text-[11px] text-rose-500 mt-0.5">
+                    بواسطة: {{ visit.approved_by.get_full_name|default:visit.approved_by.username }} {% if visit.approved_at %}بتاريخ {{ visit.approved_at|date:"Y-m-d H:i" }}{% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% if can_resubmit %}
+        <form method="POST" action="{% url 'visit_action' visit.pk 'resubmit' %}" class="shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">replay</span>
+                <span>إعادة التقديم الآن</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
 
-        <!-- Left 2 Cols: Contact info, Questionnaire, Samples -->
-        <div class="md:col-span-2 space-y-6">
+    <!-- Active In-Progress Banner (Requirement 4: Create First, Answer Later) -->
+    {% if visit.status == 'started' %}
+    <div class="bg-gradient-to-r from-teal-500 to-[#27bebe] rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">pending_actions</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold">الزيارة جارية وقيد التوثيق (مسودة)</h3>
+                <p class="text-xs text-white/90">تم إنشاء سجل الزيارة بنجاح. يرجى استكمال إجابات الاستبيان، والتقاط صورة الموقع، ثم إنهاء الزيارة.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 self-end sm:self-center">
+            <span class="px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white backdrop-blur-xs font-mono">
+                بدأت: {{ visit.started_at|date:"H:i" }}
+            </span>
+        </div>
+    </div>
+    {% endif %}
 
-            <!-- Contact & Template Card -->
-            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-                <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[#27bebe]">account_circle</span>
-                    <span>بيانات العميل والقالب</span>
-                </h2>
+    <!-- Main Content Area -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                <div class="grid grid-cols-2 gap-4 text-xs">
+        <!-- Column 1 & 2: Questions, Products, Form -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Customer & Template Profile Card -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">account_circle</span>
+                        <span>بيانات العميل والقالب</span>
+                    </h2>
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                        {{ visit.contact.account_type|default:"Clinic" }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                        <span class="text-slate-400 block mb-1">جهة الاتصال</span>
+                        <span class="text-slate-400 block mb-1">جهة الاتصال (العميل)</span>
                         <div class="font-bold text-slate-900 text-sm">{{ visit.contact.name }}</div>
-                        <span class="text-[11px] text-slate-500 font-mono">كود: {{ visit.contact.code|default:'-' }}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-1">المسؤول (المندوب)</span>
-                        <div class="font-bold text-slate-800">{{ visit.owner.get_full_name|default:visit.owner.username }}</div>
+                        <div class="font-bold text-slate-800 text-sm">{{ visit.owner.get_full_name|default:visit.owner.username }}</div>
+                        <span class="text-[11px] text-teal-600 font-medium">تم تثبيت المندوب تلقائياً</span>
                     </div>
                     <div>
-                        <span class="text-slate-400 block mb-1">نوع الحساب والتخصص</span>
-                        <span class="font-medium text-slate-800">{{ visit.contact.account_type|default:'-' }} • {{ visit.contact.specialty|default:'-' }}</span>
+                        <span class="text-slate-400 block mb-1">التخصص والمنطقة</span>
+                        <span class="font-medium text-slate-800">{{ visit.contact.specialty|default:'عام' }} • {{ visit.contact.area.name|default:'غير محددة' }}</span>
                     </div>
                     <div>
-                        <span class="text-slate-400 block mb-1">المنطقة الجغرافية</span>
-                        <span class="font-medium text-slate-800">{{ visit.contact.area.name|default:'-' }}</span>
-                    </div>
-                    {% if visit.template %}
-                    <div class="col-span-2 pt-2 border-t border-slate-100">
-                        <span class="text-slate-400 block mb-1">قالب الزيارة</span>
-                        <span class="px-3 py-1 rounded-lg bg-teal-50 text-[#27bebe] font-bold text-xs inline-block">
+                        <span class="text-slate-400 block mb-1">قالب الزيارة المعتمد</span>
+                        {% if visit.template %}
+                        <span class="px-2.5 py-1 rounded-lg bg-teal-50 text-[#1a8b8b] font-bold text-xs inline-block border border-teal-200">
                             {{ visit.template.display_name_ar }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400">زيارة عامة بدون قالب</span>
+                        {% endif %}
+                    </div>
+                    {% if visit.planned_source_item %}
+                    <div class="sm:col-span-2 pt-2 border-t border-slate-100 flex items-center gap-2">
+                        <span class="text-slate-400">الخطة المجدولة:</span>
+                        <span class="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 text-xs">
+                            <span class="material-symbols-outlined text-xs">event_available</span>
+                            <span>خطة يوم: {{ visit.planned_source_item.plan_day.date|date:"d/m/Y" }} (الترتيب: #{{ visit.planned_source_item.order }})</span>
                         </span>
                     </div>
                     {% endif %}
                 </div>
             </div>
 
-            <!-- Questionnaire Answers Card -->
+            <!-- INTERACTIVE QUESTIONNAIRE & COMPLETION FORM (When status == 'started') -->
+            {% if visit.status == 'started' %}
+            <form method="POST" enctype="multipart/form-data" id="visit-lifecycle-form" class="space-y-6">
+                {% csrf_token %}
+                <input type="hidden" name="latitude" id="form-latitude" value="{{ visit.latitude|default:'' }}">
+                <input type="hidden" name="longitude" id="form-longitude" value="{{ visit.longitude|default:'' }}">
+                <input type="hidden" name="device_accuracy" id="form-accuracy" value="{{ visit.device_accuracy|default:'' }}">
+                <input type="hidden" name="detailed_products_submitted" value="1">
+
+                <!-- Template Questions Card -->
+                {% if all_questions %}
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
+                            <div>
+                                <h2 class="text-sm font-bold text-slate-900">أسئلة استبيان الزيارة</h2>
+                                <p class="text-[11px] text-slate-500">يرجى الإجابة على جميع الأسئلة الإلزامية (*)</p>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2.5 py-0.5 rounded-full bg-teal-50 text-[#27bebe] font-bold border border-teal-200">
+                            {{ all_questions|length }} سؤال
+                        </span>
+                    </div>
+
+                    <div class="space-y-5" id="questions-container">
+                        {% for q in all_questions %}
+                        <div class="question-block p-4 rounded-xl border border-slate-200/90 bg-slate-50/50 space-y-2.5 transition-all"
+                             id="question-block-{{ q.id }}"
+                             data-question-id="{{ q.id }}"
+                             data-conditional="{{ q.is_conditional|yesno:'1,0' }}"
+                             data-parent-id="{{ q.conditional_parent_id|default:'' }}"
+                             data-trigger-val="{{ q.conditional_trigger_value|default:'' }}">
+                            
+                            <div class="flex items-start justify-between gap-3">
+                                <label class="text-xs font-bold text-slate-800 leading-relaxed block">
+                                    {{ q.text_ar }}
+                                    {% if q.is_required %}<span class="text-rose-500 font-black">*</span>{% endif %}
+                                </label>
+                                <span class="text-[10px] text-slate-400 font-semibold px-2 py-0.5 bg-white border border-slate-200 rounded-md shrink-0">
+                                    {{ q.get_stage_display }}
+                                </span>
+                            </div>
+
+                            {% if q.text_en %}
+                            <p class="text-[11px] text-slate-400 dir-ltr text-left">{{ q.text_en }}</p>
+                            {% endif %}
+
+                            <!-- Question Answer Inputs by Type -->
+                            <div class="pt-1">
+                                {% if q.question_type == 'boolean' %}
+                                    <!-- Yes / No -->
+                                    <div class="flex items-center gap-4">
+                                        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-teal-50/50 transition-colors">
+                                            <input type="radio" name="question_{{ q.id }}" value="Yes" class="question-input text-[#27bebe] focus:ring-[#27bebe]"
+                                                   onchange="handleQuestionChange({{ q.id }})"
+                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
+                                            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
+                                        </label>
+                                        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-rose-50/50 transition-colors">
+                                            <input type="radio" name="question_{{ q.id }}" value="No" class="question-input text-rose-500 focus:ring-rose-500"
+                                                   onchange="handleQuestionChange({{ q.id }})"
+                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
+                                            <span class="text-xs font-bold text-slate-700">لا (No)</span>
+                                        </label>
+                                    </div>
+
+                                {% elif q.question_type == 'single_choice' %}
+                                    <select name="question_{{ q.id }}" class="question-input w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+                                            onchange="handleQuestionChange({{ q.id }})">
+                                        <option value="">-- اختر الإجابة --</option>
+                                        {% for opt in q.options %}
+                                        <option value="{{ opt }}"
+                                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt %}selected{% endif %}{% endfor %}>
+                                            {{ opt }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+
+                                {% elif q.question_type == 'multiple_choice' %}
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                        {% for opt in q.options %}
+                                        <label class="inline-flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs">
+                                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt }}" class="question-input text-[#27bebe] rounded focus:ring-[#27bebe]"
+                                                   onchange="handleQuestionChange({{ q.id }})"
+                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt in resp.raw_answer %}checked{% endif %}{% endfor %}>
+                                            <span class="text-slate-700 font-medium">{{ opt }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+
+                                {% elif q.question_type == 'rating' %}
+                                    <div class="flex items-center gap-2">
+                                        {% for rate in "12345" %}
+                                        <label class="inline-flex flex-col items-center justify-center w-10 h-10 bg-white border border-slate-200 rounded-xl hover:border-[#27bebe] cursor-pointer">
+                                            <input type="radio" name="question_{{ q.id }}" value="{{ rate }}" class="question-input text-[#27bebe] focus:ring-[#27bebe]"
+                                                   onchange="handleQuestionChange({{ q.id }})"
+                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == rate %}checked{% endif %}{% endfor %}>
+                                            <span class="text-xs font-bold text-slate-700 mt-0.5">{{ rate }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+
+                                {% else %}
+                                    <!-- text / default -->
+                                    <textarea name="question_{{ q.id }}" rows="2" placeholder="اكتب الإجابة هنا..."
+                                              class="question-input w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+                                              oninput="handleQuestionChange({{ q.id }})">{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}</textarea>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- PRODUCT DETAILING (المنتجات المشروحة) - STRICTLY REQUIREMENT 8 -->
+                {% if supports_detailing %}
+                <div class="bg-white border border-teal-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between border-b border-teal-100 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[#27bebe]">medication</span>
+                            <div>
+                                <h2 class="text-sm font-bold text-slate-900">المنتجات المشروحة (Product Detailing)</h2>
+                                <p class="text-[11px] text-teal-700">حدد المنتجات التي تم شرحها للعميل خلال هذه الزيارة</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
+                            خاص بهذا القالب
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
+                        {% for p in products %}
+                        <label class="flex items-center gap-2.5 p-2.5 bg-slate-50 hover:bg-teal-50/60 border border-slate-200 hover:border-teal-300 rounded-xl cursor-pointer transition-colors text-xs">
+                            <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
+                                   {% if p in visit.detailed_products.all %}checked{% endif %}>
+                            <div class="truncate">
+                                <span class="font-bold text-slate-800 block truncate">{{ p.name }}</span>
+                                {% if p.code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.code }}</span>{% endif %}
+                            </div>
+                        </label>
+                        {% empty %}
+                        <p class="text-xs text-slate-400 col-span-full py-4 text-center">لا توجد منتجات نشطة في الكتالوج.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- General Feedback & Outcome Card -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+                    <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">notes</span>
+                        <span>ملاحظات ونتيجة الزيارة</span>
+                    </h2>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1.5">نتيجة الزيارة</label>
+                            <select name="visit_outcome" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                                <option value="successful" {% if visit.is_successful %}selected{% endif %}>زيارة ناجحة (Successful)</option>
+                                <option value="unsuccessful" {% if not visit.is_successful and visit.visit_outcome %}selected{% endif %}>زيارة غير ناجحة (Unsuccessful)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">تقرير / ملاحظات الزيارة</label>
+                        <textarea name="feedback" rows="3" placeholder="أدخل أية تفاصيل أو ملاحظات إضافية عن مجريات الزيارة..."
+                                  class="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">{{ visit.feedback }}</textarea>
+                    </div>
+                </div>
+
+                <!-- LOCATION & PHOTO EVIDENCE SECTION (Requirement 7) -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[#27bebe]">photo_camera</span>
+                            <div>
+                                <h2 class="text-sm font-bold text-slate-900">إثبات الموقع والصورة الميدانية</h2>
+                                <p class="text-[11px] text-slate-500">التقاط صورة حديثة لموقع الزيارة مع تثبيت إحداثيات GPS</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            مطلوب للإنهاء
+                        </span>
+                    </div>
+
+                    <!-- Photo Capture Card -->
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold text-slate-800">
+                            صورة إثبات الموقع الحالية *
+                            <span class="text-[11px] font-normal text-slate-500">(التقاط من كاميرا الهاتف أو رفع صورة)</span>
+                        </label>
+
+                        <!-- Hidden File Input targeting device camera -->
+                        <input type="file" name="location_photo" id="location-photo-file" accept="image/*" capture="environment" class="hidden" onchange="previewCapturedPhoto(event)">
+
+                        <!-- Photo Preview Container -->
+                        <div id="photo-preview-box" class="photo-preview-container p-4 text-center cursor-pointer {% if visit.location_photo %}has-image{% endif %}" onclick="triggerCameraInput()">
+                            <div id="photo-placeholder" class="{% if visit.location_photo %}hidden{% endif %} py-6 space-y-2">
+                                <div class="w-12 h-12 mx-auto rounded-full bg-teal-50 text-[#27bebe] flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-2xl">add_a_photo</span>
+                                </div>
+                                <div class="text-xs font-bold text-slate-800">انقر لفتح الكاميرا والتقاط صورة الموقع</div>
+                                <p class="text-[11px] text-slate-400">يدعم كاميرا الجوال مباشرة، صيغ JPG, PNG حتى 10 ميجابايت</p>
+                            </div>
+
+                            <div id="photo-preview-wrapper" class="{% if not visit.location_photo %}hidden{% endif %} space-y-3">
+                                <img id="photo-preview-img" src="{% if visit.location_photo %}{% url 'visit_evidence_photo' visit.pk %}{% endif %}" class="photo-preview-img mx-auto" alt="صورة إثبات الموقع">
+                                <div class="flex items-center justify-center gap-2 pt-1">
+                                    <button type="button" onclick="event.stopPropagation(); triggerCameraInput();" class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg shadow-xs">
+                                        <span class="material-symbols-outlined text-sm">replay</span>
+                                        <span>إعادة التقاط الصورة</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GPS Coordinates Section -->
+                    <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-teal-600 text-base">my_location</span>
+                                <span class="text-xs font-bold text-slate-800">إحداثيات الموقع (GPS)</span>
+                            </div>
+                            <button type="button" onclick="captureLiveCoordinates()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg shadow-xs">
+                                <span class="material-symbols-outlined text-sm">refresh</span>
+                                <span>تحديث الموقع</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs pt-1">
+                            <span class="text-slate-500">حالة GPS:</span>
+                            <span id="gps-status-badge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
+                                {% if visit.latitude and visit.longitude %}تم التقاط الموقع{% else %}في انتظار التحديد...{% endif %}
+                            </span>
+                        </div>
+
+                        <div id="gps-coords-text" class="text-[11px] font-mono text-slate-500 dir-ltr text-left">
+                            {% if visit.latitude and visit.longitude %}
+                            Lat: {{ visit.latitude|floatformat:4 }}, Lng: {{ visit.longitude|floatformat:4 }} (±{{ visit.device_accuracy|default:'-' }}m)
+                            {% else %}
+                            Lat: -, Lng: -
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Superuser Location & Photo Bypass (Requirement 7) -->
+                    {% if can_bypass_gps %}
+                    <div class="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-amber-600 text-lg">admin_panel_settings</span>
+                            <span class="text-xs font-bold text-amber-900">صلاحية المدير / تجاوز التحقق الجغرافي والصورة</span>
+                        </div>
+                        <label class="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                            <input type="checkbox" name="force_bypass_location" value="1" id="force-bypass-chk" class="text-amber-600 rounded focus:ring-amber-500" onchange="toggleBypassReason()">
+                            <span>تجاوز شرط الموقع والصورة لهذه الزيارة بموافقة إدارية</span>
+                        </label>
+                        <div id="bypass-reason-box" class="hidden">
+                            <label class="block text-[11px] font-bold text-slate-700 mb-1">سبب التجاوز الإداري * (سيتم تسجيله في سجل التدقيق)</label>
+                            <input type="text" name="bypass_reason" id="bypass-reason-input" placeholder="مثال: ضعف إشارة GPS داخل المستشفى، تم التحقق هاتفياً..." class="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-medium">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- FORM ACTIONS (Create First, Answer Later) -->
+                <div class="sticky bottom-4 z-20 bg-white/95 backdrop-blur-md border border-slate-200 p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <!-- Complete Visit -->
+                        <button type="submit" name="action" value="complete"
+                                class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                            <span class="material-symbols-outlined text-base">check_circle</span>
+                            <span>إنهاء وتوثيق الزيارة</span>
+                        </button>
+
+                        <!-- Save Draft (Resumable) -->
+                        <button type="submit" name="action" value="save_draft"
+                                class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors min-h-[44px]">
+                            <span class="material-symbols-outlined text-base">save</span>
+                            <span>حفظ كمسودة والعودة لاحقاً</span>
+                        </button>
+                    </div>
+
+                    <!-- Cancel Visit -->
+                    <button type="submit" name="action" value="cancel" onclick="return confirm('هل أنت متأكد من إلغاء هذه الزيارة نهائياً؟')"
+                            class="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors">
+                        <span class="material-symbols-outlined text-base">cancel</span>
+                        <span>إلغاء الزيارة</span>
+                    </button>
+                </div>
+            </form>
+
+            {% else %}
+            <!-- READ-ONLY DOSSIER (When status == 'finished' or 'cancelled') -->
+            
+            <!-- Questionnaire Responses Dossier Card -->
             {% if questionnaire_responses or visit.questionnaire_answers %}
-            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                     <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
                         <span>إجابات استبيان الزيارة</span>
                     </h2>
                     {% if visit.template %}
-                    <span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-brand-700 border border-teal-200">
+                    <span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
                         {{ visit.template.display_name_ar }}
                     </span>
                     {% endif %}
@@ -153,7 +551,7 @@
 
             <!-- Detailed Products Card (المنتجات المشروحة) -->
             {% if visit.detailed_products.exists %}
-            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
                 <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe]">medication</span>
                     <span>المنتجات المشروحة (Product Detailing)</span>
@@ -171,7 +569,7 @@
 
             <!-- General Feedback -->
             {% if visit.feedback %}
-            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-3">
                 <h3 class="text-xs font-bold text-slate-900">ملاحظات وتقرير الزيارة</h3>
                 <div class="p-4 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">
                     {{ visit.feedback }}
@@ -179,11 +577,12 @@
             </div>
             {% endif %}
 
-            <!-- Samples Distributed -->
-            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <!-- Samples Distributed (Historical Audit Record) -->
+            {% if visit.samples.exists %}
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
                 <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe]">medication</span>
-                    <span>العينات الطبية الموزعة</span>
+                    <span>العينات الطبية الموزعة (سجل تاريخي)</span>
                 </h2>
 
                 <div class="overflow-x-auto">
@@ -202,22 +601,20 @@
                                 <td class="py-2.5 px-3 font-mono font-bold text-[#27bebe]">{{ s.quantity }}</td>
                                 <td class="py-2.5 px-3 text-slate-500">{{ s.notes|default:'-' }}</td>
                             </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="py-4 text-center text-slate-400">لم يتم توزيع عينات في هذه الزيارة.</td>
-                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
+            {% endif %}
+            {% endif %}
 
         </div>
 
-        <!-- Right 1 Col: Execution Metrics & Audit -->
+        <!-- Column 3: Location Evidence, Metrics, Audit Details -->
         <div class="space-y-6">
 
-            <!-- Location Verification Card (Strict Reference Parity matching Visit #154829) -->
+            <!-- Location Verification Card -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
                     <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -248,7 +645,7 @@
                         </span>
                     </div>
 
-                    <!-- Completion Status (حالة الاستكمال) -->
+                    <!-- Completion Status -->
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">حالة الاستكمال:</span>
                         <span class="font-bold {% if visit.verification_status == 'verified' %}text-emerald-600{% elif visit.verification_status == 'force_bypassed' %}text-amber-600{% else %}text-slate-600{% endif %}">
@@ -256,7 +653,7 @@
                         </span>
                     </div>
 
-                    <!-- Location Status (حالة الموقع) -->
+                    <!-- Location Status -->
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">حالة الموقع:</span>
                         <span class="font-bold {% if 'ضمن' in visit.location_status or visit.location_status == 'within_geofence' %}text-emerald-600{% elif 'بعيد' in visit.location_status or visit.location_status == 'outside_geofence' %}text-rose-600{% else %}text-slate-600{% endif %}">
@@ -304,14 +701,70 @@
                 </div>
             </div>
 
-            <!-- Metrics Card -->
+            <!-- PHOTO EVIDENCE DOSSIER CARD (Requirement 7) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">image</span>
+                        <span>صورة إثبات الموقع</span>
+                    </h3>
+                    {% if visit.has_photo_evidence %}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        موثقة
+                    </span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">
+                        غير مرفقة
+                    </span>
+                    {% endif %}
+                </div>
+
+                {% if visit.location_photo %}
+                <div class="space-y-2">
+                    <a href="{% url 'visit_evidence_photo' visit.pk %}" target="_blank" class="block group relative rounded-xl overflow-hidden border border-slate-200">
+                        <img src="{% url 'visit_evidence_photo' visit.pk %}" class="w-full max-h-48 object-cover group-hover:scale-105 transition-transform duration-200" alt="صورة إثبات الزيارة">
+                        <div class="absolute inset-0 bg-slate-950/20 group-hover:bg-slate-950/10 flex items-center justify-center transition-colors">
+                            <span class="material-symbols-outlined text-white text-2xl drop-shadow">zoom_in</span>
+                        </div>
+                    </a>
+                    {% if visit.photo_captured_at %}
+                    <p class="text-[10px] text-slate-400 font-mono text-center">
+                        تم الالتقاط: {{ visit.photo_captured_at|date:"d/m/Y - H:i:s" }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-xs text-slate-400 py-3 text-center">لا توجد صورة إثبات مسجلة لهذه الزيارة.</p>
+                {% endif %}
+
+                <!-- Superuser Bypass Audit Notification (Requirement 7) -->
+                {% if visit.verification_status == 'force_bypassed' or visit.bypassed_by %}
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs">
+                    <div class="flex items-center gap-1.5 text-amber-800 font-bold">
+                        <span class="material-symbols-outlined text-sm">verified_user</span>
+                        <span>تم التجاوز بموافقة إدارية:</span>
+                    </div>
+                    <p class="text-slate-700 font-medium">بواسطة: {% if visit.bypassed_by %}{{ visit.bypassed_by.get_full_name|default:visit.bypassed_by.username }}{% else %}إدارة النظام{% endif %}</p>
+                    {% if visit.bypassed_at %}<p class="text-[11px] text-slate-500 font-mono">التاريخ: {{ visit.bypassed_at|date:"d/m/Y - H:i" }}</p>{% endif %}
+                    {% if visit.bypass_reason %}<p class="text-[11px] text-amber-900 bg-white/70 p-1.5 rounded border border-amber-200 mt-1">السبب: {{ visit.bypass_reason }}</p>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Execution Metrics Card -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2.5">مؤشرات التنفيذ</h3>
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2.5">مؤشرات التنفيذ والتوقيت</h3>
 
                 <div class="space-y-3 text-xs">
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">حالة الزيارة:</span>
                         <span class="font-bold text-slate-800">{{ visit.status_display_ar }}</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">تصنيف التخطيط:</span>
+                        <span class="font-bold {{ visit.plan_type_badge_class }} px-2 py-0.5 rounded-full text-[10px] border">
+                            {{ visit.plan_type_display_ar }}
+                        </span>
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">زيارة ناجحة:</span>
@@ -327,7 +780,7 @@
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">المدة:</span>
-                        <span class="font-mono font-bold text-slate-800">{{ visit.duration }} ثانية</span>
+                        <span class="font-mono font-bold text-slate-800">{{ visit.duration|default:0 }} ثانية</span>
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">وقت البدء:</span>
@@ -342,9 +795,13 @@
 
             <!-- Audit Card -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3 text-xs">
-                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">التدقيق والاعتماد</h3>
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">سجل التدقيق والمنشئ</h3>
                 <div>
-                    <span class="text-slate-400 block">تاريخ التسجيل</span>
+                    <span class="text-slate-400 block">أنشئت بواسطة</span>
+                    <span class="font-bold text-slate-700">{% if visit.created_by %}{{ visit.created_by.get_full_name|default:visit.created_by.username }}{% else %}-{% endif %}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block">تاريخ الإنشاء</span>
                     <span class="font-mono text-slate-700">{{ visit.created_at|date:"d/m/Y - H:i" }}</span>
                 </div>
                 {% if visit.approved_by %}
@@ -355,14 +812,59 @@
                 {% endif %}
                 {% if visit.approval_notes %}
                 <div>
-                    <span class="text-slate-400 block">ملاحظات المدير</span>
+                    <span class="text-slate-400 block">ملاحظات الاعتماد</span>
                     <p class="text-slate-600 p-2 bg-slate-50 rounded-lg mt-1 font-medium">{{ visit.approval_notes }}</p>
                 </div>
                 {% endif %}
             </div>
 
+    <!-- Approval Audit History Log (Requirement 3 & 5) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">history</span>
+                <h3 class="text-sm font-bold text-slate-900">سجل تدقيق الاعتمادات والقرارات</h3>
+            </div>
+            <span class="text-xs text-slate-400 font-mono">{{ approval_history|length }} حركات مسجلة</span>
         </div>
-
+        {% if approval_history %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+                <thead>
+                    <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                        <th class="py-2.5 px-4">التاريخ والوقت</th>
+                        <th class="py-2.5 px-4">الإجراء</th>
+                        <th class="py-2.5 px-4">المستخدم المنفذ</th>
+                        <th class="py-2.5 px-4">الحالة (قبل ➔ بعد)</th>
+                        <th class="py-2.5 px-4">السبب / الملاحظات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-medium">
+                    {% for item in approval_history %}
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="py-2.5 px-4 font-mono text-slate-500">{{ item.created_at|date:"Y-m-d H:i" }}</td>
+                        <td class="py-2.5 px-4">
+                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px]
+                                {% if item.action == 'approved' %}bg-emerald-100 text-emerald-800
+                                {% elif item.action == 'rejected' %}bg-rose-100 text-rose-800
+                                {% elif item.action == 'resubmitted' %}bg-sky-100 text-sky-800
+                                {% else %}bg-amber-100 text-amber-800{% endif %}">
+                                {{ item.get_action_display }}
+                            </span>
+                        </td>
+                        <td class="py-2.5 px-4 font-bold text-slate-800">{{ item.actor.get_full_name|default:item.actor.username|default:"النظام" }}</td>
+                        <td class="py-2.5 px-4 font-mono text-slate-500">{{ item.status_before|default:"-" }} ➔ {{ item.status_after|default:"-" }}</td>
+                        <td class="py-2.5 px-4 text-slate-700">{{ item.reason|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-xs text-slate-400">
+            لا توجد حركات تدقيق مسجلة لهذه الزيارة حتى الآن.
+        </div>
+        {% endif %}
     </div>
 
 </div>
@@ -404,5 +906,130 @@ function openDisapproveModal() {
 function closeDisapproveModal() {
     document.getElementById('disapprove-modal').classList.add('hidden');
 }
+
+function triggerCameraInput() {
+    const input = document.getElementById('location-photo-file');
+    if (input) input.click();
+}
+
+function previewCapturedPhoto(event) {
+    const file = event.target.files[0];
+    if (file) {
+        // Validate size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('حجم الصورة كبير جداً. الحد الأقصى المسموح به هو 10 ميجابايت.');
+            event.target.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const previewBox = document.getElementById('photo-preview-box');
+            const placeholder = document.getElementById('photo-placeholder');
+            const previewWrapper = document.getElementById('photo-preview-wrapper');
+            const previewImg = document.getElementById('photo-preview-img');
+
+            previewImg.src = e.target.result;
+            placeholder.classList.add('hidden');
+            previewWrapper.classList.remove('hidden');
+            previewBox.classList.add('has-image');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function captureLiveCoordinates() {
+    const statusBadge = document.getElementById('gps-status-badge');
+    const coordsText = document.getElementById('gps-coords-text');
+
+    if (!navigator.geolocation) {
+        if (statusBadge) statusBadge.innerText = 'GPS غير مدعوم في المتصفح';
+        return;
+    }
+
+    if (statusBadge) statusBadge.innerText = 'جاري التقاط الموقع...';
+
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const acc = position.coords.accuracy;
+
+            const latInput = document.getElementById('form-latitude');
+            const lngInput = document.getElementById('form-longitude');
+            const accInput = document.getElementById('form-accuracy');
+
+            if (latInput) latInput.value = lat;
+            if (lngInput) lngInput.value = lng;
+            if (accInput) accInput.value = acc;
+
+            if (statusBadge) {
+                statusBadge.innerText = 'تم التقاط الموقع بنجاح ✓';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800';
+            }
+            if (coordsText) {
+                coordsText.innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)} (±${Math.round(acc)}m)`;
+            }
+        },
+        function(error) {
+            if (statusBadge) {
+                statusBadge.innerText = 'تعذر التقاط الموقع (يرجى السماح بالوصول للـ GPS)';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800';
+            }
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+}
+
+function toggleBypassReason() {
+    const chk = document.getElementById('force-bypass-chk');
+    const reasonBox = document.getElementById('bypass-reason-box');
+    if (chk && reasonBox) {
+        if (chk.checked) {
+            reasonBox.classList.remove('hidden');
+        } else {
+            reasonBox.classList.add('hidden');
+        }
+    }
+}
+
+// Client-side conditional questions visibility evaluation
+function handleQuestionChange(questionId) {
+    evaluateConditionalQuestions();
+}
+
+function evaluateConditionalQuestions() {
+    const blocks = document.querySelectorAll('.question-block[data-conditional="1"]');
+    blocks.forEach(block => {
+        const parentId = block.getAttribute('data-parent-id');
+        const triggerVal = (block.getAttribute('data-trigger-val') || '').trim().toLowerCase();
+        if (!parentId) return;
+
+        const parentInputs = document.querySelectorAll(`[name="question_${parentId}"]`);
+        let parentAnswer = '';
+        parentInputs.forEach(input => {
+            if (input.type === 'radio' || input.type === 'checkbox') {
+                if (input.checked) parentAnswer = input.value;
+            } else {
+                parentAnswer = input.value;
+            }
+        });
+
+        if (parentAnswer.trim().toLowerCase() === triggerVal) {
+            block.classList.remove('hidden');
+        } else {
+            block.classList.add('hidden');
+        }
+    });
+}
+
+// Auto-run on page load
+document.addEventListener('DOMContentLoaded', function() {
+    evaluateConditionalQuestions();
+    // Auto-acquire GPS when starting to answer if not already acquired
+    const latInput = document.getElementById('form-latitude');
+    if (latInput && !latInput.value) {
+        captureLiveCoordinates();
+    }
+});
 </script>
 {% endblock %}

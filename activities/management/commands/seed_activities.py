@@ -68,8 +68,7 @@ class Command(BaseCommand):
                 "restrict_account_types": ["Clinic", "Pharmacy", "Polyclinic"],
                 "questionnaire": {
                     "questions": [
-                        {"order": 1, "title": "هل كان يوم ناجح ؟", "type": "mcq_single", "options": ["نعم", "لا"]},
-                        {"order": 2, "title": "ما هي نتائج اليوم ( روشتات & بيع ) ؟", "type": "narrative"}
+                        {"order": 1, "title": "ما هي نتائج اليوم ( روشتات & بيع ) ؟", "type": "narrative"}
                     ]
                 }
             },

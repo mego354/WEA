@@ -10,9 +10,10 @@ from .services import TreasuryService
 from contacts.models import Contact
 from master_data.excel_utils import export_to_excel_response
 from master_data.pagination_utils import paginate_queryset
+from accounts.permissions import require_permission, get_scoped_queryset
 
 
-@login_required
+@require_permission('treasury:payments/list')
 def vendor_payments_list(request):
     search = request.GET.get('search', '').strip()
     supplier_id = request.GET.get('supplier')
@@ -68,7 +69,7 @@ def vendor_payments_list(request):
     return render(request, 'treasury/vendor_payments_list.html', context)
 
 
-@login_required
+@require_permission('treasury:payments/export')
 def vendor_payments_export(request):
     supplier_id = request.GET.get('supplier')
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by').order_by('-serial_num')
@@ -90,7 +91,7 @@ def vendor_payments_export(request):
     return export_to_excel_response(qs, columns, filename="vendor_payments_export", sheet_title="مدفوعات الموردين")
 
 
-@login_required
+@require_permission('treasury:payments/create')
 def vendor_payment_create(request):
     if request.method == 'POST':
         supplier_id = request.POST.get('supplier')
@@ -135,7 +136,7 @@ def vendor_payment_create(request):
     return render(request, 'treasury/vendor_payment_create.html', context)
 
 
-@login_required
+@require_permission('treasury:vendors/accounting')
 def accounting_vendors_list(request):
     """
     Vendor Statements & Balances (حسابات الموردين).
@@ -164,7 +165,7 @@ def accounting_vendors_list(request):
     return render(request, 'treasury/accounting_vendors_list.html', context)
 
 
-@login_required
+@require_permission('treasury:vendors/transactions')
 def vendor_transactions_list(request):
     """
     Vendor Ledger Transactions (عمليات الموردين).
@@ -206,10 +207,11 @@ def vendor_transactions_list(request):
     return render(request, 'treasury/vendor_transactions_list.html', context)
 
 
-@login_required
+@require_permission('treasury:vaults/view')
 def vaults_list(request):
     search = request.GET.get('search', '').strip()
     qs = Vault.objects.select_related('assigned_user').order_by('serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'vault')
 
     active_filters = []
     if search:
@@ -232,7 +234,7 @@ def vaults_list(request):
     return render(request, 'treasury/vaults_list.html', context)
 
 
-@login_required
+@require_permission('treasury:vaults/transactions')
 def vault_transactions_list(request):
     vault_id = request.GET.get('vault_id')
     tx_type = request.GET.get('type')
@@ -277,7 +279,7 @@ def vault_transactions_list(request):
     return render(request, 'treasury/vault_transactions_list.html', context)
 
 
-@login_required
+@require_permission('treasury:payments/requests')
 def vendor_payment_requests_list(request):
     """View matching /vendor-payment-requests in reference ERP."""
     return render(request, 'treasury/vendor_payment_requests_list.html')

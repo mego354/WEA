@@ -100,3 +100,57 @@ def get_item(dictionary, key):
     if isinstance(dictionary, dict):
         return dictionary.get(key)
     return None
+
+
+@register.filter(name='has_permission')
+def has_permission_filter(user, perm_codename):
+    """
+    Template filter to check user permission:
+    Usage: {% if request.user|has_permission:'purchases:orders/create' %}
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if hasattr(user, 'has_permission'):
+        return user.has_permission(perm_codename)
+    return False
+
+
+@register.filter(name='can_access_module')
+def can_access_module_filter(user, module_key):
+    """
+    Template filter to check top-level module access:
+    Usage: {% if request.user|can_access_module:'purchases' %}
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if hasattr(user, 'has_permission'):
+        return user.has_permission(f"module:{module_key}")
+    return False
+
+
+@register.filter(name='is_super_admin')
+def is_super_admin_filter(user):
+    """
+    Template filter to check whether user is SuperAdmin:
+    Usage: {% if request.user|is_super_admin %}
+    """
+    if not user or not user.is_authenticated:
+        return False
+    return getattr(user, 'is_super_admin', False) or user.is_superuser
+
+
+@register.filter(name='is_manager')
+def is_manager_filter(user):
+    """
+    Template filter to check if user has manager role or is super admin:
+    Usage: {% if request.user|is_manager %}
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, 'is_super_admin', False):
+        return True
+    if getattr(user, 'role', None):
+        return getattr(user.role, 'is_manager_role', False)
+    return False
+
+

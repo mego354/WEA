@@ -335,7 +335,7 @@
                     </div>
                     <div class="min-w-0">
                         <div class="flex items-center gap-1.5 flex-wrap">
-                            <span class="text-xs font-bold text-slate-900 truncate">${c.formatted_number || c.code ? '[' + (c.formatted_number || c.code) + '] ' : ''}${c.name}</span>
+                            <span class="text-xs font-bold text-slate-900 truncate">${c.name}</span>
                             <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.account_type || c.category || 'عميل'}</span>
                         </div>
                         <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
@@ -375,8 +375,7 @@
         const directionsBtn = document.getElementById('unified-card-directions-btn');
         const previewBtn = document.getElementById('unified-card-preview-btn');
 
-        const codeStr = c.formatted_number || c.code ? `[${c.formatted_number || c.code}] ` : '';
-        if (nameEl) nameEl.textContent = `${codeStr}${c.name}`;
+        if (nameEl) nameEl.textContent = c.name;
         if (avatarEl) avatarEl.textContent = c.initials || (c.name ? c.name.substring(0, 2) : 'CL');
         if (catEl) catEl.textContent = c.category || c.account_type || 'عميل';
         if (typeEl) typeEl.textContent = c.contact_type_display || 'شخص';

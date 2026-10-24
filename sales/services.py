@@ -59,19 +59,103 @@ class SalesOrderService:
 
         order.grand_total = running_total
         order.save(update_fields=['grand_total'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='sales_order',
+            sales_order=order,
+            action='submitted',
+            actor=user,
+            status_before='',
+            status_after='pending',
+            reason=notes or 'إنشاء وتقديم أمر البيع للاعتماد'
+        )
         return order
 
     @classmethod
     @transaction.atomic
-    def approve_order(cls, order, user):
+    def approve_order(cls, order, user, notes=''):
         """
         Approves the sales order by management.
         """
-        if order.status != 'pending':
+        if order.status not in ['pending', 'rejected']:
             raise ValidationError(f"لا يمكن اعتماد الطلب في حالته الحالية: {order.get_status_display()}.")
 
+        status_before = order.status
         order.status = 'manager_approval'
-        order.save(update_fields=['status', 'updated_at'])
+        order.approved_by = user
+        order.approved_at = timezone.now()
+        order.rejection_reason = ''
+        order.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='sales_order',
+            sales_order=order,
+            action='approved',
+            actor=user,
+            status_before=status_before,
+            status_after='manager_approval',
+            reason=notes or 'تم اعتماد أمر البيع من الإدارة'
+        )
+        return order
+
+    @classmethod
+    @transaction.atomic
+    def reject_order(cls, order, user, reason=''):
+        """
+        Rejects the sales order with a mandatory reason.
+        """
+        if order.status not in ['pending', 'manager_approval']:
+            raise ValidationError(f"لا يمكن رفض الطلب في حالته الحالية: {order.get_status_display()}.")
+
+        clean_reason = (reason or '').strip()
+        if not clean_reason:
+            raise ValidationError("يرجى كتابة سبب رفض أمر البيع.")
+
+        status_before = order.status
+        order.status = 'rejected'
+        order.rejection_reason = clean_reason
+        order.approved_by = user
+        order.approved_at = timezone.now()
+        order.save(update_fields=['status', 'rejection_reason', 'approved_by', 'approved_at', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='sales_order',
+            sales_order=order,
+            action='rejected',
+            actor=user,
+            status_before=status_before,
+            status_after='rejected',
+            reason=clean_reason
+        )
+        return order
+
+    @classmethod
+    @transaction.atomic
+    def resubmit_order(cls, order, user):
+        """
+        Resubmits a rejected sales order after correction.
+        """
+        if order.status != 'rejected':
+            raise ValidationError("لا يمكن إعادة تقديم إلا الطلبات المرفوضة.")
+
+        status_before = order.status
+        order.status = 'pending'
+        order.rejection_reason = ''
+        order.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='sales_order',
+            sales_order=order,
+            action='resubmitted',
+            actor=user,
+            status_before=status_before,
+            status_after='pending',
+            reason='إعادة تقديم أمر البيع للاعتماد بعد التعديل والتصحيح'
+        )
         return order
 
     @classmethod

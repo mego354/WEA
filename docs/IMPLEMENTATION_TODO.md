@@ -1,13 +1,178 @@
-# ERP Excel Import/Export & Mobile Responsiveness Implementation Todo
+# ERP Implementation Todo & Roadmap
 
 **Project:** WEA Pharma ERP  
-**Tracking Date:** 2026-10-15  
+**Tracking Date:** 2026-10-24  
 **Overall Status:** 100% COMPLETED  
 **Status Legend:**  
 - `[ ] NOT STARTED`  
 - `[/] IN PROGRESS`  
 - `[X] COMPLETED`  
 - `[!] BLOCKED`  
+
+## Phase 11: Role-Based Visit Templates, Regional Manager Approvals, and Secure Mobile Workflows (2026-10-24)
+
+- [X] **TASK-01**: **Role-Based Visit Template Compatibility Engine**:
+  - Implemented normalized canonical account type mapping and bidirectional aliases (`ACCOUNT_TYPE_ALIASES`) in `VisitTemplate`.
+  - Implemented `is_contact_eligible(contact)` and `is_user_eligible(user)` methods.
+  - Enforced server-side compatibility checks in `VisitForm.clean()`, `visit_create`, `visit_edit`, `planned_visit_add_item`, and dynamic API `/activities/api/templates/`.
+  - Frontend auto-filtering in `visit_form.html` (`filterTemplatesByCustomer`) immediately purges incompatible templates upon contact selection.
+  - Documented in `docs/VISIT_TEMPLATE_COMPATIBILITY.md`.
+- [X] **TASK-02**: **Regional Hierarchy & Scoping Architecture**:
+  - Established territorial boundary rules for `governorate` and `subarea` entities.
+  - Implemented `get_user_managed_areas`, `get_user_managed_representatives`, `get_scoped_queryset`, and `can_user_access_object` in `accounts/permissions.py`.
+  - Strict horizontal data isolation: foreign region visits, orders, and financials are invisible and inaccessible across regional managers.
+  - Super Administrator retains universal oversight across all territories.
+  - Documented in `docs/REGIONAL_ACCESS_CONTROL.md`.
+- [X] **TASK-03**: **Visit Approval & Resubmission Lifecycle**:
+  - Visits transition to `manager_approval = 'pending'` upon representative completion.
+  - Regional managers approve or reject via `/visits/<id>/action/`.
+  - Rejection enforces mandatory non-empty Arabic rationale.
+  - Representatives receive high-contrast alert banner with rejection reason and one-tap resubmission workflow (`manager_approval = 'pending'`).
+  - Documented in `docs/APPROVAL_WORKFLOWS.md`.
+- [X] **TASK-04**: **Sales Order Approval & Downstream Enforcement**:
+  - Sales orders enter `status = 'pending_approval'`.
+  - Implemented `approve_order`, `reject_order` (mandatory reason), and `resubmit_order` in `SalesOrderService`.
+  - Downstream enforcement: `prepare_order`, `deliver_order`, and `invoice_order` strictly verify `status == 'approved'`, raising `ValidationError` if unapproved.
+- [X] **TASK-05**: **Centralized Approvals Hub & Regional Command Center**:
+  - Unified Approvals Hub (`/approvals/`) supporting Visits, Sales Orders, and Audit History tabs.
+  - Scoped multi-parameter filtering (representative, area, status, date, search) and server-side pagination.
+  - Regional Manager Dashboard (`/regional/`) with territory selector, 4-stat KPI grid, and managed representative performance matrix.
+- [X] **TASK-06**: **Security Hardening & Anti-Tampering**:
+  - Prevented self-approval: managers cannot approve their own visits or sales orders.
+  - Complete immutable audit logging via `ApprovalAuditLog` tracking all lifecycle transitions.
+  - Documented in `docs/SECURITY_REVIEW.md`.
+- [X] **TASK-07**: **Mobile-App UI & Responsive Design**:
+  - Dual-view rendering: dense desktop tables vs. touch-friendly card layouts on mobile ($\le 768$px).
+  - Validated across 320px, 375px, 390px, 430px, 768px, 1024px, and 1440px viewports with touch targets $\ge 44$px and Arabic RTL support.
+  - Documented in `docs/UI_TEST_REPORT.md`.
+- [X] **TASK-08**: **Automated Tests & Quality Assurance**:
+  - Authored comprehensive test suite `activities/tests_approval_and_regional.py` (10 tests, 100% pass).
+  - All 59 activities tests and 2 sales tests passed cleanly with zero regressions.
+
+---
+
+## Phase 10: Complete Permission Management, Settings Integration, Security Hardening, and Mobile UI (2026-10-24)
+
+- [X] **TASK-01**: **Application Audit & Route Inventory**:
+  - Audited all 100+ application routes across `purchases`, `sales`, `catalog`, `contacts`, `activities`, `inventory`, `treasury`, `master_data`, and `accounts`.
+  - Cataloged 104 standardized granular permissions in `accounts/permission_registry.py`.
+  - Authored comprehensive route and gap analysis in `docs/PERMISSION_AUDIT.md`.
+- [X] **TASK-02**: **Centralized Permission Architecture**:
+  - Implemented declarative RBAC + ABAC architecture with hierarchical module inheritance rules.
+  - Revoking `module:<name>` automatically revokes all child subpage and action permissions in `User.has_permission()`.
+  - Documented complete architecture in `docs/PERMISSION_ARCHITECTURE.md`.
+- [X] **TASK-03**: **Super Administrator Settings Console**:
+  - Created role management list (`/auth/roles/`) matching reference ERP.
+  - Implemented dynamic hierarchical permission matrix form (`/auth/roles/create/`, `/auth/roles/<id>/edit/`) with live search, collapsible module accordions, presets, and sticky save bar.
+  - Implemented user effective permissions inspector (`/auth/users/<id>/effective-permissions/`) for debugging inherited vs granted access.
+  - Authored operational guide in `docs/SETTINGS_PERMISSION_GUIDE.md`.
+- [X] **TASK-04**: **Backend Security & Privilege Escalation Hardening**:
+  - Isolated sovereign administrative privileges to `is_super_admin` (`is_superuser` or active role with `is_super=True`).
+  - Protected against privilege escalation via parameter tampering in user and role endpoints.
+  - Implemented immutable lockout protection preventing deletion/deactivation of the last active superadmin.
+  - Implemented `SecurityAuditLog` tracking all role, permission, user status, and password changes.
+  - Implemented immediate in-memory cache invalidation via `clear_perm_cache()`.
+  - Authored full security assessment in `docs/SECURITY_AUDIT.md`.
+- [X] **TASK-05**: **Application-Wide Route Enforcement**:
+  - Hardened all routes across `purchases`, `sales`, `catalog`, `contacts`, `activities`, `inventory`, `treasury`, and `master_data` with `@require_permission()` or `@require_super_admin()`.
+  - Documented route mapping in `docs/ROUTE_PERMISSION_MATRIX.md`.
+- [X] **TASK-06**: **Mobile-First Responsive Parity**:
+  - Audited viewports across 320px, 375px, 390px, 430px, 768px, 1024px, and 1440px.
+  - Built dual-view rendering for audit logs (desktop table vs. mobile cards).
+  - Built mobile-optimized accordions, touch checkboxes (min 44px), and sticky action bars for permission management.
+  - Updated mobile audit in `docs/MOBILE_RESPONSIVENESS_AUDIT.md`.
+- [X] **TASK-07**: **Automated Tests & Quality Assurance**:
+  - Built comprehensive `ERPAuthorizationSecurityTests` with 9 test cases in `accounts/tests.py`.
+  - Verified 154/154 automated tests passing across the entire Django test suite (`python manage.py test`).
+  - Authored execution report in `docs/PERMISSION_TEST_REPORT.md`.
+
+---
+
+## Phase 9: Unify Visit Creation, Remove Duplicate Questions, and Standardize Client Display (2026-10-22)
+
+- [X] **TASK-01**: **Remove Duplicate Outcome Question (`هل كان يوم ناجح ؟ *`)**:
+  - Safely deactivated question in DB via migration `activities/migrations/0007_deactivate_duplicate_outcome_question.py` (`is_active=False`).
+  - Implemented `VisitTemplate.get_active_questions()` filtering active questions and excluding redundant outcome items.
+  - Removed question from seeds (`seed_activities.py`, `scratch/seed_visit_templates.py`).
+  - Preserved historical answers and audit records.
+- [X] **TASK-02**: **Completely Remove `توزيع عينة طبية (اختياري)` from Active Workflow**:
+  - Removed sample inputs (`sample_product`, `sample_quantity`) from `templates/activities/visit_form.html`.
+  - Removed backend creation processing from `visit_create` in `activities/views.py`.
+  - Safeguarded historical audit records: `VisitSampleItem` retained; sample distribution audit table in `visit_detail.html` displayed conditionally `{% if visit.samples.exists %}`.
+- [X] **TASK-03**: **Unified Visit Creation Route (`/visits/create/`)**:
+  - Canonical route: `/visits/create/` (URL name `visit_create`).
+  - Planned visits entry point: `planned_visit_item_execute` validates rep authorization and redirects to `/visits/create/?contact_id=...&planned_item_id=...`.
+  - Unplanned visits entry point: Floating `+` action navigates directly to `/visits/create/`.
+  - Shared controller, form validation, representative locking, eligibility checks, and duplicate submission interception.
+- [X] **TASK-04**: **Preserve and Display Planned/Unplanned Classification**:
+  - Persisted indexed boolean `Visit.is_planned`.
+  - Prominent Arabic badges: `زيارة مخططة` (blue) vs `زيارة خارج الخطة` (purple) displayed across creation forms, lists, cards, detail pages, and answering screens.
+  - Added source schedule indicator to visit detail view when linked to a `PlannedVisitItem`.
+- [X] **TASK-05**: **Standardize Client Display (Names Without Codes)**:
+  - `Contact.__str__` and `Contact.display_tag` return `self.name` without brackets or codes.
+  - `CustomerModelChoiceField.label_from_instance` returns `obj.name`.
+  - Search API returns clean `display_tag`; internal search by code preserved.
+  - Cleaned all templates: `visits_list.html`, `planned_visits_list.html`, `visit_form.html`, `visit_detail.html`, and `customer_selection_modal.html`.
+- [X] **TASK-06**: **Automated Tests & Quality Assurance**:
+  - Added test cases covering question removal, active sample deprecation, unified creation route, authorization enforcement, and clean client display.
+  - Full suite of 49/49 tests passing: `py manage.py test activities`.
+  - Browser UI verified across Desktop (1440px), Tablet (768px), Mobile Large (430px, 390px, 375px), and Mobile Mini (320px).
+- [X] **TASK-07**: **Complete Documentation**:
+  - Authored `docs/VISIT_CREATION_WORKFLOW.md`.
+  - Authored `docs/VISIT_QUESTION_CONFIGURATION.md`.
+  - Updated `docs/VISIT_CLASSIFICATION.md`.
+  - Updated `docs/IMPLEMENTATION_TODO.md`.
+
+---
+
+## Phase 8: Visit Templates, Workflows, Permissions, and Location Verification (2026-10-22)
+
+- [X] **TASK-01**: **Fix Visit Template Account-Type Restrictions**:
+  - Normalized `ACCOUNT_TYPE_CHOICES` to canonical Title-Case format matching `Contact.account_type`.
+  - Added case-insensitive aliases in choices to support legacy inputs and APIs.
+  - Implemented `is_account_type_eligible()` and `is_contact_eligible()` on `VisitTemplate`.
+  - Fixed edit restoration: checkboxes now properly restore checked state when editing templates in `/settings/visits/templates/<pk>/edit/`.
+  - Enforced eligibility validation on backend in `VisitForm.clean()` and `visit_create`.
+  - Applied dynamic filtering in `/api/templates/` and client-side JavaScript.
+- [X] **TASK-02**: **Audit & Enforce Visit Settings and Permissions**:
+  - Implemented RBAC separating ordinary representative capabilities from administrative settings.
+  - Representatives cannot create, edit, toggle, or delete visit templates (HTTP 403 / redirect).
+  - Managers retain visit approval/disapproval permissions.
+  - Created comprehensive documentation and permission matrix in `docs/VISIT_SETTINGS_AND_PERMISSIONS.md`.
+- [X] **TASK-03**: **Standardize Visit Lifecycle (Create First, Answer Later)**:
+  - Decoupled visit creation from questionnaire answering.
+  - `visit_create` persists visit with `status='started'` and minimal required data (customer, template, locked rep, check-in GPS).
+  - Redirects to `/visits/<pk>/` where reps answer questionnaire items, record detailing, and take photo evidence.
+  - Implemented `action='save_draft'` (keeps status 'started') and `action='complete'` (transitions to 'finished').
+  - Required questions and photo evidence validated upon completion; answers preserved on validation error.
+  - Anti-duplicate protection prevents rapid double submissions.
+- [X] **TASK-04**: **Explicit Planned vs Unplanned Classification**:
+  - Utilized persistent boolean `Visit.is_planned` (indexed).
+  - Explicit assignment via `planned_item_id` (planned) vs ad-hoc routes (unplanned).
+  - Added Arabic badges: `زيارة مخططة` (blue) and `زيارة خارج الخطة` (purple).
+  - Added filter pills and slide-over drawer filter `plan_type=planned` / `plan_type=unplanned`.
+- [X] **TASK-05**: **Lock Representative Assignment to Authenticated User**:
+  - Standard representatives are automatically locked to `request.user` (`disabled=True` + forced in `clean()`).
+  - Client-side tampering with `owner` parameter is rejected/overridden by the server.
+  - Superusers/managers retain selector to assign other representatives.
+- [X] **TASK-06**: **Location Photo Capture & Audited Superuser Bypass**:
+  - Added `location_photo`, `photo_captured_at`, `bypassed_by`, `bypassed_at`, `bypass_reason` to `Visit`.
+  - Mobile-friendly camera file input (`accept="image/*" capture="environment"`) with live preview and retake.
+  - Backend validation in `activities.services.validate_and_save_photo_evidence` (10MB limit, image integrity check, UUID filename).
+  - Protected endpoint `/visits/<pk>/evidence/photo/` streams file to authorized users, returns 403 to unauthorized reps.
+  - Authorized superuser bypass path records audit log (`bypassed_by`, `bypassed_at`, `bypass_reason`).
+- [X] **TASK-07**: **Restrict المنتجات المشروحة to 3 Template Types**:
+  - Implemented `VisitTemplate.is_product_detailing_supported()` restricting detailing strictly to:
+    1. Single visit — doctor / DR visit
+    2. Single visit — pharmacy visit
+    3. Healthy day
+  - Detailing section hidden in frontend and cleared in backend for all other template types.
+- [X] **TASK-08**: **Automated Tests & Quality Assurance**:
+  - Added `VisitWorkflowsAndPermissionsComprehensiveTestCase` covering all requirements.
+  - All 45/45 activities tests passing (`py manage.py test activities`).
+  - Verified in browser automation across viewports: 320px, 375px, 390px, 430px, 768px, 1440px.
+- [X] **TASK-09**: **Complete Documentation**:
+  - Generated all 8 required markdown documents in `docs/`.
 
 ---
 

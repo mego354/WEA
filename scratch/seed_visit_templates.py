@@ -283,19 +283,6 @@ TEMPLATES_DATA = [
         'restrict_account_types': [],
         'questions': [
             {
-                'text_ar': 'هل كان يوم ناجح ؟',
-                'text_en': 'Was it a successful day ?',
-                'question_type': 'single_choice',
-                'options': [
-                    {'text_ar': 'نعم', 'text_en': 'Yes', 'value': 'yes'},
-                    {'text_ar': 'لا', 'text_en': 'No', 'value': 'no'},
-                ],
-                'is_required': True,
-                'is_conditional': False,
-                'stage': 'start_only',
-                'order': 1,
-            },
-            {
                 'text_ar': 'ما هى نتائج اليوم ( روشتات & بيع ) ؟',
                 'text_en': 'What were the results of the day (prescriptions & sales) ?',
                 'question_type': 'textarea',
