@@ -9,6 +9,119 @@
 - `[X] COMPLETED`  
 - `[!] BLOCKED`  
 
+## Phase 14: Final Codex Implementation — Unified Visit Lifecycle, Product Eligibility, Mobile UX & Repository Cleanup (2026-10-26)
+
+- [X] **TASK-01**: **Unified Visit Lifecycle (Create First, Answer Later)**:
+  - Ensured visit creation (`/visits/create/` or executing a planned item from `/planned-visits/`) does not require answering template questionnaire up-front.
+  - Representatives start visits, answer template questions, and detail products at their convenience.
+  - Completing visits preserves existing manager approvals and questionnaire answers.
+  - Only approved visits can be dispatched to the field Agenda.
+
+- [X] **TASK-02**: **Product Eligibility Enforcement (Sellable Only)**:
+  - Products not intended for sale (`sellable=False` or `is_active=False`) are strictly filtered via `Product.get_eligible_for_visits()`.
+  - Discarded on backend during `visit_create`, `visit_edit`, and `visit_detail`.
+  - Historical product detailing records on existing visits are preserved even if products later become non-sellable.
+
+- [X] **TASK-03**: **Configurable Product Suggestions in Settings & UI**:
+  - Global configuration added to `LocationSettings` (`master_data/models.py`) with `enable_product_suggestions` and `suggested_products` (restricted to sellable).
+  - Configurable card added to `templates/settings/location_settings.html`.
+  - Template-specific suggestions added to `VisitTemplate` (`activities/models.py`).
+  - Suggested products highlighted on `templates/activities/visit_detail.html` with amber accents and `★ مقترح` badge.
+
+- [X] **TASK-04**: **Mobile-First UX Audit (17 Screens Tested across 320px–1920px)**:
+  - Verified zero horizontal overflow on ultra-small (320px), standard (360px, 375px, 390px, 430px), tablet (768px, 1024px), and desktop.
+  - Touch targets adhere to $\ge 44\text{px} \times 44\text{px}$.
+  - Full viewport audit automated in `test_responsive_viewports.py`.
+
+- [X] **TASK-05**: **Automated Test Suite & Repository Cleanup**:
+  - Comprehensive user workflows suite `activities.tests_user_workflows` updated with 11 tests covering all user kinds, single/double visits, planned/unplanned, product eligibility, and suggestions.
+  - Total test suite: 194 tests across all apps passing with 100% success (0 failures, 0 errors).
+  - Added clean `.gitignore`, removed temporary debug scripts, reconciled repository git status.
+
+---
+
+## Phase 13: Regional Tab Excision & In-View Approvals on Agenda and Visits Routes (2026-10-25)
+
+- [X] **TASK-01**: **Complete Regional Route & View Excision**:
+  - Removed `regional/` tab and dashboard link from sidebar navigation (`templates/layouts/base.html`).
+  - Removed `regional/` routes from `activities/urls.py` and `config/urls.py`.
+  - Deleted `activities/regional_views.py` and `templates/regional/regional_dashboard.html`.
+  - Replaced regional dashboard links in `templates/approvals/approvals_hub.html` with canonical link to `agenda`.
+  - Verified no dangling imports or broken references across the entire codebase.
+
+- [X] **TASK-02**: **Support Next URL Preservation in `visit_action`**:
+  - Updated `activities/views.py:visit_action` to extract `next_url = request.POST.get('next') or request.GET.get('next')`.
+  - Standardized redirect helper `get_redirect()` ensuring users remain on their source page (`/agenda/` or `/visits/`) after approving or declining.
+
+- [X] **TASK-03**: **Agenda In-View Visit Approvals (`/agenda/`)**:
+  - Annotated each visit in `agenda_visits` with `can_approve` based on manager role, anti-self-approval rule, and regional territorial scoping.
+  - Added green Approve button and red Decline button to visit card footer in `templates/activities/agenda.html` when `can_approve` is true and visit is finished.
+  - Implemented `agenda-reject-modal` with mandatory rejection reason and form targeting `/activities/visits/<id>/action/disapprove/`.
+
+- [X] **TASK-04**: **Visits List In-View Visit Approvals (`/visits/`)**:
+  - Updated `activities/views.py:visits_list` to annotate `user_can_approve` on each visit in the paginated queryset.
+  - Added quick Approve and Decline action buttons to Table view (Actions column) and Card view (card footer) in `templates/activities/visits_list.html`.
+  - Implemented `visit-list-reject-modal` with mandatory rejection notes and next redirect.
+
+- [X] **TASK-05**: **Security & Integrity Enforcement**:
+  - Dual-control anti-self-approval rule strictly enforced: managers cannot approve or reject their own visits.
+  - Cross-regional isolation strictly enforced: managers cannot approve or reject visits of representatives outside their assigned territory.
+  - Rejection requires an explicit Arabic rationale.
+
+- [X] **TASK-06**: **Automated Testing & QA Verification**:
+  - Added automated test cases in `activities/tests_agenda.py`:
+    - `test_manager_can_approve_subordinate_visit_from_agenda`
+    - `test_manager_can_decline_subordinate_visit_from_agenda`
+    - `test_manager_can_approve_and_decline_from_visits_list`
+    - `test_anti_self_approval_and_cross_region_security`
+  - Ran test suite with 24 tests passing (100% pass).
+
+---
+
+## Phase 12: Approval Workflow Rectification, In-View Item Approvals Integration, and Agenda Tab Implementation (2026-10-25)
+
+- [X] **TASK-01**: **Audit & Reference ERP Inspection**:
+  - Inspected authorized reference application at `https://weapharma.bricks-rep.com/home` in read-only mode using browser subagent.
+  - Inspected `/agenda` layout, date picker, `Todos` and `الزيارات` tabs, out-of-plan modal, and visit cards.
+  - Verified item approval behavior on Visits, Sales Orders, and Purchase Orders.
+- [X] **TASK-02**: **Removal of Standalone Approvals Tab**:
+  - Removed "الموافقات والاعتمادات" navigation link from sidebar (`templates/layouts/base.html`).
+  - Replaced approvals hub links in `templates/regional/regional_dashboard.html` with direct list links and status filters.
+  - Implemented canonical HTTP 302 redirect in `activities/approvals_views.py:approvals_hub` to prevent broken bookmarks.
+- [X] **TASK-03**: **Purchase Order Approval Infrastructure**:
+  - Added `approved_by`, `approved_at`, and `rejection_reason` to `PurchaseOrder` model in `purchases/models.py`.
+  - Applied migrations `purchases.0004_purchaseorder_approved_at_...` and `activities.0009_approvalauditlog_purchase_order_...`.
+  - Implemented `approve_order`, `reject_order` (mandatory reason), `resubmit_order` in `purchases/services.py:PurchaseOrderService`.
+  - Added downstream inventory receipt lock: `PurchaseOrderService.stock_order` strictly enforces `status == 'approved'`.
+- [X] **TASK-04**: **In-View Detail Approval Integration**:
+  - Integrated approval actions, rejection modal, resubmission button, and audit trail into `templates/purchases/purchase_order_detail.html`.
+  - Integrated approval actions and rejection modal into `templates/activities/visit_detail.html`.
+  - Verified approval actions on `templates/sales/sales_order_detail.html`.
+- [X] **TASK-05**: **List View Status Visibility and Mobile Cards**:
+  - Added status badge pills and mobile card layout to `templates/purchases/purchase_orders_list.html`.
+  - Added `rejected` status filter and mobile card layout to `templates/sales/sales_orders_list.html`.
+  - Added approval status indicators and URL filter `?approval_status=` to `templates/activities/visits_list.html`.
+- [X] **TASK-06**: **Database State Reconciliation**:
+  - Safely reconciled inconsistent development database records (Visit #3 and PO #43) without deleting historical data.
+- [X] **TASK-07**: **Dual-Control Anti-Self-Approval Enforcement**:
+  - Barred creators from approving their own visits, sales orders, or purchase orders unless sovereign superadmin.
+- [X] **TASK-08**: **Verification Gate Sign-Off**:
+  - Authored formal verification report in `docs/APPROVAL_WORKFLOW_VERIFICATION.md` after passing all approval test suites.
+- [X] **TASK-09**: **Agenda Tab Implementation (`جدول الاعمال`)**:
+  - Created `activities.views.agenda_view` mapped to `/agenda/` and `/activities/agenda/`.
+  - Positioned `جدول الاعمال` in sidebar navigation directly under `الرئيسية`.
+  - Implemented dual tabs: `الزيارات` and `Todos` (`AgendaTodo` model).
+  - Implemented previous/next date chevron navigation and date input picker.
+  - Implemented out-of-plan registration modal (`زيارة خارج الخطة`).
+  - Implemented empty state illustration matching reference ERP (`لا خطط أخرى لهذا اليوم`).
+  - Enforced territorial scoping: Reps restricted to own agenda (403 on cross-rep query); Managers scoped to region/subregions; SuperAdmin universal access.
+- [X] **TASK-10**: **Automated Test Suites & QA**:
+  - Authored `activities/tests_approval_and_regional.py` (12 tests, 100% pass).
+  - Authored `activities/tests_agenda.py` (8 tests, 100% pass).
+  - Full module regression suite: 79 tests in `activities`, `purchases`, and `sales` passed with zero errors.
+
+---
+
 ## Phase 11: Role-Based Visit Templates, Regional Manager Approvals, and Secure Mobile Workflows (2026-10-24)
 
 - [X] **TASK-01**: **Role-Based Visit Template Compatibility Engine**:

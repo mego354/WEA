@@ -52,8 +52,11 @@
             <a href="?status=pending{% if selected_customer %}&customer={{ selected_customer }}{% endif %}" class="px-3 py-1 rounded-full text-xs font-bold transition-all {% if current_status == 'pending' %}bg-amber-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
                 قيد المراجعة
             </a>
-            <a href="?status=manager_approval{% if selected_customer %}&customer={{ selected_customer }}{% endif %}" class="px-3 py-1 rounded-full text-xs font-bold transition-all {% if current_status == 'manager_approval' %}bg-blue-600 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+            <a href="?status=manager_approval{% if selected_customer %}&customer={{ selected_customer }}{% endif %}" class="px-3 py-1 rounded-full text-xs font-bold transition-all {% if current_status == 'manager_approval' or current_status == 'approved' %}bg-blue-600 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
                 معتمد
+            </a>
+            <a href="?status=rejected{% if selected_customer %}&customer={{ selected_customer }}{% endif %}" class="px-3 py-1 rounded-full text-xs font-bold transition-all {% if current_status == 'rejected' %}bg-rose-600 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                مرفوض
             </a>
             <a href="?status=preparing{% if selected_customer %}&customer={{ selected_customer }}{% endif %}" class="px-3 py-1 rounded-full text-xs font-bold transition-all {% if current_status == 'preparing' %}bg-purple-600 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
                 جاري التجهيز
@@ -137,8 +140,10 @@
                         <td class="py-3.5 px-4 text-center">
                             {% if order.status == 'pending' %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">قيد المراجعة</span>
-                            {% elif order.status == 'manager_approval' %}
+                            {% elif order.status == 'manager_approval' or order.status == 'approved' %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/60">معتمد</span>
+                            {% elif order.status == 'rejected' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/60">مرفوض</span>
                             {% elif order.status == 'preparing' %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/60">جاري التجهيز</span>
                             {% elif order.status == 'delivered' %}
@@ -146,7 +151,7 @@
                             {% elif order.status == 'invoiced' %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200/60">تمت الفوترة</span>
                             {% elif order.status == 'cancelled' %}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/60">ملغي</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/60">ملغي</span>
                             {% endif %}
                         </td>
                         <td class="py-3.5 px-4 text-center">
@@ -167,6 +172,46 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Mobile Cards Presentation (< 768px) -->
+        <div class="block md:hidden divide-y divide-slate-100 bg-slate-50/50 p-3 space-y-3">
+            {% for order in orders %}
+            <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <a href="{% url 'sales_order_detail' order.pk %}" class="font-mono font-black text-brand-700 text-sm hover:underline">
+                        {{ order.order_number }}
+                    </a>
+                    {% if order.status == 'pending' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">قيد المراجعة</span>
+                    {% elif order.status == 'manager_approval' or order.status == 'approved' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">معتمد</span>
+                    {% elif order.status == 'rejected' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">مرفوض</span>
+                    {% elif order.status == 'preparing' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">جاري التجهيز</span>
+                    {% elif order.status == 'delivered' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">تم التسليم</span>
+                    {% elif order.status == 'invoiced' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">تمت الفوترة</span>
+                    {% elif order.status == 'cancelled' %}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">ملغي</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-900 text-sm">{{ order.customer.name }}</h4>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ order.customer.area.name|default:"بدون منطقة" }} • المخزن: {{ order.source_warehouse.name }}</p>
+                </div>
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <span class="font-mono font-bold text-slate-900">{{ order.grand_total|floatformat:2 }} ج.م</span>
+                    <a href="{% url 'sales_order_detail' order.pk %}" class="inline-flex items-center gap-1 text-brand-600 font-bold hover:underline">
+                        <span>عرض وتفاصيل</span>
+                        <span class="material-symbols-outlined text-sm">arrow_back</span>
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
         <!-- Standardized Pagination -->
         {% include 'components/pagination.html' %}
     </div>

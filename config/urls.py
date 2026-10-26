@@ -8,8 +8,13 @@ import contacts.views as contacts_views
 
 import accounts.views as accounts_views
 import activities.approvals_views as approvals_views
-import activities.regional_views as regional_views
+import activities.views as activities_views
 
+
+# Enterprise Django Admin Site Branding
+admin.site.site_header = "WEA Pharma ERP — الإدارة العامة والمركزية"
+admin.site.site_title = "WEA Pharma Admin Portal"
+admin.site.index_title = "لوحة التحكم والعمليات التنفيذية (Executive Operations Dashboard)"
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -20,8 +25,7 @@ urlpatterns = [
     path('users/', accounts_views.users_list, name='users_list_root_alias'),
     path('roles/', accounts_views.roles_list, name='roles_list_root_alias'),
     path('approvals/', approvals_views.approvals_hub, name='approvals_hub_root'),
-    path('regional/', regional_views.regional_dashboard, name='regional_dashboard_root'),
-    path('regional/dashboard/', regional_views.regional_dashboard, name='regional_dashboard_alt_root'),
+    path('agenda/', activities_views.agenda_view, name='agenda_root'),
     path('', include('master_data.urls')),
     path('home/', include('master_data.urls')),
     path('contacts/', include('contacts.urls')),

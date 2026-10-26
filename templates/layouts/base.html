@@ -103,6 +103,12 @@
                 <span>الرئيسية</span>
             </a>
 
+            <!-- Agenda (جدول الاعمال) -->
+            <a href="{% url 'agenda' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'agenda' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <span class="material-symbols-outlined text-xl {% if 'agenda' in request.path %}text-brand-600 material-symbols-fill{% endif %}">view_agenda</span>
+                <span>جدول الاعمال</span>
+            </a>
+
             <!-- Contacts -->
             {% if request.user|can_access_module:'contacts' and request.user|has_permission:'contacts:contacts/list' %}
             <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
@@ -171,25 +177,6 @@
             </div>
             {% endif %}
 
-            <!-- Approvals (مركز الموافقات) -->
-            {% if request.user|is_manager or request.user|has_permission:'activities:visits/approve' or request.user|has_permission:'sales:orders/approve' %}
-            <a href="{% url 'approvals_hub' %}" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'approvals' in request.path %}bg-amber-50 text-amber-800 font-bold border border-amber-200/60{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
-                <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-xl {% if 'approvals' in request.path %}text-amber-600 material-symbols-fill{% endif %}">verified_user</span>
-                    <span>الموافقات والاعتمادات</span>
-                </div>
-            </a>
-            {% endif %}
-
-            <!-- Regional Dashboard (لوحة قيادة المنطقة) -->
-            {% if request.user|is_manager %}
-            <a href="{% url 'regional_dashboard' %}" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'regional' in request.path %}bg-brand-50 text-brand-700 font-bold border border-brand-200/60{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
-                <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-xl {% if 'regional' in request.path %}text-brand-600 material-symbols-fill{% endif %}">map</span>
-                    <span>لوحة قيادة المنطقة</span>
-                </div>
-            </a>
-            {% endif %}
 
 
             <!-- Purchases (المشتريات) -->

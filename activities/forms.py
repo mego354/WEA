@@ -16,6 +16,15 @@ class AgreementForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'rows': 4, 'placeholder': 'تفاصيل وشروط الاتفاقية...'}),
         }
 
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        if user:
+            from accounts.permissions import get_scoped_queryset
+            base_qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')
+            scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
+            self.fields['customer'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
+
 
 class PlannedVisitItemForm(forms.ModelForm):
     class Meta:
@@ -98,27 +107,20 @@ class VisitForm(forms.ModelForm):
         UserModel = get_user_model()
 
         if user:
-            is_manager = (
-                user.is_superuser or
-                getattr(user, 'is_super_admin', False) or
-                (user.role and (
-                    user.role.is_area_manager or
-                    any(t in (user.role.name or '').lower() for t in ['manager', 'admin', 'supervisor', 'director']) or
-                    any(t in (user.role.display_name or '').lower() for t in ['مدير', 'مشرف'])
-                ))
-            )
+            from accounts.permissions import is_manager_or_higher, get_scoped_queryset
+            is_manager = is_manager_or_higher(user)
             self.is_manager = is_manager
 
-            # Customer scoping
+            # Territorial and regional scoping matching user's assigned area
+            scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
+            self.fields['contact'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
+
             if not is_manager:
-                scoped_qs = base_qs.filter(Q(assigned_team=user) | Q(created_by=user)).distinct()
-                self.fields['contact'].queryset = scoped_qs if scoped_qs.exists() else base_qs.order_by('name')
-                # Business Rule (Requirement 6): Lock representative assignment to current user
+                # Lock representative assignment to current user
                 self.fields['owner'].queryset = UserModel.objects.filter(pk=user.pk)
                 self.fields['owner'].initial = user
                 self.fields['owner'].disabled = True
             else:
-                self.fields['contact'].queryset = base_qs.order_by('name')
                 self.fields['owner'].queryset = UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
                 self.fields['owner'].initial = user
                 self.fields['owner'].required = False
@@ -239,7 +241,7 @@ class VisitTemplateForm(forms.ModelForm):
             'enable_product_detailing', 'enable_double_visit_assessment_only',
             'visit_outcome_mode', 'auto_end_visit',
             'has_special_location_settings', 'special_tolerance',
-            'restrict_account_types', 'restricted_roles'
+            'restrict_account_types', 'restricted_roles', 'suggested_products'
         ]
         widgets = {
             'display_name_ar': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالعربية...'}),
@@ -249,6 +251,7 @@ class VisitTemplateForm(forms.ModelForm):
             'visit_outcome_mode': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
             'special_tolerance': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'min': 10}),
             'restricted_roles': forms.SelectMultiple(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'suggested_products': forms.CheckboxSelectMultiple(attrs={'class': 'rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'active': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'allow_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'auto_approve_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
@@ -260,6 +263,9 @@ class VisitTemplateForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from catalog.models import Product
+        self.fields['suggested_products'].queryset = Product.get_eligible_for_visits()
+        self.fields['suggested_products'].label = "المنتجات المقترحة لهذا القالب (صالحة للبيع فقط)"
         if self.instance and self.instance.pk:
             raw = self.instance.restrict_account_types
             if isinstance(raw, list):

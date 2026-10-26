@@ -196,6 +196,11 @@ def purchase_order_detail(request, pk):
         total_credit = Decimal('0.00')
         current_vendor_balance = Decimal('0.00')
 
+    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    can_approve = has_perm_or_admin(request.user, 'purchases:orders/approve') and (is_super or order.created_by_id != request.user.id)
+    can_resubmit = (order.status == 'rejected') and (order.created_by_id == request.user.id or is_super)
+    approval_history = order.approval_history.select_related('actor').order_by('-created_at')
+
     context = {
         'order': order,
         'linked_tx': linked_tx,
@@ -203,6 +208,9 @@ def purchase_order_detail(request, pk):
         'total_credit': total_credit,
         'current_vendor_balance': current_vendor_balance,
         'status_choices': PurchaseOrder.STATUS_CHOICES,
+        'can_approve': can_approve,
+        'can_resubmit': can_resubmit,
+        'approval_history': approval_history,
     }
     return render(request, 'purchases/purchase_order_detail.html', context)
 
@@ -292,6 +300,9 @@ def purchase_order_upload_attachment(request, pk):
 def purchase_order_action(request, pk, action):
     action_perm_map = {
         'approve': 'purchases:orders/approve',
+        'reject': 'purchases:orders/approve',
+        'disapprove': 'purchases:orders/approve',
+        'resubmit': 'purchases:orders/create',
         'stock': 'purchases:orders/stock',
         'invoice': 'purchases:orders/invoice',
         'undo_invoice': 'purchases:orders/undoInvoice',
@@ -303,10 +314,45 @@ def purchase_order_action(request, pk, action):
 
     order = get_object_or_404(PurchaseOrder, pk=pk)
 
+    # Scoping and self-approval checks
+    if action in ['approve', 'reject', 'disapprove']:
+        if order.created_by_id == request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+            messages.error(request, "لا يمكن لمنشئ أمر الشراء اعتماده أو رفضه بنفسه (مبدأ الرقابة الثنائية).")
+            return redirect('purchase_order_detail', pk=order.pk)
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
     try:
         if action == 'approve':
-            PurchaseOrderService.approve_order(order, request.user)
-            messages.success(request, f"تم اعتماد أمر الشراء {order.order_number} بنجاح.")
+            notes = request.POST.get('approval_notes', '') or request.POST.get('notes', '')
+            PurchaseOrderService.approve_order(order, request.user, notes=notes)
+            msg = f"تم اعتماد أمر الشراء {order.order_number} بنجاح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.success(request, msg)
+
+        elif action in ['reject', 'disapprove']:
+            reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', '') or request.POST.get('approval_notes', '')
+            if not (reason or '').strip():
+                msg = "يرجى توضيح سبب رفض أمر الشراء لتوجيه مسؤول المشتريات."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message': msg}, status=400)
+                messages.error(request, msg)
+                return redirect('purchase_order_detail', pk=order.pk)
+
+            PurchaseOrderService.reject_order(order, request.user, reason=reason)
+            msg = f"تم رفض أمر الشراء {order.order_number}."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.error(request, msg)
+
+        elif action == 'resubmit':
+            PurchaseOrderService.resubmit_order(order, request.user)
+            msg = f"تمت إعادة تقديم أمر الشراء {order.order_number} للاعتماد بنجاح."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': order.status})
+            messages.success(request, msg)
+
         elif action == 'stock':
             PurchaseOrderService.stock_order(order, request.user)
             messages.success(request, f"تم استلام بضاعة أمر الشراء في المخزن بنجاح ({order.order_number}) وتم توليد إذن إضافة مخزن.")
@@ -322,7 +368,10 @@ def purchase_order_action(request, pk, action):
         else:
             messages.error(request, "إجراء غير معروف.")
     except ValidationError as e:
-        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        err_msg = str(e.message if hasattr(e, 'message') else e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
 
     return redirect('purchase_order_detail', pk=order.pk)
 

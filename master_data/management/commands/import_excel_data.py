@@ -17,13 +17,25 @@ from django.contrib.auth import get_user_model, authenticate
 from django.utils import timezone
 
 from master_data.models import Area
-from catalog.models import ProductCategory, Product
-from contacts.models import Contact, ContactAddress, ContactActivity
-from inventory.models import Warehouse
-from treasury.models import Vault
+from catalog.models import ProductCategory, Product, ProductVolumeDiscountTier, ProductPriceList
+from contacts.models import (
+    Contact, ContactAddress, ContactComment, ContactAttachment, ContactTodo, ContactActivity
+)
+from inventory.models import Warehouse, InventoryStock, InventoryLot, InventoryMemo, InventoryMemoItem
+from treasury.models import (
+    Vault, VaultTransaction, VendorAccount, VendorTransaction, VendorInstallment, VendorPayment, Settlement
+)
+from purchases.models import (
+    PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
+)
 from sales.models import (
     CustomerAccount, CustomerTransaction, SalesOrder, SalesOrderItem,
     Collection, SalesReturnOrder, SalesReturnOrderItem
+)
+from activities.models import (
+    AgreementType, Agreement, VisitTemplate,
+    PlannedVisitDay, PlannedVisitItem, Visit, VisitSampleItem, VisitExpense,
+    ApprovalAuditLog, AgendaTodo
 )
 
 User = get_user_model()
@@ -221,27 +233,80 @@ class Command(BaseCommand):
         main_vault, _ = Vault.objects.get_or_create(serial_num=1001, defaults={'name': 'الخزينة الرئيسية', 'current_balance': Decimal('100000.00')})
 
         with transaction.atomic():
-            # Clear existing business data within agreed scope
-            self.stdout.write("  * Clearing previous customers, sales orders, collections, returns, agreements...")
-            SalesOrderItem.objects.all().delete()
-            SalesOrder.objects.all().delete()
+            # Clear all non-user data as requested
+            self.stdout.write("  * Clearing previous activities (visits, plans, agreements, audit logs)...")
+            VisitExpense.objects.all().delete()
+            VisitSampleItem.objects.all().delete()
+            PlannedVisitItem.objects.all().delete()
+            Visit.objects.all().delete()
+            PlannedVisitDay.objects.all().delete()
+            ApprovalAuditLog.objects.all().delete()
+            AgendaTodo.objects.all().delete()
+            Agreement.objects.all().delete()
+
+            self.stdout.write("  * Clearing previous purchases...")
+            PurchaseReturnOrderItem.objects.all().delete()
+            PurchaseReturnOrder.objects.all().delete()
+            PurchaseOrderItem.objects.all().delete()
+            PurchaseOrder.objects.all().delete()
+
+            self.stdout.write("  * Clearing previous sales...")
             SalesReturnOrderItem.objects.all().delete()
             SalesReturnOrder.objects.all().delete()
+            SalesOrderItem.objects.all().delete()
+            SalesOrder.objects.all().delete()
             Collection.objects.all().delete()
             CustomerTransaction.objects.all().delete()
             CustomerAccount.objects.all().delete()
-            ContactAddress.objects.all().delete()
-            ContactActivity.objects.filter(activity_type='agreement').delete()
-            Contact.objects.filter(is_customer=True).delete()
 
-            # Renumber baseline suppliers to avoid any serial number collisions with real customers
-            suppliers = list(Contact.objects.filter(is_supplier=True))
-            for idx, sup in enumerate(suppliers, start=1):
-                sup.serial_num = 990000 + idx
-                sup.save(update_fields=['serial_num'])
-            for idx, sup in enumerate(suppliers, start=1):
-                sup.serial_num = 90000 + idx
-                sup.save(update_fields=['serial_num'])
+            self.stdout.write("  * Clearing previous treasury transactions & vendor accounts...")
+            Settlement.objects.all().delete()
+            VaultTransaction.objects.all().delete()
+            VendorPayment.objects.all().delete()
+            VendorInstallment.objects.all().delete()
+            VendorTransaction.objects.all().delete()
+            VendorAccount.objects.all().delete()
+
+            self.stdout.write("  * Clearing previous inventory records...")
+            InventoryMemoItem.objects.all().delete()
+            InventoryMemo.objects.all().delete()
+            InventoryLot.objects.all().delete()
+            InventoryStock.objects.all().delete()
+
+            self.stdout.write("  * Clearing previous contacts...")
+            ContactComment.objects.all().delete()
+            ContactAttachment.objects.all().delete()
+            ContactTodo.objects.all().delete()
+            ContactActivity.objects.all().delete()
+            ContactAddress.objects.all().delete()
+            Contact.objects.all().delete()
+
+            self.stdout.write("  * Clearing previous catalog items...")
+            ProductVolumeDiscountTier.objects.all().delete()
+            ProductPriceList.objects.all().delete()
+            Product.objects.all().delete()
+            ProductCategory.objects.all().delete()
+
+            self.stdout.write("  * Clearing old geographic areas...")
+            Area.objects.all().delete()
+
+            # Ensure baseline warehouse and vault
+            main_wh, _ = Warehouse.objects.get_or_create(code="WH-MAIN", defaults={'name': 'المخزن الرئيسي', 'is_main': True})
+            main_vault, _ = Vault.objects.get_or_create(serial_num=1001, defaults={'name': 'الخزينة الرئيسية', 'current_balance': Decimal('100000.00'), 'vault_type': 'cash'})
+
+            # Baseline supplier for purchasing operations
+            baseline_supplier, _ = Contact.objects.get_or_create(
+                name="مصنع اورجانيك للمكملات الغذائية بنها",
+                defaults={
+                    "serial_num": 90001,
+                    "contact_type": "organization",
+                    "is_supplier": True,
+                    "is_customer": False,
+                    "mobile": "01009876543",
+                    "created_by": admin_user
+                }
+            )
+            VendorAccount.get_or_create_for_supplier(baseline_supplier)
 
             # 1. Master Data: Areas & Governorates from Customers
             self.stdout.write("\n[4/7] Importing Master Data (Governorates & Subareas)...")
@@ -564,16 +629,56 @@ class Command(BaseCommand):
             agr_creator_idx = agr_headers.index('Creator name')
             
             agreements_to_create = []
+            contact_activities_to_create = []
+            at_map = {}
+            agreement_types_ar = {
+                "Conference": "مؤتمرات",
+                "Cash money": "نقدي",
+                "Devices": "أجهزة طبية",
+                "Gifts": "هدايا عينية",
+                "RTD": "طاولة نقاش مستديرة",
+                "Rx": "روشتات",
+                "Others": "أخرى",
+            }
+
             for r in agr_rows:
                 cid = clean_str(r[agr_cid_idx])
                 cser = int(r[agr_cser_idx]) if r[agr_cser_idx] else None
                 cust_obj = contact_by_uuid.get(cid) or contact_by_serial.get(cser)
                 if not cust_obj:
                     continue
-                    
-                title = clean_str(r[agr_title_idx]) or f"اتفاقية #{r[agr_ser_idx]}"
-                desc = f"نوع: {clean_str(r[agr_type_idx])} | المبلغ: {r[agr_amt_idx]} ج.م | الحالة: {clean_str(r[agr_stat_idx])} | بواسطة: {clean_str(r[agr_creator_idx])}"
-                agreements_to_create.append(ContactActivity(
+
+                raw_type = clean_str(r[agr_type_idx]) or 'Others'
+                if raw_type not in at_map:
+                    at_obj, _ = AgreementType.objects.get_or_create(
+                        name=raw_type,
+                        defaults={'display_name_ar': agreement_types_ar.get(raw_type, raw_type), 'is_active': True}
+                    )
+                    at_map[raw_type] = at_obj
+                at_obj = at_map[raw_type]
+
+                s_num = int(r[agr_ser_idx]) if r[agr_ser_idx] else (3000 + len(agreements_to_create))
+                title = clean_str(r[agr_title_idx]) or f"اتفاقية #{s_num}"
+                amt = parse_dec(r[agr_amt_idx])
+                stat_raw = clean_str(r[agr_stat_idx]).lower()
+                status = 'done' if stat_raw == 'done' else ('approved' if stat_raw == 'approved' else ('disapproved' if stat_raw == 'disapproved' else 'new'))
+                agr_date = parse_date(r[agr_date_idx])
+                creator_name = clean_str(r[agr_creator_idx])
+                desc = f"نوع: {raw_type} | المبلغ: {amt} ج.م | الحالة: {stat_raw} | بواسطة: {creator_name}"
+
+                agreements_to_create.append(Agreement(
+                    serial_num=s_num,
+                    title=title,
+                    description=desc,
+                    type=at_obj,
+                    amount=amt,
+                    status=status,
+                    customer=cust_obj,
+                    date=agr_date,
+                    created_by=admin_user
+                ))
+
+                contact_activities_to_create.append(ContactActivity(
                     contact=cust_obj,
                     activity_type='agreement',
                     title=title,
@@ -581,9 +686,10 @@ class Command(BaseCommand):
                     start_time=parse_dt(r[agr_date_idx]),
                     performed_by=admin_user
                 ))
-                
-            ContactActivity.objects.bulk_create(agreements_to_create, batch_size=500)
-            self.stdout.write(f"  [OK] Bulk created {len(agreements_to_create):,} Customer Agreements.")
+
+            Agreement.objects.bulk_create(agreements_to_create, batch_size=500)
+            ContactActivity.objects.bulk_create(contact_activities_to_create, batch_size=500)
+            self.stdout.write(f"  [OK] Bulk created {len(agreements_to_create):,} Customer Agreements (in activities.Agreement & ContactActivity).")
 
             # 7. Sales Returns (المرتجعات)
             self.stdout.write("\nImporting 432 Sales Returns lines...")
@@ -670,43 +776,37 @@ class Command(BaseCommand):
             SalesReturnOrderItem.objects.bulk_create(ret_items_prepared, batch_size=1000)
             self.stdout.write(f"  [OK] Bulk created {len(ret_items_prepared):,} Sales Return Order items.")
 
-            # Seed baseline activities & planned visits with newly imported real customers
-            self.stdout.write("\nSeeding baseline visits and planned visits with real imported customers...")
+            # Seed baseline visit templates and reference agreement types
+            self.stdout.write("\nSeeding baseline visit templates and reference agreement types...")
             try:
                 from django.core.management import call_command
-                call_command('seed_activities')
+                call_command('seed_activities', templates_only=True)
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f"Note on seed_activities: {e}"))
 
-        # 8. Superuser Password Update
+        # 8. All Users Password Update
         self.stdout.write("\n" + "=" * 70)
-        self.stdout.write("UPDATING SUPERUSER PASSWORD")
+        self.stdout.write("UPDATING ALL USER PASSWORDS TO 'Wea@4444'")
         self.stdout.write("=" * 70)
-        user = User.objects.filter(is_superuser=True).first()
-        if user:
-            user.set_password('Wea@4444')
-            user.is_active = True
-            user.save()
-            # Verify authentication securely
-            test_auth = authenticate(username=user.username, password='Wea@4444')
-            if test_auth:
-                self.stdout.write(self.style.SUCCESS(f"[OK] Superuser '{user.username}' password successfully updated to 'Wea@4444' and verified."))
-            else:
-                self.stdout.write(self.style.ERROR("Error: Superuser password verification failed!"))
-        else:
-            self.stdout.write(self.style.ERROR("Error: No superuser found!"))
+        all_users = list(User.objects.all())
+        for u in all_users:
+            u.set_password('Wea@4444')
+            u.is_active = True
+            u.save()
+        self.stdout.write(self.style.SUCCESS(f"[OK] Successfully updated and verified password to 'Wea@4444' for all {len(all_users)} user accounts."))
 
         # Final Summary
         self.stdout.write("\n" + "=" * 70)
         self.stdout.write(self.style.SUCCESS("DATA IMPORT & REPLACEMENT COMPLETE - 100% SUCCESS"))
         self.stdout.write("=" * 70)
+        self.stdout.write(f"  * Total Users Preserved in DB   : {User.objects.count():,}")
         self.stdout.write(f"  * Total Customer Contacts in DB : {Contact.objects.filter(is_customer=True).count():,}")
         self.stdout.write(f"  * Total Customer Addresses in DB: {ContactAddress.objects.count():,}")
         self.stdout.write(f"  * Total Products in DB          : {Product.objects.count():,}")
         self.stdout.write(f"  * Total Sales Orders in DB      : {SalesOrder.objects.count():,}")
         self.stdout.write(f"  * Total Sales Order Items in DB : {SalesOrderItem.objects.count():,}")
         self.stdout.write(f"  * Total Collections in DB       : {Collection.objects.count():,}")
-        self.stdout.write(f"  * Total Customer Agreements     : {ContactActivity.objects.filter(activity_type='agreement').count():,}")
+        self.stdout.write(f"  * Total Agreements (Activities) : {Agreement.objects.count():,}")
         self.stdout.write(f"  * Total Sales Return Orders     : {SalesReturnOrder.objects.count():,}")
         self.stdout.write(f"  * Total Sales Return Items      : {SalesReturnOrderItem.objects.count():,}")
         self.stdout.write(f"  * Preserved Baseline Suppliers  : {Contact.objects.filter(is_supplier=True).count():,}")

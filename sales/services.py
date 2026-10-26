@@ -24,13 +24,27 @@ class SalesOrderService:
         # Ensure customer account exists
         CustomerAccount.get_or_create_for_customer(customer)
 
+        from master_data.models import SalesSettings
+        from accounts.permissions import is_manager_or_higher
+        sales_settings = SalesSettings.get_settings()
+
+        initial_status = 'pending'
+        approved_by = None
+        approved_at = None
+        if not sales_settings.require_manager_approval or is_manager_or_higher(user):
+            initial_status = 'manager_approval'
+            approved_by = user
+            approved_at = timezone.now()
+
         order = SalesOrder(
             customer=customer,
             source_warehouse=source_warehouse,
             delivery_address=delivery_address,
             order_date=order_date or timezone.now().date(),
             delivery_date=delivery_date,
-            status='pending',
+            status=initial_status,
+            approved_by=approved_by,
+            approved_at=approved_at,
             notes=notes,
             created_by=user
         )
@@ -64,11 +78,11 @@ class SalesOrderService:
         ApprovalAuditLog.objects.create(
             record_type='sales_order',
             sales_order=order,
-            action='submitted',
+            action='submitted' if order.status == 'pending' else 'auto_approved',
             actor=user,
             status_before='',
-            status_after='pending',
-            reason=notes or 'إنشاء وتقديم أمر البيع للاعتماد'
+            status_after=order.status,
+            reason=notes or ('إنشاء وتقديم أمر البيع للاعتماد' if order.status == 'pending' else 'إنشاء أمر البيع واعتماده تلقائياً')
         )
         return order
 

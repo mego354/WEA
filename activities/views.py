@@ -15,10 +15,12 @@ from django.contrib.auth import get_user_model
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+from django.urls import reverse
+
 from .models import (
     Agreement, AgreementType, VisitTemplate, VisitTemplateQuestion,
     PlannedVisitDay, PlannedVisitItem, Visit,
-    VisitSampleItem, VisitExpense, ApprovalAuditLog
+    VisitSampleItem, VisitExpense, ApprovalAuditLog, AgendaTodo
 )
 from .forms import (
     AgreementForm, PlannedVisitItemForm, VisitForm,
@@ -30,7 +32,7 @@ from catalog.models import Product
 from .services import verify_visit_location
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
-    get_scoped_queryset, can_user_access_object
+    get_scoped_queryset, can_user_access_object, get_user_managed_representatives
 )
 
 User = get_user_model()
@@ -129,19 +131,27 @@ def agreements_list(request):
 
     # Handle inline Create via POST
     if request.method == 'POST' and 'create_agreement' in request.POST:
-        form = AgreementForm(request.POST)
+        form = AgreementForm(request.POST, user=request.user)
         if form.is_valid():
             agreement = form.save(commit=False)
             agreement.created_by = request.user
             agreement.updated_by = request.user
-            agreement.status = 'new'
+
+            from master_data.models import LocationSettings
+            from accounts.permissions import is_manager_or_higher
+            loc_settings = LocationSettings.get_settings()
+            if not loc_settings.require_manager_approval_for_agreements or is_manager_or_higher(request.user):
+                agreement.status = 'approved'
+            else:
+                agreement.status = 'new'
+
             agreement.save()
             messages.success(request, f"تم إنشاء الاتفاقية #{agreement.serial_num} بنجاح.")
             return redirect('agreements_list')
         else:
             messages.error(request, "يرجى تصحيح الأخطاء في نموذج إنشاء الاتفاقية.")
     else:
-        form = AgreementForm(initial={'date': timezone.now().date()})
+        form = AgreementForm(initial={'date': timezone.now().date()}, user=request.user)
 
     # Standardized bounded pagination
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
@@ -235,17 +245,25 @@ def agreement_detail(request, pk):
 def agreement_create(request):
     """Full-page agreement creation."""
     if request.method == 'POST':
-        form = AgreementForm(request.POST)
+        form = AgreementForm(request.POST, user=request.user)
         if form.is_valid():
             agreement = form.save(commit=False)
             agreement.created_by = request.user
             agreement.updated_by = request.user
-            agreement.status = 'new'
+
+            from master_data.models import LocationSettings
+            from accounts.permissions import is_manager_or_higher
+            loc_settings = LocationSettings.get_settings()
+            if not loc_settings.require_manager_approval_for_agreements or is_manager_or_higher(request.user):
+                agreement.status = 'approved'
+            else:
+                agreement.status = 'new'
+
             agreement.save()
             messages.success(request, f"تم إنشاء الاتفاقية #{agreement.serial_num} بنجاح.")
             return redirect('agreement_detail', pk=agreement.pk)
     else:
-        form = AgreementForm(initial={'date': timezone.now().date()})
+        form = AgreementForm(initial={'date': timezone.now().date()}, user=request.user)
     return render(request, 'activities/agreement_form.html', {'form': form, 'title': 'إضافة اتفاقية جديدة'})
 
 
@@ -487,8 +505,8 @@ def planned_visits_list(request):
         })
         current_date += datetime.timedelta(days=1)
 
-    # Contacts for drawer filter
-    contacts_qs = Contact.objects.all()
+    # Contacts for drawer filter (scoped to representative's assigned area/hierarchy)
+    contacts_qs = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
     area_filter = request.GET.get('area')
     specialty_filter = request.GET.get('specialty')
     search_contact = request.GET.get('contact_search')
@@ -850,6 +868,14 @@ def visits_list(request):
     # Standardized bounded pagination
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    user_can_manage = can_manage_approvals(request.user)
+    for v in page_obj.object_list:
+        v.user_can_approve = bool(
+            user_can_manage and
+            v.owner_id != request.user.id and
+            can_user_access_object(request.user, v, 'approve')
+        )
+
     # Filter dropdowns
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
     contacts = Contact.objects.all().order_by('name')[:50]
@@ -1024,7 +1050,13 @@ def visit_detail(request, pk):
                 if template and template.is_product_detailing_supported():
                     detailed_product_ids = request.POST.getlist('detailed_products')
                     if detailed_product_ids:
-                        visit.detailed_products.set(detailed_product_ids)
+                        # Products not intended for sale must not be selectable for new visit-related operations.
+                        # Preserve historical detailed products already linked to this visit.
+                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+                        allowed_ids = eligible_ids | historical_ids
+                        valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
+                        visit.detailed_products.set(valid_ids)
                     elif 'detailed_products_submitted' in request.POST:
                         visit.detailed_products.clear()
                 else:
@@ -1039,12 +1071,23 @@ def visit_detail(request, pk):
                         visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
                         visit.duration = 900
 
-                    if not visit.is_planned and template and template.auto_approve_unplanned:
-                        visit.approval_status = 'approved'
-                        visit.approved_by = request.user
-                        visit.approved_at = timezone.now()
+                    if visit.approval_status == 'approved':
+                        # Preserve existing manager approval
+                        pass
                     else:
-                        visit.approval_status = 'pending'
+                        from master_data.models import LocationSettings
+                        from accounts.permissions import is_manager_or_higher
+                        loc_settings = LocationSettings.get_settings()
+                        if not loc_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
+                            visit.approval_status = 'approved'
+                            visit.approved_by = request.user
+                            visit.approved_at = timezone.now()
+                        elif not visit.is_planned and template and template.auto_approve_unplanned:
+                            visit.approval_status = 'approved'
+                            visit.approved_by = request.user
+                            visit.approved_at = timezone.now()
+                        else:
+                            visit.approval_status = 'pending'
 
                     visit.save()
                     ApprovalAuditLog.objects.create(
@@ -1101,19 +1144,33 @@ def visit_detail(request, pk):
 
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
-    products = Product.objects.filter(is_active=True).order_by('name')
+
+    # Configurable Product Suggestions: collect from template & global settings
+    suggested_product_ids = set()
+    if template:
+        suggested_product_ids.update(template.get_eligible_suggested_products().values_list('id', flat=True))
+    if location_settings.enable_product_suggestions:
+        suggested_product_ids.update(location_settings.get_eligible_suggested_products().values_list('id', flat=True))
+
+    # Eligible products (sellable & active) + any historically detailed products
+    eligible_products = Product.get_eligible_for_visits()
+    historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+    all_product_ids = set(eligible_products.values_list('id', flat=True)) | historical_ids
+    products = Product.objects.filter(id__in=all_product_ids).order_by('name')
 
     can_approve = can_manage_approvals(request.user) and can_user_access_object(request.user, visit, 'approve')
     can_resubmit = (visit.approval_status in ('disapproved', 'rejected')) and (
         visit.owner == request.user or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     )
     approval_history = visit.approval_history.select_related('actor').all()
+    is_in_agenda = PlannedVisitItem.objects.filter(visit=visit).exists()
 
     return render(request, 'activities/visit_detail.html', {
         'visit': visit,
         'questionnaire_responses': questionnaire_responses,
         'all_questions': all_questions,
         'products': products,
+        'suggested_product_ids': suggested_product_ids,
         'supports_detailing': supports_detailing,
         'can_bypass_gps': can_bypass_gps,
         'verify_visits_enabled': location_settings.verify_visits,
@@ -1122,6 +1179,9 @@ def visit_detail(request, pk):
         'can_approve': can_approve,
         'can_resubmit': can_resubmit,
         'approval_history': approval_history,
+        'is_in_agenda': is_in_agenda,
+        'status_choices': Visit.STATUS_CHOICES,
+        'approval_choices': Visit.APPROVAL_CHOICES,
     })
 
 
@@ -1239,9 +1299,19 @@ def visit_create(request):
                         visit.visit_outcome = visit_outcome
                         visit.is_successful = (visit_outcome == 'successful')
 
-                    if not visit.is_planned and template and template.auto_approve_unplanned:
+                    from master_data.models import LocationSettings
+                    from accounts.permissions import is_manager_or_higher
+                    loc_settings = LocationSettings.get_settings()
+                    if not loc_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
                         visit.approval_status = 'approved'
                         visit.approved_by = request.user
+                        visit.approved_at = timezone.now()
+                    elif not visit.is_planned and template and template.auto_approve_unplanned:
+                        visit.approval_status = 'approved'
+                        visit.approved_by = request.user
+                        visit.approved_at = timezone.now()
+                    else:
+                        visit.approval_status = 'pending'
 
                     visit.save()
 
@@ -1255,7 +1325,9 @@ def visit_create(request):
                     if template and template.is_product_detailing_supported():
                         detailed_product_ids = request.POST.getlist('detailed_products')
                         if detailed_product_ids:
-                            visit.detailed_products.set(detailed_product_ids)
+                            eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                            valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in eligible_ids]
+                            visit.detailed_products.set(valid_ids)
 
                 messages.success(request, f"تم بدء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. يمكنك الآن الإجابة على الاستبيان وتوثيق تفاصيل الزيارة.")
                 return redirect('visit_detail', pk=visit.pk)
@@ -1300,7 +1372,7 @@ def visit_create(request):
     location_settings = LocationSettings.get_settings()
     can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
 
-    products = Product.objects.filter(is_active=True).order_by('name')
+    products = Product.get_eligible_for_visits()
     templates = VisitTemplate.objects.filter(active=True).order_by('name')
     return render(request, 'activities/visit_form.html', {
         'form': form,
@@ -1372,7 +1444,11 @@ def visit_edit(request, pk):
             if template and template.is_product_detailing_supported():
                 detailed_product_ids = request.POST.getlist('detailed_products')
                 if detailed_product_ids:
-                    visit.detailed_products.set(detailed_product_ids)
+                    eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                    historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+                    allowed_ids = eligible_ids | historical_ids
+                    valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
+                    visit.detailed_products.set(valid_ids)
                 elif 'detailed_products_submitted' in request.POST:
                     visit.detailed_products.clear()
             else:
@@ -1383,7 +1459,10 @@ def visit_edit(request, pk):
     else:
         form = VisitForm(instance=visit, user=request.user)
 
-    products = Product.objects.filter(is_active=True).order_by('name')
+    eligible_products = Product.get_eligible_for_visits()
+    historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+    all_product_ids = set(eligible_products.values_list('id', flat=True)) | historical_ids
+    products = Product.objects.filter(id__in=all_product_ids).order_by('name')
     templates = VisitTemplate.objects.filter(active=True).order_by('name')
     selected_contact = visit.contact
     from master_data.models import LocationSettings
@@ -1453,6 +1532,12 @@ def visit_action(request, pk, action):
     """
     visit = get_object_or_404(Visit, pk=pk)
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    next_url = request.POST.get('next') or request.GET.get('next')
+
+    def get_redirect():
+        if next_url and next_url.startswith('/'):
+            return redirect(next_url)
+        return redirect('visit_detail', pk=visit.pk)
 
     if action in ('approve', 'disapprove', 'reject'):
         if not can_manage_approvals(request.user):
@@ -1460,14 +1545,14 @@ def visit_action(request, pk, action):
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
             messages.error(request, msg)
-            return redirect('visit_detail', pk=pk)
+            return get_redirect()
 
         if not can_user_access_object(request.user, visit, action):
             msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو لا يمكن للمندوب اعتماد زيارته الخاصة)."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
             messages.error(request, msg)
-            return redirect('visit_detail', pk=pk)
+            return get_redirect()
 
         notes = request.POST.get('approval_notes', '').strip() or request.POST.get('reason', '').strip()
 
@@ -1501,7 +1586,7 @@ def visit_action(request, pk, action):
                 if is_ajax:
                     return JsonResponse({'success': False, 'message': msg}, status=400)
                 messages.error(request, msg)
-                return redirect('visit_detail', pk=visit.pk)
+                return get_redirect()
 
             status_before = visit.approval_status
             visit.approval_status = 'disapproved'
@@ -1530,17 +1615,14 @@ def visit_action(request, pk, action):
         can_resubmit_override = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
         if not (is_owner or can_resubmit_override):
             msg = "غير مصرح لك بإعادة تقديم هذه الزيارة (فقط المندوب المسؤول عن الزيارة يمكنه إعادة تقديمها)."
-            if is_ajax:
-                return JsonResponse({'success': False, 'message': msg}, status=403)
-            messages.error(request, msg)
-            return redirect('visit_detail', pk=pk)
+            return render_forbidden_response(request, msg)
 
         if visit.approval_status not in ('disapproved', 'rejected'):
             msg = "لا يمكن إعادة تقديم زيارة إلا إذا كانت مرفوضة بحاجة لتصحيح."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=400)
             messages.warning(request, msg)
-            return redirect('visit_detail', pk=pk)
+            return get_redirect()
 
         status_before = visit.approval_status
         visit.approval_status = 'pending'
@@ -1563,13 +1645,144 @@ def visit_action(request, pk, action):
         if is_ajax:
             return JsonResponse({'success': True, 'message': msg, 'status': 'pending'})
         messages.success(request, msg)
+
+    elif action in ('change_status', 'manage_status'):
+        if not can_manage_approvals(request.user):
+            msg = "عذراً، لا تملك صلاحية تغيير حالة أو اعتماد الزيارات (خاص بالمدراء والمشرفين)."
+            return render_forbidden_response(request, msg)
+
+        if not can_user_access_object(request.user, visit, 'approve'):
+            msg = "غير مصرح لك بتغيير حالة هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو لا يمكن للمندوب اعتماد زيارته الخاصة)."
+            return render_forbidden_response(request, msg)
+
+        new_approval_status = request.POST.get('approval_status', '').strip()
+        new_visit_status = request.POST.get('visit_status', '').strip()
+        reason = request.POST.get('reason', '').strip() or request.POST.get('approval_notes', '').strip() or 'تحديث الحالة من قبل مدير المنطقة'
+
+        changes = []
+        status_before = f"حالة: {visit.status} | اعتماد: {visit.approval_status}"
+
+        if new_approval_status and new_approval_status in dict(Visit.APPROVAL_CHOICES):
+            if new_approval_status != visit.approval_status:
+                visit.approval_status = new_approval_status
+                if new_approval_status == 'approved':
+                    visit.approved_by = request.user
+                    visit.approved_at = timezone.now()
+                elif new_approval_status == 'disapproved':
+                    visit.approved_by = request.user
+                    visit.approved_at = timezone.now()
+                elif new_approval_status == 'pending':
+                    visit.approved_by = None
+                    visit.approved_at = None
+                changes.append(f"حالة الاعتماد: {visit.get_approval_status_display()}")
+
+        if new_visit_status and new_visit_status in dict(Visit.STATUS_CHOICES):
+            if new_visit_status != visit.status:
+                visit.status = new_visit_status
+                if new_visit_status == 'finished' and not visit.ended_at:
+                    visit.ended_at = timezone.now()
+                changes.append(f"حالة الزيارة: {visit.get_status_display()}")
+
+        if reason:
+            visit.approval_notes = reason
+
+        visit.save()
+
+        status_after = f"حالة: {visit.status} | اعتماد: {visit.approval_status}"
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='status_changed',
+            actor=request.user,
+            status_before=status_before,
+            status_after=status_after,
+            reason=reason,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        msg = f"تم تحديث حالة الزيارة #{visit.serial_num} بنجاح ({' ، '.join(changes) if changes else 'بدون تغيير'})."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg, 'status': visit.status, 'approval_status': visit.approval_status})
+        messages.success(request, msg)
+
+    elif action == 'send_to_agenda':
+        # Business rule: visit MUST be approved before sending it to the agenda
+        if visit.approval_status != 'approved':
+            msg = "عذراً، يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return get_redirect()
+
+        can_access = (
+            request.user.is_superuser or
+            getattr(request.user, 'is_super_admin', False) or
+            can_user_access_object(request.user, visit, 'view')
+        )
+        if not can_access:
+            msg = "غير مصرح لك بإرسال هذه الزيارة إلى جدول الأعمال."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return get_redirect()
+
+        pday, _ = PlannedVisitDay.objects.get_or_create(
+            assignee=visit.owner,
+            date=visit.date,
+            defaults={'created_by': request.user}
+        )
+
+        existing_item = PlannedVisitItem.objects.filter(visit=visit).first()
+        if not existing_item:
+            existing_contact_item = PlannedVisitItem.objects.filter(plan_day=pday, contact=visit.contact).first()
+            if existing_contact_item and not existing_contact_item.visit:
+                existing_item = existing_contact_item
+                existing_item.visit = visit
+                existing_item.is_executed = (visit.status == 'finished')
+                existing_item.template = visit.template or existing_item.template
+                existing_item.save()
+            else:
+                max_order = pday.items.count() + 1
+                existing_item = PlannedVisitItem.objects.create(
+                    plan_day=pday,
+                    order=max_order,
+                    contact=visit.contact,
+                    template=visit.template,
+                    visit=visit,
+                    is_executed=(visit.status == 'finished'),
+                    notes=visit.feedback or f"زيارة معتمدة #{visit.serial_num}"
+                )
+
+        visit.is_planned = True
+        visit.save(update_fields=['is_planned'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='sent_to_agenda',
+            actor=request.user,
+            status_before=visit.approval_status,
+            status_after='in_agenda',
+            reason=f"إرسال الزيارة المعتمة #{visit.serial_num} إلى جدول الأعمال ليوم {visit.date}",
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        msg = f"تم إرسال الزيارة المعتمة #{visit.serial_num} بنجاح إلى جدول أعمال ({visit.owner.get_full_name() or visit.owner.username}) ليوم {visit.date.strftime('%d/%m/%Y')}."
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'agenda_url': f"{reverse('agenda')}?date={visit.date.strftime('%Y-%m-%d')}&assignee={visit.owner_id}"
+            })
+        messages.success(request, msg)
+        return redirect(f"{reverse('agenda')}?date={visit.date.strftime('%Y-%m-%d')}&assignee={visit.owner_id}")
+
     else:
         msg = "إجراء غير معروف."
         if is_ajax:
             return JsonResponse({'success': False, 'message': msg}, status=400)
         messages.error(request, msg)
 
-    return redirect('visit_detail', pk=visit.pk)
+    return get_redirect()
 
 
 @require_permission('activities:visits/export')
@@ -1986,5 +2199,287 @@ def template_questions_reorder(request, template_pk):
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=400)
     return JsonResponse({'success': False, 'message': 'Invalid request method'}, status=405)
+
+
+@login_required
+def agenda_view(request):
+    """
+    Agenda Tab (جدول الاعمال)
+    Replicates https://weapharma.bricks-rep.com/agenda:
+    - Displays planned and executed visits for the selected date and representative.
+    - Scoped by role:
+        * Reps: view their own agenda only. Cross-rep access returns 403.
+        * Regional Managers: view their own agenda or filter by reps in their managed region/subregions.
+          Cross-region access returns 403.
+        * SuperAdministrators: global oversight across all representatives and regions.
+    - Provides Date navigation (Previous, Next, Today, and specific date picker).
+    - Features tab switcher between 'الزيارات' (Visits) and 'Todos' (Tasks).
+    - Preserves approval status badges (معتمد, قيد الاعتماد, مرفوض) and execution links.
+    - Includes '+ تسجيل زيارة خارج الخطة' action modal.
+    - Displays empty state 'لا خطط أخرى لهذا اليوم' when no visits are scheduled.
+    """
+    is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    can_view_others = is_super or is_mgr
+
+    if is_super:
+        available_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    elif is_mgr:
+        managed_ids = list(get_user_managed_representatives(request.user).values_list('id', flat=True)) + [request.user.pk]
+        available_reps = User.objects.filter(id__in=managed_ids, is_active=True).order_by('first_name', 'username')
+    else:
+        available_reps = User.objects.filter(pk=request.user.pk)
+
+    target_rep_id = request.GET.get('assignee')
+    if target_rep_id:
+        try:
+            target_rep_id = int(target_rep_id)
+        except (ValueError, TypeError):
+            return render_forbidden_response(request, "معرّف المندوب غير صالح.")
+
+        if not can_view_others and target_rep_id != request.user.id:
+            return render_forbidden_response(request, "غير مصرح لك باستعراض جدول أعمال مستخدم آخر.")
+
+        if can_view_others:
+            if not available_reps.filter(pk=target_rep_id).exists():
+                return render_forbidden_response(request, "لا يمكنك استعراض جدول أعمال مندوب خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+            selected_rep = get_object_or_404(User, pk=target_rep_id)
+        else:
+            selected_rep = request.user
+    else:
+        selected_rep = request.user
+
+    # Date handling
+    date_str = request.GET.get('date', '').strip()
+    today = timezone.now().date()
+    selected_date = today
+    if date_str:
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d'):
+            try:
+                selected_date = datetime.datetime.strptime(date_str, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    prev_date = selected_date - datetime.timedelta(days=1)
+    next_date = selected_date + datetime.timedelta(days=1)
+
+    arabic_days = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
+    weekday_ar = arabic_days[selected_date.weekday()]
+
+    # Query Planned visits for that day
+    plan_day = PlannedVisitDay.objects.filter(assignee=selected_rep, date=selected_date).first()
+    planned_items = []
+    planned_visit_ids = set()
+    if plan_day:
+        planned_items = list(plan_day.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        for itm in planned_items:
+            if itm.visit_id:
+                planned_visit_ids.add(itm.visit_id)
+
+    # Query out-of-plan / ad-hoc visits executed for that day
+    unplanned_visits = Visit.objects.filter(
+        owner=selected_rep,
+        date=selected_date
+    ).exclude(
+        id__in=planned_visit_ids
+    ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num')
+
+    user_can_manage = can_manage_approvals(request.user)
+    agenda_visits = []
+    for itm in planned_items:
+        v = itm.visit
+        if v:
+            can_approve = bool(
+                user_can_manage and
+                v.owner_id != request.user.id and
+                can_user_access_object(request.user, v, 'approve')
+            )
+            agenda_visits.append({
+                'type': 'planned',
+                'source_item': itm,
+                'visit': v,
+                'contact': itm.contact,
+                'template': itm.template or v.template,
+                'order': itm.order,
+                'status': v.status,
+                'status_display': v.status_display_ar,
+                'status_badge_class': v.status_badge_class,
+                'approval_status': v.approval_status,
+                'approval_display': v.approval_display_ar,
+                'approval_badge_class': v.approval_badge_class,
+                'is_executed': True,
+                'can_approve': can_approve,
+                'detail_url': reverse('visit_detail', args=[v.pk]),
+                'action_url': reverse('visit_detail', args=[v.pk]),
+                'action_label': 'متابعة الزيارة' if v.status == 'started' else 'معاينة التفاصيل',
+                'notes': itm.notes,
+            })
+        else:
+            agenda_visits.append({
+                'type': 'planned',
+                'source_item': itm,
+                'visit': None,
+                'contact': itm.contact,
+                'template': itm.template,
+                'order': itm.order,
+                'status': 'planned',
+                'status_display': 'مخططة',
+                'status_badge_class': 'bg-sky-100 text-sky-800 border-sky-300',
+                'approval_status': 'approved',
+                'approval_display': 'مجدولة',
+                'approval_badge_class': 'bg-teal-50 text-teal-700 border-teal-200',
+                'is_executed': False,
+                'can_approve': False,
+                'detail_url': None,
+                'action_url': f"{reverse('visit_create')}?contact_id={itm.contact_id}&template_id={itm.template_id or ''}&plan_item_id={itm.id}",
+                'action_label': 'بدء الزيارة',
+                'notes': itm.notes,
+            })
+
+    for v in unplanned_visits:
+        can_approve = bool(
+            user_can_manage and
+            v.owner_id != request.user.id and
+            can_user_access_object(request.user, v, 'approve')
+        )
+        agenda_visits.append({
+            'type': 'unplanned',
+            'source_item': None,
+            'visit': v,
+            'contact': v.contact,
+            'template': v.template,
+            'order': None,
+            'status': v.status,
+            'status_display': v.status_display_ar,
+            'status_badge_class': v.status_badge_class,
+            'approval_status': v.approval_status,
+            'approval_display': v.approval_display_ar,
+            'approval_badge_class': v.approval_badge_class,
+            'is_executed': True,
+            'can_approve': can_approve,
+            'detail_url': reverse('visit_detail', args=[v.pk]),
+            'action_url': reverse('visit_detail', args=[v.pk]),
+            'action_label': 'معاينة التفاصيل',
+            'notes': v.feedback,
+        })
+
+    # Todos
+    todos = AgendaTodo.objects.filter(user=selected_rep, date=selected_date).order_by('is_completed', '-created_at')
+
+    # Available contacts for quick out-of-plan registration modal
+    scoped_contacts = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
+    quick_contacts = scoped_contacts.order_by('name')[:60]
+
+    current_tab = request.GET.get('tab', 'visits')
+
+    context = {
+        'selected_rep': selected_rep,
+        'available_reps': available_reps,
+        'can_view_others': can_view_others,
+        'selected_date': selected_date,
+        'formatted_date': selected_date.strftime('%Y-%m-%d'),
+        'display_date': selected_date.strftime('%d/%m/%Y'),
+        'prev_date': prev_date.strftime('%Y-%m-%d'),
+        'next_date': next_date.strftime('%Y-%m-%d'),
+        'today_date': today.strftime('%Y-%m-%d'),
+        'is_today': selected_date == today,
+        'weekday_ar': weekday_ar,
+        'agenda_visits': agenda_visits,
+        'visits_count': len(agenda_visits),
+        'todos': todos,
+        'todos_count': todos.count(),
+        'quick_contacts': quick_contacts,
+        'current_tab': current_tab,
+    }
+    return render(request, 'activities/agenda.html', context)
+
+
+@login_required
+def agenda_todo_add(request):
+    """Add a new task/todo for the current user or managed representative."""
+    if request.method != 'POST':
+        return redirect('agenda')
+
+    title = request.POST.get('title', '').strip()
+    date_str = request.POST.get('date', '').strip()
+    target_user_id = request.POST.get('assignee')
+
+    if not title:
+        messages.error(request, "يرجى إدخال عنوان المهمة.")
+        return redirect(f"{reverse('agenda')}?tab=todos")
+
+    today = timezone.now().date()
+    target_date = today
+    if date_str:
+        try:
+            target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    target_user = request.user
+    if target_user_id:
+        is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+        is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+        if is_super or is_mgr:
+            managed_reps = get_user_managed_representatives(request.user)
+            rep = managed_reps.filter(pk=target_user_id).first()
+            if rep:
+                target_user = rep
+
+    AgendaTodo.objects.create(
+        user=target_user,
+        date=target_date,
+        title=title,
+        is_completed=False
+    )
+    messages.success(request, f"تمت إضافة المهمة '{title}' بنجاح.")
+    return redirect(f"{reverse('agenda')}?date={target_date.strftime('%Y-%m-%d')}&assignee={target_user.id}&tab=todos")
+
+
+@login_required
+def agenda_todo_toggle(request, pk):
+    """Toggle completion status of a todo."""
+    todo = get_object_or_404(AgendaTodo, pk=pk)
+    is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    if todo.user != request.user and not is_super:
+        if is_mgr:
+            managed_reps = get_user_managed_representatives(request.user)
+            if not managed_reps.filter(pk=todo.user_id).exists():
+                return render_forbidden_response(request, "غير مصرح بتعديل هذه المهمة.")
+        else:
+            return render_forbidden_response(request, "غير مصرح بتعديل هذه المهمة.")
+
+    todo.is_completed = not todo.is_completed
+    todo.save(update_fields=['is_completed', 'updated_at'])
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    if is_ajax:
+        return JsonResponse({'success': True, 'is_completed': todo.is_completed})
+
+    return redirect(f"{reverse('agenda')}?date={todo.date.strftime('%Y-%m-%d')}&assignee={todo.user_id}&tab=todos")
+
+
+@login_required
+def agenda_todo_delete(request, pk):
+    """Delete a todo."""
+    todo = get_object_or_404(AgendaTodo, pk=pk)
+    is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    if todo.user != request.user and not is_super:
+        if is_mgr:
+            managed_reps = get_user_managed_representatives(request.user)
+            if not managed_reps.filter(pk=todo.user_id).exists():
+                return render_forbidden_response(request, "غير مصرح بحذف هذه المهمة.")
+        else:
+            return render_forbidden_response(request, "غير مصرح بحذف هذه المهمة.")
+
+    date_str = todo.date.strftime('%Y-%m-%d')
+    user_id = todo.user_id
+    todo.delete()
+    messages.success(request, "تم حذف المهمة بنجاح.")
+    return redirect(f"{reverse('agenda')}?date={date_str}&assignee={user_id}&tab=todos")
+
 
 

@@ -21,6 +21,18 @@ class PurchaseOrderService:
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر الشراء.")
 
+        from master_data.models import PurchaseSettings
+        from accounts.permissions import is_manager_or_higher
+        purchase_settings = PurchaseSettings.get_settings()
+
+        initial_status = 'pending'
+        approved_by = None
+        approved_at = None
+        if not purchase_settings.require_manager_approval or is_manager_or_higher(user):
+            initial_status = 'approved'
+            approved_by = user
+            approved_at = timezone.now()
+
         order = PurchaseOrder.objects.create(
             supplier=supplier,
             target_warehouse=target_warehouse,
@@ -32,7 +44,9 @@ class PurchaseOrderService:
             notes=notes,
             created_by=user,
             updated_by=user,
-            status='pending'
+            status=initial_status,
+            approved_by=approved_by,
+            approved_at=approved_at
         )
 
         for idx, itm in enumerate(items_data, start=1):
@@ -53,13 +67,89 @@ class PurchaseOrderService:
 
     @staticmethod
     @transaction.atomic
-    def approve_order(order: PurchaseOrder, user):
-        """Transitions status from pending to approved."""
-        if order.status != 'pending':
-            raise ValidationError(f"لا يمكن اعتماد طلب بحالة: {order.get_status_display()}")
+    def approve_order(order: PurchaseOrder, user, notes=""):
+        """Transitions status to approved with self-approval check and audit trail."""
+        if order.status not in ['pending', 'rejected']:
+            raise ValidationError(f"لا يمكن اعتماد طلب بحالة: {order.status_label_ar}")
+
+        # Self-approval prevention (dual-control principle)
+        if order.created_by_id == user.id and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError("لا يمكن لمنشئ أمر الشراء اعتماده بنفسه (مبدأ الرقابة الثنائية).")
+
+        status_before = order.status
         order.status = 'approved'
+        order.approved_by = user
+        order.approved_at = timezone.now()
+        order.rejection_reason = ""
         order.updated_by = user
-        order.save(update_fields=['status', 'updated_by', 'updated_at'])
+        order.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_by', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_order',
+            purchase_order=order,
+            action='approved',
+            actor=user,
+            status_before=status_before,
+            status_after='approved',
+            reason=notes or 'تم اعتماد أمر الشراء'
+        )
+        return order
+
+    @staticmethod
+    @transaction.atomic
+    def reject_order(order: PurchaseOrder, user, reason=""):
+        """Rejects purchase order with mandatory rejection reason and audit trail."""
+        reason = (reason or '').strip()
+        if not reason:
+            raise ValidationError("يرجى توضيح سبب رفض أمر الشراء لتوجيه مسؤول المشتريات.")
+
+        if order.created_by_id == user.id and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError("لا يمكن لمنشئ أمر الشراء رفض طلبه بنفسه.")
+
+        status_before = order.status
+        order.status = 'rejected'
+        order.rejection_reason = reason
+        order.approved_by = user
+        order.approved_at = timezone.now()
+        order.updated_by = user
+        order.save(update_fields=['status', 'rejection_reason', 'approved_by', 'approved_at', 'updated_by', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_order',
+            purchase_order=order,
+            action='rejected',
+            actor=user,
+            status_before=status_before,
+            status_after='rejected',
+            reason=reason
+        )
+        return order
+
+    @staticmethod
+    @transaction.atomic
+    def resubmit_order(order: PurchaseOrder, user):
+        """Allows purchaser to resubmit rejected order for approval."""
+        if order.status != 'rejected':
+            raise ValidationError("لا يمكن إعادة تقديم أمر الشراء إلا إذا كان في حالة مرفوض.")
+
+        status_before = order.status
+        order.status = 'pending'
+        order.rejection_reason = ""
+        order.updated_by = user
+        order.save(update_fields=['status', 'rejection_reason', 'updated_by', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_order',
+            purchase_order=order,
+            action='resubmitted',
+            actor=user,
+            status_before=status_before,
+            status_after='pending',
+            reason="إعادة تقديم أمر الشراء للاعتماد بعد المراجعة والتعديل"
+        )
         return order
 
     @staticmethod
@@ -67,13 +157,14 @@ class PurchaseOrderService:
     def stock_order(order: PurchaseOrder, user):
         """
         Physical Goods Receipt:
-        1. Generates an inward Warehouse Memo (إذن إضافة مخزنية).
-        2. Increments InventoryStock qty_on_hand and recalculates weighted average cost.
-        3. Updates lot batch numbers and expiration dates.
-        4. Transitions status from approved to picked.
+        1. Strictly requires order to be approved (downstream enforcement).
+        2. Generates an inward Warehouse Memo (إذن إضافة مخزنية).
+        3. Increments InventoryStock qty_on_hand and recalculates weighted average cost.
+        4. Updates lot batch numbers and expiration dates.
+        5. Transitions status from approved to picked.
         """
-        if order.status not in ['approved', 'pending']:
-            raise ValidationError(f"لا يمكن استلام بضاعة لطلب بحالة: {order.get_status_display()}")
+        if order.status != 'approved':
+            raise ValidationError(f"لا يمكن استلام البضاعة في المخزن قبل اعتماد أمر الشراء من الإدارة (الحالة الحالية: {order.status_label_ar}).")
 
         memo_number = f"MEMO-IN-{order.serial_num}"
         memo = InventoryMemo.objects.create(

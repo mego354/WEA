@@ -31,7 +31,10 @@ def sales_orders_list(request):
     active_filters = []
 
     if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
+        if status_filter in ['manager_approval', 'approved']:
+            qs = qs.filter(status__in=['manager_approval', 'approved'])
+        else:
+            qs = qs.filter(status=status_filter)
         status_labels = dict(SalesOrder.STATUS_CHOICES)
         active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
@@ -121,7 +124,7 @@ def sales_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('sales_order_create')
 
-    customers = Contact.objects.filter(is_customer=True)
+    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
     warehouses = Warehouse.objects.filter(is_active=True)
     products = Product.objects.filter(is_active=True)
 

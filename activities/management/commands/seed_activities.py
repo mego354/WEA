@@ -15,7 +15,15 @@ User = get_user_model()
 class Command(BaseCommand):
     help = "Seed Activities module reference data (Agreement types, Visit templates, initial activities)"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--templates-only',
+            action='store_true',
+            help='Only seed agreement types and visit templates, skipping sample visits/plans/agreements'
+        )
+
     def handle(self, *args, **options):
+        templates_only = options.get('templates_only', False)
         self.stdout.write("Seeding Agreement Types...")
         agreement_types = [
             ("Conference", "مؤتمرات"),
@@ -132,6 +140,10 @@ class Command(BaseCommand):
             )
             if created:
                 self.stdout.write(f"  Created VisitTemplate: {t_info['name']}")
+
+        if templates_only:
+            self.stdout.write(self.style.SUCCESS("Templates and agreement types seeded successfully (mock visits skipped)."))
+            return
 
         admin_user = User.objects.filter(is_superuser=True).first() or User.objects.first()
         contacts = list(Contact.objects.all()[:15])

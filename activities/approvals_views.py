@@ -21,30 +21,23 @@ from accounts.permissions import (
 User = get_user_model()
 
 
+from django.urls import reverse
+
 @login_required
 def approvals_hub(request):
     """
-    Centralized Approval Queue for Managers & Super Administrators.
-    Provides unified oversight for:
-    - Field Visits (pending, approved, disapproved/rejected)
-    - Sales Orders (pending, approved, rejected)
-    - Full Audit History Log
-    Enforces strict regional isolation and server-side pagination.
+    Canonical redirect: The separate approval tab has been removed in favor of
+    integrating approvals directly into item detail pages and existing list views.
+    Redirects legacy bookmarks and navigation links:
+    - tab=orders -> sales_orders_list?status=pending
+    - others -> visits_list?approval_status=pending
     """
-    # Permission check: must be manager, admin, or have visit/order approval permissions
-    can_approve_visits = has_perm_or_admin(request.user, 'activities:visits/approve')
-    can_approve_orders = has_perm_or_admin(request.user, 'sales:orders/approve')
-    is_manager = bool(
-        request.user.is_superuser or
-        getattr(request.user, 'is_super_admin', False) or
-        (request.user.role and request.user.role.is_manager_role)
-    )
-
-    if not (can_approve_visits or can_approve_orders or is_manager):
-        messages.error(request, "عذراً، لا تملك صلاحيات إدارة ومراجعة الاعتمادات الإقليمية.")
-        return redirect('home')
-
-    active_tab = request.GET.get('tab', 'visits')  # 'visits', 'orders', 'audit'
+    tab = request.GET.get('tab', 'visits')
+    if tab == 'orders':
+        url = reverse('sales_orders_list') + '?status=pending'
+    else:
+        url = reverse('visits_list') + '?approval_status=pending'
+    return redirect(url)
     status_filter = request.GET.get('status', 'pending')  # 'pending', 'approved', 'rejected', 'all'
     rep_filter = request.GET.get('representative', '')
     area_filter = request.GET.get('area', '')

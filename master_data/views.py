@@ -14,7 +14,7 @@ from contacts.models import Contact
 from inventory.models import InventoryStock
 from sales.models import SalesOrder, SalesReturnOrder, Collection, CustomerAccount
 from activities.models import Visit
-from accounts.permissions import require_permission, has_perm_or_admin
+from accounts.permissions import require_permission, has_perm_or_admin, get_scoped_queryset
 from .models import (
     CompanyProfile, LocationSettings, Area, ExpenseType,
     TicketType, ApprovalRequestType, AgreementType,
@@ -99,8 +99,11 @@ def _build_visits_sunburst(queryset):
     return result
 
 
-def _build_reps_sunburst(amount_field='current_balance'):
-    qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0}).values(
+def _build_reps_sunburst(amount_field='current_balance', user=None):
+    qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0})
+    if user:
+        qs = get_scoped_queryset(qs, user, 'customeraccount')
+    qs = qs.values(
         'customer__area__name',
         'customer__area__parent__name'
     ).annotate(val=Sum(amount_field)).order_by('-val')
@@ -162,22 +165,11 @@ def home_view(request):
         end_date_str = '2026-10-31'
         display_range = "01/10/2026 – 31/10/2026"
 
-    so_qs = SalesOrder.objects.exclude(status='cancelled')
-    ro_qs = SalesReturnOrder.objects.exclude(status='cancelled')
-    col_qs = Collection.objects.all()
-    vis_qs = Visit.objects.all()
-    cont_qs = Contact.objects.filter(is_customer=True)
-
-    # Scoping for field reps (ABAC territorial/owner filtering)
-    if not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False) or (request.user.role and request.user.role.is_manager_role)):
-        so_qs = so_qs.filter(Q(sales_rep=request.user) | Q(created_by=request.user))
-        ro_qs = ro_qs.filter(created_by=request.user)
-        col_qs = col_qs.filter(collected_by=request.user)
-        vis_qs = vis_qs.filter(owner=request.user)
-        if request.user.assigned_areas.exists():
-            cont_qs = cont_qs.filter(area__in=request.user.assigned_areas.all())
-        else:
-            cont_qs = cont_qs.filter(created_by=request.user)
+    so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), request.user, 'salesorder')
+    ro_qs = get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), request.user, 'salesreturnorder')
+    col_qs = get_scoped_queryset(Collection.objects.all(), request.user, 'collection')
+    vis_qs = get_scoped_queryset(Visit.objects.all(), request.user, 'visit')
+    cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
 
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
@@ -200,7 +192,8 @@ def home_view(request):
     colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
     cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
 
-    cust_acc = CustomerAccount.objects.aggregate(
+    cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), request.user, 'customeraccount')
+    cust_acc = cust_acc_qs.aggregate(
         total_balance=Sum('current_balance'),
         accounts_count=Count('id', filter=Q(current_balance__gt=0)),
         total_overdue=Sum('overdue_balance'),
@@ -309,8 +302,8 @@ def home_view(request):
     visits_chart = _build_visits_sunburst(vis_qs)
     orders_created_chart = _build_area_sunburst(so_qs, amount_field='grand_total')
     orders_deliv_chart = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
-    reps_bal_chart = _build_reps_sunburst('current_balance')
-    reps_ovd_chart = _build_reps_sunburst('overdue_balance')
+    reps_bal_chart = _build_reps_sunburst('current_balance', user=request.user)
+    reps_ovd_chart = _build_reps_sunburst('overdue_balance', user=request.user)
 
     charts_json = json.dumps({
         'collections_by_area': colls_chart,
@@ -385,12 +378,35 @@ def location_settings_view(request):
         loc_settings.verify_visits = request.POST.get('verify_visits') == '1'
         loc_settings.verify_sales_orders = request.POST.get('verify_sales_orders') == '1'
         loc_settings.verify_sales_returns = request.POST.get('verify_sales_returns') == '1'
+
+        # User creation and manager approval controls
+        loc_settings.allow_all_users_to_create_visits = request.POST.get('allow_all_users_to_create_visits') == 'on'
+        loc_settings.require_manager_approval_for_visits = request.POST.get('require_manager_approval_for_visits') == 'on'
+        loc_settings.allow_all_users_to_create_agreements = request.POST.get('allow_all_users_to_create_agreements') == 'on'
+        loc_settings.require_manager_approval_for_agreements = request.POST.get('require_manager_approval_for_agreements') == 'on'
+
+        # Configurable Product Suggestions (strictly restricted to eligible sellable products)
+        loc_settings.enable_product_suggestions = request.POST.get('enable_product_suggestions') == 'on'
+        from catalog.models import Product
+        eligible_products = Product.get_eligible_for_visits()
+        raw_suggested_ids = request.POST.getlist('suggested_products')
+        valid_suggested_ids = eligible_products.filter(id__in=raw_suggested_ids).values_list('id', flat=True)
+        loc_settings.suggested_products.set(valid_suggested_ids)
+
         loc_settings.save()
 
-        messages.success(request, "تم حفظ إعدادات الموقع بنجاح.")
+        messages.success(request, "تم حفظ إعدادات الموقع والزيارات بنجاح.")
         return redirect('location_settings')
 
-    return render(request, 'settings/location_settings.html', {'settings': loc_settings})
+    from catalog.models import Product
+    eligible_products = Product.get_eligible_for_visits()
+    saved_suggested_ids = list(loc_settings.suggested_products.values_list('id', flat=True))
+
+    return render(request, 'settings/location_settings.html', {
+        'settings': loc_settings,
+        'eligible_products': eligible_products,
+        'saved_suggested_ids': saved_suggested_ids,
+    })
 
 
 @require_permission(['settings:location/manage', 'activities:visits/create', 'activities:visits/edit', 'activities:visits/view'])
@@ -755,6 +771,8 @@ def sales_settings_view(request):
 
         sales_settings.tax_mode = request.POST.get('tax_mode', 'optional')
         sales_settings.default_packaging_unit = request.POST.get('default_packaging_unit', 'box')
+        sales_settings.allow_all_users_to_create = request.POST.get('allow_all_users_to_create') == 'on'
+        sales_settings.require_manager_approval = request.POST.get('require_manager_approval') == 'on'
         sales_settings.save()
 
         messages.success(request, "تم حفظ إعدادات المبيعات بنجاح.")
@@ -781,6 +799,8 @@ def purchase_settings_view(request):
 
         purchase_settings.tax_mode = request.POST.get('tax_mode', 'optional')
         purchase_settings.default_packaging_unit = request.POST.get('default_packaging_unit', 'piece')
+        purchase_settings.allow_all_users_to_create = request.POST.get('allow_all_users_to_create') == 'on'
+        purchase_settings.require_manager_approval = request.POST.get('require_manager_approval') == 'on'
         purchase_settings.save()
 
         messages.success(request, "تم حفظ إعدادات المشتريات بنجاح.")

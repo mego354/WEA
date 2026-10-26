@@ -68,8 +68,8 @@
 
         <!-- Top Header Action Buttons -->
         <div class="flex flex-wrap items-center gap-2">
-            {% if can_approve and visit.status == 'finished' %}
-                {% if visit.approval_status == 'pending' %}
+            {% if can_approve %}
+                {% if visit.approval_status != 'approved' %}
                 <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
                     {% csrf_token %}
                     <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
@@ -77,11 +77,41 @@
                         <span>اعتماد الزيارة</span>
                     </button>
                 </form>
+                {% endif %}
+
+                {% if visit.approval_status != 'disapproved' %}
                 <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>رفض الزيارة</span>
                 </button>
                 {% endif %}
+
+                <!-- Change Status Modal Trigger (Area Manager / SuperAdmin) -->
+                <button type="button" onclick="openChangeStatusModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">tune</span>
+                    <span>تغيير الحالة</span>
+                </button>
+            {% endif %}
+
+            <!-- Send to Agenda Action (Requires Approval First) -->
+            {% if is_in_agenda %}
+            <a href="{% url 'agenda' %}?date={{ visit.date|date:'Y-m-d' }}&assignee={{ visit.owner_id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-50 border border-teal-200 text-teal-800 hover:bg-teal-100 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]" title="تمت إضافة الزيارة مسبقاً لجدول الأعمال">
+                <span class="material-symbols-outlined text-base text-teal-600">event_available</span>
+                <span>معاينة في جدول الأعمال</span>
+            </a>
+            {% elif visit.approval_status == 'approved' %}
+            <form method="POST" action="{% url 'visit_action' visit.pk 'send_to_agenda' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]" title="إرسال هذه الزيارة المعتمدة إلى جدول أعمال المندوب">
+                    <span class="material-symbols-outlined text-base">view_agenda</span>
+                    <span>إرسال إلى جدول الأعمال</span>
+                </button>
+            </form>
+            {% else %}
+            <button type="button" onclick="showUnapprovedAlert()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px] cursor-not-allowed" title="يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال">
+                <span class="material-symbols-outlined text-base">lock</span>
+                <span>إرسال إلى جدول الأعمال (يتطلب الاعتماد)</span>
+            </button>
             {% endif %}
 
             {% if can_resubmit %}
@@ -343,16 +373,24 @@
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
                         {% for p in products %}
-                        <label class="flex items-center gap-2.5 p-2.5 bg-slate-50 hover:bg-teal-50/60 border border-slate-200 hover:border-teal-300 rounded-xl cursor-pointer transition-colors text-xs">
-                            <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
-                                   {% if p in visit.detailed_products.all %}checked{% endif %}>
-                            <div class="truncate">
-                                <span class="font-bold text-slate-800 block truncate">{{ p.name }}</span>
-                                {% if p.code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.code }}</span>{% endif %}
+                        <label class="flex items-center justify-between gap-2.5 p-2.5 {% if p.id in suggested_product_ids %}bg-amber-50/70 border-amber-300 ring-1 ring-amber-200/50{% else %}bg-slate-50 border-slate-200{% endif %} hover:bg-teal-50/60 hover:border-teal-300 rounded-xl cursor-pointer transition-colors text-xs min-h-[44px]">
+                            <div class="flex items-center gap-2.5 truncate">
+                                <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
+                                       {% if p in visit.detailed_products.all %}checked{% endif %}>
+                                <div class="truncate">
+                                    <span class="font-bold text-slate-800 block truncate">{{ p.name }}</span>
+                                    {% if p.sku_code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.sku_code }}</span>{% elif p.code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.code }}</span>{% endif %}
+                                </div>
                             </div>
+                            {% if p.id in suggested_product_ids %}
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">star</span>
+                                <span>مقترح</span>
+                            </span>
+                            {% endif %}
                         </label>
                         {% empty %}
-                        <p class="text-xs text-slate-400 col-span-full py-4 text-center">لا توجد منتجات نشطة في الكتالوج.</p>
+                        <p class="text-xs text-slate-400 col-span-full py-4 text-center">لا توجد منتجات صالحة للبيع في الكتالوج.</p>
                         {% endfor %}
                     </div>
                 </div>
@@ -848,6 +886,8 @@
                                 {% if item.action == 'approved' %}bg-emerald-100 text-emerald-800
                                 {% elif item.action == 'rejected' %}bg-rose-100 text-rose-800
                                 {% elif item.action == 'resubmitted' %}bg-sky-100 text-sky-800
+                                {% elif item.action == 'status_changed' %}bg-purple-100 text-purple-800
+                                {% elif item.action == 'sent_to_agenda' %}bg-teal-100 text-teal-800
                                 {% else %}bg-amber-100 text-amber-800{% endif %}">
                                 {{ item.get_action_display }}
                             </span>
@@ -1022,6 +1062,31 @@ function evaluateConditionalQuestions() {
     });
 }
 
+// Disapprove Modal handlers
+function openDisapproveModal() {
+    const m = document.getElementById('disapprove-modal');
+    if (m) m.classList.remove('hidden');
+}
+function closeDisapproveModal() {
+    const m = document.getElementById('disapprove-modal');
+    if (m) m.classList.add('hidden');
+}
+
+// Change Status Modal handlers
+function openChangeStatusModal() {
+    const m = document.getElementById('change-status-modal');
+    if (m) m.classList.remove('hidden');
+}
+function closeChangeStatusModal() {
+    const m = document.getElementById('change-status-modal');
+    if (m) m.classList.add('hidden');
+}
+
+// Alert for unapproved visit send attempt
+function showUnapprovedAlert() {
+    alert('عذراً، يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال.');
+}
+
 // Auto-run on page load
 document.addEventListener('DOMContentLoaded', function() {
     evaluateConditionalQuestions();
@@ -1032,4 +1097,82 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<!-- DISAPPROVE / REJECT MODAL -->
+<div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 text-rose-600">
+                <span class="material-symbols-outlined">cancel</span>
+                <h3 class="font-bold text-slate-900 text-sm">رفض الزيارة وإعادتها للمراجعة</h3>
+            </div>
+            <button type="button" onclick="closeDisapproveModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <form method="POST" action="{% url 'visit_action' visit.pk 'disapprove' %}" class="space-y-4 text-xs">
+            {% csrf_token %}
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">سبب الرفض والتعديلات المطلوبة من المندوب <span class="text-rose-500">*</span></label>
+                <textarea name="approval_notes" rows="3" required placeholder="يرجى توضيح سبب الرفض لتحديد المطلوب تصحيحه..."
+                          class="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="button" onclick="closeDisapproveModal()" class="px-3.5 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-colors">إلغاء</button>
+                <button type="submit" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">send</span>
+                    <span>تأكيد الرفض</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- CHANGE STATUS MODAL (Area Manager / SuperAdmin) -->
+<div id="change-status-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 text-slate-800">
+                <span class="material-symbols-outlined text-brand-600">tune</span>
+                <h3 class="font-bold text-slate-900 text-sm">تغيير حالة الزيارة والاعتماد (خاص بمدير المنطقة)</h3>
+            </div>
+            <button type="button" onclick="closeChangeStatusModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <form method="POST" action="{% url 'visit_action' visit.pk 'change_status' %}" class="space-y-4 text-xs">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">حالة الزيارة التنفيذية</label>
+                    <select name="visit_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        {% for s_val, s_lbl in status_choices %}
+                        <option value="{{ s_val }}" {% if visit.status == s_val %}selected{% endif %}>{{ s_lbl }} ({{ s_val }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">حالة الاعتماد الإداري</label>
+                    <select name="approval_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        {% for a_val, a_lbl in approval_choices %}
+                        <option value="{{ a_val }}" {% if visit.approval_status == a_val %}selected{% endif %}>{{ a_lbl }} ({{ a_val }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">سبب أو ملاحظات التغيير</label>
+                <textarea name="reason" rows="2" placeholder="ملاحظات توثيق تغيير الحالة..."
+                          class="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"></textarea>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="button" onclick="closeChangeStatusModal()" class="px-3.5 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-colors">إلغاء</button>
+                <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">check</span>
+                    <span>حفظ التعديلات</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

@@ -57,6 +57,9 @@ class PurchaseOrder(models.Model):
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_purchase_orders", verbose_name="المنشئ")
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_purchase_orders", verbose_name="آخر تعديل بواسطة")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_purchase_orders", verbose_name="المعتمد")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
+    rejection_reason = models.TextField(blank=True, default="", verbose_name="سبب الرفض")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
 
