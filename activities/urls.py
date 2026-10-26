@@ -1,13 +1,16 @@
 from django.urls import path
 from . import views
 from . import approvals_views
-from . import regional_views
 
 urlpatterns = [
-    # Approvals & Regional Management Hub
+    # Approvals & Management
     path('approvals/', approvals_views.approvals_hub, name='approvals_hub'),
-    path('regional/', regional_views.regional_dashboard, name='regional_dashboard'),
-    path('regional/dashboard/', regional_views.regional_dashboard, name='regional_dashboard_alt'),
+
+    # Agenda (جدول الاعمال)
+    path('agenda/', views.agenda_view, name='agenda'),
+    path('agenda/todos/add/', views.agenda_todo_add, name='agenda_todo_add'),
+    path('agenda/todos/<int:pk>/toggle/', views.agenda_todo_toggle, name='agenda_todo_toggle'),
+    path('agenda/todos/<int:pk>/delete/', views.agenda_todo_delete, name='agenda_todo_delete'),
     # Agreements
     path('agreements/', views.agreements_list, name='agreements_list'),
     path('agreements/bulk-status/', views.agreements_bulk_status, name='agreements_bulk_status'),

@@ -187,9 +187,23 @@
                             </span>
                         </td>
                         <td class="py-3 px-4 text-center">
-                            <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center">
-                                <span class="material-symbols-outlined text-lg">visibility</span>
-                            </a>
+                            <div class="flex items-center justify-center gap-1">
+                                {% if v.user_can_approve and v.approval_status != 'approved' %}
+                                <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}" class="inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit" class="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 inline-flex items-center" title="اعتماد الزيارة">
+                                        <span class="material-symbols-outlined text-lg">check_circle</span>
+                                    </button>
+                                </form>
+                                <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="p-1 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center" title="رفض الزيارة">
+                                    <span class="material-symbols-outlined text-lg">cancel</span>
+                                </button>
+                                {% endif %}
+                                <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="عرض التفاصيل">
+                                    <span class="material-symbols-outlined text-lg">visibility</span>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -254,7 +268,23 @@
                 {% endif %}
             </div>
 
-            <div class="pt-2 flex justify-end">
+            <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
+                <div class="flex items-center gap-1.5">
+                    {% if v.user_can_approve and v.approval_status != 'approved' %}
+                    <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="اعتماد الزيارة">
+                            <span class="material-symbols-outlined text-sm">check_circle</span>
+                            <span>اعتماد</span>
+                        </button>
+                    </form>
+                    <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="رفض الزيارة">
+                        <span class="material-symbols-outlined text-sm">cancel</span>
+                        <span>رفض</span>
+                    </button>
+                    {% endif %}
+                </div>
                 <a href="{% url 'visit_detail' v.pk %}" class="inline-flex items-center gap-1 text-xs font-bold text-[#27bebe] hover:underline">
                     <span>عرض التفاصيل</span>
                     <span class="material-symbols-outlined text-sm">arrow_back</span>
@@ -362,5 +392,63 @@ function openFilterDrawer() {
 function closeFilterDrawer() {
     document.getElementById('filter-drawer').classList.add('hidden');
 }
+function openVisitListRejectModal(visitId, serialNum) {
+    const modal = document.getElementById('visit-list-reject-modal');
+    const form = document.getElementById('visit-list-reject-form');
+    const title = document.getElementById('visit-list-reject-modal-title');
+    const textarea = document.getElementById('visit-list-reject-reason');
+    if (form) {
+        form.action = `/activities/visits/${visitId}/action/disapprove/`;
+    }
+    if (title && serialNum) {
+        title.innerText = `رفض الزيارة #${serialNum} وإعادتها للمراجعة`;
+    }
+    if (textarea) {
+        textarea.value = '';
+    }
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (textarea) textarea.focus();
+    }
+}
+function closeVisitListRejectModal() {
+    const modal = document.getElementById('visit-list-reject-modal');
+    if (modal) modal.classList.add('hidden');
+}
 </script>
+
+<!-- VISIT LIST REJECT MODAL -->
+<div id="visit-list-reject-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-rose-50/60">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-rose-600">cancel</span>
+                <h3 class="font-bold text-slate-900 text-sm" id="visit-list-reject-modal-title">رفض الزيارة وإعادتها للمراجعة</h3>
+            </div>
+            <button type="button" onclick="closeVisitListRejectModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <form id="visit-list-reject-form" method="POST" action="" class="p-6 space-y-4 text-xs">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1.5">سبب الرفض والتعديلات المطلوبة <span class="text-rose-500">*</span></label>
+                <textarea id="visit-list-reject-reason" name="approval_notes" rows="3" required placeholder="يرجى توضيح سبب رفض هذه الزيارة لتحديد المطلوب من المندوب وتصحيحه..."
+                          class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white shadow-2xs"></textarea>
+            </div>
+
+            <div class="pt-2 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeVisitListRejectModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs transition-colors">
+                    تأكيد الرفض
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

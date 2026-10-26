@@ -61,13 +61,13 @@
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.GET.next }}">
 
-                <!-- Email Input -->
+                <!-- Email / Username Input -->
                 <div>
-                    <label for="email" class="block text-xs font-bold text-slate-700 mb-1.5">البريد الإلكتروني</label>
+                    <label for="email" class="block text-xs font-bold text-slate-700 mb-1.5">البريد الإلكتروني أو اسم المستخدم</label>
                     <div class="relative">
-                        <input type="email" id="email" name="email" value="wea.pharm2020@gmail.com" required
+                        <input type="text" id="email" name="email" required
                                class="w-full pr-10 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all text-slate-900 min-h-[46px]"
-                               placeholder="Enter your email">
+                               placeholder="user@wea.com أو اسم المستخدم">
                         <span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-lg">mail</span>
                     </div>
                 </div>
@@ -76,7 +76,7 @@
                 <div>
                     <label for="password" class="block text-xs font-bold text-slate-700 mb-1.5">كلمة المرور</label>
                     <div class="relative">
-                        <input type="password" id="password" name="password" value="Wea@0000" required
+                        <input type="password" id="password" name="password" required
                                class="w-full pr-10 pl-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all text-slate-900 min-h-[46px]"
                                placeholder="Enter your Password">
                         <span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-lg">lock</span>

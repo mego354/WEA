@@ -16,7 +16,7 @@ def run():
         print("Logging in to local ERP...")
         page.goto("http://127.0.0.1:8000/auth/login/")
         page.fill("input[name='email']", "wea.pharm2020@gmail.com")
-        page.fill("input[name='password']", "Wea@0000")
+        page.fill("input[name='password']", "Wea@4444")
         page.click("button[type='submit']")
         page.wait_for_load_state("networkidle")
         time.sleep(1)

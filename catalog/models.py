@@ -55,6 +55,14 @@ class Product(models.Model):
     def price_display(self):
         return f"{self.retail_price:,.3f} جنيه"
 
+    @classmethod
+    def get_eligible_for_visits(cls):
+        """
+        Authoritative central query for visit operations:
+        Only active products intended for sale (sellable=True) are eligible for new detailing.
+        """
+        return cls.objects.filter(is_active=True, sellable=True).order_by('name')
+
 
 class ProductVolumeDiscountTier(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="volume_discounts", verbose_name="المنتج")

@@ -66,6 +66,26 @@
                     <input type="checkbox" name="auto_close_payment_on_full_settlement" {% if settings.auto_close_payment_on_full_settlement %}checked{% endif %} class="sr-only peer">
                     <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
+
+                <!-- السماح لجميع المستخدمين بإنشاء أوامر الشراء -->
+                <label class="flex items-center justify-between cursor-pointer py-1 border-t border-slate-100 pt-3">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">السماح لجميع المستخدمين بإنشاء أوامر الشراء</span>
+                        <span class="text-[11px] text-slate-400">تمكين كافة الموظفين والمستخدمين من تسجيل أوامر الشراء</span>
+                    </div>
+                    <input type="checkbox" name="allow_all_users_to_create" {% if settings.allow_all_users_to_create %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- طلب موافقة المدير إذا لم يكن المنشئ مديراً -->
+                <label class="flex items-center justify-between cursor-pointer py-1">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">طلب موافقة المدير على أوامر الشراء لغير المدراء</span>
+                        <span class="text-[11px] text-slate-400">إبقاء أمر الشراء معلقاً (Pending) بانتظار الاعتماد إذا لم يكن المنشئ مديراً</span>
+                    </div>
+                    <input type="checkbox" name="require_manager_approval" {% if settings.require_manager_approval %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
             </div>
 
             <!-- إعدادات الضريبة -->

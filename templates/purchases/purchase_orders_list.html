@@ -167,6 +167,33 @@
             </table>
         </div>
 
+        <!-- Mobile Cards Presentation (< 768px) -->
+        <div class="block md:hidden divide-y divide-slate-100 bg-slate-50/50 p-3 space-y-3">
+            {% for o in orders %}
+            <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <a href="{% url 'purchase_order_detail' o.id %}" class="font-mono font-black text-[#27bebe] text-sm hover:underline">
+                        {{ o.order_number }}
+                    </a>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold {{ o.status_badge_class }}">
+                        {{ o.status_label_ar }}
+                    </span>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-900 text-sm">{{ o.supplier.name }}</h4>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ o.supplier.area.name|default:"بدون منطقة" }} • المخزن: {{ o.target_warehouse.name }}</p>
+                </div>
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <span class="font-mono font-bold text-slate-900">{{ o.grand_total|intcomma }} جنيه</span>
+                    <a href="{% url 'purchase_order_detail' o.id %}" class="inline-flex items-center gap-1 text-[#27bebe] font-bold hover:underline">
+                        <span>عرض وتفاصيل</span>
+                        <span class="material-symbols-outlined text-sm">arrow_back</span>
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
         <!-- Standardized Pagination -->
         {% include 'components/pagination.html' %}
     </div>

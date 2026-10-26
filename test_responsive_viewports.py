@@ -32,7 +32,18 @@ def test_responsive_viewports():
         ("Visits List", "/visits/"),
         ("Visit Detail (Location Badge)", f"/visits/{visit.pk if visit else 1}/"),
         ("Contact Dossier", f"/contacts/{contact.id if contact else 1}/"),
+        ("Contacts List", "/contacts/"),
+        ("Agenda View", "/agenda/"),
+        ("Planned Visits", "/planned-visits/"),
+        ("Agreements List", "/agreements/"),
+        ("Sales Orders List", "/sales/"),
+        ("Purchase Orders List", "/purchases/"),
+        ("Catalog Products", "/catalog/"),
         ("Location Settings", "/settings/location/"),
+        ("Visit Templates Settings", "/settings/visits/templates/"),
+        ("Sales Settings", "/settings/sales/"),
+        ("Purchase Settings", "/settings/purchase/"),
+        ("Pending Approvals List View", "/visits/?approval_status=pending"),
     ]
 
     viewports = [320, 360, 375, 390, 430, 768, 1024, 1366, 1920]

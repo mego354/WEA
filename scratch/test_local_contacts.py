@@ -17,7 +17,7 @@ async def main():
         print("1. Logging into local ERP...")
         await page.goto("http://127.0.0.1:8000/auth/login/", wait_until="domcontentloaded")
         await page.fill('input[name="email"]', "wea.pharm2020@gmail.com")
-        await page.fill('input[name="password"]', "Wea@0000")
+        await page.fill('input[name="password"]', "Wea@4444")
         await page.click('button[type="submit"]')
         await asyncio.sleep(2)
         print("Logged in, current URL:", page.url)

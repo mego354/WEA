@@ -6,10 +6,35 @@ from django.contrib.auth.mixins import AccessMixin
 from django.db.models import Q
 
 
+def is_manager_or_higher(user) -> bool:
+    """
+    Returns True if user is a manager or higher:
+    - Superuser or SuperAdmin
+    - CEO or Admin
+    - Role marked is_manager_role, is_super, is_area_manager, or is_sub_area_manager
+    - Role name or display name indicating managerial rank (manager, director, supervisor, etc.)
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, 'is_super_admin', False):
+        return True
+    role = getattr(user, 'role', None)
+    if not role or not role.is_active:
+        return False
+    if getattr(role, 'is_manager_role', False) or getattr(role, 'is_super', False) or getattr(role, 'is_area_manager', False) or getattr(role, 'is_sub_area_manager', False):
+        return True
+    name_l = (role.name or '').lower()
+    disp_l = (role.display_name or '').lower()
+    if name_l in ['ceo', 'admin', 'superadmin', 'manager', 'area_manager', 'sub_area_manager', 'purchasingmanager']:
+        return True
+    return any(k in name_l or k in disp_l for k in ['manager', 'director', 'supervisor', 'مدير', 'مشرف', 'رئيس'])
+
+
 def has_perm_or_admin(user, perm_codename: str) -> bool:
     """
     Checks if a user has a specific permission codename,
     with SuperAdmin automatic override and module inheritance.
+    Also honors settings-controlled universal access for visits, sales, purchases, and agreements.
     """
     if not user.is_authenticated or not user.is_active:
         return False
@@ -17,6 +42,25 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
         return True
     if isinstance(perm_codename, (list, tuple, set)):
         return any(has_perm_or_admin(user, p) for p in perm_codename)
+
+    # Check settings-controlled universal creation access
+    try:
+        from master_data.models import LocationSettings, SalesSettings, PurchaseSettings
+        if perm_codename in ['activities:visits/create', 'activities:visits/view', 'activities:visits/list', 'activities:planned/list', 'activities:planned/manage']:
+            if LocationSettings.get_settings().allow_all_users_to_create_visits:
+                return True
+        if perm_codename in ['activities:agreements/create', 'activities:agreements/view', 'activities:agreements/list']:
+            if LocationSettings.get_settings().allow_all_users_to_create_agreements:
+                return True
+        if perm_codename in ['sales:orders/create', 'sales:orders/view', 'sales:orders/list']:
+            if SalesSettings.get_settings().allow_all_users_to_create:
+                return True
+        if perm_codename in ['purchases:orders/create', 'purchases:orders/view', 'purchases:orders/list']:
+            if PurchaseSettings.get_settings().allow_all_users_to_create:
+                return True
+    except Exception:
+        pass
+
     if hasattr(user, 'has_permission'):
         return user.has_permission(perm_codename)
     if user.role and user.role.is_active:
@@ -28,7 +72,19 @@ def can_user_access_module(user, module_key: str) -> bool:
     """
     Checks if a user has access to a top-level module (e.g. 'purchases', 'sales').
     """
-    return has_perm_or_admin(user, f"module:{module_key}")
+    if has_perm_or_admin(user, f"module:{module_key}"):
+        return True
+    try:
+        from master_data.models import LocationSettings, SalesSettings, PurchaseSettings
+        if module_key == 'activities' and (LocationSettings.get_settings().allow_all_users_to_create_visits or LocationSettings.get_settings().allow_all_users_to_create_agreements):
+            return True
+        if module_key == 'sales' and SalesSettings.get_settings().allow_all_users_to_create:
+            return True
+        if module_key == 'purchases' and PurchaseSettings.get_settings().allow_all_users_to_create:
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def is_ajax_or_api(request) -> bool:
@@ -206,7 +262,13 @@ def get_user_managed_areas(user):
             Q(parent__parent_id__in=assigned_area_ids)
         ).distinct()
 
-    return user.assigned_areas.all()
+    # Representatives & staff: assigned areas, plus subareas of assigned parent, plus sibling subareas under same governorate
+    parent_ids = list(user.assigned_areas.filter(parent__isnull=False).values_list('parent_id', flat=True))
+    return Area.objects.filter(
+        Q(id__in=assigned_area_ids) |
+        Q(parent_id__in=assigned_area_ids) |
+        Q(parent_id__in=parent_ids)
+    ).distinct()
 
 
 def get_user_managed_representatives(user):
@@ -278,7 +340,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 1. Activities: Visit
     if m_name == 'visit':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return queryset.filter(Q(owner=user) | Q(created_by=user))
         return queryset.filter(
             Q(owner__in=managed_reps) |
@@ -288,7 +350,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 2. Activities: PlannedVisitDay
     elif m_name == 'plannedvisitday':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return queryset.filter(assignee=user)
         return queryset.filter(
             Q(assignee__in=managed_reps) |
@@ -297,7 +359,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 3. Activities: Agreement
     elif m_name == 'agreement':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return queryset.filter(Q(created_by=user) | Q(customer__area__in=managed_areas))
         return queryset.filter(
             Q(created_by__in=managed_reps) |
@@ -306,17 +368,17 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 4. Contacts: Contact
     elif m_name == 'contact':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return queryset.filter(Q(created_by=user) | Q(assigned_team=user) | Q(area__in=managed_areas)).distinct()
         return queryset.filter(
+            Q(area__in=managed_areas) |
             Q(created_by__in=managed_reps) |
-            Q(assigned_team__in=managed_reps) |
-            Q(area__in=managed_areas)
+            Q(assigned_team__in=managed_reps)
         ).distinct()
 
-    # 5. Sales: SalesOrder
-    elif m_name == 'salesorder':
-        if role.is_rep and not role.is_area_manager:
+    # 5. Sales: SalesOrder & SalesReturnOrder
+    elif m_name in ['salesorder', 'salesreturnorder']:
+        if not is_manager_or_higher(user):
             return queryset.filter(Q(created_by=user) | Q(customer__area__in=managed_areas))
         return queryset.filter(
             Q(created_by__in=managed_reps) |
@@ -325,7 +387,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 6. Sales: Collection
     elif m_name == 'collection':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return queryset.filter(Q(created_by=user) | Q(customer__area__in=managed_areas))
         return queryset.filter(
             Q(created_by__in=managed_reps) |
@@ -338,7 +400,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
 
     # 8. Treasury: Vault
     elif m_name == 'vault':
-        if role.is_rep or not role.can_hold_vault:
+        if not is_manager_or_higher(user) or not getattr(role, 'can_hold_vault', True):
             return queryset.filter(assigned_user=user)
 
     return queryset
@@ -378,8 +440,11 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
     model_name = obj.__class__.__name__.lower()
 
     if model_name == 'visit':
-        if role.is_rep and not role.is_area_manager:
-            return obj.owner_id == user.id or obj.created_by_id == user.id
+        if obj.owner_id == user.id or obj.created_by_id == user.id:
+            return True
+
+        if not is_manager_or_higher(user):
+            return False
 
         # Manager authority over visit: either rep belongs to managed reps, or contact is in managed areas
         rep_authorized = (obj.owner_id in managed_rep_ids or obj.created_by_id in managed_rep_ids)
@@ -387,7 +452,7 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
         return rep_authorized or area_authorized
 
     elif model_name == 'agreement':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             if action in ['edit', 'delete']:
                 if obj.status in ['approved', 'done']:
                     return False
@@ -395,22 +460,22 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
         return (obj.created_by_id in managed_rep_ids) or (getattr(obj.customer, 'area_id', None) in managed_areas)
 
     elif model_name == 'contact':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return obj.created_by_id == user.id or obj.area_id in managed_areas or obj.assigned_team.filter(id=user.id).exists()
         return (obj.area_id in managed_areas) or (obj.created_by_id in managed_rep_ids) or (obj.assigned_team.filter(id__in=managed_rep_ids).exists())
 
-    elif model_name == 'salesorder':
-        if role.is_rep and not role.is_area_manager:
+    elif model_name in ['salesorder', 'salesreturnorder']:
+        if not is_manager_or_higher(user):
             return obj.created_by_id == user.id or getattr(obj.customer, 'area_id', None) in managed_areas
         return (obj.created_by_id in managed_rep_ids) or (getattr(obj.customer, 'area_id', None) in managed_areas)
 
     elif model_name == 'collection':
-        if role.is_rep and not role.is_area_manager:
+        if not is_manager_or_higher(user):
             return obj.created_by_id == user.id or getattr(obj.customer, 'area_id', None) in managed_areas
         return (obj.created_by_id in managed_rep_ids) or (getattr(obj.customer, 'area_id', None) in managed_areas)
 
     elif model_name == 'vault':
-        if role.is_rep:
+        if not is_manager_or_higher(user):
             return obj.assigned_user_id == user.id
 
     return True

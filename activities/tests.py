@@ -27,8 +27,34 @@ class ActivitiesModuleTestCase(TestCase):
             is_staff=True,
             is_superuser=True
         )
-        self.user = self.manager
-        self.client.login(username='testmanager', password='Password123!')
+        from django.contrib.auth.models import Permission
+        from accounts.models import Role
+        self.rep_role = Role.objects.create(
+            name='medical_rep_test_activities',
+            display_name='مندوب دعاية تجريبي',
+            is_rep=True,
+            is_area_manager=False
+        )
+        rep_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit', 'activities:visits/export',
+                'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
+                'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create', 'activities:agreements/export',
+                'module:activities', 'module:contacts'
+            ]
+        )
+        self.rep_role.permissions.set(rep_perms)
+        self.rep = User.objects.create_user(
+            username='testrep',
+            email='rep@example.com',
+            password='Password123!',
+            first_name='Ali',
+            last_name='Rep',
+            role=self.rep_role,
+            bypass_location_verification=True
+        )
+        self.user = self.rep
+        self.client.login(username='testrep', password='Password123!')
 
         # Create contact
         self.contact = Contact.objects.create(
@@ -41,13 +67,12 @@ class ActivitiesModuleTestCase(TestCase):
         )
 
         # Create agreement type
-        self.ag_type = AgreementType.objects.create(name='Cash money', display_name_ar='نقدي')
+        self.ag_type, _ = AgreementType.objects.get_or_create(name='Cash money', defaults={'display_name_ar': 'نقدي'})
 
         # Create visit template
-        self.template = VisitTemplate.objects.create(
+        self.template, _ = VisitTemplate.objects.get_or_create(
             name='Single visit (DR)',
-            display_name_ar='زيارة فردية لطبيب',
-            active=True
+            defaults={'display_name_ar': 'زيارة فردية لطبيب', 'active': True}
         )
 
     def test_agreement_crud_and_status_transitions(self):
@@ -74,6 +99,7 @@ class ActivitiesModuleTestCase(TestCase):
         self.assertContains(detail_res, 'اتفاقية رعاية عيادة')
 
         # 3. Approve Action
+        self.client.login(username='testmanager', password='Password123!')
         approve_res = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
         self.assertEqual(approve_res.status_code, 302)
         agreement.refresh_from_db()
@@ -167,6 +193,7 @@ class ActivitiesModuleTestCase(TestCase):
         self.assertContains(detail_res, 'تم التحدث مع الطبيب')
 
         # 3. Manager Approval
+        self.client.login(username='testmanager', password='Password123!')
         approve_res = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
             'approval_notes': 'معتمدة - عمل ممتاز'
         })
@@ -201,6 +228,7 @@ class ActivitiesModuleTestCase(TestCase):
             created_by=self.manager
         )
 
+        self.client.login(username='testmanager', password='Password123!')
         res = self.client.post(reverse('agreements_bulk_status'), {
             'status': 'approved',
             'selected_ids': [ag1.pk, ag2.pk]

@@ -92,12 +92,31 @@
                     <span>إدخال البضاعة للمخزن</span>
                 </button>
             </form>
-            {% elif order.status == 'pending' %}
-            <form method="POST" action="{% url 'purchase_order_action' order.id 'approve' %}">
+            {% elif can_approve and order.status in 'pending,rejected' %}
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'approve' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">check</span>
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">
+                    <span class="material-symbols-outlined text-base">check_circle</span>
                     <span>اعتماد الأمر</span>
+                </button>
+            </form>
+            <button type="button" onclick="openRejectModal()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>رفض الأمر</span>
+            </button>
+            {% elif order.status == 'pending' %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold">
+                <span class="material-symbols-outlined text-sm">hourglass_empty</span>
+                <span>بانتظار اعتماد الإدارة</span>
+            </span>
+            {% endif %}
+
+            {% if can_resubmit %}
+            <form method="POST" action="{% url 'purchase_order_action' order.id 'resubmit' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">
+                    <span class="material-symbols-outlined text-base">replay</span>
+                    <span>إعادة تقديم للاعتماد</span>
                 </button>
             </form>
             {% endif %}
@@ -136,6 +155,39 @@
             </div>
         </div>
     </div>
+
+    <!-- Rejection Alert Banner -->
+    {% if order.status == 'rejected' %}
+    <div class="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 sm:p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-2xl">error</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-rose-800">تم رفض أمر الشراء هذا من قبل الإدارة</h3>
+                <p class="text-xs text-rose-700 mt-1">
+                    <span class="font-bold">سبب الرفض:</span>
+                    {{ order.rejection_reason|default:"يرجى مراجعة وتعديل بيانات أمر الشراء ثم إعادة تقديمه للاعتماد." }}
+                </p>
+                {% if order.approved_by %}
+                <p class="text-[11px] text-rose-500 mt-0.5">
+                    القرار بواسطة: <span class="font-bold">{{ order.approved_by.get_full_name|default:order.approved_by.username }}</span>
+                    {% if order.approved_at %}• {{ order.approved_at|date:"Y-m-d H:i" }}{% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% if can_resubmit %}
+        <form method="POST" action="{% url 'purchase_order_action' order.id 'resubmit' %}" class="shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">replay</span>
+                <span>إعادة تقديم للاعتماد</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- MAIN SPLIT WORKSPACE: Left Details + Right Accordions -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -360,6 +412,41 @@
                 </div>
             </div>
 
+            <!-- 6. Approval Audit Trail (سجل تدقيق الاعتمادات) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+                <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <span class="material-symbols-outlined text-amber-600">verified</span>
+                    <span>سجل قرارات واعتمادات الإدارة</span>
+                </h2>
+
+                <div class="space-y-3">
+                    {% for log in approval_history %}
+                    <div class="p-3 rounded-xl border {% if log.action == 'approved' %}bg-emerald-50/50 border-emerald-100 text-emerald-950{% elif log.action == 'rejected' %}bg-rose-50/50 border-rose-100 text-rose-950{% elif log.action == 'resubmitted' %}bg-amber-50/50 border-amber-100 text-amber-950{% else %}bg-slate-50 border-slate-100 text-slate-800{% endif %} text-xs space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold">
+                                {% if log.action == 'approved' %}
+                                <span class="text-emerald-700">✓ تم الاعتماد بواسطة:</span>
+                                {% elif log.action == 'rejected' %}
+                                <span class="text-rose-700">✗ تم الرفض بواسطة:</span>
+                                {% elif log.action == 'resubmitted' %}
+                                <span class="text-amber-700">⟳ تمت إعادة التقديم بواسطة:</span>
+                                {% else %}
+                                <span>{{ log.get_action_display }}:</span>
+                                {% endif %}
+                                {{ log.actor.get_full_name|default:log.actor.username }}
+                            </span>
+                            <span class="font-mono text-[11px] text-slate-500">{{ log.created_at|date:"Y-m-d H:i" }}</span>
+                        </div>
+                        {% if log.reason %}
+                        <p class="text-slate-600 mt-1"><span class="font-bold">السبب/الملاحظات:</span> {{ log.reason }}</p>
+                        {% endif %}
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-3">لا توجد سجلات قرارات سابقة</p>
+                    {% endfor %}
+                </div>
+            </div>
+
         </div>
 
         <!-- RIGHT SIDEBAR ACCORDIONS (4 COLS) -->
@@ -578,5 +665,46 @@ function closeSplitOrderModal() {
         </form>
     </div>
 </div>
+<!-- REJECT ORDER MODAL -->
+<div id="po-reject-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-rose-600">cancel</span>
+                <h3 class="font-bold text-slate-900 text-base">رفض أمر الشراء {{ order.order_number }}</h3>
+            </div>
+            <button type="button" onclick="closeRejectModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'purchase_order_action' order.id 'reject' %}" class="p-6 space-y-4 text-xs">
+            {% csrf_token %}
+            <div>
+                <label class="block font-bold text-slate-700 mb-1.5">سبب الرفض والتعديلات المطلوبة <span class="text-rose-500">*</span></label>
+                <textarea name="rejection_reason" rows="3" required placeholder="يرجى كتابة سبب الرفض بوضوح لتوجيه مسؤول المشتريات..."
+                          class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white"></textarea>
+            </div>
+
+            <div class="pt-2 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50">
+                    إلغاء
+                </button>
+                <button type="submit" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm">
+                    تأكيد الرفض
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openRejectModal() {
+    document.getElementById('po-reject-modal').classList.remove('hidden');
+}
+function closeRejectModal() {
+    document.getElementById('po-reject-modal').classList.add('hidden');
+}
+</script>
 {% endblock %}
 

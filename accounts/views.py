@@ -30,12 +30,27 @@ def login_view(request):
         return redirect('home')
 
     if request.method == 'POST':
-        email = request.POST.get('email', '').strip()
+        login_input = request.POST.get('email', '').strip()
         password = request.POST.get('password', '')
         
-        user = authenticate(request, username=email, password=password)
+        # 1. Try direct authenticate by username or exact email
+        user = authenticate(request, username=login_input, password=password)
         if not user:
-            user_obj = User.objects.filter(email__iexact=email).first()
+            # 2. Comprehensive flexible resolution by email, username, or normalized variations
+            variants = [
+                login_input,
+                login_input.replace('_', '.'),
+                login_input.replace('.', '_'),
+            ]
+            if '@' in login_input:
+                variants.append(login_input.split('@')[0])
+            else:
+                variants.append(f"{login_input}@wea.com")
+
+            user_obj = User.objects.filter(
+                Q(email__in=variants) | Q(username__in=variants)
+            ).first()
+
             if user_obj:
                 user = authenticate(request, username=user_obj.username, password=password)
 

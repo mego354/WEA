@@ -24,7 +24,7 @@ async def main():
             print("Logging in...")
             await page.wait_for_selector('input[type="email"], input[name="email"], input[formcontrolname="email"]', timeout=10000)
             await page.fill('input[type="email"], input[name="email"], input[formcontrolname="email"]', "wea.pharm2020@gmail.com")
-            await page.fill('input[type="password"], input[name="password"], input[formcontrolname="password"]', "Wea@0000")
+            await page.fill('input[type="password"], input[name="password"], input[formcontrolname="password"]', "Wea@4444")
             btn = await page.query_selector('button[type="submit"]')
             if btn: await btn.click()
             await page.wait_for_load_state("networkidle")

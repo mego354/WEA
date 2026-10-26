@@ -14,6 +14,8 @@ from inventory.models import Warehouse
 from activities.models import VisitTemplate, PlannedVisitDay, PlannedVisitItem, Visit, ApprovalAuditLog
 from sales.models import SalesOrder, SalesOrderItem
 from sales.services import SalesOrderService
+from purchases.models import PurchaseOrder, PurchaseOrderItem
+from purchases.services import PurchaseOrderService
 from django.core.exceptions import ValidationError
 from accounts.permissions import get_scoped_queryset, can_user_access_object, get_user_managed_areas, get_user_managed_representatives
 
@@ -42,12 +44,13 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit',
                 'activities:visits/approve', 'activities:planned/list', 'activities:planned/manage',
                 'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/approve',
-                'module:activities', 'module:sales', 'module:contacts'
+                'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/create', 'purchases:orders/approve',
+                'module:activities', 'module:sales', 'module:contacts', 'module:purchases'
             ]
         )
         self.manager_role.permissions.set(perms)
         self.rep_role.permissions.set(
-            perms.exclude(codename__in=['activities:visits/approve', 'sales:orders/approve'])
+            perms.exclude(codename__in=['activities:visits/approve', 'sales:orders/approve', 'purchases:orders/approve'])
         )
 
         # 3. Create Regional Hierarchy
@@ -107,6 +110,10 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         self.contact_pharmacy_b = Contact.objects.create(
             name='صيدلية الشفاء بجدة', code='PH002', account_type='Pharmacy',
             area=self.subregion_b1, is_customer=True, status='customer'
+        )
+        self.supplier = Contact.objects.create(
+            name='شركة توريد الأدوية العالمية', code='SUP001', account_type='Store',
+            area=self.subregion_a1, is_supplier=True, status='supplier'
         )
 
         # 6. Create Templates
@@ -426,31 +433,304 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         self.assertEqual(order.status, 'preparing')
 
     # =========================================================================
-    # REQUIREMENT 5 & 8: Approvals Hub & Regional Dashboard UI Endpoints
+    # REQUIREMENT 5 & 8: Approvals Removal & Canonical List/Detail Integration
     # =========================================================================
     def test_approvals_hub_and_regional_dashboard_endpoints(self):
-        """Verify approvals hub and regional dashboard load properly and enforce authorization."""
-        # Rep without approval permission cannot view Approvals Hub
+        """Verify approvals hub redirects to canonical item list views and regional dashboard loads."""
+        # Unauthenticated or rep login
         self.client.login(username='rep_a1', password='Password123!')
         res_rep_appr = self.client.get(reverse('approvals_hub'))
-        # Redirected with warning to home
+        # Canonical redirect to visits list pending
         self.assertEqual(res_rep_appr.status_code, 302)
+        self.assertIn('/visits/', res_rep_appr.url)
 
-        # Manager A can view Approvals Hub
+        # Manager A accessing approvals_hub also cleanly redirects to canonical list
         self.client.login(username='manager_a', password='Password123!')
         res_mgr_appr = self.client.get(reverse('approvals_hub'))
-        self.assertEqual(res_mgr_appr.status_code, 200)
-        self.assertContains(res_mgr_appr, 'مركز الموافقات والاعتمادات الإقليمية')
+        self.assertEqual(res_mgr_appr.status_code, 302)
+        self.assertIn('/visits/', res_mgr_appr.url)
 
-        # Test tabs: visits, orders, audit
+        # Orders tab redirects to sales list
         res_orders_tab = self.client.get(f"{reverse('approvals_hub')}?tab=orders")
-        self.assertEqual(res_orders_tab.status_code, 200)
+        self.assertEqual(res_orders_tab.status_code, 302)
+        self.assertIn('/sales/', res_orders_tab.url)
 
-        res_audit_tab = self.client.get(f"{reverse('approvals_hub')}?tab=audit")
-        self.assertEqual(res_audit_tab.status_code, 200)
+        # Manager A can view Agenda for subordinate reps
+        res_mgr_agenda = self.client.get(reverse('agenda'), {'assignee': self.rep_a1.id})
+        self.assertEqual(res_mgr_agenda.status_code, 200)
+        self.assertContains(res_mgr_agenda, 'جدول الاعمال')
 
-        # Manager A can view Regional Dashboard
-        res_mgr_reg = self.client.get(reverse('regional_dashboard'))
-        self.assertEqual(res_mgr_reg.status_code, 200)
-        self.assertContains(res_mgr_reg, 'لوحة قيادة المنطقة')
-        self.assertContains(res_mgr_reg, 'خالد')  # Rep A1 name
+    def test_purchase_order_approval_lifecycle_and_downstream_enforcement(self):
+        """Verify purchase order approval, rejection with reason, resubmit, self-approval prevention, and downstream blocks."""
+        po = PurchaseOrder.objects.create(
+            serial_num=999,
+            order_number="#999",
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending'
+        )
+        PurchaseOrderItem.objects.create(
+            order=po,
+            product=self.product,
+            quantity=10,
+            unit_price=100
+        )
+        po.recalculate_totals()
+
+        # 1. Downstream block: Cannot stock unapproved purchase order
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.stock_order(po, self.manager_a)
+
+        # 2. Self-approval prevention: Purchaser/creator cannot approve own order
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.approve_order(po, self.rep_a1)
+
+        # 3. Rejection requires non-empty reason
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.reject_order(po, self.manager_a, reason="")
+
+        # 4. Authorized rejection
+        PurchaseOrderService.reject_order(po, self.manager_a, reason="سعر التكلفة غير مطابق للاتفاقية")
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'rejected')
+        self.assertEqual(po.rejection_reason, "سعر التكلفة غير مطابق للاتفاقية")
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='rejected').exists())
+
+        # 5. Resubmission by creator resets status to pending
+        PurchaseOrderService.resubmit_order(po, self.rep_a1)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'pending')
+        self.assertEqual(po.rejection_reason, "")
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='resubmitted').exists())
+
+        # 6. Authorized approval by manager
+        PurchaseOrderService.approve_order(po, self.manager_a, notes="معتمد للشراء")
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'approved')
+        self.assertEqual(po.approved_by, self.manager_a)
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='approved').exists())
+
+        # 7. Downstream stocking unlocked after approval
+        PurchaseOrderService.stock_order(po, self.manager_a)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'picked')
+
+    def test_item_detail_pages_approval_actions_and_list_filters(self):
+        """Verify approval actions directly on Visit, SalesOrder, and PurchaseOrder detail pages, and list filters."""
+        # --- Visit Detail & Approval ---
+        visit = Visit.objects.create(
+            serial_num=888,
+            owner=self.rep_a1,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            status='finished',
+            approval_status='pending',
+            date=timezone.now().date(),
+            created_by=self.rep_a1
+        )
+        self.client.login(username='manager_a', password='Password123!')
+        res_v_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_v_detail.status_code, 200)
+        self.assertTrue(res_v_detail.context['can_approve'])
+
+        # Approve visit via detail page action
+        res_v_act = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']))
+        self.assertEqual(res_v_act.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+        # Visits list filter by approval_status
+        res_v_list = self.client.get(reverse('visits_list') + '?approval_status=approved')
+        self.assertEqual(res_v_list.status_code, 200)
+        self.assertContains(res_v_list, str(visit.serial_num))
+
+        # --- Sales Order Detail & Approval ---
+        order = SalesOrder.objects.create(
+            serial_num=888,
+            order_number="#SO-888",
+            customer=self.contact_pharmacy_a,
+            source_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending',
+            order_date=timezone.now().date()
+        )
+        res_so_detail = self.client.get(reverse('sales_order_detail', args=[order.pk]))
+        self.assertEqual(res_so_detail.status_code, 200)
+        self.assertTrue(res_so_detail.context['can_approve'])
+
+        # Reject sales order with reason
+        res_so_reject = self.client.post(reverse('sales_order_action', args=[order.pk, 'reject']), {
+            'rejection_reason': 'الحد الائتماني غير كافي'
+        })
+        self.assertEqual(res_so_reject.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'rejected')
+
+        # Sales list filter by status=rejected
+        res_so_list = self.client.get(reverse('sales_orders_list') + '?status=rejected')
+        self.assertEqual(res_so_list.status_code, 200)
+        self.assertContains(res_so_list, order.order_number)
+
+        # --- Purchase Order Detail & Approval ---
+        po = PurchaseOrder.objects.create(
+            serial_num=888,
+            order_number="#PO-888",
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending',
+            order_date=timezone.now().date()
+        )
+        res_po_detail = self.client.get(reverse('purchase_order_detail', args=[po.pk]))
+        self.assertEqual(res_po_detail.status_code, 200)
+        self.assertTrue(res_po_detail.context['can_approve'])
+
+        # Approve purchase order via detail action
+        res_po_act = self.client.post(reverse('purchase_order_action', args=[po.pk, 'approve']), {
+            'approval_notes': 'معتمد من مدير المشتريات'
+        })
+        self.assertEqual(res_po_act.status_code, 302)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'approved')
+
+        # Purchase orders list filter by status=approved
+        res_po_list = self.client.get(reverse('purchase_orders_list') + '?status=approved')
+        self.assertEqual(res_po_list.status_code, 200)
+        self.assertContains(res_po_list, po.order_number)
+
+    def test_manager_of_same_area_can_change_visit_status_and_approve(self):
+        """Manager of the same regional area can approve and change visit status from detail page."""
+        visit = Visit.objects.create(
+            serial_num=9901,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        # Manager A (same area) views detail page
+        self.client.force_login(self.manager_a)
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_detail.status_code, 200)
+        self.assertTrue(res_detail.context['can_approve'])
+        self.assertFalse(res_detail.context['is_in_agenda'])
+
+        # Manager A changes status to approved and finished
+        res_change = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'change_status']),
+            {
+                'approval_status': 'approved',
+                'visit_status': 'finished',
+                'reason': 'اعتماد وتغيير الحالة من مدير المنطقة'
+            }
+        )
+        self.assertEqual(res_change.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.approved_by, self.manager_a)
+        self.assertIsNotNone(visit.approved_at)
+
+        # Audit log verification
+        audit = ApprovalAuditLog.objects.filter(visit=visit, action='status_changed').first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.actor, self.manager_a)
+
+    def test_manager_of_different_area_cannot_change_visit_status(self):
+        """Manager of a different region cannot approve or change visit status."""
+        visit = Visit.objects.create(
+            serial_num=9902,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        # Manager B (Alexandria/Jeddah) attempts to change status of Region A visit
+        self.client.force_login(self.manager_b)
+        res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'change_status']),
+            {
+                'approval_status': 'approved',
+                'visit_status': 'finished',
+            }
+        )
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertEqual(visit.status, 'started')
+
+    def test_representative_cannot_self_approve_visit(self):
+        """Representative cannot approve or change approval status on their own visit."""
+        visit = Visit.objects.create(
+            serial_num=9903,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='finished',
+            approval_status='pending'
+        )
+
+        self.client.force_login(self.rep_a1)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+
+    def test_unapproved_visit_cannot_be_sent_to_agenda(self):
+        """A visit must be approved before sending it to the agenda."""
+        visit = Visit.objects.create(
+            serial_num=9904,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        self.client.force_login(self.manager_a)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        # Should redirect back to detail with an error message
+        self.assertEqual(res.status_code, 302)
+        self.assertFalse(PlannedVisitItem.objects.filter(visit=visit).exists())
+
+    def test_approved_visit_can_be_sent_to_agenda(self):
+        """Once approved by area manager, the visit is successfully sent to the agenda."""
+        visit = Visit.objects.create(
+            serial_num=9905,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='approved',
+            approved_by=self.manager_a,
+            approved_at=timezone.now()
+        )
+
+        self.client.force_login(self.manager_a)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        self.assertEqual(res.status_code, 302)
+        self.assertIn('/agenda/', res.url)
+
+        # Verify item added to PlannedVisitDay
+        item = PlannedVisitItem.objects.filter(visit=visit).first()
+        self.assertIsNotNone(item)
+        self.assertEqual(item.plan_day.assignee, self.rep_a1)
+        self.assertEqual(item.plan_day.date, visit.date)
+        self.assertEqual(item.contact, self.contact_pharmacy_a)
+
+        # Detail page now reflects is_in_agenda=True
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertTrue(res_detail.context['is_in_agenda'])
+

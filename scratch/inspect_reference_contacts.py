@@ -25,7 +25,7 @@ async def inspect():
         if "login" in current_url or "signin" in current_url or "auth" in current_url:
             print("Logging in...")
             await page.fill('input[type="email"], input[name="email"], input[formcontrolname="email"]', "wea.pharm2020@gmail.com")
-            await page.fill('input[type="password"], input[name="password"], input[formcontrolname="password"]', "Wea@0000")
+            await page.fill('input[type="password"], input[name="password"], input[formcontrolname="password"]', "Wea@4444")
             login_btn = await page.query_selector('button[type="submit"], button:has-text("تسجيل الدخول"), button:has-text("Login")')
             if login_btn:
                 await login_btn.click()

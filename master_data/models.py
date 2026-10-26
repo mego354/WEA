@@ -68,9 +68,47 @@ class LocationSettings(models.Model):
     verify_purchase_orders = models.BooleanField(default=False, verbose_name="التحقق من موقع أوامر الشراء")
     verify_purchase_returns = models.BooleanField(default=False, verbose_name="التحقق من موقع أوامر إرجاع الشراء")
 
+    # User creation and approval controls
+    allow_all_users_to_create_visits = models.BooleanField(
+        default=False,
+        verbose_name="السماح لجميع المستخدمين بإنشاء الزيارات (مخططة أو غير مخططة)"
+    )
+    require_manager_approval_for_visits = models.BooleanField(
+        default=True,
+        verbose_name="طلب موافقة المدير للزيارات لغير المدراء"
+    )
+    allow_all_users_to_create_agreements = models.BooleanField(
+        default=False,
+        verbose_name="السماح لجميع المستخدمين بإنشاء الاتفاقيات"
+    )
+    require_manager_approval_for_agreements = models.BooleanField(
+        default=True,
+        verbose_name="طلب موافقة المدير للاتفاقيات لغير المدراء"
+    )
+
+    # Configurable Product Suggestions (Requirement)
+    enable_product_suggestions = models.BooleanField(
+        default=True,
+        verbose_name="تفعيل اقتراح المنتجات في الزيارات"
+    )
+    suggested_products = models.ManyToManyField(
+        'catalog.Product',
+        blank=True,
+        related_name='location_suggested_products',
+        limit_choices_to={'is_active': True, 'sellable': True},
+        verbose_name="المنتجات المقترحة للزيارات"
+    )
+
+    def get_eligible_suggested_products(self):
+        """Returns suggested products strictly filtered to active, sellable products."""
+        if not self.enable_product_suggestions:
+            from catalog.models import Product
+            return Product.objects.none()
+        return self.suggested_products.filter(is_active=True, sellable=True).order_by('name')
+
     class Meta:
-        verbose_name = "إعدادات الموقع"
-        verbose_name_plural = "إعدادات الموقع"
+        verbose_name = "إعدادات الموقع والزيارات"
+        verbose_name_plural = "إعدادات الموقع والزيارات"
 
     def __str__(self):
         return f"Location Settings (Tolerance: {self.tolerance}m)"
@@ -176,6 +214,16 @@ class SalesSettings(models.Model):
     default_packaging_unit = models.CharField(max_length=20, choices=PACKAGING_UNITS, default='box', verbose_name="حجم التعبئة الافتراضي")
     print_template = models.CharField(max_length=100, default='standard', verbose_name="قالب الطباعة")
 
+    # User creation and approval controls
+    allow_all_users_to_create = models.BooleanField(
+        default=False,
+        verbose_name="السماح لجميع المستخدمين بإنشاء أوامر البيع"
+    )
+    require_manager_approval = models.BooleanField(
+        default=True,
+        verbose_name="طلب موافقة المدير إذا لم يكن المنشئ مديراً أو أعلى"
+    )
+
     class Meta:
         verbose_name = "إعدادات المبيعات"
         verbose_name_plural = "إعدادات المبيعات"
@@ -211,6 +259,16 @@ class PurchaseSettings(models.Model):
 
     tax_mode = models.CharField(max_length=20, choices=TAX_MODES, default='optional', verbose_name="نمط الضريبة")
     default_packaging_unit = models.CharField(max_length=20, choices=PACKAGING_UNITS, default='piece', verbose_name="حجم التعبئة الافتراضي")
+
+    # User creation and approval controls
+    allow_all_users_to_create = models.BooleanField(
+        default=False,
+        verbose_name="السماح لجميع المستخدمين بإنشاء أوامر الشراء"
+    )
+    require_manager_approval = models.BooleanField(
+        default=True,
+        verbose_name="طلب موافقة المدير إذا لم يكن المنشئ مديراً أو أعلى"
+    )
 
     class Meta:
         verbose_name = "إعدادات المشتريات"

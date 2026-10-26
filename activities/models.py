@@ -114,8 +114,19 @@ class VisitTemplate(models.Model):
     customer_status = models.CharField(max_length=50, blank=True, default='', verbose_name="حالة العميل")
 
     questionnaire = models.JSONField(default=dict, blank=True, verbose_name="أسئلة الاستبيان (نسخة احتياطية)")
+    suggested_products = models.ManyToManyField(
+        'catalog.Product',
+        blank=True,
+        related_name='template_suggested_products',
+        limit_choices_to={'is_active': True, 'sellable': True},
+        verbose_name="المنتجات المقترحة لهذا القالب"
+    )
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, verbose_name="تاريخ الإنشاء")
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True, verbose_name="تاريخ التحديث")
+
+    def get_eligible_suggested_products(self):
+        """Returns suggested products for this template filtered strictly to active sellable products."""
+        return self.suggested_products.filter(is_active=True, sellable=True).order_by('name')
 
     class Meta:
         verbose_name = "قالب زيارة"
@@ -574,17 +585,21 @@ class ApprovalAuditLog(models.Model):
     RECORD_TYPES = [
         ('visit', 'زيارة ميدانية'),
         ('sales_order', 'أمر بيع'),
+        ('purchase_order', 'أمر شراء'),
     ]
     ACTION_CHOICES = [
         ('submitted', 'تقديم للاعتماد'),
         ('approved', 'اعتماد'),
         ('rejected', 'رفض'),
         ('resubmitted', 'إعادة تقديم بعد التعديل'),
+        ('status_changed', 'تغيير الحالة'),
+        ('sent_to_agenda', 'إرسال لجدول الأعمال'),
     ]
 
     record_type = models.CharField(max_length=20, choices=RECORD_TYPES, db_index=True, verbose_name="نوع السجل")
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="الزيارة")
     sales_order = models.ForeignKey('sales.SalesOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="أمر البيع")
+    purchase_order = models.ForeignKey('purchases.PurchaseOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="أمر الشراء")
     action = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True, verbose_name="نوع الإجراء")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approval_actions_logged', verbose_name="المستخدم المنفذ")
     status_before = models.CharField(max_length=50, blank=True, verbose_name="الحالة السابقة")
@@ -599,6 +614,23 @@ class ApprovalAuditLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        target = f"Visit #{self.visit.serial_num}" if self.visit else (f"Order #{self.sales_order.order_number}" if self.sales_order else "Record")
+        target = f"Visit #{self.visit.serial_num}" if self.visit else (f"Sales Order #{self.sales_order.order_number}" if self.sales_order else (f"Purchase Order #{self.purchase_order.order_number}" if self.purchase_order else "Record"))
         return f"[{self.get_action_display()}] {target} by {self.actor} at {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class AgendaTodo(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='agenda_todos', verbose_name="المستخدم")
+    date = models.DateField(db_index=True, verbose_name="تاريخ المهمة")
+    title = models.CharField(max_length=255, verbose_name="العنوان")
+    is_completed = models.BooleanField(default=False, verbose_name="مكتمل")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "مهمة جدول الأعمال"
+        verbose_name_plural = "مهام جدول الأعمال"
+        ordering = ['is_completed', '-created_at']
+
+    def __str__(self):
+        return f"{self.user} - {self.date}: {self.title}"
 
