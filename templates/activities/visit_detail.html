@@ -140,7 +140,7 @@
     </div>
 
     <!-- Rejection Alert Banner (Requirement 3) -->
-    {% if visit.approval_status in 'disapproved,rejected' %}
+    {% if visit.approval_status == 'disapproved' or visit.approval_status == 'rejected' %}
     <div class="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 sm:p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-start gap-3">
             <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -390,13 +390,14 @@
                                     </div>
 
                                 {% elif q.question_type == 'single_choice' %}
+
                                     <select name="question_{{ q.id }}" class="question-input w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
                                             onchange="handleQuestionChange({{ q.id }})">
                                         <option value="">-- اختر الإجابة --</option>
                                         {% for opt in q.options %}
-                                        <option value="{{ opt }}"
-                                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt %}selected{% endif %}{% endfor %}>
-                                            {{ opt }}
+                                        <option value="{{ opt.value }}"
+                                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt.value %}selected{% endif %}{% endfor %}>
+                                            {{ opt.text_ar }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -405,10 +406,10 @@
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                                         {% for opt in q.options %}
                                         <label class="inline-flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs">
-                                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt }}" class="question-input text-[#27bebe] rounded focus:ring-[#27bebe]"
+                                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value }}" class="question-input text-[#27bebe] rounded focus:ring-[#27bebe]"
                                                    onchange="handleQuestionChange({{ q.id }})"
-                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt in resp.raw_answer %}checked{% endif %}{% endfor %}>
-                                            <span class="text-slate-700 font-medium">{{ opt }}</span>
+                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt.value in resp.raw_answer %}checked{% endif %}{% endfor %}>
+                                            <span class="text-slate-700 font-medium">{{ opt.text_ar }}</span>
                                         </label>
                                         {% endfor %}
                                     </div>
