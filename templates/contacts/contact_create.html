@@ -1,11 +1,9 @@
 {% extends 'layouts/base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}انشئ جهة اتصال{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
     /* Styling to match reference ERP Angular Material / Bricks ERP UI */
     .form-section-title {
@@ -463,7 +461,7 @@
                             <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
                             <span>تحديد الموقع الجغرافي على الخريطة (GPS)</span>
                         </label>
-                        {% include 'components/location_picker.html' with picker_id='contact_create' lat_name='latitude' lng_name='longitude' initial_lat=30.0444 initial_lng=31.2357 has_saved_location=False address_input_id='primary_address_street' marker_label='موقع جهة الاتصال' %}
+                        {% include 'components/location_picker.html' with picker_id='contact_create' lat_name='latitude' lng_name='longitude' initial_lat=30.0444 initial_lng=31.2357 has_saved_location=False address_input_id='primary_address_street' marker_label='موقع جهة الاتصال' map_height='h-80 sm:h-96' %}
                     </div>
 
                     <!-- Field: تعيين كعنوان رئيسى -->
@@ -788,33 +786,112 @@
         // --- 4. ADD NEW ADDRESS CARD ---
         const addAddressBtn = document.getElementById('add-address-card-btn');
         const addressWrapper = document.getElementById('address-cards-wrapper');
+        let addressCardSequence = document.querySelectorAll('.address-card').length;
+
+        function initializeClonedLocationPicker(card, suffix) {
+            // Give every cloned picker its own IDs. The shared component's script and
+            // styles also contain the original picker ID, so update those references.
+            const oldPickerId = 'contact_create';
+            const newPickerId = `contact_create_${suffix}`;
+            const oldAddressId = 'primary_address_street';
+            const newAddressId = `primary_address_street_${suffix}`;
+
+            card.querySelectorAll('[id]').forEach(element => {
+                if (element.id === oldAddressId) {
+                    element.id = newAddressId;
+                } else if (element.id.startsWith(oldPickerId)) {
+                    element.id = element.id.replace(oldPickerId, newPickerId);
+                }
+            });
+
+            card.querySelectorAll('label[for]').forEach(label => {
+                if (label.htmlFor === oldAddressId) {
+                    label.htmlFor = newAddressId;
+                } else if (label.htmlFor.startsWith(oldPickerId)) {
+                    label.htmlFor = label.htmlFor.replace(oldPickerId, newPickerId);
+                }
+            });
+
+            // cloneNode() copies Leaflet's generated panes and the initialization flag.
+            // Remove generated map content before re-running the component initializer.
+            const mapElement = card.querySelector(`#${newPickerId}_map`);
+            if (mapElement) {
+                mapElement.innerHTML = '';
+                delete mapElement.dataset.locationPickerInitialized;
+                mapElement.classList.remove('leaflet-container');
+                mapElement.removeAttribute('tabindex');
+                mapElement.querySelectorAll('*').forEach(child => {
+                    child.classList.remove('leaflet-pane', 'leaflet-tile', 'leaflet-marker-icon',
+                        'leaflet-marker-shadow', 'leaflet-control');
+                });
+            }
+
+            // Update the embedded component configuration and CSS selectors.
+            card.querySelectorAll('script').forEach(script => {
+                if (!script.src) {
+                    script.textContent = script.textContent
+                        .replaceAll(oldPickerId, newPickerId)
+                        .replaceAll(oldAddressId, newAddressId);
+                }
+            });
+
+            card.querySelectorAll('style').forEach(style => {
+                style.textContent = style.textContent
+                    .replaceAll(oldPickerId, newPickerId)
+                    .replaceAll(oldAddressId, newAddressId);
+            });
+        }
 
         addAddressBtn.addEventListener('click', function () {
-            const firstCard = document.querySelector('.address-card');
+            const firstCard = addressWrapper.querySelector('.address-card');
             if (!firstCard) return;
 
+            addressCardSequence += 1;
+            const suffix = addressCardSequence;
             const newCard = firstCard.cloneNode(true);
+
+            // Reinitialize each cloned map independently. This also fixes duplicate IDs.
+            initializeClonedLocationPicker(newCard, suffix);
+
             newCard.querySelectorAll('input').forEach(input => {
                 if (input.type === 'checkbox') {
-                    input.checked = false; // additional addresses not main by default
+                    input.checked = false; // Additional addresses are not main by default.
                 } else {
                     input.value = '';
                 }
+                input.classList.remove('has-error');
             });
 
             const areaSelect = newCard.querySelector('.area-select');
             const subareaSelect = newCard.querySelector('.subarea-select');
-            if (areaSelect) areaSelect.value = '';
+            if (areaSelect) {
+                areaSelect.value = '';
+                areaSelect.classList.remove('has-error');
+            }
             if (subareaSelect) {
                 subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة أولاً...</option>';
                 subareaSelect.disabled = true;
+                subareaSelect.classList.remove('has-error');
             }
 
-            // Hide any errors on clone
+            // Hide validation errors on the new card.
             newCard.querySelectorAll('.field-error-text').forEach(err => err.classList.add('hidden'));
             newCard.querySelectorAll('.has-error').forEach(el => el.classList.remove('has-error'));
 
             addressWrapper.appendChild(newCard);
+
+            // Inline scripts added with cloneNode do not execute automatically. Recreate
+            // them after the card is in the DOM so the picker can find its own elements.
+            newCard.querySelectorAll('script').forEach(oldScript => {
+                const newScript = document.createElement('script');
+                if (oldScript.src) {
+                    newScript.src = oldScript.src;
+                } else {
+                    newScript.textContent = oldScript.textContent;
+                }
+                oldScript.replaceWith(newScript);
+            });
+
             attachSubareaListener(newCard);
         });
 

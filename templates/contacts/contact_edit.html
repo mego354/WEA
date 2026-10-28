@@ -1,11 +1,9 @@
 {% extends 'layouts/base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}تعديل جهة اتصال - {{ contact.name }}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
     .form-section-title {
         color: #27bebe;
@@ -320,7 +318,7 @@
                         </div>
                         <div>
                             <label class="custom-input-label">العنوان التفصيلي</label>
-                            <input type="text" name="address_street[]" value="{{ addr.street_address }}" placeholder="الشارع ورقم البناية" class="mat-like-input">
+                            <input type="text" name="address_street[]" {% if forloop.first %}id="primary_address_street"{% endif %} value="{{ addr.street_address }}" placeholder="الشارع ورقم البناية" class="mat-like-input">
                         </div>
                     </div>
 
@@ -329,6 +327,7 @@
                         <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
                     </div>
                 </div>
+
                 {% empty %}
                 <div class="address-card is-main-card">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
@@ -360,15 +359,16 @@
                         <input type="checkbox" name="address_is_main[]" value="1" checked class="rounded text-brand-500">
                         <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
                     </div>
-            </div>
-
-            <!-- Interactive Map Location Picker (Shared Component) -->
-            <div class="mt-4">
+                </div>
+                
+                {% endfor %}
+                <!-- Interactive Map Location Picker (Shared Component) -->
+                <div class="mt-4">
                 <label class="custom-input-label flex items-center gap-1.5 mb-2">
                     <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
                     <span>تعديل وتحديث الموقع الجغرافي (GPS)</span>
                 </label>
-                {% include 'components/location_picker.html' with picker_id='contact_edit' lat_name='latitude' lng_name='longitude' initial_lat=contact.latitude|default:30.0444 initial_lng=contact.longitude|default:31.2357 has_saved_location=contact.has_saved_location address_input_id='primary_address_street' marker_label=contact.name %}
+                {% include 'components/location_picker.html' with picker_id='contact_edit' lat_name='latitude' lng_name='longitude' initial_lat=contact.latitude|default:30.0444|unlocalize initial_lng=contact.longitude|default:31.2357|unlocalize has_saved_location=contact.has_saved_location address_input_id='primary_address_street' marker_label=contact.name map_height='h-80 sm:h-96' %}
             </div>
         </div>
 
@@ -430,11 +430,11 @@
                 </div>
                 <div>
                     <label class="custom-input-label">حد الائتمان (ج.م)</label>
-                    <input type="number" step="0.01" name="credit_limit" value="{{ contact.credit_limit }}" class="mat-like-input font-mono">
+                    <input type="number" step="0.01" name="credit_limit" value="{{ contact.credit_limit|unlocalize }}" class="mat-like-input font-mono">
                 </div>
                 <div>
                     <label class="custom-input-label">فترة الائتمان (أيام)</label>
-                    <input type="number" name="credit_period_days" value="{{ contact.credit_period_days }}" class="mat-like-input font-mono">
+                    <input type="number" name="credit_period_days" value="{{ contact.credit_period_days|unlocalize }}" class="mat-like-input font-mono">
                 </div>
             </div>
 
@@ -467,7 +467,7 @@
 
                     {% elif item.setting.field_type == 'number' %}
                     <input type="number" step="any" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
-                           value="{{ item.value|default:'' }}" class="mat-like-input font-mono" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
+                           value="{{ item.value|default:''|unlocalize }}" class="mat-like-input font-mono" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
 
                     {% elif item.setting.field_type == 'date' %}
                     <input type="date" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
