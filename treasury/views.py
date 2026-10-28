@@ -241,6 +241,7 @@ def vault_transactions_list(request):
     search = request.GET.get('search', '').strip()
 
     qs = VaultTransaction.objects.select_related('vault', 'created_by').order_by('-created_at')
+    qs = get_scoped_queryset(qs, request.user, 'vaulttransaction')
 
     active_filters = []
 
@@ -261,7 +262,7 @@ def vault_transactions_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    vaults = Vault.objects.filter(is_active=True).order_by('name')
+    vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 

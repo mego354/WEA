@@ -76,7 +76,6 @@ class SettingsViewsTests(TestCase):
             'sales_settings',
             'purchase_settings',
             'inventory_settings',
-            'contacts_udf',
             'sync_data',
         ]
         for ep in endpoints:
@@ -96,7 +95,6 @@ class SettingsViewsTests(TestCase):
             ('sales_settings', 'settings/sales_settings.html'),
             ('purchase_settings', 'settings/purchase_settings.html'),
             ('inventory_settings', 'settings/inventory_settings.html'),
-            ('contacts_udf', 'settings/contacts_udf.html'),
             ('sync_data', 'settings/sync_data.html'),
         ]
         for ep, tpl in endpoints:
@@ -278,25 +276,11 @@ class SettingsViewsTests(TestCase):
         self.assertTrue(prof.use_batch_number)
         self.assertTrue(prof.is_batch_mandatory)
 
-    def test_contacts_udf_update(self):
+    def test_contacts_udf_url_not_found(self):
+        """Verify that /settings/contacts-udf/ has been removed and returns HTTP 404."""
         self.client.login(username='admin@example.com', password='AdminPassword123!')
-        field = ContactFieldSetting.objects.create(
-            field_key='custom_tax',
-            display_name='الرقم الضريبي للعميل',
-            section='basic',
-            is_locked=False,
-            is_required=False,
-            is_filterable=False
-        )
-        response = self.client.post(reverse('contacts_udf'), {
-            'field_id': field.pk,
-            'is_required': 'on',
-            'is_filterable': 'on',
-        })
-        self.assertEqual(response.status_code, 302)
-        field.refresh_from_db()
-        self.assertTrue(field.is_required)
-        self.assertTrue(field.is_filterable)
+        response = self.client.get('/settings/contacts-udf/')
+        self.assertEqual(response.status_code, 404)
 
     def test_sync_data_views(self):
         self.client.login(username='admin@example.com', password='AdminPassword123!')

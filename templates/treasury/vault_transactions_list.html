@@ -54,7 +54,7 @@
     {% include 'components/active_filters.html' %}
 
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">history</span>
                 <span>سجل حركات النقدية اليومية</span>
@@ -62,25 +62,26 @@
                     {{ total_count }} حركة
                 </span>
             </h2>
+            {% include 'components/table_column_picker.html' with table_id='vault_transactions_table' %}
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="vault_transactions_table" data-col-table="vault_transactions_table" class="min-w-[800px] w-full text-right text-xs">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-4">الخزنة</th>
-                        <th class="py-3 px-4">نوع الحركة</th>
-                        <th class="py-3 px-4">المبلغ</th>
-                        <th class="py-3 px-4">الرصيد بعد الحركة</th>
-                        <th class="py-3 px-4">البيان</th>
-                        <th class="py-3 px-4">المسئول</th>
-                        <th class="py-3 px-4">تاريخ ووقت الحركة</th>
+                        <th data-col="vault" data-col-label="الخزنة" data-col-required="true" class="py-3 px-4">الخزنة</th>
+                        <th data-col="transaction_type" data-col-label="نوع الحركة" data-col-required="true" class="py-3 px-4">نوع الحركة</th>
+                        <th data-col="amount" data-col-label="المبلغ" class="py-3 px-4">المبلغ</th>
+                        <th data-col="running_balance" data-col-label="الرصيد بعد الحركة" class="py-3 px-4">الرصيد بعد الحركة</th>
+                        <th data-col="description" data-col-label="البيان" class="py-3 px-4">البيان</th>
+                        <th data-col="created_by" data-col-label="المسئول" class="py-3 px-4">المسئول</th>
+                        <th data-col="created_at" data-col-label="تاريخ ووقت الحركة" class="py-3 px-4">تاريخ ووقت الحركة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for tx in transactions %}
                     <tr class="hover:bg-slate-50/70">
-                        <td class="py-3 px-4 font-bold text-slate-900">{{ tx.vault.name }}</td>
-                        <td class="py-3 px-4 font-bold">
+                        <td data-col="vault" class="py-3 px-4 font-bold text-slate-900">{{ tx.vault.name }}</td>
+                        <td data-col="transaction_type" class="py-3 px-4 font-bold">
                             {% if tx.transaction_type == 'inflow' %}
                             <span class="text-emerald-700 flex items-center gap-1">
                                 <span class="material-symbols-outlined text-sm">arrow_downward</span>
@@ -93,13 +94,13 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-4 font-mono font-black text-sm {% if tx.transaction_type == 'inflow' %}text-emerald-700{% else %}text-red-700{% endif %}">
+                        <td data-col="amount" class="py-3 px-4 font-mono font-black text-sm {% if tx.transaction_type == 'inflow' %}text-emerald-700{% else %}text-red-700{% endif %}">
                             {{ tx.amount|intcomma }} ج.م
                         </td>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900">{{ tx.running_balance|intcomma }} ج.م</td>
-                        <td class="py-3 px-4 font-medium text-slate-800">{{ tx.description }}</td>
-                        <td class="py-3 px-4 text-slate-500">{{ tx.created_by.name|default:tx.created_by.username }}</td>
-                        <td class="py-3 px-4 text-slate-400 font-mono">{{ tx.created_at|date:"Y-m-d H:i" }}</td>
+                        <td data-col="running_balance" class="py-3 px-4 font-mono font-bold text-slate-900">{{ tx.running_balance|intcomma }} ج.م</td>
+                        <td data-col="description" class="py-3 px-4 font-medium text-slate-800">{{ tx.description }}</td>
+                        <td data-col="created_by" class="py-3 px-4 text-slate-500">{{ tx.created_by.name|default:tx.created_by.username }}</td>
+                        <td data-col="created_at" class="py-3 px-4 text-slate-400 font-mono">{{ tx.created_at|date:"Y-m-d H:i" }}</td>
                     </tr>
                     {% empty %}
                     <tr>

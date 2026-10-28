@@ -52,6 +52,7 @@ class Contact(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='customer', verbose_name="الحالة")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    custom_values = models.JSONField(default=dict, blank=True, verbose_name="القيم المخصصة")
 
     parent_org = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='branches', verbose_name="المؤسسة التابعة لها")
     assigned_team = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="assigned_contacts", verbose_name="المسئولين")
@@ -268,6 +269,10 @@ class ContactActivity(models.Model):
         ('visit', 'زيارة'),
         ('call', 'مكالمة'),
         ('agreement', 'اتفاقية'),
+        ('todo', 'مهمة'),
+        ('update', 'تحديث بيانات'),
+        ('order', 'طلب بيع'),
+        ('collection', 'تحصيل'),
     ]
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="activities", verbose_name="جهة الاتصال")
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPES, default='visit', verbose_name="نوع النشاط")

@@ -10,19 +10,23 @@ from master_data.models import Area
 
 class AccountsModelTests(TestCase):
     def setUp(self):
-        self.super_role = Role.objects.create(
+        self.super_role, _ = Role.objects.get_or_create(
             name='superadmin',
-            display_name='مدير نظام رئيسي',
-            is_super=True,
-            is_active=True
+            defaults={
+                'display_name': 'مدير نظام رئيسي',
+                'is_super': True,
+                'is_active': True
+            }
         )
-        self.rep_role = Role.objects.create(
+        self.rep_role, _ = Role.objects.get_or_create(
             name='medical_rep',
-            display_name='مندوب دعاية',
-            is_rep=True,
-            is_active=True
+            defaults={
+                'display_name': 'مندوب دعاية',
+                'is_rep': True,
+                'is_active': True
+            }
         )
-        self.area = Area.objects.create(name='القاهرة', code='CAI', area_type='governorate')
+        self.area, _ = Area.objects.get_or_create(code='CAI', defaults={'name': 'القاهرة', 'area_type': 'governorate'})
 
     def test_user_creation_and_attributes(self):
         user = User.objects.create_user(
@@ -201,12 +205,17 @@ class RoleManagementViewTests(TestCase):
             name='مدير النظام',
             role=self.admin_role
         )
-        self.test_role = Role.objects.create(
+        self.test_role, _ = Role.objects.get_or_create(
             name='accountant',
-            display_name='محاسب',
-            can_hold_vault=True,
-            is_active=True
+            defaults={
+                'display_name': 'محاسب',
+                'can_hold_vault': True,
+                'is_active': True
+            }
         )
+        self.test_role.can_hold_vault = True
+        self.test_role.is_active = True
+        self.test_role.save()
 
     def test_roles_list_view(self):
         self.client.login(username='admin@example.com', password='AdminPassword123!')

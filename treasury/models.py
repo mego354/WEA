@@ -16,6 +16,7 @@ class Vault(models.Model):
     name = models.CharField(max_length=150, unique=True, verbose_name="اسم الخزنة / الحساب")
     vault_type = models.CharField(max_length=20, choices=VAULT_TYPES, default='cash', verbose_name="نوع الخزنة")
     assigned_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_vaults", verbose_name="المسئول / المندوب الحائز للعهدة")
+    is_rep_vault = models.BooleanField(default=False, verbose_name="خزنة عهدة مندوب")
     is_active = models.BooleanField(default=True, verbose_name="مفعلة")
     current_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الرصيد الحالي (ج.م)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")

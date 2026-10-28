@@ -1,13 +1,14 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}سجل التدقيق الأمني - WEA Pharma ERP{% endblock %}
+{% block title %}سجل التدقيق الشامل للعمليات - WEA Pharma ERP{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">سجل التدقيق الأمني</span>
+<span class="font-bold text-[#27bebe]">سجل التدقيق الشامل</span>
 {% endblock %}
 
 {% block content %}
@@ -18,9 +19,9 @@
         <div>
             <h1 class="text-2xl font-bold text-[#27bebe] flex items-center gap-2">
                 <span class="material-symbols-outlined">history_toggle_off</span>
-                <span>سجل التدقيق الأمني للعمليات الإدارية</span>
+                <span>سجل التدقيق الشامل لكافة العمليات</span>
             </h1>
-            <p class="text-xs text-slate-500 mt-1">تتبع دقيق لكافة العمليات الحساسة (إنشاء وتعديل الأدوار، تعيين الصلاحيات، تغيير أدوار المستخدمين، وإعادة تعيين كلمات المرور).</p>
+            <p class="text-xs text-slate-500 mt-1">تتبع دقيق وتاريخي لكافة العمليات الحساسة في النظام (المستخدمين، جهات الاتصال، الزيارات، المخازن، المبيعات، والخزينة).</p>
         </div>
         <div class="flex items-center gap-2">
             <span class="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5 min-h-[40px]">
@@ -30,34 +31,70 @@
         </div>
     </div>
 
+    <!-- Active Filters Chips -->
+    {% include 'components/active_filters.html' %}
+
     <!-- Filters Bar -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4">
-        <form method="GET" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <!-- Search -->
-            <div class="relative flex-1">
-                <input type="text" name="q" value="{{ query }}" placeholder="بحث في السجل (المسؤول، المستخدم، IP، الوصف)..."
-                       class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[44px]">
-                <span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-lg">search</span>
+            <div class="relative lg:col-span-2">
+                <input type="text" name="q" value="{{ query }}" placeholder="بحث (المسؤول، السجل، IP، الوصف)..."
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
+            </div>
+
+            <!-- Module Filter -->
+            <div>
+                <select name="module" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                    <option value="">جميع الموديولات</option>
+                    {% for code, label in module_choices %}
+                    <option value="{{ code }}" {% if module_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <!-- Action Type Filter -->
-            <select name="action" class="px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[44px]">
-                <option value="">جميع أنواع العمليات</option>
-                {% for code, label in action_choices %}
-                <option value="{{ code }}" {% if action_filter == code %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+            <div>
+                <select name="action" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                    <option value="">جميع العمليات</option>
+                    {% for code, label in action_choices %}
+                    <option value="{{ code }}" {% if action_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-            <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base">filter_list</span>
-                <span>تصفية</span>
-            </button>
+            <!-- User Filter -->
+            <div>
+                <select name="user" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                    <option value="">جميع المستخدمين</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}" {% if user_filter == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-            {% if query or action_filter %}
-            <a href="{% url 'audit_logs_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all flex items-center justify-center min-h-[44px]">
-                إلغاء
-            </a>
-            {% endif %}
+            <!-- Date Range Inputs -->
+            <div class="flex items-center gap-1 sm:col-span-2 lg:col-span-2">
+                <input type="date" name="date_from" value="{{ date_from }}" title="من تاريخ"
+                       class="w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                <span class="text-slate-400 text-xs">إلى</span>
+                <input type="date" name="date_to" value="{{ date_to }}" title="إلى تاريخ"
+                       class="w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 sm:col-span-2 lg:col-span-1">
+                <button type="submit" class="flex-1 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 min-h-[42px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
+                    <span>تصفية</span>
+                </button>
+                {% if query or module_filter or action_filter or user_filter or date_from or date_to %}
+                <a href="{% url 'audit_logs_list' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all flex items-center justify-center min-h-[42px]" title="إلغاء التصفية">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </a>
+                {% endif %}
+            </div>
         </form>
     </div>
 
@@ -69,11 +106,14 @@
                 <thead>
                     <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] font-bold">
                         <th class="p-3.5">التاريخ والوقت</th>
+                        <th class="p-3.5">الموديول</th>
                         <th class="p-3.5">نوع العملية</th>
-                        <th class="p-3.5">المسؤول المنفذ</th>
-                        <th class="p-3.5">المستهدف</th>
+                        <th class="p-3.5">المنفذ</th>
+                        <th class="p-3.5">السجل المستهدف</th>
+                        <th class="p-3.5">الحالة</th>
                         <th class="p-3.5">عنوان IP</th>
-                        <th class="p-3.5">التفاصيل</th>
+                        <th class="p-3.5">الوصف</th>
+                        <th class="p-3.5 text-center">التفاصيل</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-xs">
@@ -83,12 +123,24 @@
                             {{ log.created_at|date:"Y-m-d H:i:s" }}
                         </td>
                         <td class="p-3.5 whitespace-nowrap">
-                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold
-                                {% if 'ROLE' in log.action_type %}bg-purple-50 text-purple-700 border border-purple-200
-                                {% elif 'PASSWORD' in log.action_type %}bg-rose-50 text-rose-700 border border-rose-200
-                                {% elif 'STATUS' in log.action_type %}bg-amber-50 text-amber-700 border border-amber-200
-                                {% else %}bg-teal-50 text-teal-700 border border-teal-200{% endif %}">
-                                {{ log.get_action_type_display }}
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {{ log.get_module_display }}
+                            </span>
+                        </td>
+                        <td class="p-3.5 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold
+                                {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-50 text-rose-700 border border-rose-200
+                                {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-50 text-blue-700 border border-blue-200
+                                {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-50 text-teal-700 border border-teal-200
+                                {% else %}bg-purple-50 text-purple-700 border border-purple-200{% endif %}">
+                                <span class="w-1.5 h-1.5 rounded-full
+                                    {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-500
+                                    {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-500
+                                    {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-500
+                                    {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-500
+                                    {% else %}bg-purple-500{% endif %}"></span>
+                                <span>{{ log.get_action_type_display }}</span>
                             </span>
                         </td>
                         <td class="p-3.5 whitespace-nowrap">
@@ -99,7 +151,9 @@
                             {% endif %}
                         </td>
                         <td class="p-3.5 whitespace-nowrap">
-                            {% if log.target_user %}
+                            {% if log.record_name or log.record_id %}
+                            <span class="font-medium text-slate-700">{{ log.record_name|default:log.record_id }}</span>
+                            {% elif log.target_user %}
                             <span class="text-slate-700">{{ log.target_user.name|default:log.target_user.username }}</span>
                             {% elif log.target_role %}
                             <span class="text-slate-700">دور: {{ log.target_role.display_name }}</span>
@@ -107,17 +161,39 @@
                             <span class="text-slate-400">-</span>
                             {% endif %}
                         </td>
+                        <td class="p-3.5 whitespace-nowrap">
+                            {% if log.status == 'SUCCESS' %}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                <span class="material-symbols-outlined text-[12px]">check_circle</span>
+                                <span>ناجح</span>
+                            </span>
+                            {% elif log.status == 'FAILURE' %}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                <span class="material-symbols-outlined text-[12px]">cancel</span>
+                                <span>فشل</span>
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400">-</span>
+                            {% endif %}
+                        </td>
                         <td class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                             {{ log.ip_address|default:"-" }}
                         </td>
-                        <td class="p-3.5 text-slate-600 max-w-md">
+                        <td class="p-3.5 text-slate-600 max-w-xs truncate" title="{{ log.description }}">
                             {{ log.description }}
+                        </td>
+                        <td class="p-3.5 text-center whitespace-nowrap">
+                            <button onclick="openAuditModal({{ log.id }})"
+                                    class="px-2.5 py-1 bg-slate-50 hover:bg-[#27bebe] hover:text-white text-slate-600 text-xs font-semibold rounded-lg border border-slate-200 transition-all flex items-center gap-1 mx-auto">
+                                <span class="material-symbols-outlined text-sm">visibility</span>
+                                <span>عرض</span>
+                            </button>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="p-12 text-center text-slate-400">
-                            لا توجد أحداث أمنية مسجلة مطابقة للبحث.
+                        <td colspan="9" class="p-12 text-center text-slate-400">
+                            لا توجد أحداث تدقيق مسجلة مطابقة لمعايير البحث.
                         </td>
                     </tr>
                     {% endfor %}
@@ -128,56 +204,237 @@
         <!-- Mobile Card View (< 768px) -->
         <div class="md:hidden divide-y divide-slate-100">
             {% for log in logs %}
-            <div class="p-4 space-y-2">
+            <div class="p-4 space-y-2.5">
                 <div class="flex items-center justify-between text-xs">
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
-                        {% if 'ROLE' in log.action_type %}bg-purple-50 text-purple-700
-                        {% elif 'PASSWORD' in log.action_type %}bg-rose-50 text-rose-700
-                        {% elif 'STATUS' in log.action_type %}bg-amber-50 text-amber-700
-                        {% else %}bg-teal-50 text-teal-700{% endif %}">
-                        {{ log.get_action_type_display }}
-                    </span>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            {{ log.get_module_display }}
+                        </span>
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold
+                            {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                            {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-50 text-rose-700 border border-rose-200
+                            {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-50 text-blue-700 border border-blue-200
+                            {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-50 text-teal-700 border border-teal-200
+                            {% else %}bg-purple-50 text-purple-700 border border-purple-200{% endif %}">
+                            <span class="w-1 h-1 rounded-full
+                                {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-500
+                                {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-500
+                                {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-500
+                                {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-500
+                                {% else %}bg-purple-500{% endif %}"></span>
+                            <span>{{ log.get_action_type_display }}</span>
+                        </span>
+                    </div>
                     <span class="text-[10px] font-mono text-slate-400">{{ log.created_at|date:"Y-m-d H:i" }}</span>
                 </div>
 
-                <div class="text-xs">
-                    <span class="font-bold text-slate-800">المنفذ: </span>
-                    <span class="text-slate-600">
-                        {% if log.actor %}{{ log.actor.name|default:log.actor.username }}{% else %}النظام تلقائياً{% endif %}
-                    </span>
+                <div class="flex items-center justify-between text-xs">
+                    <div>
+                        <span class="text-slate-400">المنفذ: </span>
+                        <span class="font-bold text-slate-800">{% if log.actor %}{{ log.actor.name|default:log.actor.username }}{% else %}النظام تلقائياً{% endif %}</span>
+                    </div>
+                    {% if log.status == 'SUCCESS' %}
+                    <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">ناجح</span>
+                    {% elif log.status == 'FAILURE' %}
+                    <span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">فشل</span>
+                    {% endif %}
                 </div>
 
                 <p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     {{ log.description }}
                 </p>
 
-                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-1">
-                    <span>IP: {{ log.ip_address|default:"-" }}</span>
-                    {% if log.target_user %}<span>مستهدف: {{ log.target_user.name|default:log.target_user.username }}</span>{% endif %}
+                <div class="flex items-center justify-between text-[11px] pt-1">
+                    <span class="text-slate-400 font-mono">IP: {{ log.ip_address|default:"-" }}</span>
+                    <button onclick="openAuditModal({{ log.id }})"
+                            class="px-3 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-lg border border-teal-200 flex items-center gap-1 hover:bg-[#27bebe] hover:text-white transition-colors">
+                        <span class="material-symbols-outlined text-sm">visibility</span>
+                        <span>تفاصيل الحدث</span>
+                    </button>
                 </div>
             </div>
             {% empty %}
             <div class="p-8 text-center text-slate-400 text-xs">
-                لا توجد أحداث أمنية مسجلة.
+                لا توجد أحداث تدقيق مسجلة.
             </div>
             {% endfor %}
         </div>
 
         <!-- Pagination -->
-        {% if paginator.num_pages > 1 %}
-        <div class="p-4 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span class="text-slate-500">صفحة {{ page_obj.number }} من {{ paginator.num_pages }}</span>
-            <div class="flex items-center gap-1">
-                {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">السابق</a>
-                {% endif %}
-                {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">التالي</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>
+
+<!-- Audit Log Detail Modal -->
+<div id="auditDetailModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+        <!-- Modal Header -->
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-teal-600">manage_search</span>
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base">تفاصيل حدث التدقيق</h3>
+            </div>
+            <button onclick="closeAuditModal()" class="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-200 transition-colors">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div id="auditModalContent" class="p-5 overflow-y-auto space-y-4 text-xs">
+            <div class="flex items-center justify-center py-12 text-slate-400">
+                <span class="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+                <span>جاري تحميل التفاصيل...</span>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+            <button onclick="closeAuditModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+                إغلاق
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAuditModal(logId) {
+    const modal = document.getElementById('auditDetailModal');
+    const content = document.getElementById('auditModalContent');
+    modal.classList.remove('hidden');
+    content.innerHTML = `
+        <div class="flex items-center justify-center py-12 text-slate-400">
+            <span class="material-symbols-outlined animate-spin text-2xl mr-2">progress_activity</span>
+            <span>جاري تحميل تفاصيل السجل...</span>
+        </div>
+    `;
+
+    fetch(`/settings/audit-logs/${logId}/detail/`)
+        .then(res => {
+            if (!res.ok) throw new Error('فشل جلب التفاصيل');
+            return res.json();
+        })
+        .then(data => {
+            let prevHtml = '<span class="text-slate-400 italic">لا توجد بيانات سابقة مسجلة</span>';
+            if (data.previous_values && Object.keys(data.previous_values).length > 0) {
+                prevHtml = '<dl class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+                for (const [k, v] of Object.entries(data.previous_values)) {
+                    prevHtml += `<div class="bg-rose-50/70 border border-rose-100 p-2 rounded">
+                        <dt class="font-mono text-[10px] text-rose-600">${escapeHtml(k)}</dt>
+                        <dd class="font-semibold text-slate-800 break-words">${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
+                    </div>`;
+                }
+                prevHtml += '</dl>';
+            }
+
+            let newHtml = '<span class="text-slate-400 italic">لا توجد بيانات جديدة مسجلة</span>';
+            if (data.new_values && Object.keys(data.new_values).length > 0) {
+                newHtml = '<dl class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+                for (const [k, v] of Object.entries(data.new_values)) {
+                    newHtml += `<div class="bg-emerald-50/70 border border-emerald-100 p-2 rounded">
+                        <dt class="font-mono text-[10px] text-emerald-600">${escapeHtml(k)}</dt>
+                        <dd class="font-semibold text-slate-800 break-words">${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
+                    </div>`;
+                }
+                newHtml += '</dl>';
+            }
+
+            content.innerHTML = `
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">الموديول:</span>
+                        <span class="font-bold text-slate-800">${escapeHtml(data.module || '-')}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">نوع العملية:</span>
+                        <span class="font-bold text-teal-700">${escapeHtml(data.action_type_display || data.action_type || '-')}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">التاريخ والوقت:</span>
+                        <span class="font-mono text-slate-700">${escapeHtml(data.created_at || '-')}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">المنفذ:</span>
+                        <span class="font-bold text-slate-800">${escapeHtml(data.actor || '-')}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">السجل المستهدف:</span>
+                        <span class="font-medium text-slate-700">${escapeHtml(data.record_name || data.record_id || '-')}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[10px]">الحالة:</span>
+                        <span class="font-bold ${data.status === 'SUCCESS' ? 'text-emerald-600' : 'text-rose-600'}">${escapeHtml(data.status || '-')}</span>
+                    </div>
+                    <div class="col-span-2 sm:col-span-3">
+                        <span class="text-slate-400 block text-[10px]">عنوان IP والجهاز:</span>
+                        <span class="font-mono text-[11px] text-slate-600">${escapeHtml(data.ip_address || '-')} - ${escapeHtml(data.user_agent || '-')}</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">الوصف الكامل:</label>
+                    <div class="bg-white border border-slate-200 p-3 rounded-lg text-slate-700">
+                        ${escapeHtml(data.description || '-')}
+                    </div>
+                </div>
+
+                ${data.reason ? `
+                <div>
+                    <label class="font-bold text-amber-700 block mb-1">السبب / الملاحظات:</label>
+                    <div class="bg-amber-50/60 border border-amber-200 p-3 rounded-lg text-amber-900">
+                        ${escapeHtml(data.reason)}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Diff Values -->
+                <div class="space-y-3 pt-2">
+                    <h4 class="font-bold text-slate-800 border-b border-slate-200 pb-1 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-teal-600">difference</span>
+                        <span>مقارنة التغييرات (السابقة مقابل الجديدة):</span>
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <h5 class="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">remove_circle</span>
+                                <span>القيم السابقة:</span>
+                            </h5>
+                            ${prevHtml}
+                        </div>
+                        <div class="space-y-1.5">
+                            <h5 class="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">add_circle</span>
+                                <span>القيم الجديدة:</span>
+                            </h5>
+                            ${newHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(err => {
+            content.innerHTML = `
+                <div class="p-6 text-center text-rose-500">
+                    <span class="material-symbols-outlined text-3xl">error</span>
+                    <p class="mt-2 font-bold">${escapeHtml(err.message)}</p>
+                </div>
+            `;
+        });
+}
+
+function closeAuditModal() {
+    document.getElementById('auditDetailModal').classList.add('hidden');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeAuditModal();
+});
+</script>
 {% endblock %}

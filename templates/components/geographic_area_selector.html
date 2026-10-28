@@ -1,0 +1,229 @@
+{# Component: Accessible Hierarchical Geographic Area Selector #}
+<div id="{{ selector_id }}_area_selector_wrapper" class="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+    <!-- Header & Search Controls -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+            <label class="block text-xs font-bold text-slate-800">
+                المناطق الجغرافية المعينة للمستخدم
+            </label>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+                تحديد المحافظة الرئيسية يمنح إشرافاً شاملاً على جميع مناطقها الفرعية
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="selectAllAreas_{{ selector_id }}()" class="px-2.5 py-1 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors border border-brand-200">
+                تحديد الكل
+            </button>
+            <button type="button" onclick="clearAllAreas_{{ selector_id }}()" class="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
+                مسح التحديد
+            </button>
+            <span id="{{ selector_id }}_selected_count_badge" class="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-700 rounded-lg">
+                0 محددة
+            </span>
+        </div>
+    </div>
+
+    <!-- Quick Search -->
+    <div class="relative">
+        <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+        <input type="text" id="{{ selector_id }}_area_search" placeholder="ابحث باسم المنطقة أو المحافظة..."
+               oninput="filterAreas_{{ selector_id }}(this.value)"
+               class="w-full pr-10 pl-8 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+        <button type="button" onclick="clearSearch_{{ selector_id }}()" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <span class="material-symbols-outlined text-sm">close</span>
+        </button>
+    </div>
+
+    <!-- Selected Areas Pills Container -->
+    <div id="{{ selector_id }}_selected_chips" class="flex flex-wrap gap-1.5 min-h-[28px] max-h-28 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg">
+        <span id="{{ selector_id }}_empty_placeholder" class="text-[11px] text-slate-400 italic py-0.5 px-1">لم يتم تحديد أي منطقة بعد</span>
+    </div>
+
+    <!-- Hierarchical Tree Container -->
+    <div id="{{ selector_id }}_tree" class="max-h-72 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+        {% for main in hierarchical_areas %}
+        <div class="area-group bg-white border border-slate-200 rounded-lg overflow-hidden transition-colors" data-main-id="{{ main.id }}" data-search-name="{{ main.name|lower }} {{ main.code|lower }}">
+            <!-- Governorate Header -->
+            <div class="flex items-center justify-between p-2.5 bg-slate-50/80 hover:bg-slate-100/80 cursor-pointer select-none">
+                <label class="flex items-center gap-2 cursor-pointer flex-1 min-h-[32px]">
+                    <input type="checkbox" name="assigned_areas" value="{{ main.id }}"
+                           id="{{ selector_id }}_area_{{ main.id }}"
+                           data-name="{{ main.name }}" data-type="governorate"
+                           {% if main.id in selected_area_ids %}checked{% endif %}
+                           onchange="onAreaCheckboxChange_{{ selector_id }}(this)"
+                           class="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500">
+                    <span class="text-xs font-bold text-slate-800">{{ main.name }}</span>
+                    <span class="px-1.5 py-0.5 text-[10px] font-medium bg-brand-50 text-brand-700 rounded border border-brand-200">محافظة</span>
+                    <span class="text-[10px] font-mono text-slate-400">[{{ main.code }}]</span>
+                </label>
+                {% if main.subareas.all %}
+                <button type="button" onclick="toggleSubareasAccordion_{{ selector_id }}('{{ selector_id }}_sub_{{ main.id }}', this)"
+                        class="p-1 text-slate-400 hover:text-slate-700 rounded transition-transform" title="إظهار/إخفاء المناطق الفرعية">
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- Subareas Container -->
+            {% if main.subareas.all %}
+            <div id="{{ selector_id }}_sub_{{ main.id }}" class="subareas-list divide-y divide-slate-100 border-t border-slate-100 bg-white">
+                {% for sub in main.subareas.all %}
+                <div class="area-item flex items-center justify-between py-2 px-3 pr-8 hover:bg-slate-50 min-h-[36px]" data-search-name="{{ sub.name|lower }} {{ sub.code|lower }}">
+                    <label class="flex items-center gap-2 cursor-pointer flex-1">
+                        <input type="checkbox" name="assigned_areas" value="{{ sub.id }}"
+                               id="{{ selector_id }}_area_{{ sub.id }}"
+                               data-name="{{ sub.name }} ({{ main.name }})" data-type="subarea"
+                               data-parent-id="{{ main.id }}"
+                               {% if sub.id in selected_area_ids %}checked{% endif %}
+                               onchange="onAreaCheckboxChange_{{ selector_id }}(this)"
+                               class="w-3.5 h-3.5 text-brand-600 rounded border-slate-300 focus:ring-brand-500">
+                        <span class="text-xs text-slate-700 font-medium">{{ sub.name }}</span>
+                        <span class="text-[10px] font-mono text-slate-400">[{{ sub.code }}]</span>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="py-4 text-center text-xs text-slate-400">
+            لا توجد مناطق جغرافية متاحة للاختيار ضمن نطاق صلاحياتك.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+(function() {
+    const selId = "{{ selector_id }}";
+    
+    window[`updateChips_${selId}`] = function() {
+        const wrapper = document.getElementById(`${selId}_area_selector_wrapper`);
+        if (!wrapper) return;
+        const chipsContainer = document.getElementById(`${selId}_selected_chips`);
+        const badge = document.getElementById(`${selId}_selected_count_badge`);
+        const checkboxes = wrapper.querySelectorAll('input[type="checkbox"][name="assigned_areas"]:checked');
+        
+        chipsContainer.innerHTML = '';
+        if (checkboxes.length === 0) {
+            chipsContainer.innerHTML = `<span id="${selId}_empty_placeholder" class="text-[11px] text-slate-400 italic py-0.5 px-1">لم يتم تحديد أي منطقة بعد</span>`;
+            if (badge) badge.textContent = "0 محددة";
+            return;
+        }
+        
+        if (badge) badge.textContent = `${checkboxes.length} محددة`;
+        
+        checkboxes.forEach(cb => {
+            const name = cb.getAttribute('data-name') || cb.value;
+            const isGov = cb.getAttribute('data-type') === 'governorate';
+            const chip = document.createElement('span');
+            chip.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${isGov ? 'bg-brand-50 border-brand-200 text-brand-800 font-bold' : 'bg-slate-100 border-slate-200 text-slate-700'}`;
+            chip.innerHTML = `
+                <span>${name}</span>
+                <button type="button" onclick="removeAreaChip_${selId}('${cb.value}')" class="text-slate-400 hover:text-red-500 flex items-center">
+                    <span class="material-symbols-outlined text-[13px]">close</span>
+                </button>
+            `;
+            chipsContainer.appendChild(chip);
+        });
+    };
+
+    window[`onAreaCheckboxChange_${selId}`] = function(cb) {
+        window[`updateChips_${selId}`]();
+    };
+
+    window[`removeAreaChip_${selId}`] = function(areaId) {
+        const cb = document.getElementById(`${selId}_area_${areaId}`);
+        if (cb) {
+            cb.checked = false;
+            window[`updateChips_${selId}`]();
+        }
+    };
+
+    window[`selectAllAreas_${selId}`] = function() {
+        const wrapper = document.getElementById(`${selId}_area_selector_wrapper`);
+        if (!wrapper) return;
+        wrapper.querySelectorAll('input[type="checkbox"][name="assigned_areas"]').forEach(cb => {
+            // Only check visible ones (honoring active search filter)
+            const item = cb.closest('.area-item') || cb.closest('.area-group');
+            if (item && item.style.display !== 'none') {
+                cb.checked = true;
+            }
+        });
+        window[`updateChips_${selId}`]();
+    };
+
+    window[`clearAllAreas_${selId}`] = function() {
+        const wrapper = document.getElementById(`${selId}_area_selector_wrapper`);
+        if (!wrapper) return;
+        wrapper.querySelectorAll('input[type="checkbox"][name="assigned_areas"]').forEach(cb => {
+            cb.checked = false;
+        });
+        window[`updateChips_${selId}`]();
+    };
+
+    window[`filterAreas_${selId}`] = function(query) {
+        const q = (query || '').trim().toLowerCase();
+        const wrapper = document.getElementById(`${selId}_area_selector_wrapper`);
+        if (!wrapper) return;
+
+        const groups = wrapper.querySelectorAll('.area-group');
+        groups.forEach(grp => {
+            const grpSearch = (grp.getAttribute('data-search-name') || '');
+            let grpMatch = grpSearch.includes(q);
+            const subItems = grp.querySelectorAll('.area-item');
+            let hasVisibleSub = false;
+
+            subItems.forEach(item => {
+                const itemSearch = (item.getAttribute('data-search-name') || '');
+                if (!q || grpMatch || itemSearch.includes(q)) {
+                    item.style.display = '';
+                    hasVisibleSub = true;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            if (!q || grpMatch || hasVisibleSub) {
+                grp.style.display = '';
+                // Auto-expand if search query matches subareas
+                const subList = grp.querySelector('.subareas-list');
+                if (subList && q && hasVisibleSub) {
+                    subList.classList.remove('hidden');
+                }
+            } else {
+                grp.style.display = 'none';
+            }
+        });
+    };
+
+    window[`clearSearch_${selId}`] = function() {
+        const searchInput = document.getElementById(`${selId}_area_search`);
+        if (searchInput) {
+            searchInput.value = '';
+            window[`filterAreas_${selId}`]('');
+        }
+    };
+
+    window[`toggleSubareasAccordion_${selId}`] = function(containerId, btn) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const isHidden = container.classList.toggle('hidden');
+        if (btn) {
+            const icon = btn.querySelector('.material-symbols-outlined');
+            if (icon) {
+                icon.textContent = isHidden ? 'expand_more' : 'expand_less';
+            }
+        }
+    };
+
+    // Initialize chips on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        window[`updateChips_${selId}`]();
+    });
+    // In case DOM is already ready:
+    setTimeout(function() {
+        window[`updateChips_${selId}`]();
+    }, 50);
+})();
+</script>

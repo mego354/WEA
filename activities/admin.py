@@ -72,8 +72,8 @@ class VisitTemplateQuestionInline(admin.TabularInline):
 
 @admin.register(VisitTemplate)
 class VisitTemplateAdmin(admin.ModelAdmin):
-    list_display = ('name', 'display_name_ar', 'mode', 'questions_count', 'allow_unplanned', 'auto_approve_unplanned', 'active_badge')
-    list_filter = ('active', 'mode', 'allow_unplanned', 'auto_approve_unplanned', 'enable_product_detailing')
+    list_display = ('name', 'display_name_ar', 'questions_count', 'allow_unplanned', 'active_badge')
+    list_filter = ('active', 'allow_unplanned', 'enable_product_detailing')
     search_fields = ('name', 'display_name_ar', 'display_name_en')
     filter_horizontal = ('restricted_roles', 'suggested_products')
     inlines = [VisitTemplateQuestionInline]

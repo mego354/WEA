@@ -177,14 +177,24 @@
                 <div id="customer-search-container" class="{% if selected_contact or form.contact.value %}hidden{% endif %} relative">
                     <div class="relative">
                         <span class="material-symbols-outlined absolute right-3.5 top-2.5 text-slate-400 text-lg">search</span>
-                        <input type="text" id="customer-search-input" onkeyup="handleCustomerSearch(event)" onfocus="openSearchResults()"
-                               placeholder="ابحث باسم العميل، الكود، التخصص، أو العنوان..." autocomplete="off"
-                               class="w-full rounded-xl border border-slate-200 pr-10 pl-10 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-xs">
-                        <span id="search-spinner" class="material-symbols-outlined absolute left-3.5 top-2.5 text-slate-400 text-lg hidden animate-spin">refresh</span>
+                        <input type="text" id="customer-search-input" onkeyup="handleCustomerSearch(event)" onfocus="openSearchResults()" onclick="openSearchResults()"
+                               placeholder="ابحث باسم العميل أو مكان الزيارة، الكود، التخصص، أو العنوان..." autocomplete="off"
+                               class="w-full rounded-xl border border-slate-200 pr-10 pl-24 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-xs cursor-pointer">
+                        <div class="absolute left-2 top-1.5 flex items-center gap-1">
+                            <span id="search-spinner" class="material-symbols-outlined text-slate-400 text-lg hidden animate-spin">refresh</span>
+                            <button type="button" onclick="toggleSearchResults(event)" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-0.5" title="عرض الأماكن والعملاء المتاحين">
+                                <span class="material-symbols-outlined text-base">expand_more</span>
+                                <span>الأماكن</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Live Results Dropdown -->
-                    <div id="customer-search-dropdown" class="hidden absolute right-0 left-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto z-30 divide-y divide-slate-100">
+                    <div id="customer-search-dropdown" class="hidden absolute right-0 left-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-72 overflow-y-auto z-30 divide-y divide-slate-100">
+                        <div class="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                            <span>الأماكن والعملاء المتاحين</span>
+                            <span id="customer-results-count" class="text-teal-600 font-mono"></span>
+                        </div>
                         <div id="customer-search-results" class="p-1.5 space-y-1">
                             <!-- Populated via JS -->
                         </div>
@@ -272,90 +282,21 @@
                 </div>
             </div>
 
-            <!-- SECTION 3.5: VISIT TEMPLATE QUESTIONNAIRE & PRODUCT DETAILING -->
-            <input type="hidden" name="detailed_products_submitted" value="1">
-            
-            <div id="template-questionnaire-section" class="space-y-4 pt-2">
-                <!-- Questionnaire Card -->
-                <div id="questionnaire-card" class="hidden bg-slate-50/70 rounded-2xl border border-slate-200/80 p-4 space-y-4">
-                    <div class="flex items-center justify-between pb-3 border-b border-slate-200">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-brand-600">assignment</span>
-                            <div>
-                                <h3 class="text-xs font-bold text-slate-800" id="template-title-label">استبيان الزيارة</h3>
-                                <p class="text-[11px] text-slate-500" id="template-mode-label">إجابة أسئلة نموذج الزيارة المعتمد</p>
-                            </div>
-                        </div>
-                        <span id="template-questions-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                            0 أسئلة
-                        </span>
-                    </div>
-
-                    <!-- Stage 1: Start Questions (Check-in) -->
-                    <div id="start-questions-container" class="space-y-3 hidden">
-                        <div class="flex items-center gap-1.5 text-sky-800 text-xs font-bold pb-1 border-b border-sky-100">
-                            <span class="material-symbols-outlined text-sm">play_circle</span>
-                            <span>أسئلة بداية الزيارة (Check-in)</span>
-                        </div>
-                        <div id="start-questions-list" class="space-y-3">
-                            <!-- Populated via JS -->
-                        </div>
-                    </div>
-
-                    <!-- Stage 2: Completion Questions (Check-out) -->
-                    <div id="completion-questions-container" class="space-y-3 hidden">
-                        <div class="flex items-center gap-1.5 text-slate-800 text-xs font-bold pb-1 border-b border-slate-200">
-                            <span class="material-symbols-outlined text-sm text-brand-600">fact_check</span>
-                            <span>استبيان نتائج ومحادثة الزيارة (Check-out)</span>
-                        </div>
-                        <div id="completion-questions-list" class="space-y-3">
-                            <!-- Populated via JS -->
-                        </div>
-                    </div>
+            <!-- SECTION 3.5: TEMPLATE LINKAGE NOTICE -->
+            <!-- Requirement: Template questions and detailing only appear while documenting/finishing the visit -->
+            <div id="template-info-notice" class="hidden p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl flex items-start gap-3">
+                <div class="w-8 h-8 rounded-full bg-teal-100 text-[#27bebe] flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-lg">assignment</span>
                 </div>
-
-                <!-- Product Detailing Card (Shown if template enables detailing) -->
-                <div id="product-detailing-card" class="hidden p-4 bg-teal-50/40 rounded-2xl border border-teal-200/80 space-y-3">
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-teal-100">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-teal-700">medication</span>
-                            <div>
-                                <h3 class="text-xs font-bold text-slate-900">المنتجات المشروحة في الزيارة (Product Detailing)</h3>
-                                <p class="text-[11px] text-slate-500">حدد الأصناف التي تم تفصيلها وشرحها للطبيب أو الصيدلي</p>
-                            </div>
-                        </div>
-                        <input type="text" id="detailing-search-input" onkeyup="filterDetailingProducts(this.value)" placeholder="تصفية المنتجات..." class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 bg-white placeholder-slate-400 focus:border-brand-500 w-full sm:w-48">
-                    </div>
-
-                    <div id="detailing-products-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
-                        {% for p in products %}
-                        <label class="detailing-product-item flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-teal-400 cursor-pointer text-xs font-bold text-slate-800 transition-colors" data-name="{{ p.name|lower }}">
-                            <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" {% if saved_detailed_products and p.id in saved_detailed_products %}checked{% endif %}>
-                            <span class="truncate">{{ p.name }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Visit Outcome Card (Shown if outcome mode is enabled) -->
-                <div id="visit-outcome-card" class="hidden p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2">
-                    <label class="block text-xs font-bold text-slate-800">نتيجة الزيارة (Visit Outcome)</label>
-                    <div class="flex flex-wrap gap-2">
-                        <label class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer">
-                            <input type="radio" name="visit_outcome" value="successful" {% if not visit or visit.visit_outcome == 'successful' or visit.is_successful %}checked{% endif %} class="text-emerald-600 focus:ring-emerald-500">
-                            <span>زيارة ناجحة (Successful)</span>
-                        </label>
-                        <label class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold cursor-pointer">
-                            <input type="radio" name="visit_outcome" value="unsuccessful" {% if visit and visit.visit_outcome == 'unsuccessful' %}checked{% endif %} class="text-slate-600 focus:ring-slate-500">
-                            <span>زيارة غير ناجحة (Unsuccessful)</span>
-                        </label>
-                    </div>
+                <div class="text-xs">
+                    <h4 class="font-bold text-teal-900" id="template-notice-title">تم اختيار قالب الزيارة</h4>
+                    <p class="text-teal-700 text-[11px] mt-0.5">ستظهر أسئلة الاستبيان وشرح المنتجات للمندوب عند بدء الزيارة وإنهاؤها في شاشة المتابعة بعد الاعتماد.</p>
                 </div>
             </div>
 
             <!-- SECTION 5: NOTES & FEEDBACK -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">الملاحظات والنتائج</label>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">الملاحظات والتخطيط المسبق</label>
                 {{ form.feedback }}
                 {% if form.feedback.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.feedback.errors.0 }}</p>{% endif %}
             </div>
@@ -363,8 +304,8 @@
             <!-- SUBMISSION BUTTONS (With Double-Click Protection) -->
             <div class="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100">
                 <button type="submit" id="submit-visit-btn" class="w-full sm:w-auto px-8 py-3 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-base">play_arrow</span>
-                    <span id="submit-btn-text">بدء الزيارة والانتقال للاستبيان</span>
+                    <span class="material-symbols-outlined text-base">add_circle</span>
+                    <span id="submit-btn-text">{% if visit %}حفظ التعديلات{% else %}تسجيل وإنشاء الزيارة (مخططة){% endif %}</span>
                 </button>
                 <a href="{% url 'visits_list' %}" class="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl text-center transition-colors">
                     إلغاء
@@ -402,11 +343,14 @@
         // Automatically request browser GPS on page load
         acquireDeviceLocation();
 
-        // Load templates registry and dynamic questionnaires
+        // Preload customer list so reps immediately see available places
+        preloadCustomers();
+
+        // Load templates registry
         loadTemplatesRegistry();
 
         // If Django select already has a value not represented in currentCustomer, sync it
-        const djangoSelect = document.getElementById('visit-contact-select');
+        const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
         if (djangoSelect && djangoSelect.value && !currentCustomer) {
             fetchCustomerDetails(djangoSelect.value);
         }
@@ -543,10 +487,37 @@
         }
     }
 
+    // Preload top customers on page load so list is immediately available
+    async function preloadCustomers() {
+        try {
+            const res = await fetch('/contacts/api/search/?q=');
+            if (res.ok) {
+                const data = await res.json();
+                const list = data.results || data || [];
+                renderSearchResults(list);
+            }
+        } catch(e) {}
+    }
+
+    function toggleSearchResults(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const dropdown = document.getElementById('customer-search-dropdown');
+        if (dropdown) {
+            if (dropdown.classList.contains('hidden')) {
+                openSearchResults();
+            } else {
+                dropdown.classList.add('hidden');
+            }
+        }
+    }
+
     // Customer Typeahead Search
     function handleCustomerSearch(e) {
         clearTimeout(searchDebounceTimeout);
-        const query = e.target.value.trim();
+        const query = (e && e.target ? e.target.value : '').trim();
         const spinner = document.getElementById('search-spinner');
         const dropdown = document.getElementById('customer-search-dropdown');
         const resultsEl = document.getElementById('customer-search-results');
@@ -567,10 +538,12 @@
                 if (spinner) spinner.classList.add('hidden');
                 if (dropdown) dropdown.classList.remove('hidden');
             }
-        }, 250);
+        }, 200);
     }
 
     function openSearchResults() {
+        const dropdown = document.getElementById('customer-search-dropdown');
+        if (dropdown) dropdown.classList.remove('hidden');
         const input = document.getElementById('customer-search-input');
         if (input) {
             handleCustomerSearch({ target: input });
@@ -579,16 +552,21 @@
 
     function renderSearchResults(contacts) {
         const resultsEl = document.getElementById('customer-search-results');
+        const countEl = document.getElementById('customer-results-count');
         if (!resultsEl) return;
 
+        if (countEl) {
+            countEl.textContent = `${contacts.length} مكان/عميل`;
+        }
+
         if (!contacts.length) {
-            resultsEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي عملاء مطابقين للبحث.</p>';
+            resultsEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي أماكن أو عملاء مطابقين للبحث.</p>';
             return;
         }
 
         resultsEl.innerHTML = contacts.map(c => `
             <div onclick="selectCustomer(${JSON.stringify(c).replace(/"/g, '&quot;')})"
-                 class="typeahead-item flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors">
+                 class="typeahead-item flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors">
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-full bg-teal-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
                         ${c.initials || (c.name ? c.name.substring(0, 2) : 'CL')}
@@ -624,8 +602,8 @@
             lng: c.longitude || null
         };
 
-        // Update hidden django select
-        const djangoSelect = document.getElementById('visit-contact-select');
+        // Update hidden django select (support both visit-contact-select and id_contact)
+        const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
         if (djangoSelect) {
             let optionExists = false;
             for (let i = 0; i < djangoSelect.options.length; i++) {
@@ -688,7 +666,7 @@
 
     function clearCustomerSelection() {
         currentCustomer = null;
-        const djangoSelect = document.getElementById('visit-contact-select');
+        const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
         if (djangoSelect) djangoSelect.value = '';
 
         const card = document.getElementById('selected-customer-card');
@@ -708,7 +686,7 @@
 
     async function fetchCustomerDetails(id) {
         try {
-            const res = await fetch(`/contacts/api/search/?q=&id=${id}`);
+            const res = await fetch(`/contacts/api/search/?id=${id}`);
             if (res.ok) {
                 const data = await res.json();
                 const list = data.results || data || [];
@@ -718,32 +696,14 @@
         } catch(e) {}
     }
 
-    // Submit handler preventing duplicate submissions and enforcing representative GPS
+    // Submit handler preventing duplicate submissions
     function handleFormSubmit(e) {
-        const djangoSelect = document.getElementById('visit-contact-select');
+        const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
         if (!djangoSelect || !djangoSelect.value) {
-            alert('يرجى اختيار العميل المطلوب تسجيل الزيارة له.');
+            alert('يرجى اختيار العميل أو مكان الزيارة المطلوب تسجيلها له.');
             clearCustomerSelection();
             if (e) e.preventDefault();
             return false;
-        }
-
-        // GPS Requirement Check for Representatives
-        if (isGpsRequired) {
-            const latVal = document.getElementById('id_latitude')?.value;
-            const lngVal = document.getElementById('id_longitude')?.value;
-            if (!latVal || !lngVal) {
-                alert('تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والانتظار حتى يتم التقاط الإحداثيات.');
-                if (e) e.preventDefault();
-                return false;
-            }
-            const latNum = parseFloat(latVal);
-            const lngNum = parseFloat(lngVal);
-            if (isNaN(latNum) || isNaN(lngNum) || latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180 || (latNum === 0 && lngNum === 0)) {
-                alert('إحداثيات الموقع الجغرافي غير صالحة. يرجى إعادة محاولة التقاط الموقع.');
-                if (e) e.preventDefault();
-                return false;
-            }
         }
 
         const btn = document.getElementById('submit-visit-btn');
@@ -751,7 +711,7 @@
         if (btn) {
             btn.disabled = true;
             btn.classList.add('opacity-75', 'cursor-not-allowed');
-            if (btnText) btnText.textContent = 'جاري حفظ واعتماد الزيارة...';
+            if (btnText) btnText.textContent = 'جاري تسجيل وإنشاء الزيارة...';
         }
         return true;
     }
@@ -827,6 +787,20 @@
                 }
             }
 
+            if (!isValid && c) {
+                const name = (c.name || '').toLowerCase();
+                const spec = (c.specialty || '').toLowerCase();
+                if (spec || name.includes('د.') || name.includes('دكتور') || name.includes('dr')) {
+                    if (targetTypes.includes('clinic') || targetTypes.includes('physician') || targetTypes.includes('doctor')) {
+                        isValid = true;
+                    }
+                } else if (name.includes('صيدلية') || name.includes('صيدليه') || name.includes('pharmacy')) {
+                    if (targetTypes.includes('pharmacy') || targetTypes.includes('pharmacist')) {
+                        isValid = true;
+                    }
+                }
+            }
+
             if (isValid) {
                 opt.disabled = false;
                 opt.hidden = false;
@@ -846,181 +820,22 @@
     }
 
     function onTemplateSelected(templateId) {
-        const questionnaireCard = document.getElementById('questionnaire-card');
-        const detailingCard = document.getElementById('product-detailing-card');
-        const outcomeCard = document.getElementById('visit-outcome-card');
+        const noticeEl = document.getElementById('template-info-notice');
+        const noticeTitle = document.getElementById('template-notice-title');
 
         if (!templateId) {
-            if (questionnaireCard) questionnaireCard.classList.add('hidden');
-            if (detailingCard) detailingCard.classList.add('hidden');
-            if (outcomeCard) outcomeCard.classList.add('hidden');
+            if (noticeEl) noticeEl.classList.add('hidden');
             return;
         }
 
         currentTemplate = allTemplates.find(t => t.id == templateId);
-        if (!currentTemplate) return;
-
-        // Update Template Header Info
-        const titleLabel = document.getElementById('template-title-label');
-        const modeLabel = document.getElementById('template-mode-label');
-        const countBadge = document.getElementById('template-questions-count-badge');
-
-        if (titleLabel) titleLabel.textContent = currentTemplate.display_name_ar || currentTemplate.name;
-        if (modeLabel) modeLabel.textContent = `وضع القالب: ${currentTemplate.mode === 'checkin_checkout' ? 'Checkin and Checkout' : 'عادي'}`;
-        
-        const questions = currentTemplate.questions || [];
-        if (countBadge) countBadge.textContent = `${questions.length} أسئلة`;
-
-        // Render Start vs Completion Questions
-        const startQuestions = questions.filter(q => q.stage === 'start_only');
-        const completionQuestions = questions.filter(q => q.stage !== 'start_only');
-
-        const startContainer = document.getElementById('start-questions-container');
-        const startList = document.getElementById('start-questions-list');
-        const compContainer = document.getElementById('completion-questions-container');
-        const compList = document.getElementById('completion-questions-list');
-
-        if (startQuestions.length > 0) {
-            startContainer.classList.remove('hidden');
-            startList.innerHTML = startQuestions.map(q => renderQuestionField(q)).join('');
-        } else {
-            startContainer.classList.add('hidden');
-            startList.innerHTML = '';
-        }
-
-        if (completionQuestions.length > 0) {
-            compContainer.classList.remove('hidden');
-            compList.innerHTML = completionQuestions.map(q => renderQuestionField(q)).join('');
-        } else {
-            compContainer.classList.add('hidden');
-            compList.innerHTML = '';
-        }
-
-        if (questions.length > 0) {
-            questionnaireCard.classList.remove('hidden');
-        } else {
-            questionnaireCard.classList.add('hidden');
-        }
-
-        // Product Detailing Toggle
-        if (detailingCard) {
-            if (currentTemplate.enable_product_detailing) {
-                detailingCard.classList.remove('hidden');
-            } else {
-                detailingCard.classList.add('hidden');
+        if (noticeEl) {
+            noticeEl.classList.remove('hidden');
+            if (currentTemplate && noticeTitle) {
+                const qCount = (currentTemplate.questions || []).length;
+                noticeTitle.textContent = `تم اختيار القالب: ${currentTemplate.display_name_ar || currentTemplate.name} (${qCount} أسئلة استبيان)`;
             }
         }
-
-        // Visit Outcome Toggle
-        if (outcomeCard) {
-            if (currentTemplate.visit_outcome_mode && currentTemplate.visit_outcome_mode !== 'disabled') {
-                outcomeCard.classList.remove('hidden');
-            } else {
-                outcomeCard.classList.add('hidden');
-            }
-        }
-
-        evalConditions();
-    }
-
-    function renderQuestionField(q) {
-        const val = savedAnswers[String(q.id)] || '';
-        const requiredStar = q.is_required ? '<span class="text-rose-500">*</span>' : '';
-        const conditionalAttrs = `data-question-id="${q.id}" data-is-conditional="${q.is_conditional}" data-parent-id="${q.conditional_parent_id || ''}" data-trigger-val="${(q.conditional_trigger_value || '').toLowerCase()}"`;
-
-        let inputHtml = '';
-        if (q.question_type === 'single_choice') {
-            const options = q.options || [];
-            inputHtml = `
-                <div class="flex flex-wrap gap-2 pt-1">
-                    ${options.map(opt => {
-                        const optVal = opt.value || opt.text_ar;
-                        const isChecked = (val === optVal || (!val && opt.is_default)) ? 'checked' : '';
-                        return `
-                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
-                                <input type="radio" name="question_${q.id}" value="${optVal}" ${isChecked} onchange="evalConditions()" class="text-teal-600 focus:ring-teal-500 question-input">
-                                <span>${opt.text_ar}</span>
-                            </label>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        } else if (q.question_type === 'multiple_choice') {
-            const options = q.options || [];
-            const selectedArr = Array.isArray(val) ? val : [val];
-            inputHtml = `
-                <div class="flex flex-wrap gap-2 pt-1">
-                    ${options.map(opt => {
-                        const optVal = opt.value || opt.text_ar;
-                        const isChecked = selectedArr.includes(optVal) ? 'checked' : '';
-                        return `
-                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
-                                <input type="checkbox" name="question_${q.id}" value="${optVal}" ${isChecked} onchange="evalConditions()" class="text-teal-600 focus:ring-teal-500 rounded question-input">
-                                <span>${opt.text_ar}</span>
-                            </label>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        } else if (q.question_type === 'textarea') {
-            inputHtml = `<textarea name="question_${q.id}" rows="3" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500 question-input">${val}</textarea>`;
-        } else if (q.question_type === 'number') {
-            inputHtml = `<input type="number" name="question_${q.id}" value="${val}" placeholder="أدخل الرقم..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
-        } else if (q.question_type === 'date') {
-            inputHtml = `<input type="date" name="question_${q.id}" value="${val}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
-        } else {
-            inputHtml = `<input type="text" name="question_${q.id}" value="${val}" placeholder="اكتب الإجابة..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 question-input">`;
-        }
-
-        return `
-            <div class="question-field-wrapper space-y-1.5 p-3 rounded-xl border border-slate-200 bg-white" id="field_wrapper_${q.id}" ${conditionalAttrs}>
-                <div class="flex items-center justify-between">
-                    <label class="block text-xs font-bold text-slate-800">
-                        ${q.text_ar} ${requiredStar}
-                    </label>
-                    ${q.is_conditional ? '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200">مشروط</span>' : ''}
-                </div>
-                ${inputHtml}
-            </div>
-        `;
-    }
-
-    function evalConditions() {
-        const wrappers = document.querySelectorAll('.question-field-wrapper[data-is-conditional="true"]');
-        wrappers.forEach(wrapper => {
-            const parentId = wrapper.getAttribute('data-parent-id');
-            const triggerVal = (wrapper.getAttribute('data-trigger-val') || '').trim().toLowerCase();
-
-            let parentVal = '';
-            const parentRadios = document.querySelectorAll(`input[name="question_${parentId}"]:checked`);
-            if (parentRadios.length > 0) {
-                parentVal = (parentRadios[0].value || '').trim().toLowerCase();
-            } else {
-                const parentInput = document.querySelector(`[name="question_${parentId}"]`);
-                if (parentInput) parentVal = (parentInput.value || '').trim().toLowerCase();
-            }
-
-            if (parentId && triggerVal && parentVal === triggerVal) {
-                wrapper.style.display = 'block';
-                wrapper.querySelectorAll('input, select, textarea').forEach(inp => inp.disabled = false);
-            } else {
-                wrapper.style.display = 'none';
-                wrapper.querySelectorAll('input, select, textarea').forEach(inp => inp.disabled = true);
-            }
-        });
-    }
-
-    function filterDetailingProducts(q) {
-        const query = (q || '').trim().toLowerCase();
-        const items = document.querySelectorAll('.detailing-product-item');
-        items.forEach(it => {
-            const name = it.getAttribute('data-name') || '';
-            if (!query || name.includes(query)) {
-                it.style.display = 'flex';
-            } else {
-                it.style.display = 'none';
-            }
-        });
     }
 </script>
 

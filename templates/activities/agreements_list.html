@@ -49,6 +49,9 @@
                     <span>تصدير البيانات</span>
                 </a>
 
+                <!-- Column Picker -->
+                {% include 'components/table_column_picker.html' with table_id='agreements_table' %}
+
                 <!-- Create Agreement Button -->
                 <button type="button" onclick="openCreateModal()"
                         class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
@@ -110,33 +113,33 @@
 
     <!-- Agreements Table Container -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right border-collapse">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="agreements_table" data-col-table="agreements_table" class="min-w-[850px] w-full text-right border-collapse">
                 <thead>
-                    <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
-                        <th class="py-3.5 px-3 w-10 text-center">
+                    <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold select-none">
+                        <th data-col="checkbox" data-required="true" class="py-3.5 px-3 w-10 text-center">
                             <input type="checkbox" id="select-all" class="rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] cursor-pointer" title="تحديد الكل">
                         </th>
-                        <th class="py-3.5 px-4 w-16">#</th>
-                        <th class="py-3.5 px-4">عميل</th>
-                        <th class="py-3.5 px-4">العنوان</th>
-                        <th class="py-3.5 px-4">النوع</th>
-                        <th class="py-3.5 px-4">المبلغ</th>
-                        <th class="py-3.5 px-4">التاريخ</th>
-                        <th class="py-3.5 px-4">المنشئ</th>
-                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="serial" data-col-label="رقم الاتفاقية" data-required="true" class="py-3.5 px-4 w-16">#</th>
+                        <th data-col="customer" data-col-label="عميل" data-required="true" class="py-3.5 px-4">عميل</th>
+                        <th data-col="title" data-col-label="العنوان" class="py-3.5 px-4">العنوان</th>
+                        <th data-col="type" data-col-label="النوع" class="py-3.5 px-4">النوع</th>
+                        <th data-col="amount" data-col-label="المبلغ" class="py-3.5 px-4">المبلغ</th>
+                        <th data-col="date" data-col-label="التاريخ" class="py-3.5 px-4">التاريخ</th>
+                        <th data-col="creator" data-col-label="المنشئ" class="py-3.5 px-4">المنشئ</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                     {% for a in agreements %}
                     <tr class="hover:bg-teal-50/30 transition-colors cursor-pointer" onclick="window.location='{% url 'agreement_detail' a.pk %}'">
-                        <td class="py-3 px-3 text-center" onclick="event.stopPropagation()">
+                        <td data-col="checkbox" class="py-3 px-3 text-center" onclick="event.stopPropagation()">
                             <input type="checkbox" value="{{ a.pk }}" class="agreement-checkbox rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] cursor-pointer">
                         </td>
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                        <td data-col="serial" class="py-3 px-4 font-mono font-bold text-slate-900">
                             <span class="hover:text-[#27bebe]">#{{ a.serial_num }}</span>
                         </td>
-                        <td class="py-3 px-4">
+                        <td data-col="customer" class="py-3 px-4">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-slate-400 text-base">person</span>
                                 <div>
@@ -149,24 +152,24 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="py-3 px-4 font-medium text-slate-800 max-w-xs truncate" title="{{ a.title }}">
+                        <td data-col="title" class="py-3 px-4 font-medium text-slate-800 max-w-xs truncate" title="{{ a.title }}">
                             {{ a.title }}
                         </td>
-                        <td class="py-3 px-4">
+                        <td data-col="type" class="py-3 px-4">
                             <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold">
                                 {{ a.type.name }}
                             </span>
                         </td>
-                        <td class="py-3 px-4 font-bold text-slate-900 font-mono">
+                        <td data-col="amount" class="py-3 px-4 font-bold text-slate-900 font-mono">
                             {{ a.amount|intcomma }} <span class="text-[10px] font-normal text-slate-500">ج.م</span>
                         </td>
-                        <td class="py-3 px-4 text-slate-600 font-mono">
+                        <td data-col="date" class="py-3 px-4 text-slate-600 font-mono">
                             {{ a.date|date:"d/m/Y" }}
                         </td>
-                        <td class="py-3 px-4 text-slate-600">
+                        <td data-col="creator" class="py-3 px-4 text-slate-600">
                             {{ a.created_by.get_full_name|default:a.created_by.username }}
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="status" class="py-3 px-4 text-center">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ a.status_badge_class }}">
                                 {{ a.status_display_ar }}
                             </span>

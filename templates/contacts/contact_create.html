@@ -560,6 +560,78 @@
         </div>
 
         <!-- ========================================== -->
+        <!-- SECTION 4: الحقول المخصصة (Custom Fields)  -->
+        <!-- ========================================== -->
+        {% if custom_field_settings %}
+        <div class="card-container mb-8">
+            <div class="form-section-title">
+                <span class="material-symbols-outlined text-brand-500 text-xl">extension</span>
+                <span>الحقول المخصصة</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {% for setting in custom_field_settings %}
+                <div class="{% if setting.field_type == 'textarea' %}md:col-span-2{% endif %}">
+                    <label class="custom-input-label" for="custom_{{ setting.field_key }}">
+                        {{ setting.display_name }}
+                        {% if setting.is_required %}<span class="required-star">*</span>{% endif %}
+                    </label>
+
+                    {% if setting.field_type == 'textarea' %}
+                    <textarea name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}" rows="3"
+                              class="mat-like-input h-auto py-2.5 resize-none"
+                              placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}></textarea>
+
+                    {% elif setting.field_type == 'number' %}
+                    <input type="number" step="any" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
+                           class="mat-like-input font-mono" placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}>
+
+                    {% elif setting.field_type == 'date' %}
+                    <input type="date" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
+                           class="mat-like-input" {% if setting.is_required %}required{% endif %}>
+
+                    {% elif setting.field_type == 'boolean' %}
+                    <div class="flex items-center gap-2 h-[48px]">
+                        <input type="checkbox" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
+                               class="w-5 h-5 rounded text-brand-500 border-slate-300">
+                        <span class="text-xs text-slate-600 font-semibold">{{ setting.help_text|default:"نعم / مفعل" }}</span>
+                    </div>
+
+                    {% elif setting.field_type == 'single_choice' %}
+                    <select name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}" class="mat-like-select" {% if setting.is_required %}required{% endif %}>
+                        <option value="">اختر...</option>
+                        {% for choice in setting.choices %}
+                        <option value="{{ choice }}">{{ choice }}</option>
+                        {% endfor %}
+                    </select>
+
+                    {% elif setting.field_type == 'multi_choice' %}
+                    <div class="p-3 border border-slate-200 rounded-lg bg-slate-50/50 flex flex-wrap gap-4">
+                        {% for choice in setting.choices %}
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                            <input type="checkbox" name="custom_{{ setting.field_key }}[]" value="{{ choice }}" class="rounded text-brand-500">
+                            <span>{{ choice }}</span>
+                        </label>
+                        {% empty %}
+                        <span class="text-xs text-slate-400">لا توجد خيارات محددة</span>
+                        {% endfor %}
+                    </div>
+
+                    {% else %}
+                    <input type="text" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
+                           class="mat-like-input" placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}>
+                    {% endif %}
+
+                    {% if setting.help_text and setting.field_type != 'boolean' and setting.field_type != 'textarea' %}
+                    <span class="text-[11px] text-slate-400 mt-1 block">{{ setting.help_text }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ========================================== -->
         <!-- FOOTER ACTIONS: حفظ & الغاء                  -->
         <!-- ========================================== -->
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">

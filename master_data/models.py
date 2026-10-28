@@ -9,7 +9,9 @@ class Area(models.Model):
 
     code = models.CharField(max_length=20, unique=True, verbose_name="كود المنطقة")
     name = models.CharField(max_length=150, verbose_name="اسم المنطقة")
+    name_en = models.CharField(max_length=150, blank=True, verbose_name="اسم المنطقة (en)")
     area_type = models.CharField(max_length=20, choices=AREA_TYPES, default='subarea', verbose_name="نوع المنطقة")
+    is_company_area = models.BooleanField(default=False, verbose_name="منطقة إدارية داخلية للشركة")
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subareas', verbose_name="المنطقة الأب / المحافظة")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
 
@@ -290,14 +292,29 @@ class ContactFieldSetting(models.Model):
         ('basic', 'المعلومات الأساسية'),
     ]
 
+    FIELD_TYPES = [
+        ('text', 'نص قصير (Text)'),
+        ('textarea', 'نص متعدد الأسطر (Textarea)'),
+        ('number', 'رقم (Number)'),
+        ('date', 'تاريخ (Date)'),
+        ('boolean', 'نعم / لا (Boolean)'),
+        ('single_choice', 'اختيار مفرد (Single Choice)'),
+        ('multi_choice', 'اختيار متعدد (Multi Choice)'),
+    ]
+
     field_key = models.CharField(max_length=50, unique=True, verbose_name="مفتاح الحقل")
     display_name = models.CharField(max_length=100, verbose_name="اسم الحقل")
+    display_name_en = models.CharField(max_length=100, blank=True, verbose_name="اسم الحقل (en)")
     section = models.CharField(max_length=50, choices=SECTIONS, verbose_name="القسم")
+    field_type = models.CharField(max_length=30, choices=FIELD_TYPES, default='text', verbose_name="نوع الحقل")
+    choices = models.JSONField(default=list, blank=True, help_text="قائمة الخيارات للاختيار المفرد والمتعدد", verbose_name="الخيارات")
+    help_text = models.CharField(max_length=255, blank=True, verbose_name="نص المساعدة")
     is_locked = models.BooleanField(default=False, verbose_name="مغلق")
     is_required = models.BooleanField(default=False, verbose_name="مطلوب")
     is_builtin = models.BooleanField(default=True, verbose_name="مدمج")
     is_core = models.BooleanField(default=False, verbose_name="اساسي")
     is_filterable = models.BooleanField(default=False, verbose_name="قابلة للتصفية")
+    is_active = models.BooleanField(default=True, verbose_name="مفعل")
     order = models.PositiveIntegerField(default=0, verbose_name="الترتيب")
 
     class Meta:

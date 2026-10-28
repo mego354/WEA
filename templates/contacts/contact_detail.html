@@ -395,6 +395,24 @@
                 </div>
             </div>
 
+            {% if formatted_custom_fields %}
+            <!-- الحقول المخصصة (Custom Fields) -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="erp-accordion-header" onclick="toggleAccordion('sec-custom-fields')">
+                    <span>الحقول المخصصة</span>
+                    <span id="icon-sec-custom-fields" class="material-symbols-outlined text-slate-400">expand_less</span>
+                </div>
+                <div id="sec-custom-fields" class="divide-y divide-slate-50">
+                    {% for f in formatted_custom_fields %}
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">{{ f.setting.display_name }}</span>
+                        <span class="erp-detail-val {% if f.setting.field_type == 'boolean' and f.value %}text-emerald-600 font-bold{% endif %}">{{ f.display_value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- 3. حساب العميل / حساب المورد -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div class="erp-accordion-header" onclick="toggleAccordion('sec-account')">
@@ -608,6 +626,73 @@
                 </div>
             </div>
 
+            <!-- Timeline Container (Phase 7: Default 5 items + View All) -->
+            <div id="timeline" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">timeline</span>
+                        <h3 class="text-base font-bold text-slate-800">تسلسل الأحداث</h3>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">({{ total_timeline_count }})</span>
+                    </div>
+                    {% if total_timeline_count > 5 %}
+                    <button type="button" onclick="openTimelineModal()" class="text-xs font-bold text-[#27bebe] hover:underline flex items-center gap-1">
+                        <span>عرض الكل ({{ total_timeline_count }})</span>
+                        <span class="material-symbols-outlined text-sm">arrow_back</span>
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Recent 5 Timeline Items -->
+                <div class="relative pr-6 border-r-2 border-slate-100 space-y-5">
+                    {% for act in recent_timeline %}
+                    <div class="relative">
+                        <!-- Dot on vertical line -->
+                        <div class="absolute -right-[31px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm
+                            {% if act.activity_type == 'visit' %}bg-emerald-500
+                            {% elif act.activity_type == 'order' %}bg-cyan-500
+                            {% elif act.activity_type == 'collection' %}bg-amber-500
+                            {% elif act.activity_type == 'todo' %}bg-blue-500
+                            {% elif act.activity_type == 'call' %}bg-purple-500
+                            {% else %}bg-slate-400{% endif %}"></div>
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mb-1
+                                    {% if act.activity_type == 'visit' %}bg-emerald-50 text-emerald-700
+                                    {% elif act.activity_type == 'order' %}bg-cyan-50 text-cyan-700
+                                    {% elif act.activity_type == 'collection' %}bg-amber-50 text-amber-700
+                                    {% elif act.activity_type == 'todo' %}bg-blue-50 text-blue-700
+                                    {% elif act.activity_type == 'call' %}bg-purple-50 text-purple-700
+                                    {% else %}bg-slate-100 text-slate-700{% endif %}">
+                                    {{ act.get_activity_type_display }}
+                                </span>
+                                <h4 class="text-xs font-bold text-slate-800">{{ act.title }}</h4>
+                                {% if act.notes %}
+                                <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{{ act.notes|truncatechars:120 }}</p>
+                                {% endif %}
+                                <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                                    <span>بواسطة: {{ act.performed_by.name|default:"النظام" }}</span>
+                                </div>
+                            </div>
+                            <span class="text-[11px] text-slate-400 font-mono whitespace-nowrap">{{ act.created_at|date:"d/m/Y h:i A" }}</span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="py-8 text-center text-slate-400">
+                        <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">history</span>
+                        <p class="text-xs">لا توجد أحداث مسجلة بعد في تسلسل الأحداث.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if total_timeline_count > 5 %}
+                <div class="pt-4 mt-4 border-t border-slate-100 text-center">
+                    <button type="button" onclick="openTimelineModal()" class="erp-btn-outline text-xs">
+                        عرض كافة الأحداث ({{ total_timeline_count }})
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
         </div>
 
     </div>
@@ -652,14 +737,6 @@
             </div>
         </div>
 
-        <!-- المكالمات (Calls) -->
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <div class="flex items-center gap-2 font-bold text-sm text-slate-800 mb-3">
-                <span class="material-symbols-outlined text-brand-600">call</span>
-                <span>المكالمات</span>
-            </div>
-            <p class="text-xs text-slate-400 text-center py-4">لا توجد مكالمات مسجلة.</p>
-        </div>
 
         <!-- الاتفاقيات (Agreements) -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
@@ -830,11 +907,11 @@
             <div class="flex items-center gap-4">
                 <!-- Toggle show completed -->
                 <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-600">
-                    <input type="checkbox" id="showCompletedToggle" class="rounded text-brand-500">
+                    <input type="checkbox" id="showCompletedToggle" class="rounded text-brand-500" checked onchange="toggleCompletedTodos(this.checked)">
                     <span>اظهر المنتهي</span>
                 </label>
                 <!-- Add Todo Button -->
-                <button type="button" onclick="document.getElementById('newTodoBox').classList.toggle('hidden')" class="erp-btn-outline text-xs text-brand-600 border-brand-300">
+                <button type="button" onclick="document.getElementById('newTodoBox').classList.toggle('hidden'); document.getElementById('newTodoTitle').focus();" class="erp-btn-outline text-xs text-brand-600 border-brand-300">
                     اضف Todo جديد
                 </button>
             </div>
@@ -842,28 +919,30 @@
 
         <!-- New Todo Input (Collapsible) -->
         <div id="newTodoBox" class="hidden mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
-            <form method="POST" action="{% url 'contact_create_todo' contact.id %}" class="flex gap-2">
+            <form id="createTodoForm" method="POST" action="{% url 'contact_create_todo' contact.id %}" onsubmit="return handleCreateTodo(event)" class="flex gap-2">
                 {% csrf_token %}
-                <input type="text" name="title" placeholder="عنوان المهمة..." required class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg">
-                <button type="submit" class="erp-btn-teal text-xs">إضافة</button>
+                <input type="text" name="title" id="newTodoTitle" placeholder="عنوان المهمة..." required class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500">
+                <button type="submit" id="saveTodoBtn" class="erp-btn-teal text-xs">إضافة</button>
             </form>
         </div>
 
         <!-- Todos Checklist -->
-        <div class="space-y-2">
+        <div id="todosListContainer" class="space-y-2">
             {% for todo in todos %}
-            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors {% if todo.is_completed %}opacity-60 bg-slate-50{% endif %}">
+            <div id="todo-row-{{ todo.id }}" class="todo-item flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors {% if todo.is_completed %}is-completed opacity-60 bg-slate-50{% endif %}">
                 <div class="flex items-center gap-3">
-                    <form method="POST" action="{% url 'contact_toggle_todo' contact.id todo.id %}">
-                        {% csrf_token %}
-                        <input type="checkbox" onchange="this.form.submit()" {% if todo.is_completed %}checked{% endif %} class="rounded text-brand-500 cursor-pointer">
-                    </form>
-                    <span class="text-xs font-semibold text-slate-800 {% if todo.is_completed %}line-through text-slate-400{% endif %}">{{ todo.title }}</span>
+                    <input type="checkbox" onchange="toggleTodoAjax({{ todo.id }}, this)" {% if todo.is_completed %}checked{% endif %} class="rounded text-brand-500 cursor-pointer w-4 h-4">
+                    <span id="todo-text-{{ todo.id }}" class="text-xs font-semibold text-slate-800 {% if todo.is_completed %}line-through text-slate-400{% endif %}">{{ todo.title }}</span>
                 </div>
-                <span class="text-[11px] text-slate-400 font-mono">{{ todo.created_at|date:"d/m/Y" }}</span>
+                <div class="flex items-center gap-3">
+                    <span class="text-[11px] text-slate-400 font-mono">{{ todo.created_at|date:"d/m/Y" }}</span>
+                    <button type="button" onclick="deleteTodoAjax({{ todo.id }})" class="text-slate-400 hover:text-red-500 p-1 transition-colors" title="حذف المهمة">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </div>
             </div>
             {% empty %}
-            <p class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>
+            <p id="noTodosMsg" class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>
             {% endfor %}
         </div>
     </div>
@@ -947,7 +1026,88 @@
     </div>
 </div>
 
+<!-- MODAL: TIMELINE EVENTS FULL HISTORY (Phase 7) -->
+<div id="timelineModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">history</span>
+                <h3 class="font-bold text-slate-800 text-base">تسلسل الأحداث الكامل</h3>
+                <span id="modalTimelineCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">0</span>
+            </div>
+            <button type="button" onclick="closeTimelineModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Filters Bar -->
+        <div class="p-4 border-b border-slate-100 bg-white grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+                <input type="text" id="timelineFilterQ" placeholder="بحث في الأحداث..." oninput="debounceFetchTimeline()"
+                       class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <select id="timelineFilterType" onchange="fetchTimelineEvents(1)" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-brand-500">
+                    <option value="all">كل الأنشطة</option>
+                    <option value="visit">زيارات</option>
+                    <option value="call">مكالمات</option>
+                    <option value="agreement">اتفاقيات</option>
+                    <option value="todo">مهام</option>
+                    <option value="update">تحديث بيانات</option>
+                    <option value="order">أوامر بيع</option>
+                    <option value="collection">تحصيلات</option>
+                </select>
+            </div>
+            <div>
+                <input type="date" id="timelineFilterFrom" onchange="fetchTimelineEvents(1)" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-brand-500" title="من تاريخ">
+            </div>
+            <div>
+                <input type="date" id="timelineFilterTo" onchange="fetchTimelineEvents(1)" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-brand-500" title="إلى تاريخ">
+            </div>
+        </div>
+
+        <!-- Body / Events list -->
+        <div class="flex-1 overflow-y-auto p-6 relative">
+            <div id="timelineLoadingSpinner" class="hidden absolute inset-0 bg-white/70 flex items-center justify-center z-10">
+                <div class="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <div id="timelineModalEventsList" class="relative pr-6 border-r-2 border-slate-100 space-y-5">
+                <!-- Populated via AJAX -->
+            </div>
+            <div id="timelineEmptyState" class="hidden py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">filter_alt_off</span>
+                <p class="text-xs">لا توجد أحداث مطابقة لشروط البحث والتصفية.</p>
+            </div>
+        </div>
+
+        <!-- Footer / Pagination -->
+        <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs">
+            <span id="timelinePageIndicator" class="text-slate-500 font-medium">صفحة 1 من 1</span>
+            <div class="flex items-center gap-2">
+                <button type="button" id="timelinePrevBtn" onclick="timelinePrevPage()" class="erp-btn-outline px-3 py-1.5 text-xs disabled:opacity-50">السابق</button>
+                <button type="button" id="timelineNextBtn" onclick="timelineNextPage()" class="erp-btn-outline px-3 py-1.5 text-xs disabled:opacity-50">التالي</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
     function toggleAccordion(id) {
         const sec = document.getElementById(id);
         const icon = document.getElementById('icon-' + id);
@@ -983,7 +1143,252 @@
         document.getElementById('deleteModal').classList.add('hidden');
     }
 
-    // Close menus on outside click
+    // --- TIMELINE MODAL LOGIC (Phase 7) ---
+    let timelineCurrentPage = 1;
+    let timelineTotalPages = 1;
+    let timelineDebounceTimer = null;
+
+    function openTimelineModal() {
+        document.getElementById('timelineModal').classList.remove('hidden');
+        fetchTimelineEvents(1);
+    }
+
+    function closeTimelineModal() {
+        document.getElementById('timelineModal').classList.add('hidden');
+    }
+
+    function debounceFetchTimeline() {
+        clearTimeout(timelineDebounceTimer);
+        timelineDebounceTimer = setTimeout(() => {
+            fetchTimelineEvents(1);
+        }, 300);
+    }
+
+    function timelinePrevPage() {
+        if (timelineCurrentPage > 1) {
+            fetchTimelineEvents(timelineCurrentPage - 1);
+        }
+    }
+
+    function timelineNextPage() {
+        if (timelineCurrentPage < timelineTotalPages) {
+            fetchTimelineEvents(timelineCurrentPage + 1);
+        }
+    }
+
+    function fetchTimelineEvents(page) {
+        timelineCurrentPage = page || 1;
+        const spinner = document.getElementById('timelineLoadingSpinner');
+        const list = document.getElementById('timelineModalEventsList');
+        const emptyState = document.getElementById('timelineEmptyState');
+        const q = document.getElementById('timelineFilterQ').value.trim();
+        const activityType = document.getElementById('timelineFilterType').value;
+        const dateFrom = document.getElementById('timelineFilterFrom').value;
+        const dateTo = document.getElementById('timelineFilterTo').value;
+
+        spinner.classList.remove('hidden');
+
+        const params = new URLSearchParams({
+            page: timelineCurrentPage,
+            per_page: 10,
+            q: q,
+            activity_type: activityType,
+            date_from: dateFrom,
+            date_to: dateTo,
+        });
+
+        fetch(`{% url 'contact_timeline_events' contact.id %}?${params.toString()}`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            spinner.classList.add('hidden');
+            timelineTotalPages = data.total_pages || 1;
+            document.getElementById('modalTimelineCountBadge').innerText = data.total_count || 0;
+            document.getElementById('timelinePageIndicator').innerText = `صفحة ${data.page} من ${timelineTotalPages} (إجمالي ${data.total_count})`;
+
+            const prevBtn = document.getElementById('timelinePrevBtn');
+            const nextBtn = document.getElementById('timelineNextBtn');
+            prevBtn.disabled = !data.has_previous;
+            nextBtn.disabled = !data.has_next;
+
+            list.innerHTML = '';
+            if (!data.events || data.events.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            const colorMap = {
+                'visit': { dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700' },
+                'order': { dot: 'bg-cyan-500', badge: 'bg-cyan-50 text-cyan-700' },
+                'collection': { dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700' },
+                'todo': { dot: 'bg-blue-500', badge: 'bg-blue-50 text-blue-700' },
+                'call': { dot: 'bg-purple-500', badge: 'bg-purple-50 text-purple-700' },
+                'update': { dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-700' },
+                'agreement': { dot: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700' },
+            };
+
+            data.events.forEach(evt => {
+                const colors = colorMap[evt.activity_type] || { dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-700' };
+                const div = document.createElement('div');
+                div.className = 'relative';
+                div.innerHTML = `
+                    <div class="absolute -right-[31px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${colors.dot}"></div>
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mb-1 ${colors.badge}">
+                                ${evt.type_label}
+                            </span>
+                            <h4 class="text-xs font-bold text-slate-800">${evt.title}</h4>
+                            ${evt.notes ? `<p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">${evt.notes}</p>` : ''}
+                            <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                                <span>بواسطة: ${evt.performed_by}</span>
+                            </div>
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono whitespace-nowrap">${evt.created_at}</span>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        })
+        .catch(err => {
+            spinner.classList.add('hidden');
+            console.error('Error fetching timeline events:', err);
+        });
+    }
+
+    // --- TODOS AJAX & FILTERING LOGIC (Phase 6) ---
+    function toggleTodoAjax(todoId, checkbox) {
+        const csrftoken = getCookie('csrftoken');
+        fetch(`/contacts/{{ contact.id }}/todos/${todoId}/toggle/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                const row = document.getElementById(`todo-row-${todoId}`);
+                const text = document.getElementById(`todo-text-${todoId}`);
+                if (data.is_completed) {
+                    row.classList.add('is-completed', 'opacity-60', 'bg-slate-50');
+                    text.classList.add('line-through', 'text-slate-400');
+                    checkbox.checked = true;
+                } else {
+                    row.classList.remove('is-completed', 'opacity-60', 'bg-slate-50');
+                    text.classList.remove('line-through', 'text-slate-400');
+                    checkbox.checked = false;
+                }
+                // Re-apply completed filter if active
+                const showCompleted = document.getElementById('showCompletedToggle')?.checked ?? true;
+                toggleCompletedTodos(showCompleted);
+            }
+        })
+        .catch(err => console.error('Error toggling todo:', err));
+    }
+
+    function deleteTodoAjax(todoId) {
+        if (!confirm('هل تريد حذف هذه المهمة نهائياً؟')) return;
+        const csrftoken = getCookie('csrftoken');
+        fetch(`/contacts/{{ contact.id }}/todos/${todoId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                const row = document.getElementById(`todo-row-${todoId}`);
+                if (row) {
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    setTimeout(() => {
+                        row.remove();
+                        const list = document.getElementById('todosListContainer');
+                        if (list && list.querySelectorAll('.todo-item').length === 0) {
+                            list.innerHTML = '<p id="noTodosMsg" class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>';
+                        }
+                    }, 300);
+                }
+            }
+        })
+        .catch(err => console.error('Error deleting todo:', err));
+    }
+
+    function handleCreateTodo(e) {
+        e.preventDefault();
+        const form = document.getElementById('createTodoForm');
+        const input = document.getElementById('newTodoTitle');
+        const title = input.value.trim();
+        if (!title) return false;
+
+        const csrftoken = getCookie('csrftoken');
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok' && data.todo) {
+                input.value = '';
+                document.getElementById('newTodoBox').classList.add('hidden');
+                const noMsg = document.getElementById('noTodosMsg');
+                if (noMsg) noMsg.remove();
+
+                const list = document.getElementById('todosListContainer');
+                const todo = data.todo;
+                const div = document.createElement('div');
+                div.id = `todo-row-${todo.id}`;
+                div.className = 'todo-item flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors';
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" onchange="toggleTodoAjax(${todo.id}, this)" class="rounded text-brand-500 cursor-pointer w-4 h-4">
+                        <span id="todo-text-${todo.id}" class="text-xs font-semibold text-slate-800">${todo.title}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-[11px] text-slate-400 font-mono">${todo.created_at}</span>
+                        <button type="button" onclick="deleteTodoAjax(${todo.id})" class="text-slate-400 hover:text-red-500 p-1 transition-colors" title="حذف المهمة">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                `;
+                list.prepend(div);
+            } else {
+                form.submit(); // fallback
+            }
+        })
+        .catch(err => {
+            console.error('Error adding todo:', err);
+            form.submit(); // fallback
+        });
+        return false;
+    }
+
+    function toggleCompletedTodos(showCompleted) {
+        document.querySelectorAll('.todo-item.is-completed').forEach(el => {
+            el.style.display = showCompleted ? '' : 'none';
+        });
+    }
+
+    // Close menus and modal on outside click / escape key
     document.addEventListener('click', function(e) {
         if (!e.target.closest('#statusDropdownBtn') && !e.target.closest('#statusDropdownMenu')) {
             const el = document.getElementById('statusDropdownMenu');
@@ -992,6 +1397,23 @@
         if (!e.target.closest('[onclick*="toggleHeaderActionsMenu"]') && !e.target.closest('#headerActionsMenu')) {
             const el = document.getElementById('headerActionsMenu');
             if (el) el.classList.add('hidden');
+        }
+        if (e.target.id === 'timelineModal') {
+            closeTimelineModal();
+        }
+        if (e.target.id === 'deleteModal') {
+            closeDeleteModal();
+        }
+        if (e.target.id === 'addAddressModal') {
+            closeAddAddressModal();
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeTimelineModal();
+            closeDeleteModal();
+            closeAddAddressModal();
         }
     });
 </script>

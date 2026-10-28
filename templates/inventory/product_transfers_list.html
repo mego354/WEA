@@ -1,0 +1,187 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}طلبات التحويل بين المخازن - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'warehouses_list' %}" class="hover:text-brand-600 transition-colors">المخازن والمخزون</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">طلبات التحويل بين المخازن</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Top Action Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">swap_horiz</span>
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight">طلبات التحويل بين المخازن</h1>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">طلبات نقل البضاعة بين مخازن المندوبين في نفس المنطقة الرئيسية مع دورة الاعتماد</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'warehouses_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">warehouse</span>
+                <span>قائمة المخازن</span>
+            </a>
+            <a href="{% url 'product_transfer_create' %}" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/20 transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>طلب تحويل بضاعة جديد</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Tabs & Search Toolbar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <!-- Status Tabs -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold border-b border-slate-100">
+            <a href="?status=all{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3.5 py-2 rounded-xl transition-all whitespace-nowrap {% if current_status == 'all' %}bg-brand-500 text-white shadow-sm shadow-brand-500/25{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+                الكل
+            </a>
+            <a href="?status=pending{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3.5 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 {% if current_status == 'pending' %}bg-amber-500 text-white shadow-sm shadow-amber-500/25{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+                <span class="material-symbols-outlined text-sm">hourglass_top</span>
+                <span>قيد المراجعة والاعتماد</span>
+            </a>
+            <a href="?status=approved{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3.5 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 {% if current_status == 'approved' %}bg-blue-600 text-white shadow-sm shadow-blue-600/25{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+                <span class="material-symbols-outlined text-sm">verified</span>
+                <span>معتمد (في انتظار التحويل)</span>
+            </a>
+            <a href="?status=transferred{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3.5 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 {% if current_status == 'transferred' %}bg-emerald-600 text-white shadow-sm shadow-emerald-600/25{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+                <span class="material-symbols-outlined text-sm">check_circle</span>
+                <span>تم التحويل</span>
+            </a>
+            <a href="?status=rejected{% if search_query %}&search={{ search_query }}{% endif %}"
+               class="px-3.5 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 {% if current_status == 'rejected' %}bg-rose-600 text-white shadow-sm shadow-rose-600/25{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+                <span class="material-symbols-outlined text-sm">cancel</span>
+                <span>مرفوض</span>
+            </a>
+        </div>
+
+        <!-- Search Form -->
+        <form method="GET" class="flex flex-col sm:flex-row gap-3">
+            <input type="hidden" name="status" value="{{ current_status }}">
+            <div class="flex-1 relative">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم الطلب، اسم المندوب، أو المخزن..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </div>
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-base">search</span>
+                <span>بحث</span>
+            </button>
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='transfers_table' %}
+        </form>
+    </div>
+
+    <!-- Active Filters -->
+    {% include 'components/active_filters.html' %}
+
+    <!-- Table of Transfers -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="transfers_table" data-col-table="transfers_table" class="min-w-[850px] w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th data-col="reference" data-col-label="رقم الطلب" data-required="true" class="p-3.5">رقم الطلب</th>
+                        <th data-col="requester" data-col-label="المندوب الطالب" class="p-3.5">المندوب الطالب</th>
+                        <th data-col="destination" data-col-label="مخزن الاستلام" data-required="true" class="p-3.5">مخزن الاستلام (الوجهة)</th>
+                        <th data-col="source" data-col-label="المخزن المحول منه" data-required="true" class="p-3.5">المخزن المحول منه (المصدر)</th>
+                        <th data-col="items_count" data-col-label="عدد الأصناف" class="p-3.5">عدد الأصناف</th>
+                        <th data-col="date" data-col-label="تاريخ الطلب" class="p-3.5">تاريخ الطلب</th>
+                        <th data-col="status" data-col-label="الحالة" class="p-3.5 text-center">الحالة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="p-3.5 text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-800">
+                    {% for tr in transfers %}
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                        <td data-col="reference" class="p-3.5 font-bold font-mono text-brand-700">
+                            <a href="{% url 'product_transfer_detail' tr.pk %}" class="hover:underline">
+                                {{ tr.reference_number }}
+                            </a>
+                        </td>
+                        <td data-col="requester" class="p-3.5 font-semibold text-slate-900">
+                            {{ tr.requesting_user.get_full_name|default:tr.requesting_user.username }}
+                        </td>
+                        <td data-col="destination" class="p-3.5 font-medium text-slate-700">
+                            <div class="flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-emerald-600">input</span>
+                                <span>{{ tr.destination_warehouse.name }}</span>
+                            </div>
+                        </td>
+                        <td data-col="source" class="p-3.5 font-medium text-slate-700">
+                            <div class="flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-amber-600">output</span>
+                                <span>{{ tr.source_warehouse.name }}</span>
+                            </div>
+                        </td>
+                        <td data-col="items_count" class="p-3.5 font-bold text-slate-900">
+                            {{ tr.items.count }} صنف
+                        </td>
+                        <td data-col="date" class="p-3.5 text-slate-500 whitespace-nowrap">
+                            {{ tr.created_at|date:"Y-m-d H:i" }}
+                        </td>
+                        <td data-col="status" class="p-3.5 text-center whitespace-nowrap">
+                            {% if tr.status == 'pending' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <span class="material-symbols-outlined text-xs">hourglass_top</span>
+                                <span>قيد المراجعة</span>
+                            </span>
+                            {% elif tr.status == 'approved' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                <span class="material-symbols-outlined text-xs">verified</span>
+                                <span>معتمد</span>
+                            </span>
+                            {% elif tr.status == 'transferred' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <span class="material-symbols-outlined text-xs">check_circle</span>
+                                <span>تم التحويل</span>
+                            </span>
+                            {% elif tr.status == 'rejected' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                                <span class="material-symbols-outlined text-xs">cancel</span>
+                                <span>مرفوض</span>
+                            </span>
+                            {% elif tr.status == 'cancelled' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
+                                <span>ملغي</span>
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td data-col="actions" class="p-3.5 text-center">
+                            <a href="{% url 'product_transfer_detail' tr.pk %}"
+                               class="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-all">
+                                <span>عرض</span>
+                                <span class="material-symbols-outlined text-sm">visibility</span>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="p-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">swap_horiz</span>
+                            <p class="font-medium text-slate-600">لا توجد طلبات تحويل مخزني مطابقة للمحددات الحالية.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Standardized Pagination -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        {% include 'components/pagination.html' %}
+    </div>
+
+</div>
+{% endblock %}

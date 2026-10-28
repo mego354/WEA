@@ -63,11 +63,13 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
             display_name='مندوب مبيعات',
             is_rep=True
         )
-        self.accountant_role = Role.objects.create(
+        self.accountant_role, _ = Role.objects.get_or_create(
             name='accountant',
-            display_name='محاسب',
-            is_rep=False,
-            is_area_manager=False
+            defaults={
+                'display_name': 'محاسب',
+                'is_rep': False,
+                'is_area_manager': False
+            }
         )
 
         all_perms = Permission.objects.filter(
@@ -185,8 +187,13 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         self.assertIsNotNone(visit)
         self.assertFalse(visit.is_planned)
         self.assertFalse(visit.doubled, "Must be recorded as a single visit")
-        self.assertEqual(visit.status, 'started')
+        self.assertEqual(visit.status, 'planned')
         self.assertEqual(visit.approval_status, 'pending', "Must require manager approval for non-manager rep")
+
+        # Rep attempts to start visit before manager approval -> MUST FAIL
+        res_start_unapproved = self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'planned', "Visit cannot be started before manager approval")
 
         # Step 2: Rep tries to send unapproved visit to agenda -> MUST FAIL
         res_agenda_unapproved = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
@@ -207,9 +214,25 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         self.assertEqual(visit.approved_by, self.manager_cairo)
         self.assertIsNotNone(visit.approved_at)
 
-        # Step 4: Rep logs in and completes the visit
+        # Step 4: Rep logs in, starts the visit, submits answers, and completes the visit
         self.client.logout()
         self.client.login(username='rep_cairo', password='Password123!')
+        res_start = self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        self.assertEqual(res_start.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started', "Visit successfully transitioned to started upon explicit start action")
+        self.assertIsNotNone(visit.started_at)
+
+        # Rep saves draft answers -> status remains 'started'
+        res_draft = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'save_draft',
+            'feedback': 'حفظ مسودة مؤقتة',
+        })
+        self.assertEqual(res_draft.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started', "Submitting answers does not end visit; status remains started")
+
+        # Rep explicitly completes the visit
         res_complete = self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'complete',
             'visit_outcome': 'successful',
@@ -253,6 +276,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo, doubled=True).first()
         self.assertIsNotNone(visit)
         self.assertTrue(visit.doubled, "Must be recorded as a double visit")
+        self.assertEqual(visit.status, 'planned')
         self.assertEqual(visit.approval_status, 'pending')
 
         # Manager approves
@@ -265,9 +289,13 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'approved')
 
-        # Rep completes
+        # Rep starts and completes
         self.client.logout()
         self.client.login(username='rep_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
         self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'complete',
             'visit_outcome': 'successful',
@@ -314,10 +342,11 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         })
         self.assertEqual(res_exec.status_code, 302)
         plan_item.refresh_from_db()
-        self.assertTrue(plan_item.is_executed)
+        self.assertFalse(plan_item.is_executed, "Planned item is NOT executed until visit finishes")
         visit = plan_item.visit
         self.assertIsNotNone(visit)
         self.assertTrue(visit.is_planned)
+        self.assertEqual(visit.status, 'planned')
         self.assertEqual(visit.approval_status, 'pending')
 
         # 3. Manager approves
@@ -330,15 +359,21 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'approved')
 
-        # 4. Rep completes
+        # 4. Rep starts and completes
         self.client.logout()
         self.client.login(username='rep_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
         self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'complete',
             'visit_outcome': 'successful',
         })
         visit.refresh_from_db()
         self.assertEqual(visit.status, 'finished')
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed, "Planned item is executed after visit finishes")
         self.assertEqual(visit.approval_status, 'approved')
         self.assertTrue(visit.is_planned)
 

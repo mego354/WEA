@@ -71,27 +71,37 @@
 
     <!-- Memos Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">receipt_long</span>
+                <span>أذونات الحركات المخزنية</span>
+                <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
+                    {{ total_count }} إذن
+                </span>
+            </h2>
+            {% include 'components/table_column_picker.html' with table_id='inventory_memos_table' %}
+        </div>
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="inventory_memos_table" data-col-table="inventory_memos_table" class="min-w-[850px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
-                        <th class="py-3.5 px-4">رقم الإذن</th>
-                        <th class="py-3.5 px-4">نوع الحركة</th>
-                        <th class="py-3.5 px-4">المخزن</th>
-                        <th class="py-3.5 px-4">البيان والسبب</th>
-                        <th class="py-3.5 px-4">عدد الأصناف</th>
-                        <th class="py-3.5 px-4">تاريخ التنفيذ</th>
-                        <th class="py-3.5 px-4">المسئول</th>
-                        <th class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="memo_number" data-col-label="رقم الإذن" data-col-required="true" class="py-3.5 px-4">رقم الإذن</th>
+                        <th data-col="memo_type" data-col-label="نوع الحركة" class="py-3.5 px-4">نوع الحركة</th>
+                        <th data-col="warehouse" data-col-label="المخزن" class="py-3.5 px-4">المخزن</th>
+                        <th data-col="statement" data-col-label="البيان والسبب" class="py-3.5 px-4">البيان والسبب</th>
+                        <th data-col="items_count" data-col-label="عدد الأصناف" class="py-3.5 px-4">عدد الأصناف</th>
+                        <th data-col="created_at" data-col-label="تاريخ التنفيذ" class="py-3.5 px-4">تاريخ التنفيذ</th>
+                        <th data-col="created_by" data-col-label="المسئول" class="py-3.5 px-4">المسئول</th>
+                        <th data-col="status" data-col-label="الحالة" data-col-required="true" class="py-3.5 px-4 text-center">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for memo in memos %}
                     <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                        <td data-col="memo_number" class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
                             {{ memo.memo_number }}
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="memo_type" class="py-3.5 px-4">
                             {% if memo.memo_type == 'inward' %}
                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                 <span class="material-symbols-outlined text-xs">arrow_downward</span>
@@ -104,22 +114,22 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 font-medium text-slate-800">
+                        <td data-col="warehouse" class="py-3.5 px-4 font-medium text-slate-800">
                             {{ memo.warehouse.name }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-600 font-medium">
+                        <td data-col="statement" class="py-3.5 px-4 text-xs text-slate-600 font-medium">
                             {{ memo.statement }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs font-bold text-slate-700">
+                        <td data-col="items_count" class="py-3.5 px-4 text-xs font-bold text-slate-700">
                             {{ memo.items_count|default:memo.items.count }} صنف
                         </td>
-                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">
+                        <td data-col="created_at" class="py-3.5 px-4 text-xs font-mono text-slate-500">
                             {{ memo.created_at|date:"Y-m-d H:i" }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-600">
+                        <td data-col="created_by" class="py-3.5 px-4 text-xs text-slate-600">
                             {{ memo.created_by|default:"النظام" }}
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="status" class="py-3.5 px-4 text-center">
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                 {{ memo.get_status_display }}
                             </span>

@@ -1,4 +1,4 @@
-{% load erp_tags %}<!DOCTYPE html>
+{% load erp_tags static %}<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -390,12 +390,6 @@
                         <span>إعدادات المخازن</span>
                     </a>
                     {% endif %}
-                    {% if request.user|has_permission:'settings:contactsUdf/manage' %}
-                    <a href="{% url 'contacts_udf' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'contacts-udf' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">tune</span>
-                        <span>تخصيص الحقول</span>
-                    </a>
-                    {% endif %}
                     {% if request.user|has_permission:'settings:syncData/manage' %}
                     <a href="{% url 'sync_data' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sync-data' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">sync</span>
@@ -408,17 +402,17 @@
         </div>
 
         <!-- User Profile Footer -->
-        <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm">
+        <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm shrink-0">
                     {{ request.user.name|default:request.user.username|slice:":2" }}
                 </div>
-                <div class="overflow-hidden">
-                    <p class="text-sm font-bold text-slate-900 truncate">{{ request.user.name|default:request.user.username }}</p>
-                    <p class="text-xs text-slate-500 truncate">{{ request.user.role_name }}</p>
+                <div class="overflow-hidden min-w-0 flex-1" title="{{ request.user.name|default:request.user.username }} ({{ request.user.role_name }})">
+                    <p class="text-sm font-bold text-slate-900 truncate" title="{{ request.user.name|default:request.user.username }}">{{ request.user.name|default:request.user.username }}</p>
+                    <p class="text-xs text-slate-500 truncate" title="{{ request.user.role_name }}">{{ request.user.role_name }}</p>
                 </div>
             </div>
-            <a href="{% url 'logout' %}" title="تسجيل الخروج" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+            <a href="{% url 'logout' %}" title="تسجيل الخروج" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors shrink-0">
                 <span class="material-symbols-outlined text-xl">logout</span>
             </a>
         </div>
@@ -428,19 +422,19 @@
     <div class="flex-1 flex flex-col min-w-0 mr-0 lg:mr-72 transition-all duration-300">
         <!-- TOPBAR -->
         <header class="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
-            <div class="flex items-center gap-3">
-                <button onclick="toggleSidebar()" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors" aria-label="فتح القائمة">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <button id="mobileMenuToggle" onclick="toggleSidebar()" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors shrink-0" aria-label="فتح القائمة">
                     <span class="material-symbols-outlined text-2xl">menu</span>
                 </button>
-                <div class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap">
+                <div class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
                     {% block breadcrumb %}
-                    <span class="font-medium text-slate-700">الرئيسية</span>
+                    <span class="font-medium text-slate-700 truncate">الرئيسية</span>
                     {% endblock %}
                 </div>
             </div>
 
             <!-- Top Actions -->
-            <div class="flex items-center gap-2 sm:gap-3">
+            <div class="flex items-center gap-2 sm:gap-3 shrink-0">
                 <!-- Notifications -->
                 <button class="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                     <span class="material-symbols-outlined text-xl">notifications</span>
@@ -450,15 +444,8 @@
                 <!-- Language indicator -->
                 <span class="hidden sm:inline-block px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg">عربي (EGP)</span>
 
-                <!-- Quick Action Button -->
-                {% block top_actions %}
-                {% if request.user|has_permission:'purchases:orders/create' %}
-                <a href="{% url 'purchase_order_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
-                    <span class="material-symbols-outlined text-base">add</span>
-                    <span>أمر مشتريات جديد</span>
-                </a>
-                {% endif %}
-                {% endblock %}
+                <!-- Quick Action Button (Page-specific overrides) -->
+                {% block top_actions %}{% endblock %}
             </div>
         </header>
 
@@ -511,12 +498,6 @@
             <span class="text-[10px] mt-0.5">المشتريات</span>
         </a>
         {% endif %}
-
-        <!-- Menu Drawer Toggle -->
-        <button type="button" onclick="toggleSidebar()" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] text-slate-500 hover:text-brand-600 transition-colors">
-            <span class="material-symbols-outlined text-2xl">menu</span>
-            <span class="text-[10px] mt-0.5">القائمة</span>
-        </button>
     </nav>
 
     <!-- GLOBAL BOTTOM-LEFT FLOATING ACTION BUTTON (FAB) (Matching Reference ERP) -->
@@ -634,6 +615,8 @@
             closeCustomerSelectionModal();
         }
     </script>
+    <!-- Reusable Table Column Manager -->
+    <script src="{% static 'js/table_column_manager.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

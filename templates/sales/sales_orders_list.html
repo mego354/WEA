@@ -91,6 +91,9 @@
                 <span class="material-symbols-outlined text-base">filter_alt</span>
                 <span>تصفية</span>
             </button>
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='sales_orders_table' %}
         </form>
     </div>
 
@@ -99,45 +102,45 @@
 
     <!-- Sales Orders Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="sales_orders_table" data-col-table="sales_orders_table" class="min-w-[850px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
-                        <th class="py-3.5 px-4">رقم الطلب</th>
-                        <th class="py-3.5 px-4">العميل</th>
-                        <th class="py-3.5 px-4">مخزن الصرف</th>
-                        <th class="py-3.5 px-4">تاريخ الطلب</th>
-                        <th class="py-3.5 px-4">المندوب</th>
-                        <th class="py-3.5 px-4 text-left">إجمالي القيمة</th>
-                        <th class="py-3.5 px-4 text-center">الحالة</th>
-                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th data-col="order_number" data-col-label="رقم الطلب" data-required="true" class="py-3.5 px-4">رقم الطلب</th>
+                        <th data-col="customer" data-col-label="العميل" data-required="true" class="py-3.5 px-4">العميل</th>
+                        <th data-col="warehouse" data-col-label="مخزن الصرف" class="py-3.5 px-4">مخزن الصرف</th>
+                        <th data-col="order_date" data-col-label="تاريخ الطلب" class="py-3.5 px-4">تاريخ الطلب</th>
+                        <th data-col="representative" data-col-label="المندوب" class="py-3.5 px-4">المندوب</th>
+                        <th data-col="total" data-col-label="إجمالي القيمة" class="py-3.5 px-4 text-left">إجمالي القيمة</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for order in orders %}
                     <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                        <td data-col="order_number" class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
                             <a href="{% url 'sales_order_detail' order.pk %}" class="hover:underline">
                                 {{ order.order_number }}
                             </a>
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="customer" class="py-3.5 px-4">
                             <div class="font-bold text-slate-900">{{ order.customer.name }}</div>
                             <div class="text-[11px] text-slate-400">{{ order.customer.area.name|default:"بدون منطقة" }}</div>
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600 text-xs">
+                        <td data-col="warehouse" class="py-3.5 px-4 text-slate-600 text-xs">
                             {{ order.source_warehouse.name }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                        <td data-col="order_date" class="py-3.5 px-4 text-xs font-mono text-slate-600">
                             {{ order.order_date|date:"Y-m-d" }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-600">
+                        <td data-col="representative" class="py-3.5 px-4 text-xs text-slate-600">
                             {{ order.created_by|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">
+                        <td data-col="total" class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">
                             {{ order.grand_total|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="status" class="py-3.5 px-4 text-center">
                             {% if order.status == 'pending' %}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">قيد المراجعة</span>
                             {% elif order.status == 'manager_approval' or order.status == 'approved' %}
@@ -154,7 +157,7 @@
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/60">ملغي</span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
                             <a href="{% url 'sales_order_detail' order.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-brand-50 text-slate-700 hover:text-brand-700 rounded-lg text-xs font-bold transition-colors">
                                 <span class="material-symbols-outlined text-sm">visibility</span>
                                 <span>التفاصيل</span>

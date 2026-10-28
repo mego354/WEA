@@ -88,6 +88,7 @@ class VisitForm(forms.ModelForm):
         model = Visit
         fields = ['contact', 'template', 'owner', 'date', 'is_successful', 'doubled', 'feedback', 'latitude', 'longitude', 'device_accuracy', 'location_photo']
         widgets = {
+            'contact': forms.Select(attrs={'id': 'visit-contact-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'template': forms.Select(attrs={'id': 'visit-template-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'onchange': 'onTemplateSelected(this.value)'}),
             'owner': forms.Select(attrs={'id': 'visit-owner-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'date': forms.DateInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'type': 'date'}),
@@ -111,9 +112,15 @@ class VisitForm(forms.ModelForm):
             is_manager = is_manager_or_higher(user)
             self.is_manager = is_manager
 
-            # Territorial and regional scoping matching user's assigned area
-            scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
-            self.fields['contact'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
+            # Territorial and regional scoping matching user's assigned area.
+            # For representatives, always show all active customers so they can create visits.
+            # Area/region restrictions are enforced at the data access level, not at selection time.
+            if is_manager:
+                scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
+                self.fields['contact'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
+            else:
+                # Reps see all active customers — scoping is enforced on the resulting visit/record
+                self.fields['contact'].queryset = base_qs.order_by('name')
 
             if not is_manager:
                 # Lock representative assignment to current user
@@ -179,13 +186,16 @@ class VisitForm(forms.ModelForm):
                 getattr(user, 'can_bypass_location', False)
             )
 
+        lat = cleaned_data.get('latitude') or self.data.get('latitude')
+        lng = cleaned_data.get('longitude') or self.data.get('longitude')
+
         if settings.verify_visits and not can_bypass:
-            lat = cleaned_data.get('latitude') or self.data.get('latitude')
-            lng = cleaned_data.get('longitude') or self.data.get('longitude')
             if lat is None or lng is None or str(lat).strip() == '' or str(lng).strip() == '':
                 raise forms.ValidationError(
                     "تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والمحاولة مجدداً."
                 )
+
+        if lat and lng:
             try:
                 lat_float = float(lat)
                 lng_float = float(lng)
@@ -237,9 +247,8 @@ class VisitTemplateForm(forms.ModelForm):
         model = VisitTemplate
         fields = [
             'display_name_ar', 'display_name_en', 'name', 'active',
-            'mode', 'allow_unplanned', 'auto_approve_unplanned',
+            'allow_unplanned',
             'enable_product_detailing', 'enable_double_visit_assessment_only',
-            'visit_outcome_mode', 'auto_end_visit',
             'has_special_location_settings', 'special_tolerance',
             'restrict_account_types', 'restricted_roles', 'suggested_products'
         ]
@@ -247,25 +256,25 @@ class VisitTemplateForm(forms.ModelForm):
             'display_name_ar': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالعربية...'}),
             'display_name_en': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالإنجليزية...'}),
             'name': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'المعرف الفريد (e.g. single_visit_dr)'}),
-            'mode': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
-            'visit_outcome_mode': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
             'special_tolerance': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'min': 10}),
             'restricted_roles': forms.SelectMultiple(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
             'suggested_products': forms.CheckboxSelectMultiple(attrs={'class': 'rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'active': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'allow_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
-            'auto_approve_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'enable_product_detailing': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'enable_double_visit_assessment_only': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
-            'auto_end_visit': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'has_special_location_settings': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from catalog.models import Product
+        from accounts.models import Role
         self.fields['suggested_products'].queryset = Product.get_eligible_for_visits()
         self.fields['suggested_products'].label = "المنتجات المقترحة لهذا القالب (صالحة للبيع فقط)"
+        self.fields['restricted_roles'].queryset = Role.objects.filter(is_active=True).order_by('display_name', 'name')
+        self.fields['restricted_roles'].required = False
+        self.fields['restricted_roles'].label = "تقييد على أدوار المستخدمين"
         if self.instance and self.instance.pk:
             raw = self.instance.restrict_account_types
             if isinstance(raw, list):

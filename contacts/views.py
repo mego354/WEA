@@ -7,7 +7,10 @@ from django.db.models import Q
 from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
 from .models import Contact, ContactAddress, ContactComment, ContactAttachment, ContactTodo, ContactActivity
-from master_data.models import Area
+from master_data.models import Area, ContactFieldSetting
+from accounts.services import AuditLogService
+from datetime import datetime, time
+from django.utils import timezone
 from treasury.models import VendorAccount
 from sales.models import CustomerAccount
 from accounts.models import User
@@ -162,13 +165,38 @@ def contact_detail(request, pk):
     if not can_user_access_object(request.user, contact, 'view'):
         return render_forbidden_response(request, "لا يمكنك عرض جهة الاتصال خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
 
-    active_tab = request.GET.get('tab', 'overview').strip()
+    ALLOWED_TABS = ['overview', 'activities', 'sales', 'purchases', 'attachments', 'todos', 'tasks']
+    active_tab = request.GET.get('tab', 'overview').strip().lower()
+    if active_tab not in ALLOWED_TABS:
+        active_tab = 'overview'
 
     addresses = contact.addresses.all()
     comments = contact.comments.select_related('author').order_by('-created_at')
     attachments = contact.attachments.select_related('uploaded_by').order_by('-created_at')
     todos = contact.todos.select_related('created_by').order_by('is_completed', '-created_at')
     activities = contact.activities.select_related('performed_by').order_by('-created_at')
+
+    # Top 5 recent timeline activities for overview
+    recent_timeline = activities[:5]
+    total_timeline_count = activities.count()
+
+    # Active custom fields configured in Contacts UDF
+    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
+    formatted_custom_fields = []
+    custom_vals = contact.custom_values or {}
+    for setting in custom_field_settings:
+        val = custom_vals.get(setting.field_key)
+        if setting.field_type == 'boolean':
+            display_val = 'نعم' if val else ('لا' if val is False else '-')
+        elif setting.field_type == 'multi_choice':
+            display_val = ', '.join(val) if isinstance(val, list) and val else '-'
+        else:
+            display_val = str(val) if val not in [None, ''] else '-'
+        formatted_custom_fields.append({
+            'setting': setting,
+            'value': val,
+            'display_value': display_val,
+        })
 
     # Transactions & accounting relationships
     sales_orders = []
@@ -184,9 +212,9 @@ def contact_detail(request, pk):
     if contact.is_supplier:
         purchase_orders = contact.purchase_orders.select_related('created_by').order_by('-created_at')[:20]
 
-    governorates = Area.objects.filter(area_type='governorate').order_by('name')
+    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
     if not governorates.exists():
-        governorates = Area.objects.all().order_by('name')
+        governorates = Area.objects.filter(is_company_area=False).order_by('name')
 
     context = {
         'contact': contact,
@@ -196,6 +224,10 @@ def contact_detail(request, pk):
         'attachments': attachments,
         'todos': todos,
         'activities': activities,
+        'recent_timeline': recent_timeline,
+        'total_timeline_count': total_timeline_count,
+        'custom_field_settings': custom_field_settings,
+        'formatted_custom_fields': formatted_custom_fields,
         'sales_orders': sales_orders,
         'collections': collections,
         'purchase_orders': purchase_orders,
@@ -206,6 +238,33 @@ def contact_detail(request, pk):
         'governorates': governorates,
     }
     return render(request, 'contacts/contact_detail.html', context)
+
+
+def extract_custom_values_from_post(post_data):
+    """Extract custom field values based on active ContactFieldSetting specifications."""
+    custom_values = {}
+    active_settings = ContactFieldSetting.objects.filter(is_active=True)
+    for setting in active_settings:
+        key = setting.field_key
+        field_type = setting.field_type
+        input_key = f"custom_{key}"
+        if field_type == 'boolean':
+            custom_values[key] = input_key in post_data and post_data.get(input_key) in ['on', 'true', '1', True]
+        elif field_type == 'multi_choice':
+            values = post_data.getlist(f"{input_key}[]") or post_data.getlist(input_key)
+            custom_values[key] = values
+        elif field_type == 'number':
+            val = post_data.get(input_key, '').strip()
+            if val:
+                try:
+                    custom_values[key] = float(val) if '.' in val else int(val)
+                except ValueError:
+                    custom_values[key] = val
+            else:
+                custom_values[key] = None
+        else:
+            custom_values[key] = post_data.get(input_key, '').strip()
+    return custom_values
 
 
 @require_permission('contacts:contacts/create')
@@ -259,6 +318,8 @@ def contact_create(request):
         area_id = request.POST.get('area_id') or request.POST.get('area')
         area = Area.objects.filter(id=area_id).first() if area_id else None
 
+        custom_values = extract_custom_values_from_post(request.POST)
+
         contact = Contact.objects.create(
             name=name,
             contact_type=contact_type,
@@ -282,6 +343,7 @@ def contact_create(request):
             credit_limit=credit_limit,
             status='customer' if is_customer else 'active',
             notes=notes,
+            custom_values=custom_values,
             created_by=request.user
         )
 
@@ -324,6 +386,32 @@ def contact_create(request):
         if is_supplier:
             VendorAccount.get_or_create_for_supplier(contact)
 
+        # Centralized Audit Log & Activity Creation
+        AuditLogService.log(
+            action='create',
+            module='contacts',
+            user=request.user,
+            record_id=contact.id,
+            record_name=f"{contact.name} (#{contact.serial_num})",
+            new_values={
+                'name': contact.name,
+                'contact_type': contact.contact_type,
+                'is_customer': contact.is_customer,
+                'is_supplier': contact.is_supplier,
+                'mobile': contact.mobile,
+                'custom_values': custom_values,
+            },
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='update',
+            title='إنشاء جهة اتصال جديدة',
+            notes=f"تم إنشاء جهة الاتصال {contact.name} بنجاح",
+            performed_by=request.user
+        )
+
         messages.success(request, f"تم إنشاء جهة الاتصال '{contact.name}' بنجاح (#{contact.serial_num}).")
         return redirect('contact_detail', pk=contact.id)
 
@@ -331,9 +419,11 @@ def contact_create(request):
 
 
 def render_create_form(request, errors=None):
-    governorates = Area.objects.filter(area_type='governorate').order_by('name')
+    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
     if not governorates.exists():
-        governorates = Area.objects.all().order_by('name')
+        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+
+    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
 
     context = {
         'governorates': governorates,
@@ -341,6 +431,7 @@ def render_create_form(request, errors=None):
         'specialties': SPECIALTIES,
         'account_types': ACCOUNT_TYPES,
         'country_codes': COUNTRY_CODES,
+        'custom_field_settings': custom_field_settings,
         'errors': errors or {}
     }
     return render(request, 'contacts/contact_create.html', context)
@@ -364,6 +455,17 @@ def contact_edit(request, pk):
         if not name:
             messages.error(request, "اسم جهة الاتصال مطلوب.")
             return render_edit_form(request, contact, errors={'name': 'هذا الحقل مطلوب'})
+
+        prev_values = {
+            'name': contact.name,
+            'contact_type': contact.contact_type,
+            'is_customer': contact.is_customer,
+            'is_supplier': contact.is_supplier,
+            'mobile': contact.mobile,
+            'phone': contact.phone,
+            'email': contact.email,
+            'custom_values': dict(contact.custom_values or {}),
+        }
 
         contact.name = name
         contact.contact_type = contact_type
@@ -406,10 +508,18 @@ def contact_edit(request, pk):
             except ValueError:
                 pass
 
+        credit_period_days = request.POST.get('credit_period_days')
+        if credit_period_days is not None and credit_period_days != '':
+            try:
+                contact.credit_period_days = int(credit_period_days)
+            except ValueError:
+                pass
+
         area_id = request.POST.get('area_id') or request.POST.get('area')
         if area_id:
             contact.area = Area.objects.filter(id=area_id).first()
 
+        contact.custom_values = extract_custom_values_from_post(request.POST)
         contact.save()
 
         # Update addresses: delete removed and re-create / update
@@ -441,6 +551,35 @@ def contact_edit(request, pk):
         if is_supplier:
             VendorAccount.get_or_create_for_supplier(contact)
 
+        new_values = {
+            'name': contact.name,
+            'contact_type': contact.contact_type,
+            'is_customer': contact.is_customer,
+            'is_supplier': contact.is_supplier,
+            'mobile': contact.mobile,
+            'phone': contact.phone,
+            'email': contact.email,
+            'custom_values': dict(contact.custom_values or {}),
+        }
+        AuditLogService.log(
+            action='update',
+            module='contacts',
+            user=request.user,
+            record_id=contact.id,
+            record_name=f"{contact.name} (#{contact.serial_num})",
+            previous_values=prev_values,
+            new_values=new_values,
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='update',
+            title='تحديث بيانات جهة الاتصال',
+            notes='تم حفظ التعديلات والبيانات المخصصة بنجاح',
+            performed_by=request.user
+        )
+
         messages.success(request, f"تم تحديث بيانات جهة الاتصال '{contact.name}' بنجاح.")
         return redirect('contact_detail', pk=contact.id)
 
@@ -448,9 +587,18 @@ def contact_edit(request, pk):
 
 
 def render_edit_form(request, contact, errors=None):
-    governorates = Area.objects.filter(area_type='governorate').order_by('name')
+    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
     if not governorates.exists():
-        governorates = Area.objects.all().order_by('name')
+        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+
+    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
+    formatted_custom_fields = []
+    custom_vals = contact.custom_values or {}
+    for setting in custom_field_settings:
+        formatted_custom_fields.append({
+            'setting': setting,
+            'value': custom_vals.get(setting.field_key),
+        })
 
     # Split mobile into country code & number
     mobile_parts = contact.mobile.split(' ', 1) if contact.mobile else ['', '']
@@ -473,6 +621,8 @@ def render_edit_form(request, contact, errors=None):
         'mobile_num': mobile_num,
         'phone_code': phone_code,
         'phone_num': phone_num,
+        'custom_field_settings': custom_field_settings,
+        'formatted_custom_fields': formatted_custom_fields,
         'errors': errors or {}
     }
     return render(request, 'contacts/contact_edit.html', context)
@@ -487,7 +637,20 @@ def contact_delete(request, pk):
     if request.method == 'POST':
         name = contact.name
         serial = contact.serial_num
+        record_id = contact.id
+        status_val = contact.status
         contact.delete()
+
+        AuditLogService.log(
+            action='delete',
+            module='contacts',
+            user=request.user,
+            record_id=record_id,
+            record_name=f"{name} (#{serial})",
+            previous_values={'name': name, 'serial_num': serial, 'status': status_val},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
         messages.success(request, f"تم مسح جهة الاتصال '{name}' (#{serial}) بنجاح.")
         return redirect('contacts_list')
     return redirect('contact_detail', pk=pk)
@@ -500,12 +663,33 @@ def contact_update_status(request, pk):
         return render_forbidden_response(request, "لا يمكنك تعديل حالة جهة الاتصال.")
 
     if request.method == 'POST':
+        old_status = contact.status
         new_status = request.POST.get('status', '').strip().lower()
         if new_status in ['lead', 'customer', 'inactive', 'active']:
             contact.status = new_status
             contact.save()
+
+            AuditLogService.log(
+                action='update',
+                module='contacts',
+                user=request.user,
+                record_id=contact.id,
+                record_name=f"{contact.name} (#{contact.serial_num})",
+                previous_values={'status': old_status},
+                new_values={'status': new_status},
+                ip_address=AuditLogService.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            )
+            ContactActivity.objects.create(
+                contact=contact,
+                activity_type='update',
+                title=f"تغيير الحالة إلى {contact.status_label}",
+                notes=f"تم تعديل حالة جهة الاتصال من {old_status} إلى {new_status}",
+                performed_by=request.user
+            )
+
             messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {contact.status_label}.")
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
                 return JsonResponse({'status': 'ok', 'new_status': contact.status_label})
     return redirect('contact_detail', pk=pk)
 
@@ -519,10 +703,27 @@ def contact_add_comment(request, pk):
     if request.method == 'POST':
         text = request.POST.get('comment', '').strip()
         if text:
-            ContactComment.objects.create(
+            comment = ContactComment.objects.create(
                 contact=contact,
                 author=request.user,
                 text=text
+            )
+            AuditLogService.log(
+                action='create',
+                module='contacts',
+                user=request.user,
+                record_id=comment.id,
+                record_name=f"تعليق على {contact.name}",
+                new_values={'contact_id': contact.id, 'text': text},
+                ip_address=AuditLogService.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            )
+            ContactActivity.objects.create(
+                contact=contact,
+                activity_type='call',
+                title="إضافة تعليق جديد",
+                notes=text[:200],
+                performed_by=request.user
             )
             messages.success(request, "تمت إضافة التعليق بنجاح.")
         else:
@@ -539,13 +740,40 @@ def contact_create_todo(request, pk):
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         if title:
-            ContactTodo.objects.create(
+            todo = ContactTodo.objects.create(
                 contact=contact,
                 title=title,
                 created_by=request.user
             )
+            AuditLogService.log(
+                action='create',
+                module='contacts',
+                user=request.user,
+                record_id=todo.id,
+                record_name=f"مهمة: {title}",
+                new_values={'contact_id': contact.id, 'title': title, 'is_completed': False},
+                ip_address=AuditLogService.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            )
+            ContactActivity.objects.create(
+                contact=contact,
+                activity_type='todo',
+                title=f"إضافة مهمة: {title}",
+                notes="تمت إضافة مهمة جديدة لجهة الاتصال",
+                performed_by=request.user
+            )
             messages.success(request, "تمت إضافة المهمة بنجاح.")
-    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=Todos")
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
+                return JsonResponse({
+                    'status': 'ok',
+                    'todo': {
+                        'id': todo.id,
+                        'title': todo.title,
+                        'is_completed': todo.is_completed,
+                        'created_at': todo.created_at.strftime('%d/%m/%Y'),
+                    }
+                })
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=todos")
 
 
 @require_permission('contacts:contacts/edit')
@@ -555,11 +783,136 @@ def contact_toggle_todo(request, pk, todo_id):
         return render_forbidden_response(request, "لا يمكنك تعديل مهام هذه الجهة.")
 
     todo = get_object_or_404(ContactTodo, pk=todo_id, contact=contact)
+    old_status = todo.is_completed
     todo.is_completed = not todo.is_completed
     todo.save()
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        return JsonResponse({'status': 'ok', 'is_completed': todo.is_completed})
-    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=Todos")
+
+    AuditLogService.log(
+        action='update',
+        module='contacts',
+        user=request.user,
+        record_id=todo.id,
+        record_name=f"مهمة: {todo.title}",
+        previous_values={'is_completed': old_status},
+        new_values={'is_completed': todo.is_completed},
+        ip_address=AuditLogService.get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    )
+    ContactActivity.objects.create(
+        contact=contact,
+        activity_type='todo',
+        title=f"{'إكمال' if todo.is_completed else 'إعادة فتح'} مهمة: {todo.title}",
+        notes="تم تحديث حالة إنجاز المهمة",
+        performed_by=request.user
+    )
+
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
+        return JsonResponse({'status': 'ok', 'is_completed': todo.is_completed, 'todo_id': todo.id})
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=todos")
+
+
+@require_permission('contacts:contacts/edit')
+def contact_delete_todo(request, pk, todo_id):
+    contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك حذف مهام هذه الجهة.")
+
+    todo = get_object_or_404(ContactTodo, pk=todo_id, contact=contact)
+    if request.method == 'POST':
+        title = todo.title
+        todo_id_val = todo.id
+        todo.delete()
+
+        AuditLogService.log(
+            action='delete',
+            module='contacts',
+            user=request.user,
+            record_id=todo_id_val,
+            record_name=f"مهمة: {title}",
+            previous_values={'contact_id': contact.id, 'title': title},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='todo',
+            title=f"حذف مهمة: {title}",
+            notes="تم حذف المهمة نهائياً",
+            performed_by=request.user
+        )
+        messages.success(request, "تم حذف المهمة بنجاح.")
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
+            return JsonResponse({'status': 'ok', 'todo_id': todo_id_val})
+
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=todos")
+
+
+@require_permission('contacts:contacts/view')
+def contact_timeline_events(request, pk):
+    contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'view'):
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+    qs = contact.activities.select_related('performed_by').order_by('-created_at')
+
+    # Filters
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(notes__icontains=q))
+
+    activity_type = request.GET.get('activity_type', '').strip()
+    if activity_type and activity_type != 'all':
+        qs = qs.filter(activity_type=activity_type)
+
+    actor = request.GET.get('actor', '').strip()
+    if actor:
+        qs = qs.filter(performed_by__name__icontains=actor)
+
+    date_from = request.GET.get('date_from', '').strip()
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            qs = qs.filter(created_at__gte=timezone.make_aware(datetime.combine(dt_from, time.min)))
+        except ValueError:
+            pass
+
+    date_to = request.GET.get('date_to', '').strip()
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+            qs = qs.filter(created_at__lte=timezone.make_aware(datetime.combine(dt_to, time.max)))
+        except ValueError:
+            pass
+
+    page = request.GET.get('page', 1)
+    per_page = int(request.GET.get('per_page', 10))
+    paginator = Paginator(qs, per_page)
+    try:
+        page_obj = paginator.page(page)
+    except Exception:
+        page_obj = paginator.page(1)
+
+    events_data = []
+    for act in page_obj.object_list:
+        events_data.append({
+            'id': act.id,
+            'activity_type': act.activity_type,
+            'type_label': act.get_activity_type_display(),
+            'title': act.title,
+            'notes': act.notes,
+            'performed_by': act.performed_by.name if act.performed_by else "النظام",
+            'created_at': act.created_at.strftime('%d/%m/%Y %I:%M %p'),
+            'date_formatted': act.created_at.strftime('%d/%m/%Y'),
+        })
+
+    return JsonResponse({
+        'events': events_data,
+        'page': page_obj.number,
+        'total_pages': paginator.num_pages,
+        'total_count': paginator.count,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+    })
 
 
 @require_permission('contacts:contacts/edit')
@@ -570,14 +923,31 @@ def contact_upload_attachment(request, pk):
 
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
-        ContactAttachment.objects.create(
+        attachment = ContactAttachment.objects.create(
             contact=contact,
             file=uploaded_file,
             filename=uploaded_file.name,
             uploaded_by=request.user
         )
+        AuditLogService.log(
+            action='create',
+            module='contacts',
+            user=request.user,
+            record_id=attachment.id,
+            record_name=f"مرفق: {attachment.filename}",
+            new_values={'contact_id': contact.id, 'filename': attachment.filename},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='update',
+            title=f"رفع مرفق: {attachment.filename}",
+            notes="تم إرفاق ملف جديد بجهة الاتصال",
+            performed_by=request.user
+        )
         messages.success(request, f"تم رفع الملف '{uploaded_file.name}' بنجاح.")
-    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=المرفقات")
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=attachments")
 
 
 @require_permission('contacts:contacts/edit')
@@ -597,13 +967,30 @@ def contact_add_address(request, pk):
         if area or street or title:
             if is_main:
                 contact.addresses.update(is_main=False)
-            ContactAddress.objects.create(
+            addr = ContactAddress.objects.create(
                 contact=contact,
                 title=title,
                 area=area,
                 sub_area=sub_area,
                 street_address=street,
                 is_main=is_main
+            )
+            AuditLogService.log(
+                action='create',
+                module='contacts',
+                user=request.user,
+                record_id=addr.id,
+                record_name=f"عنوان: {title or 'عنوان جديد'}",
+                new_values={'contact_id': contact.id, 'title': title, 'sub_area': sub_area},
+                ip_address=AuditLogService.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            )
+            ContactActivity.objects.create(
+                contact=contact,
+                activity_type='update',
+                title=f"إضافة عنوان: {title or 'عنوان جديد'}",
+                notes=f"{area.name if area else ''} - {sub_area} - {street}",
+                performed_by=request.user
             )
             messages.success(request, "تمت إضافة العنوان بنجاح.")
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
@@ -617,7 +1004,26 @@ def contact_delete_address(request, pk, address_id):
 
     address = get_object_or_404(ContactAddress, pk=address_id, contact=contact)
     if request.method == 'POST':
+        title = address.title
+        addr_id = address.id
         address.delete()
+        AuditLogService.log(
+            action='delete',
+            module='contacts',
+            user=request.user,
+            record_id=addr_id,
+            record_name=f"عنوان: {title}",
+            previous_values={'contact_id': contact.id, 'title': title},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='update',
+            title=f"حذف عنوان: {title}",
+            notes="تم حذف العنوان من جهة الاتصال",
+            performed_by=request.user
+        )
         messages.success(request, "تم حذف العنوان بنجاح.")
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
 
@@ -982,7 +1388,18 @@ def get_subareas(request):
     return JsonResponse({'subareas': subareas})
 
 
-@require_permission('contacts:contacts/list')
+@require_permission([
+    'contacts:contacts/list',
+    'contacts:contacts/view',
+    'activities:visits/create',
+    'activities:visits/list',
+    'activities:planned/list',
+    'activities:planned/manage',
+    'sales:orders/create',
+    'sales:orders/list',
+    'activities:agreements/create',
+    'activities:agreements/list',
+])
 def customers_search_api(request):
     """
     Search and list authorized customers for Visit Registration and selectors.
@@ -1008,8 +1425,10 @@ def customers_search_api(request):
         q = request.GET.get('q', '').strip()
         limit = int(request.GET.get('limit', 100))
 
-    # Base queryset: active customers only
-    qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')\
+    # Base queryset: active customers and visitable contacts
+    qs = Contact.objects.filter(
+        Q(is_customer=True) | Q(status='customer') | Q(account_type__gt='')
+    ).exclude(status='inactive')\
         .select_related('area', 'created_by')\
         .prefetch_related('addresses__area')
 
@@ -1026,17 +1445,15 @@ def customers_search_api(request):
     )
 
     if not is_manager:
-        # Reps only see their assigned customers or customers they created
-        user_contacts = Contact.objects.filter(
-            Q(assigned_team=user) | Q(created_by=user)
-        )
-        if user_contacts.exists():
-            qs = qs.filter(Q(assigned_team=user) | Q(created_by=user)).distinct()
-        else:
-            # If rep has no specifically assigned contacts, fallback to user's area or assigned team
-            qs = qs.filter(Q(assigned_team=user) | Q(created_by=user)).distinct()
+        # Reps see all active customers — they need to be able to visit any customer.
+        # The area/assignment scoping is enforced at the visit record level, not at contact selection.
+        # No additional filter needed; the base queryset (active customers) is sufficient.
+        pass
 
-    if q:
+    contact_id = request.GET.get('id') or request.POST.get('id')
+    if contact_id and str(contact_id).isdigit():
+        qs = qs.filter(id=int(contact_id))
+    elif q:
         qs = qs.filter(
             Q(name__icontains=q) |
             Q(code__icontains=q) |
@@ -1045,6 +1462,7 @@ def customers_search_api(request):
             Q(area__name__icontains=q)
         ).distinct()
 
+    qs = qs.order_by('name')
     total_count = qs.count()
     results = []
     for c in qs[:limit]:
