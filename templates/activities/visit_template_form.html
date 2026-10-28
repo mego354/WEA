@@ -77,6 +77,7 @@
         </div>
 
         <!-- Accordion 1: Settings (الإعدادات) -->
+        <!-- Accordion 1: Settings (الإعدادات) -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <button type="button" onclick="toggleAccordion('acc-settings')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
                 <div class="flex items-center gap-2.5">
@@ -86,41 +87,28 @@
                 <span id="arrow-acc-settings" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
             </button>
             <div id="acc-settings" class="p-5 space-y-4 border-t border-slate-100">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-3.5 rounded-xl bg-teal-50/60 border border-teal-200/80 text-xs text-teal-900 flex items-start gap-2.5">
+                    <span class="material-symbols-outlined text-teal-600 text-lg shrink-0 mt-0.5">verified</span>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">الوضع (Mode)</label>
-                        {{ form.mode }}
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">نتيجة الزيارة (Visit Outcome)</label>
-                        {{ form.visit_outcome_mode }}
+                        <strong class="font-bold">دورة حياة الزيارات الموحدة:</strong>
+                        <p class="mt-0.5 text-teal-800">تتبع جميع الزيارات (المخططة وخارج الخطة) تدفقاً قياسياً واحداً: إنشاء الزيارة &larr; اعتماد المدير &larr; بدء الزيارة (Check-in) &larr; الإجابة على الاستبيان &larr; إنهاء الزيارة (Check-out) مع حساب المدة آلياً على الخادم.</p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors min-h-[44px]">
                         {{ form.allow_unplanned }}
                         <span class="text-xs font-bold text-slate-800">تفعيل تسجيل زيارات خارج الخطة</span>
                     </label>
 
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
-                        {{ form.auto_approve_unplanned }}
-                        <span class="text-xs font-bold text-slate-800">موافقة تلقائية للزيارات خارج الخطة</span>
-                    </label>
-
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors min-h-[44px]">
                         {{ form.enable_product_detailing }}
                         <span class="text-xs font-bold text-slate-800">تفعيل شرح المنتجات (Product Detailing)</span>
                     </label>
 
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors min-h-[44px]">
                         {{ form.enable_double_visit_assessment_only }}
                         <span class="text-xs font-bold text-slate-800">تقييمات للزيارات المزدوجة فقط</span>
-                    </label>
-
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
-                        {{ form.auto_end_visit }}
-                        <span class="text-xs font-bold text-slate-800">إنهاء الزيارة تلقائياً</span>
                     </label>
                 </div>
             </div>
@@ -137,7 +125,7 @@
             </button>
             <div id="acc-location" class="p-5 space-y-4 border-t border-slate-100">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 hover:bg-slate-50 cursor-pointer transition-colors min-h-[44px]">
                         {{ form.has_special_location_settings }}
                         <span class="text-xs font-bold text-slate-800">اعدادات خاصة للتحقق من الموقع لهذا القالب</span>
                     </label>
@@ -156,19 +144,19 @@
             <button type="button" onclick="toggleAccordion('acc-constraints')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
                 <div class="flex items-center gap-2.5">
                     <span class="material-symbols-outlined text-brand-600">filter_alt</span>
-                    <span class="text-sm font-bold text-slate-900">3. القيود وتحديد الحسابات المستهدفة (Constraints)</span>
+                    <span class="text-sm font-bold text-slate-900">3. القيود وتحديد الحسابات والأدوار المستهدفة (Constraints)</span>
                 </div>
                 <span id="arrow-acc-constraints" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
             </button>
-            <div id="acc-constraints" class="p-5 space-y-4 border-t border-slate-100">
+            <div id="acc-constraints" class="p-5 space-y-6 border-t border-slate-100">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-2">نوع الحساب المستهدف (Account Types)</label>
-                    <p class="text-[11px] text-slate-400 mb-2">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">نوع الحساب المستهدف (Account Types)</label>
+                    <p class="text-[11px] text-slate-500 mb-2">
                         حدد أنواع الحسابات التي يتاح لها هذا القالب عند تسجيل الزيارة (اتركها فارغة لإتاحته لكافة الحسابات):
                     </p>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {% for choice in form.restrict_account_types %}
-                        <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold cursor-pointer">
+                        <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold cursor-pointer min-h-[40px]">
                             {{ choice.tag }}
                             <span>{{ choice.choice_label }}</span>
                         </label>
@@ -176,11 +164,124 @@
                     </div>
                 </div>
 
-                <div class="pt-2">
-                    <label class="block text-xs font-bold text-slate-700 mb-1">تقييد على أدوار المستخدمين (Restricted Roles)</label>
-                    {{ form.restricted_roles }}
-                    <p class="text-[11px] text-slate-400 mt-1">اتركه فارغاً ليكون متاحاً لكافة الأدوار الميدانية</p>
+                <!-- Redesigned Restricted Roles Component -->
+                <div class="pt-4 border-t border-slate-100 space-y-3" id="restricted-roles-component">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800">
+                                تقييد استخدام القالب على أدوار وظيفية محددة (Restricted Roles)
+                            </label>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                افتراضياً، يكون القالب متاحاً لجميع الأدوار الميدانية. عند اختيار أدوار معينة، يقتصر ظهور واستخدام هذا القالب على تلك الأدوار فقط.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button type="button" onclick="selectAllRoles(true)" class="px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-colors min-h-[36px]">
+                                تحديد الكل
+                            </button>
+                            <button type="button" onclick="selectAllRoles(false)" class="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors min-h-[36px]">
+                                إلغاء التحديد (إتاحة للجميع)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter search bar and status counter -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="relative flex-1">
+                            <span class="material-symbols-outlined text-slate-400 absolute right-3 top-2 text-lg pointer-events-none">search</span>
+                            <input type="text" id="roleSearchInput" onkeyup="filterRolesList()" placeholder="بحث سريع في الأدوار الوظيفية..." class="w-full pr-9 pl-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 min-h-[36px]">
+                        </div>
+                        <div id="rolesCountSummary" class="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
+                            <span id="rolesSelectedBadge" class="px-2.5 py-1 rounded-full text-[11px] bg-slate-200 text-slate-700">
+                                متاح لجميع الأدوار (بدون قيود)
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Roles Checkbox Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto p-1 border border-slate-100 rounded-xl" id="rolesGridContainer">
+                        {% for choice in form.restricted_roles %}
+                        <label class="role-card flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-teal-300 hover:bg-teal-50/20 cursor-pointer transition-all min-h-[44px] select-none" data-role-name="{{ choice.choice_label|lower }}">
+                            <div class="flex items-center gap-2.5">
+                                {{ choice.tag }}
+                                <span class="text-xs font-bold text-slate-800 role-display-name">{{ choice.choice_label }}</span>
+                            </div>
+                            <span class="material-symbols-outlined text-sm text-slate-300 role-check-indicator">check_circle</span>
+                        </label>
+                        {% empty %}
+                        <div class="col-span-full py-4 text-center text-xs text-slate-400">
+                            لا توجد أدوار وظيفية مسجلة حالياً
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Selected Roles Pills Container -->
+                    <div id="selectedRolesPills" class="flex flex-wrap items-center gap-1.5 pt-1"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Accordion 4: Suggested Products (المنتجات المقترحة للزيارات الميدانية) -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden" id="suggested-products-component">
+            <button type="button" onclick="toggleAccordion('acc-suggested-products')" class="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-right">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-brand-600">inventory_2</span>
+                    <span class="text-sm font-bold text-slate-900">4. المنتجات المقترحة للزيارات الميدانية (Suggested Products)</span>
+                </div>
+                <span id="arrow-acc-suggested-products" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+            </button>
+            <div id="acc-suggested-products" class="p-5 space-y-4 border-t border-slate-100">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800">
+                            المنتجات المتاحة للاقتراح خلال الزيارة (تقتصر على المنتجات الصالحة للبيع فقط)
+                        </label>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            المنتجات المحددة هنا ستظهر لمندوبي المبيعات والدعاية كاقتراحات رئيسية أثناء تسجيل وتوثيق الزيارة.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" onclick="selectAllProducts(true)" class="px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-colors min-h-[36px]">
+                            تحديد الكل
+                        </button>
+                        <button type="button" onclick="selectAllProducts(false)" class="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors min-h-[36px]">
+                            إلغاء التحديد
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search and Counter -->
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div class="relative flex-1">
+                        <span class="material-symbols-outlined text-slate-400 absolute right-3 top-2 text-lg pointer-events-none">search</span>
+                        <input type="text" id="productSearchInput" onkeyup="filterProductsList()" placeholder="بحث سريع في المنتجات بالاسم أو الكود..." class="w-full pr-9 pl-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 min-h-[36px]">
+                    </div>
+                    <div id="productsCountSummary" class="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
+                        <span id="productsSelectedBadge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700">
+                            بدون منتجات مقترحة
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Products Checkbox Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto p-1 border border-slate-100 rounded-xl" id="productsGridContainer">
+                    {% for choice in form.suggested_products %}
+                    <label class="product-card flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-teal-300 hover:bg-teal-50/20 cursor-pointer transition-all min-h-[44px] select-none" data-product-name="{{ choice.choice_label|lower }}">
+                        <div class="flex items-center gap-2.5">
+                            {{ choice.tag }}
+                            <span class="text-xs font-bold text-slate-800 product-display-name">{{ choice.choice_label }}</span>
+                        </div>
+                        <span class="material-symbols-outlined text-sm text-slate-300 product-check-indicator">check_circle</span>
+                    </label>
+                    {% empty %}
+                    <div class="col-span-full py-6 text-center text-xs text-slate-400">
+                        لا توجد منتجات صالحة للبيع مسجلة في الكتالوج حالياً
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Selected Products Pills Container -->
+                <div id="selectedProductsPills" class="flex flex-wrap items-center gap-1.5 pt-1"></div>
             </div>
         </div>
 
@@ -528,5 +629,213 @@ function openEditQuestionModal(id, textAr, textEn, type, stage, isRequired, isCo
 function closeQuestionModal() {
     document.getElementById('questionModal').classList.add('hidden');
 }
+
+// =============================================================================
+// Restricted Roles Interactive Controls
+// =============================================================================
+function initRestrictedRoles() {
+    const container = document.getElementById('rolesGridContainer');
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            updateRoleCardState(this);
+            syncRolesSummary();
+        });
+        updateRoleCardState(cb);
+    });
+    syncRolesSummary();
+}
+
+function updateRoleCardState(cb) {
+    const card = cb.closest('.role-card');
+    if (!card) return;
+    const icon = card.querySelector('.role-check-indicator');
+    if (cb.checked) {
+        card.classList.add('border-teal-500', 'bg-teal-50/50');
+        card.classList.remove('border-slate-200', 'bg-white');
+        if (icon) {
+            icon.classList.add('text-teal-600');
+            icon.classList.remove('text-slate-300');
+        }
+    } else {
+        card.classList.remove('border-teal-500', 'bg-teal-50/50');
+        card.classList.add('border-slate-200', 'bg-white');
+        if (icon) {
+            icon.classList.remove('text-teal-600');
+            icon.classList.add('text-slate-300');
+        }
+    }
+}
+
+function selectAllRoles(select) {
+    const container = document.getElementById('rolesGridContainer');
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        const card = cb.closest('.role-card');
+        if (!card || card.style.display !== 'none') {
+            cb.checked = select;
+            updateRoleCardState(cb);
+        }
+    });
+    syncRolesSummary();
+}
+
+function filterRolesList() {
+    const input = document.getElementById('roleSearchInput');
+    const filter = (input ? input.value : '').toLowerCase().trim();
+    const container = document.getElementById('rolesGridContainer');
+    if (!container) return;
+    const cards = container.querySelectorAll('.role-card');
+    cards.forEach(card => {
+        const text = card.getAttribute('data-role-name') || '';
+        if (text.includes(filter)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function syncRolesSummary() {
+    const container = document.getElementById('rolesGridContainer');
+    const badge = document.getElementById('rolesSelectedBadge');
+    const pills = document.getElementById('selectedRolesPills');
+    if (!container || !badge || !pills) return;
+
+    const checkedBoxes = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'));
+    pills.innerHTML = '';
+
+    if (checkedBoxes.length === 0) {
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700';
+        badge.textContent = 'متاح لجميع الأدوار (بدون قيود)';
+    } else {
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-100 text-teal-800 border border-teal-200';
+        badge.textContent = `مقيّد على (${checkedBoxes.length}) أدوار محددة`;
+
+        checkedBoxes.forEach(cb => {
+            const card = cb.closest('.role-card');
+            const nameEl = card ? card.querySelector('.role-display-name') : null;
+            const roleName = nameEl ? nameEl.textContent.trim() : 'دور';
+
+            const pill = document.createElement('span');
+            pill.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200';
+            pill.innerHTML = `<span>${roleName}</span><button type="button" class="text-teal-500 hover:text-rose-600 ml-1 leading-none font-bold" title="إلغاء">&times;</button>`;
+            pill.querySelector('button').addEventListener('click', (e) => {
+                e.preventDefault();
+                cb.checked = false;
+                updateRoleCardState(cb);
+                syncRolesSummary();
+            });
+            pills.appendChild(pill);
+        });
+    }
+}
+
+function initSuggestedProducts() {
+    const container = document.getElementById('productsGridContainer');
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        updateProductCardState(cb);
+        cb.addEventListener('change', () => {
+            updateProductCardState(cb);
+            syncProductsSummary();
+        });
+    });
+    syncProductsSummary();
+}
+
+function updateProductCardState(cb) {
+    const card = cb.closest('.product-card');
+    if (!card) return;
+    const icon = card.querySelector('.product-check-indicator');
+    if (cb.checked) {
+        card.classList.add('border-teal-500', 'bg-teal-50/40');
+        card.classList.remove('border-slate-200', 'bg-white');
+        if (icon) {
+            icon.classList.add('text-teal-600');
+            icon.classList.remove('text-slate-300');
+        }
+    } else {
+        card.classList.remove('border-teal-500', 'bg-teal-50/40');
+        card.classList.add('border-slate-200', 'bg-white');
+        if (icon) {
+            icon.classList.remove('text-teal-600');
+            icon.classList.add('text-slate-300');
+        }
+    }
+}
+
+function selectAllProducts(select) {
+    const container = document.getElementById('productsGridContainer');
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        const card = cb.closest('.product-card');
+        if (!card || card.style.display !== 'none') {
+            cb.checked = select;
+            updateProductCardState(cb);
+        }
+    });
+    syncProductsSummary();
+}
+
+function filterProductsList() {
+    const input = document.getElementById('productSearchInput');
+    const filter = (input ? input.value : '').toLowerCase().trim();
+    const container = document.getElementById('productsGridContainer');
+    if (!container) return;
+    const cards = container.querySelectorAll('.product-card');
+    cards.forEach(card => {
+        const text = card.getAttribute('data-product-name') || '';
+        if (text.includes(filter)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function syncProductsSummary() {
+    const container = document.getElementById('productsGridContainer');
+    const badge = document.getElementById('productsSelectedBadge');
+    const pills = document.getElementById('selectedProductsPills');
+    if (!container || !badge || !pills) return;
+
+    const checkedBoxes = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'));
+    pills.innerHTML = '';
+
+    if (checkedBoxes.length === 0) {
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700';
+        badge.textContent = 'بدون منتجات مقترحة';
+    } else {
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-100 text-teal-800 border border-teal-200';
+        badge.textContent = `تم تحديد (${checkedBoxes.length}) منتجات مقترحة`;
+
+        checkedBoxes.forEach(cb => {
+            const card = cb.closest('.product-card');
+            const nameEl = card ? card.querySelector('.product-display-name') : null;
+            const productName = nameEl ? nameEl.textContent.trim() : 'منتج';
+
+            const pill = document.createElement('span');
+            pill.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200';
+            pill.innerHTML = `<span>${productName}</span><button type="button" class="text-teal-500 hover:text-rose-600 ml-1 leading-none font-bold" title="إلغاء">&times;</button>`;
+            pill.querySelector('button').addEventListener('click', (e) => {
+                e.preventDefault();
+                cb.checked = false;
+                updateProductCardState(cb);
+                syncProductsSummary();
+            });
+            pills.appendChild(pill);
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initRestrictedRoles();
+    initSuggestedProducts();
+});
 </script>
 {% endblock %}

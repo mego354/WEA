@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from .models import User, Role, RoleTag, SecurityAuditLog
+from .services import AuditLogService
 from master_data.models import Area
 from .permissions import require_permission, require_super_admin, has_perm_or_admin
 from master_data.pagination_utils import paginate_queryset
@@ -56,19 +57,52 @@ def login_view(request):
 
         if user:
             if not user.is_active:
+                AuditLogService.log(
+                    action_type='AUTH_FAILED',
+                    module='accounts',
+                    description=f"محاولة تسجيل دخول لحساب معطل: {login_input}",
+                    status='FAILURE',
+                    request=request
+                )
                 messages.error(request, "هذا الحساب معطل حالياً. يرجى التواصل مع إدارة النظام.")
                 return render(request, 'accounts/login.html')
             login(request, user)
+            AuditLogService.log(
+                action_type='AUTH_LOGIN',
+                module='accounts',
+                actor=user,
+                target_user=user,
+                description=f"تسجيل دخول ناجح للمستخدم: {user.name or user.username} ({user.email})",
+                status='SUCCESS',
+                request=request
+            )
             messages.success(request, f"مرحباً بك مجدداً {user.name or user.username}")
             next_url = request.GET.get('next') or request.POST.get('next') or 'home'
             return redirect(next_url)
         else:
+            AuditLogService.log(
+                action_type='AUTH_FAILED',
+                module='accounts',
+                description=f"محاولة تسجيل دخول فاشلة بالبريد/المعرف: {login_input}",
+                status='FAILURE',
+                request=request
+            )
             messages.error(request, "البريد الإلكتروني أو كلمة المرور غير صحيحة.")
 
     return render(request, 'accounts/login.html')
 
 
 def logout_view(request):
+    if request.user.is_authenticated:
+        AuditLogService.log(
+            action_type='AUTH_LOGOUT',
+            module='accounts',
+            actor=request.user,
+            target_user=request.user,
+            description=f"تسجيل خروج للمستخدم: {request.user.name or request.user.username} ({request.user.email})",
+            status='SUCCESS',
+            request=request
+        )
     logout(request)
     messages.info(request, "تم تسجيل الخروج بنجاح.")
     return redirect('login')
@@ -77,6 +111,56 @@ def logout_view(request):
 # ==========================================
 # USERS MANAGEMENT
 # ==========================================
+
+def get_hierarchical_areas(user=None):
+    """
+    Returns main root areas with their subareas prefetched,
+    scoped if the requesting user is a manager.
+    """
+    from master_data.models import Area
+    from accounts.permissions import is_manager_or_higher, get_user_main_areas
+
+    if user and not user.is_superuser and not getattr(user, 'is_super_admin', False):
+        if is_manager_or_higher(user):
+            main_areas_qs = get_user_main_areas(user)
+        else:
+            main_areas_qs = Area.objects.none()
+    else:
+        main_areas_qs = Area.objects.filter(parent__isnull=True)
+
+    return main_areas_qs.prefetch_related('subareas').order_by('name')
+
+
+def validate_assigned_areas_for_user(request_user, area_ids):
+    """
+    Validates submitted area IDs:
+    - Verifies all IDs exist in the database (rejects invalid/bogus IDs).
+    - If request_user is a manager (not superadmin), ensures all submitted IDs belong to the manager's authorized main areas.
+    """
+    from master_data.models import Area
+    from accounts.permissions import get_user_managed_areas
+
+    if not area_ids:
+        return True, "", []
+
+    cleaned_ids = []
+    for aid in area_ids:
+        try:
+            cleaned_ids.append(int(aid))
+        except (ValueError, TypeError):
+            return False, "توجد معرفات مناطق غير صالحة.", []
+
+    valid_count = Area.objects.filter(id__in=cleaned_ids).count()
+    if valid_count != len(set(cleaned_ids)):
+        return False, "توجد مناطق جغرافية غير صالحة أو غير موجودة بالنظام.", []
+
+    if not request_user.is_superuser and not getattr(request_user, 'is_super_admin', False):
+        managed_area_ids = set(get_user_managed_areas(request_user).values_list('id', flat=True))
+        if not set(cleaned_ids).issubset(managed_area_ids):
+            return False, "لا تمتلك الصلاحية لتعيين مناطق جغرافية خارج نطاق مسؤوليتك الإدارية المعتمدة.", []
+
+    return True, "", cleaned_ids
+
 
 @login_required
 @require_permission('users:users/list')
@@ -119,7 +203,8 @@ def users_list(request):
 
     paginator, page_obj = paginate_queryset(request, users_qs, default_per_page=25)
 
-    roles = Role.objects.filter(is_active=True).order_by('display_name')
+    roles = Role.get_supported_roles()
+    hierarchical_areas = get_hierarchical_areas(request.user)
     areas = Area.objects.all().order_by('name')
 
     context = {
@@ -128,6 +213,7 @@ def users_list(request):
         'paginator': paginator,
         'roles': roles,
         'areas': areas,
+        'hierarchical_areas': hierarchical_areas,
         'query': query,
         'role_filter': role_filter,
         'status_filter': status_filter,
@@ -141,6 +227,7 @@ def users_list(request):
 def user_create(request):
     """
     Handles user creation with privilege escalation safeguards and audit logging.
+    Strictly restricts role assignment to the 5 supported canonical roles.
     """
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -159,10 +246,9 @@ def user_create(request):
             messages.error(request, f"البريد الإلكتروني '{email}' مسجل بالفعل لمستخدم آخر.")
             return redirect('users_list')
 
-        try:
-            role = Role.objects.get(pk=role_id)
-        except Role.DoesNotExist:
-            messages.error(request, "الدور الوظيفي المحدد غير موجود.")
+        role = Role.get_supported_roles().filter(pk=role_id).first() or Role.objects.filter(pk=role_id, is_active=True).first()
+        if not role:
+            messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
             return redirect('users_list')
 
         # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
@@ -182,20 +268,28 @@ def user_create(request):
             locale='ar'
         )
 
-        # Handle areas if provided
+        # Handle areas if provided with strict backend validation
         area_ids = request.POST.getlist('assigned_areas')
         if area_ids:
-            user.assigned_areas.set(area_ids)
+            is_valid, err_msg, cleaned_ids = validate_assigned_areas_for_user(request.user, area_ids)
+            if not is_valid:
+                messages.error(request, err_msg)
+                return redirect('users_list')
+            user.assigned_areas.set(cleaned_ids)
 
         # Record Security Audit Log
-        SecurityAuditLog.objects.create(
-            actor=request.user,
+        AuditLogService.log(
             action_type='USER_CREATED',
+            module='accounts',
+            actor=request.user,
             target_user=user,
             target_role=role,
+            record_id=user.id,
+            record_name=user.name,
+            new_values={'name': user.name, 'email': user.email, 'role': role.display_name, 'code': user.code},
             description=f"إنشاء حساب مستخدم جديد: {user.name} ({user.email}) وتعيين الدور: {role.display_name}",
-            ip_address=_get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            status='SUCCESS',
+            request=request,
         )
 
         messages.success(request, f"تم إنشاء حساب المستخدم '{user.name}' بنجاح.")
@@ -241,6 +335,15 @@ def user_edit(request, pk):
                 messages.error(request, "لا يمكن تعطيل مدير النظام الأعلى الأخير للنظام لمنع قفل النظام!")
                 return redirect('user_edit', pk=pk)
 
+        old_values = {
+            'name': target_user.name,
+            'email': target_user.email,
+            'role': target_user.role.display_name if target_user.role else 'بدون دور',
+            'is_active': target_user.is_active,
+            'code': target_user.code,
+            'mobile': target_user.mobile,
+        }
+
         old_role = target_user.role
         target_user.name = name
         target_user.email = email
@@ -250,15 +353,15 @@ def user_edit(request, pk):
         target_user.is_active = is_active
 
         if role_id:
-            try:
-                new_role = Role.objects.get(pk=role_id)
-                # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
-                if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
-                    messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
-                    return redirect('user_edit', pk=pk)
-                target_user.role = new_role
-            except Role.DoesNotExist:
-                pass
+            new_role = Role.get_supported_roles().filter(pk=role_id).first() or Role.objects.filter(pk=role_id, is_active=True).first()
+            if not new_role:
+                messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
+                return redirect('user_edit', pk=pk)
+            # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
+            if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
+                messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
+                return redirect('user_edit', pk=pk)
+            target_user.role = new_role
         else:
             if not target_user.is_superuser:
                 target_user.role = None
@@ -266,30 +369,52 @@ def user_edit(request, pk):
         target_user.save()
         target_user.clear_perm_cache()
 
-        # Update assigned areas
+        # Update assigned areas with strict backend validation
         area_ids = request.POST.getlist('assigned_areas')
-        target_user.assigned_areas.set(area_ids)
+        is_valid, err_msg, cleaned_ids = validate_assigned_areas_for_user(request.user, area_ids)
+        if not is_valid:
+            messages.error(request, err_msg)
+            return redirect('user_edit', pk=pk)
+        target_user.assigned_areas.set(cleaned_ids)
 
-        # Record Security Audit Log
-        SecurityAuditLog.objects.create(
-            actor=request.user,
+        new_values = {
+            'name': target_user.name,
+            'email': target_user.email,
+            'role': target_user.role.display_name if target_user.role else 'بدون دور',
+            'is_active': target_user.is_active,
+            'code': target_user.code,
+            'mobile': target_user.mobile,
+        }
+
+        # Record Security Audit Log with previous and new values
+        AuditLogService.log(
             action_type='USER_UPDATED',
+            module='accounts',
+            actor=request.user,
             target_user=target_user,
             target_role=target_user.role,
+            record_id=target_user.id,
+            record_name=target_user.name,
+            previous_values=old_values,
+            new_values=new_values,
             description=f"تحديث بيانات المستخدم: {target_user.name} (الدور السابق: {old_role}, الدور الجديد: {target_user.role}, الحالة: {'مفعل' if is_active else 'معطل'})",
-            ip_address=_get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            status='SUCCESS',
+            request=request,
         )
 
         messages.success(request, f"تم تحديث بيانات المستخدم '{target_user.name}' بنجاح.")
         return redirect('users_list')
 
-    roles = Role.objects.filter(is_active=True).order_by('display_name')
+    roles = Role.get_supported_roles()
+    hierarchical_areas = get_hierarchical_areas(request.user)
+    selected_area_ids = list(target_user.assigned_areas.values_list('id', flat=True))
     areas = Area.objects.all().order_by('name')
     return render(request, 'accounts/user_edit.html', {
         'target_user': target_user,
         'roles': roles,
         'areas': areas,
+        'hierarchical_areas': hierarchical_areas,
+        'selected_area_ids': selected_area_ids,
     })
 
 
@@ -321,13 +446,16 @@ def user_reset_password(request, pk):
         target_user.save()
 
         # Record Security Audit Log
-        SecurityAuditLog.objects.create(
-            actor=request.user,
+        AuditLogService.log(
             action_type='USER_PASSWORD_RESET',
+            module='accounts',
+            actor=request.user,
             target_user=target_user,
+            record_id=target_user.id,
+            record_name=target_user.name,
             description=f"إعادة تعيين كلمة المرور للمستخدم: {target_user.name} ({target_user.email})",
-            ip_address=_get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            status='SUCCESS',
+            request=request,
         )
 
         messages.success(request, f"تم تغيير كلمة المرور للمستخدم '{target_user.name}' بنجاح.")
@@ -351,6 +479,7 @@ def user_toggle_status(request, pk):
                 messages.error(request, "لا يمكن تعطيل حساب مدير النظام الأعلى الوحيد في النظام!")
                 return redirect('users_list')
 
+    prev_status = target_user.is_active
     target_user.is_active = not target_user.is_active
     target_user.save()
     target_user.clear_perm_cache()
@@ -358,13 +487,18 @@ def user_toggle_status(request, pk):
     status_str = "تفعيل" if target_user.is_active else "تعطيل"
 
     # Record Security Audit Log
-    SecurityAuditLog.objects.create(
-        actor=request.user,
+    AuditLogService.log(
         action_type='USER_STATUS_TOGGLED',
+        module='accounts',
+        actor=request.user,
         target_user=target_user,
+        record_id=target_user.id,
+        record_name=target_user.name,
+        previous_values={'is_active': prev_status},
+        new_values={'is_active': target_user.is_active},
         description=f"{status_str} حساب المستخدم: {target_user.name} ({target_user.email})",
-        ip_address=_get_client_ip(request),
-        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        status='SUCCESS',
+        request=request,
     )
 
     messages.success(request, f"تم {status_str} حساب المستخدم '{target_user.name}' بنجاح.")
@@ -758,46 +892,184 @@ def role_delete(request, pk):
 # ==========================================
 # SECURITY AUDIT LOGS (SUPERADMIN ONLY)
 # ==========================================
+# AUDIT LOGS MANAGEMENT
+# ==========================================
 
 @login_required
-@require_super_admin()
+@require_permission(['settings:auditLogs/view', 'settings:rbac/view'])
 def audit_logs_list(request):
     """
-    Audit history for security-sensitive administrative operations.
-    Filterable by action_type, search query, and date range.
+    Comprehensive Audit history for all ERP operations:
+    Filterable by module, action_type, actor/user, search query (records, IDs, names), and date range.
+    Includes previous and new value tracking with server-side pagination.
     """
+    from datetime import datetime, time
+    from django.utils import timezone
+
+    module_filter = request.GET.get('module', '').strip()
     action_filter = request.GET.get('action', '').strip()
+    user_filter = request.GET.get('user', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
     query = request.GET.get('q', '').strip()
 
     logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
 
+    if module_filter:
+        logs_qs = logs_qs.filter(module=module_filter)
+
     if action_filter:
         logs_qs = logs_qs.filter(action_type=action_filter)
+
+    if user_filter and user_filter.isdigit():
+        logs_qs = logs_qs.filter(actor_id=int(user_filter))
+
+    if date_from:
+        try:
+            df = datetime.strptime(date_from, '%Y-%m-%d')
+            df_aware = timezone.make_aware(datetime.combine(df.date(), time.min))
+            logs_qs = logs_qs.filter(created_at__gte=df_aware)
+        except (ValueError, TypeError):
+            pass
+
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, '%Y-%m-%d')
+            dt_aware = timezone.make_aware(datetime.combine(dt.date(), time.max))
+            logs_qs = logs_qs.filter(created_at__lte=dt_aware)
+        except (ValueError, TypeError):
+            pass
 
     if query:
         logs_qs = logs_qs.filter(
             Q(description__icontains=query) |
+            Q(record_id__icontains=query) |
+            Q(record_name__icontains=query) |
             Q(actor__name__icontains=query) |
-            Q(actor__email__icontains=query) |
+            Q(actor__username__icontains=query) |
             Q(target_user__name__icontains=query) |
             Q(ip_address__icontains=query)
         )
 
     active_filters = []
+    if module_filter:
+        mod_dict = dict(SecurityAuditLog.MODULE_CHOICES)
+        active_filters.append({'label': 'الموديول', 'value': mod_dict.get(module_filter, module_filter), 'param': 'module'})
     if action_filter:
-        action_dict = dict(SecurityAuditLog.ACTION_CHOICES)
-        active_filters.append({'label': 'نوع العملية', 'value': action_dict.get(action_filter, action_filter), 'param': 'action'})
+        action_lbl = SecurityAuditLog.get_label_for_action(action_filter)
+        active_filters.append({'label': 'نوع العملية', 'value': action_lbl, 'param': 'action'})
+    if user_filter and user_filter.isdigit():
+        u_obj = User.objects.filter(pk=int(user_filter)).first()
+        if u_obj:
+            active_filters.append({'label': 'المستخدم', 'value': u_obj.name or u_obj.username, 'param': 'user'})
+    if date_from:
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+    if date_to:
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
     if query:
         active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
 
     paginator, page_obj = paginate_queryset(request, logs_qs, default_per_page=25)
 
+    all_users = User.objects.filter(is_active=True).order_by('name')
+
     return render(request, 'accounts/audit_logs.html', {
         'logs': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
+        'module_choices': SecurityAuditLog.MODULE_CHOICES,
         'action_choices': SecurityAuditLog.ACTION_CHOICES,
+        'module_filter': module_filter,
         'action_filter': action_filter,
+        'user_filter': user_filter,
+        'date_from': date_from,
+        'date_to': date_to,
         'query': query,
         'active_filters': active_filters,
+        'users': all_users,
     })
+
+
+@login_required
+@require_permission(['settings:auditLogs/view', 'settings:rbac/view'])
+def audit_log_detail(request, pk):
+    """JSON API endpoint returning comprehensive details and diffs for an audit entry."""
+    log = get_object_or_404(SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role'), pk=pk)
+    log_data = {
+        'id': log.id,
+        'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'module': log.module,
+        'module_display': log.get_module_display(),
+        'action_type': log.action_type,
+        'action_type_display': log.get_action_type_display(),
+        'action_type_display_en': log.get_action_type_display(lang='en'),
+        'actor': log.actor.name or log.actor.username if log.actor else 'النظام تلقائياً',
+        'record_id': log.record_id,
+        'record_name': log.record_name,
+        'description': log.description,
+        'status': log.status,
+        'reason': log.reason,
+        'ip_address': log.ip_address or '–',
+        'user_agent': log.user_agent or '–',
+        'previous_values': log.previous_values,
+        'new_values': log.new_values,
+    }
+    return JsonResponse({
+        'success': True,
+        'log': log_data,
+        **log_data,
+    })
+
+
+# ==========================================
+# USERS SETTINGS (SUPERADMIN ONLY)
+# ==========================================
+
+@login_required
+@require_super_admin()
+def users_settings_view(request):
+    """
+    Users Settings view:
+    Controls automated provisioning of representative warehouses and treasuries.
+    Includes toggle controls, explicit business rules documentation, and interactive backfill execution.
+    Restricted strictly to authorized SuperAdmins.
+    """
+    from accounts.models import UserSettings
+    from accounts.services import is_representative
+    from django.core.management import call_command
+    import io
+
+    settings_obj = UserSettings.get_settings()
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'save_settings')
+
+        if action == 'save_settings':
+            settings_obj.auto_create_rep_warehouse = bool(request.POST.get('auto_create_rep_warehouse') == '1')
+            settings_obj.auto_create_rep_treasury = bool(request.POST.get('auto_create_rep_treasury') == '1')
+            settings_obj.save()
+            messages.success(request, "تم حفظ إعدادات إنشاء المخازن والخزائن للمندوبين بنجاح.")
+            return redirect('users_settings')
+
+        elif action == 'run_backfill':
+            out = io.StringIO()
+            call_command('backfill_representative_resources', stdout=out)
+            messages.success(request, "تم تشغيل المعالجة الاسترجاعية (Backfill) وتحديث موارد المندوبين بنجاح.")
+            return redirect('users_settings')
+
+    # Status summary
+    active_users = User.objects.filter(is_active=True).select_related('role').prefetch_related('assigned_areas')
+    reps = [u for u in active_users if is_representative(u)]
+    reps_with_wh = [u for u in reps if u.get_default_warehouse() is not None]
+    reps_with_vault = [u for u in reps if u.get_default_treasury() is not None]
+
+    context = {
+        'settings': settings_obj,
+        'total_reps_count': len(reps),
+        'reps_with_wh_count': len(reps_with_wh),
+        'reps_missing_wh_count': len(reps) - len(reps_with_wh),
+        'reps_with_vault_count': len(reps_with_vault),
+        'reps_missing_vault_count': len(reps) - len(reps_with_vault),
+        'reps': reps,
+    }
+    return render(request, 'accounts/users_settings.html', context)

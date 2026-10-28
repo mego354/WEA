@@ -93,13 +93,24 @@
                 </button>
             {% endif %}
 
+            <!-- Start Visit Button (planned + approved only) -->
+            {% if can_start_visit %}
+            <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">play_circle</span>
+                    <span>بدء الزيارة الآن</span>
+                </button>
+            </form>
+            {% endif %}
+
             <!-- Send to Agenda Action (Requires Approval First) -->
             {% if is_in_agenda %}
             <a href="{% url 'agenda' %}?date={{ visit.date|date:'Y-m-d' }}&assignee={{ visit.owner_id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-50 border border-teal-200 text-teal-800 hover:bg-teal-100 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]" title="تمت إضافة الزيارة مسبقاً لجدول الأعمال">
                 <span class="material-symbols-outlined text-base text-teal-600">event_available</span>
                 <span>معاينة في جدول الأعمال</span>
             </a>
-            {% elif visit.approval_status == 'approved' %}
+            {% elif visit.approval_status == 'approved' and visit.status == 'finished' %}
             <form method="POST" action="{% url 'visit_action' visit.pk 'send_to_agenda' %}" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]" title="إرسال هذه الزيارة المعتمدة إلى جدول أعمال المندوب">
@@ -107,11 +118,6 @@
                     <span>إرسال إلى جدول الأعمال</span>
                 </button>
             </form>
-            {% else %}
-            <button type="button" onclick="showUnapprovedAlert()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px] cursor-not-allowed" title="يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال">
-                <span class="material-symbols-outlined text-base">lock</span>
-                <span>إرسال إلى جدول الأعمال (يتطلب الاعتماد)</span>
-            </button>
             {% endif %}
 
             {% if can_resubmit %}
@@ -165,7 +171,47 @@
     </div>
     {% endif %}
 
-    <!-- Active In-Progress Banner (Requirement 4: Create First, Answer Later) -->
+    <!-- Planned (Awaiting Approval) Banner -->
+    {% if visit.status == 'planned' and visit.approval_status == 'pending' %}
+    <div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 sm:p-5 text-amber-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">hourglass_top</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-amber-800">الزيارة في انتظار اعتماد المدير</h3>
+                <p class="text-xs text-amber-700 mt-0.5">تم إنشاء الزيارة بنجاح وهي بانتظار اعتماد المدير المسؤول. بعد الاعتماد يمكنك بدء الزيارة.</p>
+            </div>
+        </div>
+        <span class="px-3 py-1 rounded-full text-xs font-black bg-amber-200 text-amber-800">قيد الاعتماد</span>
+    </div>
+    {% endif %}
+
+    <!-- Planned (Approved, Ready to Start) Banner -->
+    {% if visit.status == 'planned' and visit.approval_status == 'approved' %}
+    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">check_circle</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold">الزيارة معتمدة — جاهزة للبدء</h3>
+                <p class="text-xs text-white/90 mt-0.5">تمت الموافقة على الزيارة. اضغط زر «بدء الزيارة الآن» لتسجيل وقت البدء والانتقال إلى الاستبيان.</p>
+            </div>
+        </div>
+        {% if can_start_visit %}
+        <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" class="inline shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white text-teal-700 hover:bg-white/90 text-sm font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">play_circle</span>
+                <span>بدء الزيارة الآن</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Active In-Progress Banner -->
     {% if visit.status == 'started' %}
     <div class="bg-gradient-to-r from-teal-500 to-[#27bebe] rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-center gap-3">
@@ -173,8 +219,8 @@
                 <span class="material-symbols-outlined text-2xl">pending_actions</span>
             </div>
             <div>
-                <h3 class="text-sm font-bold">الزيارة جارية وقيد التوثيق (مسودة)</h3>
-                <p class="text-xs text-white/90">تم إنشاء سجل الزيارة بنجاح. يرجى استكمال إجابات الاستبيان، والتقاط صورة الموقع، ثم إنهاء الزيارة.</p>
+                <h3 class="text-sm font-bold">الزيارة جارية وقيد التوثيق والإنهاء</h3>
+                <p class="text-xs text-white/90">يرجى استكمال إجابات الاستبيان، والتقاط صورة الموقع، ثم إنهاء الزيارة.</p>
             </div>
         </div>
         <div class="flex items-center gap-2 self-end sm:self-center">
@@ -238,6 +284,43 @@
                     {% endif %}
                 </div>
             </div>
+
+            <!-- PLANNED STATE GUIDANCE (When status == 'planned') -->
+            {% if visit.status == 'planned' %}
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs text-center space-y-4">
+                <div class="w-16 h-16 rounded-full bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center mx-auto">
+                    <span class="material-symbols-outlined text-3xl">{% if visit.approval_status == 'approved' %}play_circle{% else %}hourglass_top{% endif %}</span>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">
+                        {% if visit.approval_status == 'approved' %}
+                        الزيارة جاهزة للبدء
+                        {% else %}
+                        الزيارة في انتظار اعتماد المشرف / المدير
+                        {% endif %}
+                    </h3>
+                    <p class="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                        {% if visit.approval_status == 'approved' %}
+                        تم اعتماد الزيارة رسمياً. انقر على زر «بدء الزيارة الآن» لتسجيل الحضور وتفعيل الاستبيان وتوثيق شرح المنتجات.
+                        {% else %}
+                        يتطلب نظام العمل الموحد اعتماد الزيارة من المدير المسؤول قبل بدئها. سيتم إشعارك فور الاعتماد لتتمكن من بدء الزيارة.
+                        {% endif %}
+                    </p>
+                </div>
+
+                {% if can_start_visit %}
+                <div class="pt-2">
+                    <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+                            <span class="material-symbols-outlined text-base">play_circle</span>
+                            <span>بدء الزيارة وتسجيل الحضور الآن</span>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <!-- INTERACTIVE QUESTIONNAIRE & COMPLETION FORM (When status == 'started') -->
             {% if visit.status == 'started' %}
@@ -818,7 +901,7 @@
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">المدة:</span>
-                        <span class="font-mono font-bold text-slate-800">{{ visit.duration|default:0 }} ثانية</span>
+                        <span class="font-bold text-slate-800">{{ visit.duration_formatted }}{% if visit.duration > 0 %} <span class="text-slate-400 font-normal text-xs">({{ visit.duration }} ثانية)</span>{% endif %}</span>
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">وقت البدء:</span>

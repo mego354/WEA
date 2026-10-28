@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path('', views.home_view, name='home'),
     path('settings/', lambda request: redirect('users_list'), name='settings_root'),
+    path('settings/users/', lambda request: redirect('users_settings'), name='settings_users_redirect'),
 
     # Company Branding
     path('settings/branding/', views.branding_settings_view, name='branding_settings'),
@@ -48,8 +49,7 @@ urlpatterns = [
     path('settings/purchase/', views.purchase_settings_view, name='purchase_settings'),
     path('settings/inventory/', views.inventory_settings_view, name='inventory_settings'),
 
-    # Custom Fields & Data Sync
-    path('settings/contacts-udf/', views.contacts_udf_view, name='contacts_udf'),
+    # Data Sync
     path('settings/sync-data/', views.sync_data_view, name='sync_data'),
     path('settings/sync-data/<str:sync_type>/sync/', views.sync_data_trigger, name='sync_data_trigger'),
 ]

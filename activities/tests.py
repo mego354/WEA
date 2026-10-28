@@ -160,9 +160,17 @@ class ActivitiesModuleTestCase(TestCase):
         self.assertEqual(visit_res.status_code, 302)
 
         item.refresh_from_db()
-        self.assertTrue(item.is_executed)
+        self.assertFalse(item.is_executed)
         self.assertIsNotNone(item.visit)
         self.assertTrue(item.visit.is_planned)
+
+        # Approve, start and finish the visit to complete execution
+        item.visit.approval_status = 'approved'
+        item.visit.save(update_fields=['approval_status'])
+        self.client.post(reverse('visit_action', args=[item.visit.pk, 'start']))
+        self.client.post(reverse('visit_action', args=[item.visit.pk, 'end']))
+        item.refresh_from_db()
+        self.assertTrue(item.is_executed)
 
         # 4. Export Planned Visits
         export_res = self.client.get(reverse('planned_visits_export'))
@@ -740,10 +748,8 @@ class VisitTemplatesManagementTestCase(TestCase):
             name='single_visit_dr_test',
             display_name_ar='زيارة فردية لطبيب (اختبار)',
             display_name_en='Single visit (DR) Test',
-            mode='checkin_checkout',
-            allow_unplanned=True,
-            auto_approve_unplanned=False,
-            enable_product_detailing=True,
+                        allow_unplanned=True,
+                        enable_product_detailing=True,
             restrict_account_types=['clinic', 'hospital'],
             active=True
         )
@@ -784,35 +790,32 @@ class VisitTemplatesManagementTestCase(TestCase):
             'display_name_ar': 'قالب صيدلية جديد',
             'display_name_en': 'New Pharmacy Template',
             'name': 'pharmacy_new_test',
-            'mode': 'checkin_checkout',
             'active': 'on',
             'allow_unplanned': 'on',
             'enable_product_detailing': 'on',
-            'visit_outcome_mode': 'enabled',
             'special_tolerance': 300,
-            'restrict_account_types': ['pharmacy']
+            'restrict_account_types': ['pharmacy'],
+            'restricted_roles': [str(self.rep_role.id)]
         })
         self.assertEqual(create_res.status_code, 302)
         new_tmpl = VisitTemplate.objects.filter(name='pharmacy_new_test').first()
         self.assertIsNotNone(new_tmpl)
         self.assertEqual(new_tmpl.display_name_ar, 'قالب صيدلية جديد')
         self.assertEqual(new_tmpl.restrict_account_types, ['pharmacy'])
+        self.assertIn(self.rep_role, new_tmpl.restricted_roles.all())
 
         # Edit
         edit_res = self.client.post(reverse('visit_template_edit', args=[new_tmpl.pk]), {
             'display_name_ar': 'قالب صيدلية محدث',
             'display_name_en': 'Updated Pharmacy Template',
             'name': 'pharmacy_new_test',
-            'mode': 'normal',
             'active': 'on',
-            'visit_outcome_mode': 'enabled',
             'special_tolerance': 400,
             'restrict_account_types': ['pharmacy', 'store']
         })
         self.assertEqual(edit_res.status_code, 302)
         new_tmpl.refresh_from_db()
         self.assertEqual(new_tmpl.display_name_ar, 'قالب صيدلية محدث')
-        self.assertEqual(new_tmpl.mode, 'normal')
         self.assertIn('store', new_tmpl.restrict_account_types)
 
     def test_template_preview_view(self):
@@ -935,10 +938,8 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         self.tmpl_dr = VisitTemplate.objects.create(
             name='single_visit_dr_wf',
             display_name_ar='زيارة فردية لطبيب',
-            mode='checkin_checkout',
-            allow_unplanned=True,
-            auto_approve_unplanned=True,
-            enable_product_detailing=True,
+                        allow_unplanned=True,
+                        enable_product_detailing=True,
             restrict_account_types=['clinic', 'hospital'],
             active=True
         )
@@ -978,10 +979,8 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         self.tmpl_pharmacy = VisitTemplate.objects.create(
             name='single_visit_pharmacy_wf',
             display_name_ar='زيارة صيدلية',
-            mode='checkin_checkout',
-            allow_unplanned=True,
-            auto_approve_unplanned=False,
-            enable_product_detailing=True,
+                        allow_unplanned=True,
+                        enable_product_detailing=True,
             restrict_account_types=['pharmacy'],
             active=True
         )
@@ -1024,8 +1023,26 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
 
         visit = Visit.objects.filter(contact=self.clinic_customer).first()
         self.assertIsNotNone(visit)
-        # Template has auto_approve_unplanned=True -> should be automatically approved
+        # Superuser creator is auto-approved; status is planned until explicitly started
         self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.status, 'planned')
+
+        # Start visit explicitly
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        # Submit answers and complete visit
+        self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'visit_outcome': 'successful',
+            'feedback': 'زيارة ممتازة ومثمرة',
+            f'question_{self.q_meet.id}': 'Yes',
+            f'question_{self.q_details.id}': 'تمت مناقشة فاعلية الصنف وتأكيد كتابة 5 علب أسبوعياً',
+            'detailed_products': [self.product1.id, self.product2.id],
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
         self.assertEqual(visit.visit_outcome, 'successful')
 
         # Check answers persisted properly in JSON
@@ -1059,6 +1076,13 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         self.assertEqual(create_res.status_code, 302)
         visit = Visit.objects.filter(contact=self.clinic_customer, template=self.tmpl_dr).first()
         self.assertIsNotNone(visit)
+        self.assertEqual(visit.status, 'planned')
+
+        # Approve and start visit
+        visit.approval_status = 'approved'
+        visit.save(update_fields=['approval_status'])
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
         self.assertEqual(visit.status, 'started')
 
         # Step 2: Attempt to complete visit without answering required question q_meet
@@ -1106,11 +1130,23 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         submit_res = self.client.post(reverse('visit_create'), post_data)
         self.assertEqual(submit_res.status_code, 302)
 
-        # Verify plan item executed
+        # Verify plan item is executed only after visit ends
         plan_item.refresh_from_db()
-        self.assertTrue(plan_item.is_executed)
+        self.assertFalse(plan_item.is_executed)
         self.assertIsNotNone(plan_item.visit)
         self.assertEqual(plan_item.visit.is_planned, True)
+
+        # Approve, start, and end visit
+        plan_item.visit.approval_status = 'approved'
+        plan_item.visit.save(update_fields=['approval_status'])
+        self.client.post(reverse('visit_action', args=[plan_item.visit.pk, 'start']))
+        self.client.post(reverse('visit_detail', args=[plan_item.visit.pk]), {
+            'action': 'complete',
+            f'question_{self.q_meet.id}': 'No',
+            f'question_{self.q_reason_not.id}': 'الطبيب في مؤتمر علمي بالخارج',
+        })
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed)
         self.assertEqual(plan_item.visit.questionnaire_answers.get(str(self.q_reason_not.id)), 'الطبيب في مؤتمر علمي بالخارج')
 
 
@@ -1186,8 +1222,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.tmpl_pharmacy_only = VisitTemplate.objects.create(
             name='single_visit_pharmacy',
             display_name_ar='زيارة صيدلية فردية',
-            mode='checkin_checkout',
-            restrict_account_types=['Pharmacy'],
+                        restrict_account_types=['Pharmacy'],
             active=True
         )
         self.q_stock = VisitTemplateQuestion.objects.create(
@@ -1202,8 +1237,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.tmpl_clinics_hospitals = VisitTemplate.objects.create(
             name='single_visit_dr',
             display_name_ar='زيارة فردية لطبيب',
-            mode='checkin_checkout',
-            restrict_account_types=['Clinic', 'Hospital'],
+                        restrict_account_types=['Clinic', 'Hospital'],
             active=True
         )
         self.q_prescribe = VisitTemplateQuestion.objects.create(
@@ -1218,8 +1252,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.tmpl_healthy_day = VisitTemplate.objects.create(
             name='healthy_day',
             display_name_ar='اليوم الصحي',
-            mode='checkin_checkout',
-            restrict_account_types=['Pharmacy', 'Clinic', 'Hospital'],
+                        restrict_account_types=['Pharmacy', 'Clinic', 'Hospital'],
             active=True
         )
 
@@ -1227,8 +1260,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.tmpl_coaching = VisitTemplate.objects.create(
             name='coaching_visit',
             display_name_ar='زيارة مرافقة وتدريب',
-            mode='checkin_checkout',
-            active=True
+                        active=True
         )
 
     # -------------------------------------------------------------------------
@@ -1309,9 +1341,16 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertEqual(create_res.status_code, 302)
         visit = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).first()
         self.assertIsNotNone(visit)
-        self.assertEqual(visit.status, 'started')
+        self.assertEqual(visit.status, 'planned')
         self.assertEqual(visit.approval_status, 'pending')
         self.assertRedirects(create_res, reverse('visit_detail', args=[visit.pk]))
+
+        # Manager approves visit, representative starts visit
+        visit.approval_status = 'approved'
+        visit.save(update_fields=['approval_status'])
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
 
         # Step 2: Open visit detail screen (answering screen)
         detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
@@ -1745,8 +1784,25 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertTrue(v_planned.is_planned)
         self.assertEqual(v_planned.plan_type_display_ar, 'زيارة مخططة')
         plan_item.refresh_from_db()
-        self.assertTrue(plan_item.is_executed)
+        self.assertFalse(plan_item.is_executed, "Planned item is not executed until visit is completed")
         self.assertEqual(plan_item.visit, v_planned)
+
+        # Complete visit -> plan item becomes executed
+        v_planned.approval_status = 'approved'
+        v_planned.questionnaire_answers = {str(self.q_stock.id): 'Yes'}
+        v_planned.save(update_fields=['approval_status', 'questionnaire_answers'])
+        self.client.post(reverse('visit_action', args=[v_planned.pk, 'start']), {
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+            'device_accuracy': '10.0'
+        })
+        self.client.post(reverse('visit_action', args=[v_planned.pk, 'end']), {
+            'latitude': '31.2001',
+            'longitude': '29.9187',
+            'device_accuracy': '10.0'
+        })
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed)
 
         # 2. Unplanned visit creation directly at /visits/create/
         create_unplanned_page = self.client.get(reverse('visit_create'))

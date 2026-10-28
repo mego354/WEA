@@ -70,13 +70,14 @@
                     {{ total_count }} سند
                 </span>
             </h2>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <a href="{% url 'vendor_payments_export' %}?supplier={{ selected_supplier_id|default:'' }}"
                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
                    title="تصدير إلى Excel (.xlsx)">
                     <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
                     <span>تصدير إلى Excel</span>
                 </a>
+                {% include 'components/table_column_picker.html' with table_id='vendor_payments_table' %}
                 <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
                     <span class="material-symbols-outlined text-base">add</span>
                     <span>سند صرف جديد</span>
@@ -84,30 +85,30 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="vendor_payments_table" data-col-table="vendor_payments_table" class="min-w-[850px] w-full text-right text-sm">
                 <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-4">رقم السند</th>
-                        <th class="py-3 px-4">المورد</th>
-                        <th class="py-3 px-4">تاريخ الصرف</th>
-                        <th class="py-3 px-4">المبلغ المسدد</th>
-                        <th class="py-3 px-4">وسيلة الدفع</th>
-                        <th class="py-3 px-4">الخزنة</th>
-                        <th class="py-3 px-4">المرجع</th>
-                        <th class="py-3 px-4">المسئول</th>
-                        <th class="py-3 px-4">الحالة</th>
+                        <th data-col="serial_num" data-col-label="رقم السند" data-col-required="true" class="py-3 px-4">رقم السند</th>
+                        <th data-col="supplier" data-col-label="المورد" data-col-required="true" class="py-3 px-4">المورد</th>
+                        <th data-col="payment_date" data-col-label="تاريخ الصرف" class="py-3 px-4">تاريخ الصرف</th>
+                        <th data-col="amount" data-col-label="المبلغ المسدد" class="py-3 px-4">المبلغ المسدد</th>
+                        <th data-col="payment_method" data-col-label="وسيلة الدفع" class="py-3 px-4">وسيلة الدفع</th>
+                        <th data-col="vault" data-col-label="الخزنة" class="py-3 px-4">الخزنة</th>
+                        <th data-col="reference_number" data-col-label="المرجع" class="py-3 px-4">المرجع</th>
+                        <th data-col="created_by" data-col-label="المسئول" class="py-3 px-4">المسئول</th>
+                        <th data-col="status" data-col-label="الحالة" data-col-required="true" class="py-3 px-4">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for p in payments %}
                     <tr class="hover:bg-slate-50/70">
-                        <td class="py-3.5 px-4 font-mono font-bold text-brand-700">#{{ p.serial_num }}</td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">{{ p.supplier.name }}</td>
-                        <td class="py-3.5 px-4 text-xs text-slate-500 font-mono">{{ p.payment_date|date:"Y-m-d" }}</td>
-                        <td class="py-3.5 px-4 font-black text-slate-900 text-sm">{{ p.amount|intcomma }} ج.م</td>
-                        <td class="py-3.5 px-4 text-xs font-semibold">{{ p.get_payment_method_display }}</td>
-                        <td class="py-3.5 px-4 text-xs text-slate-700">{{ p.vault.name }}</td>
+                        <td data-col="serial_num" class="py-3.5 px-4 font-mono font-bold text-brand-700">#{{ p.serial_num }}</td>
+                        <td data-col="supplier" class="py-3.5 px-4 font-bold text-slate-900">{{ p.supplier.name }}</td>
+                        <td data-col="payment_date" class="py-3.5 px-4 text-xs text-slate-500 font-mono">{{ p.payment_date|date:"Y-m-d" }}</td>
+                        <td data-col="amount" class="py-3.5 px-4 font-black text-slate-900 text-sm">{{ p.amount|intcomma }} ج.م</td>
+                        <td data-col="payment_method" class="py-3.5 px-4 text-xs font-semibold">{{ p.get_payment_method_display }}</td>
+                        <td data-col="vault" class="py-3.5 px-4 text-xs text-slate-700">{{ p.vault.name }}</td>
                         <td class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ p.reference_number|default:"-" }}</td>
                         <td class="py-3.5 px-4 text-xs">{{ p.created_by.name|default:p.created_by.username }}</td>
                         <td class="py-3.5 px-4">

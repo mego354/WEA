@@ -54,6 +54,9 @@
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
 
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='products_table' %}
+
             <!-- Create Product Button -->
             <a href="{% url 'product_create' %}"
                class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
@@ -68,25 +71,25 @@
 
     <!-- Products Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="products_table" data-col-table="products_table" class="min-w-[850px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4">الاسم</th>
-                        <th class="py-3.5 px-4">الكود</th>
-                        <th class="py-3.5 px-4">التصنيف</th>
-                        <th class="py-3.5 px-4">السعر</th>
-                        <th class="py-3.5 px-4">قيمة الضريبة</th>
-                        <th class="py-3.5 px-4 text-center">متاح للبيع</th>
-                        <th class="py-3.5 px-4">باركود</th>
-                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3.5 px-4">الاسم</th>
+                        <th data-col="code" data-col-label="الكود" data-required="true" class="py-3.5 px-4">الكود</th>
+                        <th data-col="category" data-col-label="التصنيف" class="py-3.5 px-4">التصنيف</th>
+                        <th data-col="price" data-col-label="السعر" class="py-3.5 px-4">السعر</th>
+                        <th data-col="tax" data-col-label="قيمة الضريبة" class="py-3.5 px-4">قيمة الضريبة</th>
+                        <th data-col="sellable" data-col-label="متاح للبيع" class="py-3.5 px-4 text-center">متاح للبيع</th>
+                        <th data-col="barcode" data-col-label="باركود" class="py-3.5 px-4">باركود</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for p in products %}
                     <tr class="hover:bg-slate-50/80 transition-colors group">
                         <!-- Name with Thumbnail preview -->
-                        <td class="py-3.5 px-4">
+                        <td data-col="name" class="py-3.5 px-4">
                             <div class="flex items-center gap-3">
                                 {% if p.thumbnail %}
                                 <img src="{{ p.thumbnail.url }}" alt="{{ p.name }}" class="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0">
@@ -107,29 +110,29 @@
                         </td>
 
                         <!-- Code / SKU -->
-                        <td class="py-3.5 px-4 font-mono font-bold text-slate-700">
+                        <td data-col="code" class="py-3.5 px-4 font-mono font-bold text-slate-700">
                             {{ p.sku_code }}
                         </td>
 
                         <!-- Category -->
-                        <td class="py-3.5 px-4">
+                        <td data-col="category" class="py-3.5 px-4">
                             <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
                                 {{ p.category.name|default:"WEA" }}
                             </span>
                         </td>
 
                         <!-- Price -->
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="price" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ p.retail_price|intcomma }} جنيه
                         </td>
 
                         <!-- Tax -->
-                        <td class="py-3.5 px-4 font-mono text-slate-600">
+                        <td data-col="tax" class="py-3.5 px-4 font-mono text-slate-600">
                             {{ p.tax_percentage }}%
                         </td>
 
                         <!-- Sellable -->
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="sellable" class="py-3.5 px-4 text-center">
                             {% if p.sellable %}
                             <span class="material-symbols-outlined text-emerald-600 text-base" title="متاح للبيع">check_circle</span>
                             {% else %}
@@ -138,12 +141,12 @@
                         </td>
 
                         <!-- Barcode -->
-                        <td class="py-3.5 px-4 font-mono text-slate-500">
+                        <td data-col="barcode" class="py-3.5 px-4 font-mono text-slate-500">
                             {{ p.barcode|default:"—" }}
                         </td>
 
                         <!-- Actions Dropdown -->
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
                             <div class="relative inline-block text-right">
                                 <button type="button" onclick="toggleActionMenu('action-{{ p.id }}')"
                                         class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">

@@ -36,6 +36,11 @@ class CustomUserChangeForm(UserChangeForm):
         model = User
         fields = '__all__'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'role' in self.fields:
+            self.fields['role'].queryset = Role.get_supported_roles()
+
     def clean(self):
         cleaned_data = super().clean()
         new_pw = cleaned_data.get('new_password')
@@ -69,6 +74,8 @@ class CustomUserCreationForm(UserCreationForm):
         super().__init__(*args, **kwargs)
         if 'name' in self.fields:
             self.fields['name'].required = True
+        if 'role' in self.fields:
+            self.fields['role'].queryset = Role.get_supported_roles()
 
 
 @admin.register(RoleTag)
@@ -145,6 +152,11 @@ class UserAdmin(BaseUserAdmin):
         'enable_location_bypass',
         'disable_location_bypass'
     ]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "role":
+            kwargs["queryset"] = Role.get_supported_roles()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     fieldsets = (
         ('معلومات الحساب الأساسية وتغيير كلمة المرور', {

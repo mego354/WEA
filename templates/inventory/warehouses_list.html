@@ -20,10 +20,18 @@
             <h1 class="text-2xl font-black text-slate-900 tracking-tight">إدارة المخازن</h1>
             <p class="text-sm text-slate-500 mt-0.5">مستودعات الشركة ومخازن الفروع وتوزيع المخزون</p>
         </div>
-        <button onclick="toggleModal('new-warehouse-modal')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
-            <span class="material-symbols-outlined text-base">add</span>
-            <span>إضافة مخزن جديد</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'product_transfers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all">
+                <span class="material-symbols-outlined text-base text-slate-600">swap_horiz</span>
+                <span>طلبات التحويل بين المخازن</span>
+            </a>
+            {% if can_manage_warehouses %}
+            <button onclick="toggleModal('new-warehouse-modal')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>إضافة مخزن جديد</span>
+            </button>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Search Toolbar -->
@@ -50,12 +58,19 @@
         <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
             <div class="flex items-start justify-between">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl">warehouse</span>
+                    <div class="w-12 h-12 rounded-xl {% if wh.is_rep_warehouse %}bg-amber-50 text-amber-600{% elif wh.is_main %}bg-blue-50 text-blue-600{% else %}bg-brand-50 text-brand-600{% endif %} flex items-center justify-center">
+                        <span class="material-symbols-outlined text-2xl">{% if wh.is_rep_warehouse %}person_pin{% else %}warehouse{% endif %}</span>
                     </div>
                     <div>
                         <h2 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors">{{ wh.name }}</h2>
-                        <span class="text-xs font-mono font-bold text-slate-400">#{{ wh.code }}</span>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-xs font-mono font-bold text-slate-400">#{{ wh.code }}</span>
+                            {% if wh.is_main %}
+                            <span class="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">رئيسي</span>
+                            {% elif wh.is_rep_warehouse %}
+                            <span class="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">عهدة مندوب</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
                 <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold {% if wh.is_active %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-slate-100 text-slate-500{% endif %}">
@@ -64,20 +79,34 @@
             </div>
 
             <div class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                {% if wh.assigned_user %}
                 <div class="flex items-center justify-between">
-                    <span class="text-slate-400">العنوان:</span>
-                    <span class="font-medium text-slate-700">{{ wh.address|default:"غير محدد" }}</span>
+                    <span class="text-slate-400">المندوب المسئول:</span>
+                    <span class="font-bold text-slate-900">{{ wh.assigned_user.get_full_name|default:wh.assigned_user.username }}</span>
+                </div>
+                {% endif %}
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">المنطقة الرئيسية:</span>
+                    <span class="font-bold text-brand-700">
+                        {% with m_area=wh.main_area %}
+                        {{ m_area.name|default:"عام / غير محدد" }}
+                        {% endwith %}
+                    </span>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-slate-400">أمين المخزن / المدير:</span>
-                    <span class="font-medium text-slate-700">{{ wh.manager.name|default:"غير معين" }}</span>
+                    <span class="text-slate-400">العنوان:</span>
+                    <span class="font-medium text-slate-700 truncate max-w-[180px]">{{ wh.address|default:"غير محدد" }}</span>
                 </div>
             </div>
 
-            <div class="mt-4 pt-3 flex items-center justify-end gap-2">
+            <div class="mt-4 pt-3 flex items-center justify-between border-t border-slate-100">
                 <a href="{% url 'inventory_stock_list' %}?warehouse={{ wh.id }}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
-                    <span>عرض الأرصدة بالمخزن</span>
+                    <span>عرض الأرصدة</span>
                     <span class="material-symbols-outlined text-sm">arrow_left</span>
+                </a>
+                <a href="{% url 'product_transfers_list' %}?search={{ wh.code }}" class="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1">
+                    <span>التحويلات</span>
+                    <span class="material-symbols-outlined text-sm">history</span>
                 </a>
             </div>
         </div>

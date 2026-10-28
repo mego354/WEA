@@ -47,6 +47,9 @@
                 {% endif %}
             </button>
 
+            <!-- Column Visibility Picker -->
+            {% include 'components/table_column_picker.html' with table_id='purchase_returns_table' %}
+
             <!-- New Return Order Button -->
             <a href="{% url 'purchase_return_order_create' %}"
                class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
@@ -61,54 +64,54 @@
 
     <!-- Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="purchase_returns_table" data-col-table="purchase_returns_table" class="min-w-[950px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4">رقم المسلسل</th>
-                        <th class="py-3.5 px-4">الاسم</th>
-                        <th class="py-3.5 px-4">المنطقة</th>
-                        <th class="py-3.5 px-4">انشئ فى</th>
-                        <th class="py-3.5 px-4">المنشئ</th>
-                        <th class="py-3.5 px-4">الحالة</th>
-                        <th class="py-3.5 px-4">اجمالى القيمة</th>
-                        <th class="py-3.5 px-4">مسئول الاستلام</th>
-                        <th class="py-3.5 px-4">وقت الاستلام</th>
+                        <th data-col="order_number" data-col-label="رقم المسلسل" data-col-required="true" class="py-3.5 px-4">رقم المسلسل</th>
+                        <th data-col="supplier" data-col-label="الاسم" data-col-required="true" class="py-3.5 px-4">الاسم</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
+                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4">انشئ فى</th>
+                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4">المنشئ</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4">الحالة</th>
+                        <th data-col="grand_total" data-col-label="اجمالى القيمة" class="py-3.5 px-4">اجمالى القيمة</th>
+                        <th data-col="delivery_agent" data-col-label="مسئول الاستلام" class="py-3.5 px-4">مسئول الاستلام</th>
+                        <th data-col="delivery_time" data-col-label="وقت الاستلام" class="py-3.5 px-4">وقت الاستلام</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for r in returns %}
                     <tr class="hover:bg-slate-50/80 transition-colors cursor-pointer" onclick="window.location='{% url 'purchase_return_order_detail' r.id %}'">
-                        <td class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
+                        <td data-col="order_number" class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
                             {{ r.order_number }}
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="supplier" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ r.supplier.name }}
                             {% if r.purchase_order %}
                             <span class="text-[10px] text-slate-400 block font-normal">عائد على أمر الشراء {{ r.purchase_order.order_number }}</span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600">
+                        <td data-col="area" class="py-3.5 px-4 text-slate-600">
                             {{ r.supplier.area.name|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono">
                             {{ r.created_at|date:"d/m/Y h:i A" }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-700">
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700">
                             {{ r.created_by.get_full_name|default:r.created_by.username|default:"المدير" }}
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="status" class="py-3.5 px-4">
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ r.status_badge_class }}">
                                 {{ r.status_label_ar }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900 font-mono">
+                        <td data-col="grand_total" class="py-3.5 px-4 font-bold text-slate-900 font-mono">
                             {{ r.grand_total|intcomma }} جنيه
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600">
+                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-600">
                             {{ r.delivery_agent|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-500">
+                        <td data-col="delivery_time" class="py-3.5 px-4 text-slate-500">
                             {{ r.delivery_time|default:"—" }}
                         </td>
                     </tr>

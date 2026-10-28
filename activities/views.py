@@ -26,10 +26,14 @@ from .forms import (
     AgreementForm, PlannedVisitItemForm, VisitForm,
     VisitTemplateForm, VisitTemplateQuestionForm
 )
+from django.core.exceptions import ValidationError
 from contacts.models import Contact
 from master_data.models import Area
 from catalog.models import Product
-from .services import verify_visit_location
+from .services import (
+    verify_visit_location, can_start_visit, start_visit,
+    can_submit_answers, save_visit_answers, can_end_visit, end_visit
+)
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, get_user_managed_representatives
@@ -45,6 +49,9 @@ def can_manage_approvals(user, module_type='visits'):
     """
     if not user.is_authenticated:
         return False
+    from accounts.permissions import is_manager_or_higher
+    if is_manager_or_higher(user):
+        return True
     if module_type == 'agreements':
         return has_perm_or_admin(user, 'activities:agreements/approve')
     return has_perm_or_admin(user, 'activities:visits/approve')
@@ -595,12 +602,9 @@ def visit_templates_api(request):
                 'name': tmpl.name,
                 'display_name_ar': tmpl.display_name_ar,
                 'display_name_en': tmpl.display_name_en,
-                'mode': tmpl.mode,
                 'allow_unplanned': tmpl.allow_unplanned,
-                'auto_approve_unplanned': tmpl.auto_approve_unplanned,
                 'enable_product_detailing': tmpl.enable_product_detailing,
                 'supports_product_detailing': tmpl.is_product_detailing_supported(),
-                'visit_outcome_mode': tmpl.visit_outcome_mode,
                 'restrict_account_types': tmpl.restrict_account_types or [],
                 'questions': questions_data
             })
@@ -1066,41 +1070,30 @@ def visit_detail(request, pk):
                     visit.status = 'finished'
                     visit.ended_at = timezone.now()
                     if visit.started_at:
-                        visit.duration = max(60, int((visit.ended_at - visit.started_at).total_seconds()))
+                        visit.duration = max(1, int((visit.ended_at - visit.started_at).total_seconds()))
                     else:
                         visit.started_at = visit.ended_at - datetime.timedelta(minutes=15)
                         visit.duration = 900
 
-                    if visit.approval_status == 'approved':
-                        # Preserve existing manager approval
-                        pass
-                    else:
-                        from master_data.models import LocationSettings
-                        from accounts.permissions import is_manager_or_higher
-                        loc_settings = LocationSettings.get_settings()
-                        if not loc_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
-                            visit.approval_status = 'approved'
-                            visit.approved_by = request.user
-                            visit.approved_at = timezone.now()
-                        elif not visit.is_planned and template and template.auto_approve_unplanned:
-                            visit.approval_status = 'approved'
-                            visit.approved_by = request.user
-                            visit.approved_at = timezone.now()
-                        else:
-                            visit.approval_status = 'pending'
-
                     visit.save()
+
+                    # Mark planned item as executed upon visit completion
+                    planned_item = PlannedVisitItem.objects.filter(visit=visit).first()
+                    if planned_item:
+                        planned_item.is_executed = True
+                        planned_item.save(update_fields=['is_executed'])
+
                     ApprovalAuditLog.objects.create(
                         record_type='visit',
                         visit=visit,
-                        action='submitted',
+                        action='status_changed',
                         actor=request.user,
                         status_before='started',
-                        status_after=visit.approval_status,
-                        reason='تقديم الزيارة بعد إكمال وتوثيق الإجراءات',
+                        status_after='finished',
+                        reason='إنهاء الزيارة وتوثيق الإجراءات رسمياً (Check-out)',
                         ip_address=request.META.get('REMOTE_ADDR')
                     )
-                    messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح.")
+                    messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}.")
                 else:
                     # Save Draft (Status remains 'started', resumable)
                     visit.save()
@@ -1112,7 +1105,9 @@ def visit_detail(request, pk):
                     'success': True,
                     'status': visit.status,
                     'serial_num': visit.serial_num,
-                    'message': "تم حفظ البيانات بنجاح."
+                    'duration': visit.duration,
+                    'duration_formatted': visit.duration_formatted,
+                    'message': f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح (استغرقت {visit.duration_formatted})." if action == 'complete' else "تم حفظ البيانات بنجاح."
                 })
             return redirect('visit_detail', pk=visit.pk)
 
@@ -1162,6 +1157,8 @@ def visit_detail(request, pk):
     can_resubmit = (visit.approval_status in ('disapproved', 'rejected')) and (
         visit.owner == request.user or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     )
+    # can_start_visit: centralized service check
+    can_start_visit_val, _ = can_start_visit(visit, request.user)
     approval_history = visit.approval_history.select_related('actor').all()
     is_in_agenda = PlannedVisitItem.objects.filter(visit=visit).exists()
 
@@ -1178,6 +1175,7 @@ def visit_detail(request, pk):
         'can_manage_approvals': can_manage_approvals(request.user),
         'can_approve': can_approve,
         'can_resubmit': can_resubmit,
+        'can_start_visit': can_start_visit_val,
         'approval_history': approval_history,
         'is_in_agenda': is_in_agenda,
         'status_choices': Visit.STATUS_CHOICES,
@@ -1239,11 +1237,11 @@ def visit_create(request):
                 recent_duplicate = Visit.objects.filter(
                     contact=contact,
                     owner=owner,
-                    status='started',
+                    status__in=['planned', 'started'],
                     created_at__gte=timezone.now() - datetime.timedelta(seconds=60)
                 ).first()
                 if recent_duplicate:
-                    messages.warning(request, f"يوجد زيارة جارية بالفعل تم بدؤها منذ لحظات (زيارة #{recent_duplicate.serial_num}).")
+                    messages.warning(request, f"يوجد زيارة تم إنشاؤها منذ لحظات لهذا العميل (زيارة #{recent_duplicate.serial_num}).")
                     return redirect('visit_detail', pk=recent_duplicate.pk)
 
                 with transaction.atomic():
@@ -1253,51 +1251,9 @@ def visit_create(request):
                     visit.is_planned = bool(planned_item)
                     if planned_item:
                         visit.date = planned_item.plan_day.date
-                    visit.status = 'started'  # Initial status: in progress / جارية
-                    visit.approval_status = 'pending'
-                    visit.started_at = timezone.now()
-
-                    # Save and verify GPS coordinates if provided at check-in
-                    lat = request.POST.get('latitude') or form.cleaned_data.get('latitude')
-                    lng = request.POST.get('longitude') or form.cleaned_data.get('longitude')
-                    acc = request.POST.get('device_accuracy') or form.cleaned_data.get('device_accuracy')
-                    photo_file = request.FILES.get('location_photo')
-                    force_bypass = bool(
-                        (request.POST.get('force_bypass_location') == '1' and can_bypass_gps) or
-                        (can_bypass_gps and (not lat or not lng))
-                    )
-                    bypass_reason = request.POST.get('bypass_reason', '')
-
-                    try:
-                        verify_visit_location(
-                            visit, request.user, contact,
-                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                            photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
-                        )
-                    except Exception:
-                        pass
-
-                    # Save optional initial answers if submitted (excluding duplicate outcome questions)
-                    initial_answers = {}
-                    if template:
-                        for q in template.get_active_questions():
-                            f_name = f'question_{q.id}'
-                            val = request.POST.get(f_name) or request.POST.getlist(f_name)
-                            if isinstance(val, list) and len(val) == 1:
-                                val = val[0]
-                            elif isinstance(val, list) and len(val) == 0:
-                                val = ''
-                            if q.question_type == 'multiple_choice':
-                                val = request.POST.getlist(f_name)
-                            if val:
-                                initial_answers[str(q.id)] = val
-                    if initial_answers:
-                        visit.questionnaire_answers = initial_answers
-
-                    visit_outcome = request.POST.get('visit_outcome', '').strip()
-                    if visit_outcome:
-                        visit.visit_outcome = visit_outcome
-                        visit.is_successful = (visit_outcome == 'successful')
+                    # Visit is created as 'planned'; the rep must explicitly start it after approval
+                    visit.status = 'planned'
+                    visit.started_at = None
 
                     from master_data.models import LocationSettings
                     from accounts.permissions import is_manager_or_higher
@@ -1306,30 +1262,43 @@ def visit_create(request):
                         visit.approval_status = 'approved'
                         visit.approved_by = request.user
                         visit.approved_at = timezone.now()
-                    elif not visit.is_planned and template and template.auto_approve_unplanned:
-                        visit.approval_status = 'approved'
-                        visit.approved_by = request.user
-                        visit.approved_at = timezone.now()
                     else:
                         visit.approval_status = 'pending'
 
+                    # Initial location verification if coordinates provided
+                    lat = request.POST.get('latitude') or request.POST.get('lat')
+                    lng = request.POST.get('longitude') or request.POST.get('lng')
+                    acc = request.POST.get('device_accuracy')
+                    photo_file = request.FILES.get('location_photo')
+                    force_bypass = bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps)
+                    bypass_reason = request.POST.get('bypass_reason', '')
+                    if loc_settings.verify_visits or lat or lng or photo_file or force_bypass:
+                        try:
+                            verify_visit_location(
+                                visit, request.user, contact,
+                                visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
+                            )
+                        except Exception:
+                            pass
+
                     visit.save()
+
+                    # Handle product detailing if template supports it
+                    if template and template.is_product_detailing_supported():
+                        detailed_ids = request.POST.getlist('detailed_products')
+                        if detailed_ids:
+                            eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                            valid_ids = [int(pid) for pid in detailed_ids if str(pid).isdigit() and int(pid) in eligible_ids]
+                            visit.detailed_products.set(valid_ids)
 
                     # Associate planned item if execution came from planned visits
                     if planned_item:
-                        planned_item.is_executed = True
+                        planned_item.is_executed = False  # Not executed until visit is started & finished
                         planned_item.visit = visit
                         planned_item.save()
 
-                    # Handle product detailing only if supported
-                    if template and template.is_product_detailing_supported():
-                        detailed_product_ids = request.POST.getlist('detailed_products')
-                        if detailed_product_ids:
-                            eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                            valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in eligible_ids]
-                            visit.detailed_products.set(valid_ids)
-
-                messages.success(request, f"تم بدء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. يمكنك الآن الإجابة على الاستبيان وتوثيق تفاصيل الزيارة.")
+                messages.success(request, f"تم إنشاء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. {'يمكنك بدء الزيارة الآن.' if visit.approval_status == 'approved' else 'الزيارة في انتظار الاعتماد.'}")
                 return redirect('visit_detail', pk=visit.pk)
         else:
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
@@ -1539,7 +1508,55 @@ def visit_action(request, pk, action):
             return redirect(next_url)
         return redirect('visit_detail', pk=visit.pk)
 
-    if action in ('approve', 'disapprove', 'reject'):
+    if action == 'start':
+        can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+        try:
+            start_visit(
+                visit, request.user, request=request,
+                lat=request.POST.get('latitude') or request.GET.get('latitude'),
+                lng=request.POST.get('longitude') or request.GET.get('longitude'),
+                accuracy=request.POST.get('device_accuracy') or request.GET.get('device_accuracy'),
+                photo_file=request.FILES.get('location_photo'),
+                force_bypass=bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps),
+                bypass_reason=request.POST.get('bypass_reason', '')
+            )
+            msg = f"تم بدء الزيارة #{visit.serial_num} بنجاح. يمكنك الآن الإجابة على الاستبيان وإنهاء الزيارة."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': 'started'})
+            messages.success(request, msg)
+        except ValidationError as e:
+            msg = e.message if hasattr(e, 'message') else str(e)
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+        return get_redirect()
+
+    elif action == 'end':
+        can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+        try:
+            end_visit(
+                visit, request.user, request=request,
+                lat=request.POST.get('latitude'),
+                lng=request.POST.get('longitude'),
+                accuracy=request.POST.get('device_accuracy'),
+                photo_file=request.FILES.get('location_photo'),
+                force_bypass=bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps),
+                bypass_reason=request.POST.get('bypass_reason', ''),
+                feedback=request.POST.get('feedback', ''),
+                visit_outcome=request.POST.get('visit_outcome', '')
+            )
+            msg = f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': 'finished', 'duration': visit.duration, 'duration_formatted': visit.duration_formatted})
+            messages.success(request, msg)
+        except ValidationError as e:
+            msg = e.message if hasattr(e, 'message') else str(e)
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+        return get_redirect()
+
+    elif action in ('approve', 'disapprove', 'reject'):
         if not can_manage_approvals(request.user):
             msg = "عذراً، لا تملك صلاحية اعتماد أو رفض الزيارات (خاص بالمدراء والمشرفين)."
             if is_ajax:
@@ -1548,7 +1565,7 @@ def visit_action(request, pk, action):
             return get_redirect()
 
         if not can_user_access_object(request.user, visit, action):
-            msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو لا يمكن للمندوب اعتماد زيارته الخاصة)."
+            msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو المندوب العادي لا يمكنه اعتماد زيارته الخاصة)."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
             messages.error(request, msg)
@@ -2308,11 +2325,11 @@ def agenda_view(request):
                 'approval_status': v.approval_status,
                 'approval_display': v.approval_display_ar,
                 'approval_badge_class': v.approval_badge_class,
-                'is_executed': True,
+                'is_executed': (v.status == 'finished'),
                 'can_approve': can_approve,
                 'detail_url': reverse('visit_detail', args=[v.pk]),
                 'action_url': reverse('visit_detail', args=[v.pk]),
-                'action_label': 'متابعة الزيارة' if v.status == 'started' else 'معاينة التفاصيل',
+                'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
                 'notes': itm.notes,
             })
         else:
@@ -2356,11 +2373,11 @@ def agenda_view(request):
             'approval_status': v.approval_status,
             'approval_display': v.approval_display_ar,
             'approval_badge_class': v.approval_badge_class,
-            'is_executed': True,
+            'is_executed': (v.status == 'finished'),
             'can_approve': can_approve,
             'detail_url': reverse('visit_detail', args=[v.pk]),
             'action_url': reverse('visit_detail', args=[v.pk]),
-            'action_label': 'معاينة التفاصيل',
+            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
             'notes': v.feedback,
         })
 

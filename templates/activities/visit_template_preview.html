@@ -51,7 +51,7 @@
                 </div>
                 <div class="text-left">
                     <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/20 backdrop-blur-xs text-white">
-                        {{ template.get_mode_display }}
+                        دورة حياة قياسية
                     </span>
                 </div>
             </div>
@@ -200,22 +200,7 @@
             </div>
             {% endif %}
 
-            <!-- Visit Outcome Selector (if enabled) -->
-            {% if template.visit_outcome_mode != 'disabled' %}
-            <div class="space-y-2 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <label class="block text-xs font-bold text-slate-800">نتيجة الزيارة النهائية (Visit Outcome)</label>
-                <div class="flex flex-wrap gap-2">
-                    <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer">
-                        <input type="radio" name="preview_outcome" value="successful" checked class="text-emerald-600 focus:ring-emerald-500">
-                        <span>زيارة ناجحة (Successful)</span>
-                    </label>
-                    <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold cursor-pointer">
-                        <input type="radio" name="preview_outcome" value="unsuccessful" class="text-slate-600 focus:ring-slate-500">
-                        <span>زيارة غير ناجحة (Unsuccessful)</span>
-                    </label>
-                </div>
-            </div>
-            {% endif %}
+
         </div>
     </div>
 </div>

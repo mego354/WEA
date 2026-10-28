@@ -25,18 +25,20 @@
     <!-- Areas Hierarchy List matching Reference ERP Cards -->
     <div class="space-y-3">
         {% for gov in governorates %}
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden area-card" id="area_{{ gov.id }}">
-            <div class="p-4 flex items-center justify-between hover:bg-slate-50/70 transition-colors cursor-pointer" onclick="toggleAreaSubareas('sub_{{ gov.id }}')">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs area-card relative" id="area_{{ gov.id }}">
+            <div class="p-4 flex items-center justify-between rounded-t-xl hover:bg-slate-50/70 transition-colors cursor-pointer select-none" onclick="toggleAreaSubareas('sub_{{ gov.id }}')">
                 <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-xl text-slate-400 transition-transform duration-200" id="icon_sub_{{ gov.id }}">expand_more</span>
+                    <button type="button" class="text-slate-400 hover:text-slate-600 focus:outline-none" aria-label="توسيع أو طي المناطق الفرعية">
+                        <span class="material-symbols-outlined text-xl transition-transform duration-200" id="icon_sub_{{ gov.id }}">expand_more</span>
+                    </button>
                     
                     <!-- 3-Dot Action Menu Button -->
-                    <div class="relative" onclick="event.stopPropagation();">
-                        <button type="button" onclick="toggleAreaMenu('menu_{{ gov.id }}')"
+                    <div class="relative z-10" onclick="event.stopPropagation();">
+                        <button type="button" onclick="toggleAreaMenu('menu_{{ gov.id }}', event)" aria-label="قائمة الإجراءات"
                                 class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
                             <span class="material-symbols-outlined text-lg">more_vert</span>
                         </button>
-                        <div id="menu_{{ gov.id }}" class="hidden absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 text-xs font-semibold text-slate-700">
+                        <div id="menu_{{ gov.id }}" class="hidden absolute start-0 mt-1 w-48 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-50 text-xs font-semibold text-slate-700">
                             <button type="button" onclick="openAddSubareaModal('{{ gov.id }}', '{{ gov.name }}')" class="w-full text-right px-4 py-2 hover:bg-slate-50 hover:text-[#27bebe] flex items-center gap-2">
                                 <span class="material-symbols-outlined text-base">add</span>
                                 <span>إضافة منطقة فرعية</span>
@@ -56,10 +58,16 @@
                     </div>
                 </div>
 
-                <!-- Area Title with code [code] -->
-                <div class="text-right">
-                    <span class="text-base font-bold text-slate-800">{{ gov.name }}</span>
-                    <span class="text-sm font-bold text-slate-600 font-mono">[{{ gov.code }}]</span>
+                <!-- Area Title with subareas count badge and code -->
+                <div class="flex items-center gap-3 text-right">
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold {% if gov.subareas_count > 0 %}bg-teal-50 text-teal-700 border border-teal-200{% else %}bg-slate-100 text-slate-500 border border-slate-200{% endif %}">
+                        {{ gov.subareas_count }} مناطق فرعية
+                    </span>
+                    <div>
+                        <span class="text-base font-bold text-slate-800">{{ gov.name }}</span>
+                        {% if gov.name_en %}<span class="text-xs text-slate-400 mr-1 font-sans">({{ gov.name_en }})</span>{% endif %}
+                        <span class="text-sm font-bold text-slate-600 font-mono">[{{ gov.code }}]</span>
+                    </div>
                 </div>
             </div>
 
@@ -152,15 +160,34 @@
         }
     }
 
-    function toggleAreaMenu(menuId) {
+    function toggleAreaMenu(menuId, event) {
+        if (event) event.stopPropagation();
+        const menu = document.getElementById(menuId);
+        if (!menu) return;
+        const isHidden = menu.classList.contains('hidden');
+
+        // Close all other open menus and reset parent card z-index
         document.querySelectorAll('[id^="menu_"]').forEach(m => {
-            if (m.id !== menuId) m.classList.add('hidden');
+            m.classList.add('hidden');
+            const card = m.closest('.area-card');
+            if (card) card.style.zIndex = '';
         });
-        document.getElementById(menuId).classList.toggle('hidden');
+
+        if (isHidden) {
+            menu.classList.remove('hidden');
+            const parentCard = menu.closest('.area-card');
+            if (parentCard) parentCard.style.zIndex = '40';
+        }
     }
 
-    document.addEventListener('click', function() {
-        document.querySelectorAll('[id^="menu_"]').forEach(m => m.classList.add('hidden'));
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('[id^="menu_"]') && !e.target.closest('button[onclick*="toggleAreaMenu"]')) {
+            document.querySelectorAll('[id^="menu_"]').forEach(m => {
+                m.classList.add('hidden');
+                const card = m.closest('.area-card');
+                if (card) card.style.zIndex = '';
+            });
+        }
     });
 
     function openNewAreaModal() {

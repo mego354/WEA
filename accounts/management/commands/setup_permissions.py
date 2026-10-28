@@ -12,6 +12,9 @@ from accounts.permission_registry import (
 class Command(BaseCommand):
     help = "Seeds and updates all centralized permissions and standard roles for WEA Pharma ERP."
 
+    def add_arguments(self, parser):
+        parser.add_argument('--no-audit', action='store_true', help='Skip recording security audit log.')
+
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE("Starting ERP permissions synchronization..."))
 
@@ -65,79 +68,115 @@ class Command(BaseCommand):
         self.setup_standard_roles(created_perm_objs)
 
         # Record Security Audit Log
-        SecurityAuditLog.objects.create(
-            actor=None,
-            action_type='PERMISSIONS_SEEDED',
-            description=f"Permissions seeded: {len(registered)} registered permissions synchronized across standard roles.",
-        )
-        self.stdout.write(self.style.SUCCESS("Recorded security audit log entry."))
+        if not options.get('no_audit'):
+            try:
+                from accounts.services import AuditLogService
+                AuditLogService.log(
+                    action='create',
+                    module='roles',
+                    record_name='تهيئة الصلاحيات والأدوار',
+                    status='success',
+                    reason=f"Permissions seeded: {len(registered)} registered permissions synchronized across standard roles."
+                )
+                self.stdout.write(self.style.SUCCESS("Recorded security audit log entry."))
+            except Exception:
+                pass
 
     def setup_standard_roles(self, perm_map):
         """
-        Configures the standard enterprise roles and their default permission sets.
+        Configures exactly the five canonical supported enterprise roles:
+        1. superadmin
+        2. manager
+        3. accountant
+        4. rep
+        5. medical_rep
         """
-        # 1. SuperAdmin (System Superuser - All permissions)
+        # 1. superadmin (System Superuser - All registered permissions)
         super_admin, _ = Role.objects.get_or_create(
-            name='SuperAdmin',
+            name=Role.ROLE_SUPERADMIN,
             defaults={
                 'display_name': 'مدير النظام الأعلى',
                 'description': 'إدارة شاملة للنظام، كافة الصلاحيات والإعدادات والحسابات.',
                 'is_system': True,
                 'is_active': True,
                 'is_super': True,
+                'can_hold_vault': True,
             }
         )
+        super_admin.display_name = 'مدير النظام الأعلى'
         super_admin.is_super = True
         super_admin.is_system = True
+        super_admin.is_active = True
+        super_admin.can_hold_vault = True
         super_admin.save()
         super_admin.permissions.set(list(perm_map.values()))
 
-        # 2. Admin (General System Admin)
-        admin_role, _ = Role.objects.get_or_create(
-            name='Admin',
+        # Also sync legacy 'SuperAdmin' role if present in DB
+        legacy_super = Role.objects.filter(name='SuperAdmin').first()
+        if legacy_super and legacy_super.pk != super_admin.pk:
+            legacy_super.is_super = True
+            legacy_super.is_system = True
+            legacy_super.is_active = False
+            legacy_super.save()
+            legacy_super.permissions.set(list(perm_map.values()))
+
+        # 2. manager (Executive & Operational Manager)
+        manager_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_MANAGER,
             defaults={
-                'display_name': 'مدير النظام',
-                'description': 'إدارة العمليات اليومية، المستخدمين، المناطق، الإعدادات العامة.',
+                'display_name': 'مدير',
+                'description': 'إشراف على مناديب المنطقة، اعتماد خطط الزيارات وأوامر البيع وعمليات الشراء والاتفاقيات.',
                 'is_system': True,
                 'is_active': True,
-                'is_super': False,
+                'is_sales_team': True,
+                'is_area_manager': True,
+                'is_main_area_bound': True,
+                'has_sales_targets': True,
             }
         )
-        # Admins get all operational and settings permissions
-        admin_perms = [
-            p for c, p in perm_map.items()
-            if not c.startswith('system:rbac') # Only superadmin edits roles
-        ]
-        admin_role.permissions.set(admin_perms)
+        manager_role.display_name = 'مدير'
+        manager_role.is_system = True
+        manager_role.is_active = True
+        manager_role.is_sales_team = True
+        manager_role.is_area_manager = True
+        manager_role.is_main_area_bound = True
+        manager_role.has_sales_targets = True
+        manager_role.save()
 
-        # 3. CEO (Executive Management)
-        ceo_role, _ = Role.objects.get_or_create(
-            name='CEO',
-            defaults={
-                'display_name': 'المدير العام',
-                'description': 'رؤية شاملة للشركة، التقارير التنفيذية، الاعتمادات العليا.',
-                'is_system': True,
-                'is_active': True,
-                'is_super': False,
-            }
-        )
-        ceo_perms = [
-            p for c, p in perm_map.items()
-            if c.startswith('module:') or '/list' in c or '/view' in c or '/approve' in c or '/export' in c
+        manager_codenames = [
+            'module:activities', 'activities:visits/list', 'activities:visits/view',
+            'activities:visits/approve', 'activities:visits/export',
+            'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
+            'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/approve',
+            'activities:agreements/export',
+            'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/approve', 'sales:orders/export',
+            'sales:collections/list',
+            'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
+            'contacts:contacts/edit', 'contacts:contacts/export',
+            'module:catalog', 'catalog:products/list', 'catalog:products/view',
+            'module:inventory', 'inventory:stocks/view',
+            'module:purchases', 'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/approve',
+            'purchases:orders/export',
         ]
-        ceo_role.permissions.set(ceo_perms)
+        manager_role.permissions.set([perm_map[c] for c in manager_codenames if c in perm_map])
 
-        # 4. Chief Accountant (رئيس الحسابات)
+        # 3. accountant (Finance & Treasury)
         accountant, _ = Role.objects.get_or_create(
-            name='Accountant',
+            name=Role.ROLE_ACCOUNTANT,
             defaults={
-                'display_name': 'محاسب عام',
+                'display_name': 'محاسب',
                 'description': 'إدارة الحسابات، الخزن النقدية، ترحيل الفواتير، مدفوعات الموردين.',
                 'is_system': True,
                 'is_active': True,
                 'can_hold_vault': True,
             }
         )
+        accountant.display_name = 'محاسب'
+        accountant.is_system = True
+        accountant.is_active = True
+        accountant.can_hold_vault = True
+        accountant.save()
+
         acc_codenames = [
             'module:treasury', 'treasury:vaults/view', 'treasury:vaults/transactions',
             'treasury:payments/list', 'treasury:payments/create', 'treasury:payments/requests',
@@ -153,39 +192,12 @@ class Command(BaseCommand):
         ]
         accountant.permissions.set([perm_map[c] for c in acc_codenames if c in perm_map])
 
-        # 5. Area Manager (مدير منطقة)
-        area_mgr, _ = Role.objects.get_or_create(
-            name='AreaManager',
-            defaults={
-                'display_name': 'مدير منطقة',
-                'description': 'إشراف على مناديب المنطقة، اعتماد خطط الزيارات وأوامر البيع والاتفاقيات.',
-                'is_system': True,
-                'is_active': True,
-                'is_sales_team': True,
-                'is_area_manager': True,
-                'is_main_area_bound': True,
-                'has_sales_targets': True,
-            }
-        )
-        area_codenames = [
-            'module:activities', 'activities:visits/list', 'activities:visits/view',
-            'activities:visits/approve', 'activities:visits/export',
-            'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
-            'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/approve',
-            'activities:agreements/export',
-            'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/approve', 'sales:orders/export',
-            'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
-            'contacts:contacts/edit', 'contacts:contacts/export',
-            'module:catalog', 'catalog:products/list', 'catalog:products/view',
-        ]
-        area_mgr.permissions.set([perm_map[c] for c in area_codenames if c in perm_map])
-
-        # 6. Medical / Field Sales Representative (مندوب دعاية / مبيعات)
+        # 4. rep (Commercial Sales Representative)
         rep_role, _ = Role.objects.get_or_create(
-            name='MedicalRep',
+            name=Role.ROLE_REP,
             defaults={
-                'display_name': 'مندوب دعاية ومبيعات',
-                'description': 'تنفيذ الزيارات الميدانية، خطط الزيارات، طلبات البيع، إبرام الاتفاقيات.',
+                'display_name': 'مندوب مبيعات',
+                'description': 'المبيعات التجارية، الفواتير، أوامر البيع، والتحصيلات الميدانية.',
                 'is_system': True,
                 'is_active': True,
                 'is_sales_team': True,
@@ -195,6 +207,16 @@ class Command(BaseCommand):
                 'has_sales_targets': True,
             }
         )
+        rep_role.display_name = 'مندوب مبيعات'
+        rep_role.is_system = True
+        rep_role.is_active = True
+        rep_role.is_sales_team = True
+        rep_role.is_rep = True
+        rep_role.is_sub_area_bound = True
+        rep_role.can_hold_vault = True
+        rep_role.has_sales_targets = True
+        rep_role.save()
+
         rep_codenames = [
             'module:activities', 'activities:visits/list', 'activities:visits/view',
             'activities:visits/create', 'activities:visits/edit', 'activities:visits/evidence',
@@ -208,10 +230,33 @@ class Command(BaseCommand):
         ]
         rep_role.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
 
-        # Also sync existing lowercase or test roles in DB
-        for role_name in ['medical_rep', 'med_rep_test']:
-            r = Role.objects.filter(name=role_name).first()
-            if r:
-                r.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
+        # 5. medical_rep (Medical / Scientific Representative)
+        medical_rep_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_MEDICAL_REP,
+            defaults={
+                'display_name': 'مندوب دعاية طبية',
+                'description': 'الدعاية الطبية، الزيارات الميدانية للأطباء والمراكز الطبية والصيدليات، عينات الأدوية، والاتفاقيات.',
+                'is_system': True,
+                'is_active': True,
+                'is_sales_team': True,
+                'is_rep': True,
+                'is_sub_area_bound': True,
+                'can_hold_vault': True,
+                'has_sales_targets': True,
+            }
+        )
+        medical_rep_role.display_name = 'مندوب دعاية طبية'
+        medical_rep_role.is_system = True
+        medical_rep_role.is_active = True
+        medical_rep_role.is_sales_team = True
+        medical_rep_role.is_rep = True
+        medical_rep_role.is_sub_area_bound = True
+        medical_rep_role.can_hold_vault = True
+        medical_rep_role.has_sales_targets = True
+        medical_rep_role.save()
+        medical_rep_role.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
 
-        self.stdout.write(self.style.SUCCESS("Standard enterprise roles updated successfully."))
+        # Deactivate any non-canonical roles so only the 5 canonical roles are active
+        Role.objects.exclude(name__in=Role.CANONICAL_ROLE_KEYS).update(is_active=False)
+
+        self.stdout.write(self.style.SUCCESS("Canonical 5 enterprise roles configured and synchronized successfully."))

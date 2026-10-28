@@ -9,6 +9,150 @@
 - `[X] COMPLETED`  
 - `[!] BLOCKED`  
 
+## Phase 17: Audit Log Labels, Persistent Areas UI, Obsolete Features Removal, Database Role Consolidation, App-Wide Data Scoping & Hierarchical Area Selector (2026-10-28)
+
+- [X] **TASK-01: Fix `نوع العملية` in Audit Logs**:
+  - Implemented bilingual mapping dictionary `ACTION_LABELS` on `SecurityAuditLog`.
+  - Added methods `get_action_type_display(lang='ar')`, `get_label_for_action(code, lang='ar')`, and properties `action_type_display` and `action_type_display_en`.
+  - Updated desktop table, mobile cards, active filter chips, and diff modal in `templates/accounts/audit_logs.html` and `accounts/views.py`.
+  - Maintained colored dot indicator as a secondary visual cue, with safe fallbacks for legacy/unmapped action codes.
+  - Tested and verified: `accounts.tests_audit_logging` (3 tests pass).
+
+- [X] **TASK-02: Fix Three-Dot Action Menu in `settings/areas/`**:
+  - Identified root cause: `overflow-hidden` on `.area-card` clipped dropdowns when subareas were collapsed (card height ~56px).
+  - Removed `overflow-hidden`, applied rounded corner utilities, anchored dropdown to `start-0` with `z-50`, and elevated open card's z-index dynamically in `toggleAreaMenu`.
+  - Isolated expand/collapse button and three-dot button events with `event.stopPropagation()`.
+  - Tested and verified: `master_data.tests_egypt_areas` (3 tests pass).
+
+- [X] **TASK-03: Completely Remove `home/settings/contacts-udf/`**:
+  - Removed sidebar link from `templates/layouts/base.html`.
+  - Removed URL route `settings/contacts-udf/` from `master_data/urls.py`.
+  - Removed `contacts_udf_view` from `master_data/views.py`.
+  - Deleted obsolete template `templates/settings/contacts_udf.html`.
+  - Preserved underlying `ContactFieldSetting` model and contacts data integrity.
+  - Tested and verified: `master_data.tests.test_contacts_udf_url_not_found` asserting HTTP 404 (18 tests pass).
+
+- [X] **TASK-04: Consolidate User Types & Update Development Database**:
+  - Verified development database `db.sqlite3` and created full snapshot backup `backups/db_backup_codex_task_20261028_033053.sqlite3`.
+  - Migrated historical audit logs referencing obsolete roles by copying role names to `record_name` and setting `target_role=None`.
+  - Deleted all 16 obsolete role rows from `accounts_role`. Exactly 5 canonical roles remain: `superadmin`, `manager`, `accountant`, `rep`, `medical_rep`.
+  - 18 active users retained, 0 users deleted, all business history and credentials preserved.
+  - Tested and verified: `accounts.tests_roles_consolidation` (5 tests pass).
+
+- [X] **TASK-05: Remove `المكالمات` (Calls) from Contact Activities**:
+  - Removed the Calls card from the Activities tab in `templates/contacts/contact_detail.html`.
+  - Preserved visits, agreements, and timeline events; preserved `ContactActivity` data model.
+  - Tested and verified: `contacts.tests_udf_todos_timeline` (6 tests pass).
+
+- [X] **TASK-06: Remove `أمر مشتريات جديد` from Top-Left Navbar**:
+  - Removed purchase order creation action from top navbar in `templates/layouts/base.html`.
+  - Kept purchase order creation workflow intact on `/purchases/orders/` and `/purchases/orders/create/`.
+  - Layout remains balanced and aligned in both RTL and LTR.
+  - Tested and verified: `purchases.tests` (16 tests pass).
+
+- [X] **TASK-07: Enforce App-Wide Data Access by Role & Organizational Scope**:
+  - Reinforced backend ABAC/RBAC scoping in `accounts/permissions.py`:
+    - `rep`: strictly own records (`created_by=user`, `owner=user`), no peer leakage in same area.
+    - `medical_rep`: strictly own records plus shared assigned contacts/products.
+    - `manager`: records of reps belonging to the same root main area across all secondary sub-areas; anti-self-approval rule; fail-secure behavior when unassigned.
+    - `accountant`: broad visibility across financial and accounting scopes.
+    - `superadmin`: global unrestricted visibility.
+  - Enforced `get_scoped_queryset` across sales collections, accounting customers, customer transactions, and treasury vaults.
+  - Tested and verified: `accounts.tests_data_scoping` (6 tests pass) & `activities.tests_approval_and_regional` (17 tests pass).
+
+- [X] **TASK-08: Redesign Geographic Area Selector for New & Edited Users**:
+  - Created reusable accessible component: `templates/components/geographic_area_selector.html`.
+  - Grouped governorates and subareas with Arabic labels, search input, chips summary, live count badge, and select/clear all.
+  - Integrated server-side validation (`validate_assigned_areas_for_user`) preventing managers from assigning areas outside their main area scope.
+  - Tested and verified: `accounts.tests_geographic_areas_selector` (4 tests pass).
+
+## Phase 16: Enterprise Role Consolidation, Centralized Audit Logging, Egypt Areas, Contact UDF, Todos & Timeline (2026-10-28)
+
+- [X] **TASK-01: User Role Consolidation to 5 Canonical Roles**:
+  - Defined canonical role keys (`superadmin`, `manager`, `accountant`, `rep`, `medical_rep`) in `accounts/models.py`.
+  - Migrated all 18 existing users into canonical roles preserving all transactions, credentials, and business links.
+  - Deactivated 21 obsolete/duplicate roles (`is_active=False`) without breaking referential integrity.
+  - Enforced `Role.get_supported_roles()` in user forms, admin, and views.
+  - Unit tests verified: `accounts/tests_roles_consolidation.py` (5 tests passing).
+
+- [X] **TASK-02: Comprehensive Append-Only Audit Logging & Diff Inspection**:
+  - Implemented centralized `AuditLogService` with recursive sensitive data redaction to `[REDACTED]`.
+  - Added `module`, `record_id`, `record_name`, `previous_values`, `new_values`, `status`, `reason` to `SecurityAuditLog`.
+  - Created `/settings/audit-logs/` with server-side pagination, module/action/user/date/search filters, and side-by-side previous vs new values diff modal.
+  - Instrumented auth, accounts, contacts, UDF, areas, and settings actions.
+  - Unit tests verified: `accounts/tests_audit_logging.py` (3 tests passing).
+
+- [X] **TASK-03: Visit Suggested Products Relocation to Visit Templates**:
+  - Moved "المنتجات المقترحة للزيارات الميدانية" out of `settings/location/` into Visit Templates (`templates/activities/visit_template_form.html`).
+  - Restricted suggested products strictly to active sellable catalog items (`sellable=True, is_active=True`).
+  - Removed Card 4 from `templates/settings/location_settings.html` and cleaned up `master_data/views.py`.
+  - Unit tests verified: `activities/tests_suggested_products.py` (3 tests passing).
+
+- [X] **TASK-04: Egypt 27 Governorates & Company Internal Areas Isolation**:
+  - Added `is_company_area` and `name_en` to `Area` model (`master_data/models.py`).
+  - Flagged 14 company facilities/warehouses with `is_company_area=True` preserving all database relations.
+  - Implemented management command `setup_egypt_areas.py` standardizing Egypt's official 27 governorates.
+  - Updated `areas_settings_view` to annotate `subareas_count=Count('subareas')` and filter company facilities.
+  - Unit tests verified: `master_data/tests_egypt_areas.py` (3 tests passing).
+
+- [X] **TASK-05: Contact Custom Fields (UDF) Multi-Type Architecture**:
+  - Enhanced `ContactFieldSetting` (`master_data/models.py`) with support for all 7 types (`text`, `textarea`, `number`, `date`, `boolean`, `single_choice`, `multi_choice`).
+  - Added `Contact.custom_values` (`JSONField`) in `contacts/models.py`.
+  - Implemented full CRUD management in `contacts_udf_view` (`templates/settings/contacts_udf.html`).
+  - Integrated custom fields into contact creation, editing, and Overview accordion card in `contact_detail.html`.
+  - Unit tests verified: `contacts/tests_udf_todos_timeline.py` (custom fields tests).
+
+- [X] **TASK-06: Contact TODOs Blank Page Fix & Asynchronous (AJAX) UX**:
+  - Resolved blank page on `contacts/<id>/overview/?tab=todos` caused by tab case-sensitivity and unhandled redirects.
+  - Implemented tab normalization: `raw_tab.lower().strip()`, defaulting invalid tabs safely to `'overview'`.
+  - Added dedicated endpoints: `contact_create_todo`, `contact_toggle_todo`, `contact_delete_todo` supporting both AJAX JSON and fallback redirects.
+  - Asynchronous checkbox toggling, task creation, and instant deletion without page reloads.
+  - Unit tests verified: `contacts/tests_udf_todos_timeline.py` (TODO tests).
+
+- [X] **TASK-07: Contact Timeline Top-5 Display & Paginated Modal Dialog**:
+  - Overview tab displays the top 5 most recent activities (`recent_timeline = activities[:5]`) with activity-type badges and timestamps.
+  - "عرض الكل" button opens `#timelineModal` with debounced search, activity-type filtering, and date range filters.
+  - Implemented server-side paginated JSON endpoint: `contact_timeline_events` (`/contacts/<pk>/timeline/events/`).
+  - Unit tests verified: `contacts/tests_udf_todos_timeline.py` (timeline tests).
+
+- [X] **TASK-08: Complete Automated Test Suite & Health Check**:
+  - 19 out of 19 tests passing across all 5 test modules with 0 errors and 0 failures.
+  - Django system check: `python manage.py check` reports 0 issues.
+
+---
+
+## Phase 15: Visit Lifecycle Standardization, Template Simplification, Role Restrictions & Subsystem Audit (2026-10-27)
+
+- [X] **TASK-01**: **Unified Visit Lifecycle State Machine**:
+  - Implemented single workflow for all visits: Creation (`planned`) $\to$ Manager Approval (`approved`) $\to$ Rep Start / Check-in (`started`) $\to$ Detailing / Questionnaire Drafts $\to$ Rep End / Check-out (`finished`).
+  - Added domain services in `activities/services.py`: `can_start_visit()`, `start_visit()`, `can_submit_answers()`, `save_visit_answers()`, `can_end_visit()`, `end_visit()`.
+  - Atomic database transactions with `select_for_update()` to prevent concurrency conflicts.
+  - Duration calculated strictly server-side: `(ended_at - started_at).total_seconds()`.
+
+- [X] **TASK-02**: **Removal of Obsolete Visit Template Settings**:
+  - Safely removed 4 obsolete configurable settings: `mode`, `visit_outcome_mode`, `auto_approve_unplanned`, and `auto_end_visit`.
+  - Cleaned up models, admin definitions, forms, views, API serializers, and template fragments.
+  - Generated and executed clean migration: `activities/migrations/0012_remove_obsolete_visittemplate_settings.py`.
+  - Verified historical records intact (19 visits, 6 templates, audit logs, GPS coordinates, photos).
+
+- [X] **TASK-03**: **Redesign & Hardening of Restricted Roles**:
+  - Redesigned Accordion 3 in `templates/activities/visit_template_form.html` with real-time search, "Select All", "Deselect All", counter badges, and removable pill tags.
+  - Clarified default-open semantics (empty = all roles permitted; non-empty = assigned active roles only).
+  - Enforced role restrictions server-side across `VisitTemplate.is_user_eligible()`, `/api/visit-templates/`, `visit_create`, `start_visit`, `save_visit_answers`, and `end_visit`.
+  - Touch-accessible targets ($\ge 44\text{px}$) optimized for mobile viewports (375px, 390px, 430px).
+
+- [X] **TASK-04**: **Code Quality Audit & Dead Code Removal**:
+  - Removed 144 lines of unreachable dead code in `activities/approvals_views.py`.
+  - Cleaned up unused imports, dead feature flags, and redundant template snippets.
+  - Preserved dual-control anti-self-approval rule and regional manager scoping.
+
+- [X] **TASK-05**: **Automated Test Suite & Verification**:
+  - 100% of tests passing across the entire activities test suite (89/89 tests passed in 91s).
+  - Django system checks verified (`python manage.py check`: 0 silenced issues).
+  - Clean migrations confirmed (`python manage.py showmigrations activities`).
+
+---
+
 ## Phase 14: Final Codex Implementation — Unified Visit Lifecycle, Product Eligibility, Mobile UX & Repository Cleanup (2026-10-26)
 
 - [X] **TASK-01**: **Unified Visit Lifecycle (Create First, Answer Later)**:
@@ -543,5 +687,95 @@
 - [X] **DOC-02**: Created `docs/DATA_IMPORT_MAPPING.md`.
 - [X] **DOC-03**: Created `docs/DATA_IMPORT_REPORT.md`.
 - [X] **DOC-04**: Updated `docs/IMPLEMENTATION_TODO.md`.
+
+---
+
+## Phase 9: Representative Warehouses, Treasuries, Transfers & Area-Based Approvals
+
+- [X] **DB-01**: Created local SQLite backup `backups/db_backup_pre_rep_warehouses_20261027.sqlite3` (9,936,896 bytes).
+- [X] **MOD-01**: Created `UserSettings` singleton model in `accounts.models` with `auto_create_rep_warehouse` and `auto_create_rep_treasury` toggles.
+- [X] **MOD-02**: Extended `inventory.Warehouse` with `assigned_user`, `is_rep_warehouse`, and `area` fields (`inventory.migrations.0002`).
+- [X] **MOD-03**: Added `ProductTransferRequest` and `ProductTransferRequestItem` models in `inventory.models` supporting references, approvals, and dual inventory memo linkages.
+- [X] **MOD-04**: Extended `treasury.Vault` with `is_rep_vault` field (`treasury.migrations.0002`).
+- [X] **SRV-01**: Implemented `ensure_representative_resources` in `accounts.services` with `select_for_update()` transaction locking, automatic code formatting (`WH-REP-####`, `VAULT-REP-####`), and area alignment.
+- [X] **SRV-02**: Connected `post_save` on `User` and `m2m_changed` on `User.assigned_areas.through` in `accounts.signals` to automatically provision resources and synchronize territories.
+- [X] **CMD-01**: Implemented idempotent management command `backfill_representative_resources` with `--dry-run` preview; successfully backfilled all existing representatives without altering balances.
+- [X] **AUTH-01**: Standardized manager eligibility across all approvals based strictly on Root Main Area canonical traversal (`get_main_area()`).
+- [X] **AUTH-02**: Implemented anti-self-approval and fail-secure access control in `accounts.permissions`.
+- [X] **AUTH-03**: Scoped querysets (`get_scoped_queryset`) across warehouses, vaults, stock, memos, transfer requests, and orders to main area for managers and own resources for representatives.
+- [X] **AUTH-04**: Implemented strict read-only protection on representative treasuries in `can_user_access_object`: managers can inspect balances/movements but cannot deposit, withdraw, transfer, adjust, or delete.
+- [X] **FLOW-01**: Implemented `ProductTransferService` in `inventory.services` with same-main-area validation, accountant/superadmin approval requirement, pessimistic row locking (`select_for_update()`), atomic stock movements, and dual inventory memo generation.
+- [X] **FLOW-02**: Enforced server-side representative warehouse assignment in `sales.services` and `sales.views`, ignoring client-forged warehouse IDs.
+- [X] **FLOW-03**: Enforced same-main-area manager approval and reservation release on order rejection in `sales.services`.
+- [X] **UI-01**: Implemented Users Settings view and template (`templates/accounts/users_settings.html`) with toggles, policy documentation, diagnostic counters, and backfill action.
+- [X] **UI-02**: Added transfer requests UI (`product_transfers_list.html`, `product_transfer_create.html`, `product_transfer_detail.html`) and embedded entry point in `warehouses_list.html`.
+- [X] **UI-03**: Embedded representative ownership and main area badges in `users_list.html`, `warehouses_list.html`, and `vaults_list.html`.
+- [X] **UI-04**: Zero new application tabs or sidebar items added (verified in `templates/layouts/base.html`).
+- [X] **TEST-01**: Added comprehensive test suite `accounts/tests_rep_provisioning.py` (5/5 PASSED).
+- [X] **TEST-02**: Added comprehensive test suite `inventory/tests_transfers.py` (5/5 PASSED).
+- [X] **TEST-03**: Added comprehensive test suite `sales/tests_rep_sales.py` (3/3 PASSED).
+- [X] **TEST-04**: Added comprehensive test suite `accounts/tests_area_approvals.py` (7/7 PASSED).
+- [X] **TEST-05**: Ran full test suite across `accounts`, `inventory`, `sales`, `treasury`: 49/49 PASSED with 100% OK.
+- [X] **TEST-06**: Ran full regression test suite across `activities` visit workflows and agenda: 29/29 PASSED with 100% OK.
+- [X] **DOC-01**: Created `docs/REPRESENTATIVE_WAREHOUSES_AND_TREASURIES.md`.
+- [X] **DOC-02**: Created `docs/INTER_WAREHOUSE_PRODUCT_REQUESTS.md`.
+- [X] **DOC-03**: Created `docs/AREA_BASED_MANAGER_PERMISSIONS.md`.
+- [X] **DOC-04**: Created `docs/INVENTORY_AND_SALES_APPROVALS.md`.
+- [X] **DOC-05**: Created `docs/MANAGER_OPERATIONAL_VISIBILITY.md`.
+- [X] **DOC-06**: Updated `docs/IMPLEMENTATION_TODO.md`.
+
+---
+
+## Phase 10: Mobile Navigation, Responsive Tables, Persistent Column Preferences & Role-Based Dashboards
+
+- [X] **NAV-01**: Removed redundant bottom navigation drawer icon on small screens in `templates/layouts/base.html`, preserving top-right mobile toggle button (`id="mobileMenuToggle"`) as the single entry point.
+- [X] **NAV-02**: Verified 4 remaining functional bottom navigation tabs (Home, Contacts, Products, Purchases) remain evenly distributed without blank space.
+- [X] **USER-01**: Fixed user names overflowing in navigation menu and profile drawer across small screens and RTL/LTR layouts:
+  - Applied `overflow-hidden min-w-0 flex-1` to user info containers.
+  - Added `truncate` and `title` tooltip attributes on user name and role name elements.
+  - Added `shrink-0` on user avatars and logout button to prevent compression.
+- [X] **TAB-01**: Created reusable client-side Table Column Manager in `static/js/table_column_manager.js`:
+  - `localStorage` persistence keyed by `erp_table_cols_{table_id}_v1`.
+  - Immediate DOM visibility synchronization between headers (`th`) and rows (`td`).
+  - "Show All" (`showAll`) and "Reset to Defaults" (`resetDefaults`) actions.
+  - Locked required/identifying columns (`required: true`) that cannot be hidden.
+  - Safe fallback to defaults if storage is unavailable or corrupted.
+- [X] **TAB-02**: Created reusable table column picker component in `templates/components/table_column_picker.html`.
+- [X] **TAB-03**: Audited and upgraded 17 data tables with responsive containers (`overflow-x-auto scrollbar-thin`), explicit minimum widths (`min-w-[750px]` - `min-w-[1000px]`), column visibility tags (`data-col-table`, `data-col`), and column picker integration:
+  - Contacts (`contacts_list.html`)
+  - Sales Orders (`sales_orders_list.html`)
+  - Collections (`collections_list.html`)
+  - Accounting Customers (`accounting_customers_list.html`)
+  - Inventory Stock (`stock_list.html`)
+  - Inventory Memos (`memos_list.html`)
+  - Product Transfers (`product_transfers_list.html`)
+  - Purchase Orders (`purchase_orders_list.html`)
+  - Purchase Return Orders (`purchase_return_orders.html`)
+  - Vaults (`vaults_list.html`)
+  - Vault Transactions (`vault_transactions_list.html`)
+  - Vendor Payments (`vendor_payments_list.html`)
+  - Accounting Vendors (`accounting_vendors_list.html`)
+  - Visits (`visits_list.html`)
+  - Agreements (`agreements_list.html`)
+  - Products (`products_list.html`)
+  - Users (`users_list.html`)
+- [X] **DASH-01**: Implemented role-based dashboard cards and chart datasets in `master_data/views.py`:
+  - **SuperAdmin**: System-wide operational and financial metrics (14 cards) and all 6 visualization charts.
+  - **Accountant**: Financial metrics only (10 cards) and 5 financial charts; field visit cards and visits-by-area chart strictly omitted.
+  - **Representative**: Own operational pipeline metrics (rep warehouse stock value, rep vault balance, own sales, collections, visits); cross-rep comparison charts (`reps_balance`, `reps_overdue`) strictly omitted to preserve peer privacy.
+  - **Manager**: Main-area team operational statistics with representative selector.
+- [X] **DASH-02**: Implemented Manager Representative Selector in `templates/dashboard/home.html` top controls:
+  - Integrated directly into existing dashboard page (zero new tabs added).
+  - Backend validation against `is_manager_eligible_for_user`: cross-area attempts safely rejected with automatic fallback to team scope.
+  - Active representative banner indicator with one-click return to team scope ("العودة لإحصائيات الفريق كامل").
+  - Preserves date filters seamlessly across rep selection changes.
+- [X] **TEST-01**: Created comprehensive automated test suite `master_data/tests_dashboard_roles.py` (9/9 tests PASSED with 100% OK).
+- [X] **TEST-02**: Verified regression safety across area approvals and regional permissions suites (24/24 tests PASSED with 100% OK).
+- [X] **DOC-01**: Created `docs/RESPONSIVE_TABLES.md`.
+- [X] **DOC-02**: Created `docs/TABLE_COLUMN_PREFERENCES.md`.
+- [X] **DOC-03**: Created `docs/DASHBOARD_ROLE_PERMISSIONS.md`.
+- [X] **DOC-04**: Updated `docs/IMPLEMENTATION_TODO.md`.
+
+
 
 

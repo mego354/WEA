@@ -65,6 +65,9 @@
                 إلغاء التصفية
             </a>
             {% endif %}
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='stock_table' %}
         </form>
     </div>
 
@@ -73,56 +76,56 @@
 
     <!-- Inventory Stock Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="stock_table" data-col-table="stock_table" class="min-w-[900px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
-                        <th class="py-3.5 px-4">كود الصنف</th>
-                        <th class="py-3.5 px-4">اسم المنتج</th>
-                        <th class="py-3.5 px-4">المخزن</th>
-                        <th class="py-3.5 px-4">التصنيف</th>
-                        <th class="py-3.5 px-4 text-center">الرصيد الفعلي</th>
-                        <th class="py-3.5 px-4 text-center">المحجوز</th>
-                        <th class="py-3.5 px-4 text-center">المتاح للبيع</th>
-                        <th class="py-3.5 px-4 text-left">متوسط التكلفة</th>
-                        <th class="py-3.5 px-4 text-left">إجمالي القيمة</th>
-                        <th class="py-3.5 px-4 text-center">حالة الرصيد</th>
+                        <th data-col="sku" data-col-label="كود الصنف" data-required="true" class="py-3.5 px-4">كود الصنف</th>
+                        <th data-col="name" data-col-label="اسم المنتج" data-required="true" class="py-3.5 px-4">اسم المنتج</th>
+                        <th data-col="warehouse" data-col-label="المخزن" class="py-3.5 px-4">المخزن</th>
+                        <th data-col="category" data-col-label="التصنيف" class="py-3.5 px-4">التصنيف</th>
+                        <th data-col="qty_on_hand" data-col-label="الرصيد الفعلي" class="py-3.5 px-4 text-center">الرصيد الفعلي</th>
+                        <th data-col="qty_reserved" data-col-label="المحجوز" class="py-3.5 px-4 text-center">المحجوز</th>
+                        <th data-col="qty_available" data-col-label="المتاح للبيع" class="py-3.5 px-4 text-center">المتاح للبيع</th>
+                        <th data-col="cost" data-col-label="متوسط التكلفة" class="py-3.5 px-4 text-left">متوسط التكلفة</th>
+                        <th data-col="total_value" data-col-label="إجمالي القيمة" class="py-3.5 px-4 text-left">إجمالي القيمة</th>
+                        <th data-col="status" data-col-label="حالة الرصيد" class="py-3.5 px-4 text-center">حالة الرصيد</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for stock in stocks %}
                     <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                        <td data-col="sku" class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
                             {{ stock.product.sku_code }}
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="name" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ stock.product.name }}
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="warehouse" class="py-3.5 px-4">
                             <span class="inline-flex items-center gap-1 text-slate-600">
                                 <span class="material-symbols-outlined text-sm text-slate-400">warehouse</span>
                                 <span>{{ stock.warehouse.name }}</span>
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-500">
+                        <td data-col="category" class="py-3.5 px-4 text-xs text-slate-500">
                             {{ stock.product.category.name|default:"عام" }}
                         </td>
-                        <td class="py-3.5 px-4 text-center font-bold text-slate-900">
+                        <td data-col="qty_on_hand" class="py-3.5 px-4 text-center font-bold text-slate-900">
                             {{ stock.qty_on_hand|floatformat:0 }} <span class="text-xs text-slate-400">{{ stock.product.unit }}</span>
                         </td>
-                        <td class="py-3.5 px-4 text-center text-amber-600 font-semibold">
+                        <td data-col="qty_reserved" class="py-3.5 px-4 text-center text-amber-600 font-semibold">
                             {{ stock.qty_reserved|floatformat:0 }}
                         </td>
-                        <td class="py-3.5 px-4 text-center font-bold text-emerald-600">
+                        <td data-col="qty_available" class="py-3.5 px-4 text-center font-bold text-emerald-600">
                             {{ stock.qty_available|floatformat:0 }}
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono text-xs">
+                        <td data-col="cost" class="py-3.5 px-4 text-left font-mono text-xs">
                             {{ stock.product_cost|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">
+                        <td data-col="total_value" class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">
                             {{ stock.total_cost|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="status" class="py-3.5 px-4 text-center">
                             {% if stock.qty_on_hand > 50 %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                 متوفر

@@ -57,7 +57,7 @@
 
     <!-- Accounts Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">account_balance_wallet</span>
                 <span>أرصدة حسابات العملاء</span>
@@ -65,46 +65,47 @@
                     {{ total_count }} عميل
                 </span>
             </h2>
+            {% include 'components/table_column_picker.html' with table_id='accounting_customers_table' %}
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="accounting_customers_table" data-col-table="accounting_customers_table" class="min-w-[850px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
-                        <th class="py-3.5 px-4">اسم العميل</th>
-                        <th class="py-3.5 px-4">المنطقة</th>
-                        <th class="py-3.5 px-4 text-center">حد الائتمان</th>
-                        <th class="py-3.5 px-4 text-center">فترة الائتمان</th>
-                        <th class="py-3.5 px-4 text-left">الرصيد المدين المستحق</th>
-                        <th class="py-3.5 px-4 text-left">المديونية المتأخرة</th>
-                        <th class="py-3.5 px-4 text-center">تاريخ آخر حركة</th>
-                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th data-col="customer" data-col-label="اسم العميل" data-col-required="true" class="py-3.5 px-4">اسم العميل</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
+                        <th data-col="credit_limit" data-col-label="حد الائتمان" class="py-3.5 px-4 text-center">حد الائتمان</th>
+                        <th data-col="credit_period" data-col-label="فترة الائتمان" class="py-3.5 px-4 text-center">فترة الائتمان</th>
+                        <th data-col="current_balance" data-col-label="الرصيد المدين المستحق" class="py-3.5 px-4 text-left">الرصيد المدين المستحق</th>
+                        <th data-col="overdue_balance" data-col-label="المديونية المتأخرة" class="py-3.5 px-4 text-left">المديونية المتأخرة</th>
+                        <th data-col="last_transaction" data-col-label="تاريخ آخر حركة" class="py-3.5 px-4 text-center">تاريخ آخر حركة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-col-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for acc in accounts %}
                     <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="customer" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ acc.customer.name }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-500">
+                        <td data-col="area" class="py-3.5 px-4 text-xs text-slate-500">
                             {{ acc.customer.area.name|default:"عام" }}
                         </td>
-                        <td class="py-3.5 px-4 text-center font-mono text-xs">
+                        <td data-col="credit_limit" class="py-3.5 px-4 text-center font-mono text-xs">
                             {{ acc.credit_limit|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-center text-xs font-bold text-slate-600">
+                        <td data-col="credit_period" class="py-3.5 px-4 text-center text-xs font-bold text-slate-600">
                             {{ acc.credit_period_days }} يوم
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono font-bold text-base {% if acc.current_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
+                        <td data-col="current_balance" class="py-3.5 px-4 text-left font-mono font-bold text-base {% if acc.current_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
                             {{ acc.current_balance|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono text-xs text-slate-400">
+                        <td data-col="overdue_balance" class="py-3.5 px-4 text-left font-mono text-xs text-slate-400">
                             {{ acc.overdue_balance|floatformat:2 }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-center text-xs font-mono text-slate-500">
+                        <td data-col="last_transaction" class="py-3.5 px-4 text-center text-xs font-mono text-slate-500">
                             {{ acc.last_transaction_date|date:"Y-m-d"|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
                             <div class="flex items-center justify-center gap-1.5">
                                 <a href="{% url 'customer_transactions_list' %}?customer_id={{ acc.customer.id }}" title="كشف الحساب" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
                                     <span class="material-symbols-outlined text-lg">receipt_long</span>

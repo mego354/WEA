@@ -62,6 +62,9 @@
                 </button>
             </div>
 
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='purchase_orders_table' %}
+
             <!-- Create Purchase Order Button -->
             <a href="{% url 'purchase_order_create' %}"
                class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
@@ -76,78 +79,78 @@
 
     <!-- Purchase Orders Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="purchase_orders_table" data-col-table="purchase_orders_table" class="min-w-[900px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4">رقم المسلسل</th>
-                        <th class="py-3.5 px-4">الاسم</th>
-                        <th class="py-3.5 px-4">المنطقة</th>
-                        <th class="py-3.5 px-4">انشئ فى</th>
-                        <th class="py-3.5 px-4">المنشئ</th>
-                        <th class="py-3.5 px-4">الحالة</th>
-                        <th class="py-3.5 px-4">اجمالى القيمة</th>
-                        <th class="py-3.5 px-4">مسئول التوصيل</th>
-                        <th class="py-3.5 px-4">وقت التوصيل</th>
-                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th data-col="serial" data-col-label="رقم المسلسل" data-required="true" class="py-3.5 px-4">رقم المسلسل</th>
+                        <th data-col="supplier" data-col-label="المورد" data-required="true" class="py-3.5 px-4">الاسم</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
+                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4">انشئ فى</th>
+                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4">المنشئ</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4">الحالة</th>
+                        <th data-col="total" data-col-label="اجمالى القيمة" class="py-3.5 px-4">اجمالى القيمة</th>
+                        <th data-col="delivery_agent" data-col-label="مسئول التوصيل" class="py-3.5 px-4">مسئول التوصيل</th>
+                        <th data-col="delivery_time" data-col-label="وقت التوصيل" class="py-3.5 px-4">وقت التوصيل</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for o in orders %}
                     <tr class="hover:bg-slate-50/80 transition-colors group">
                         <!-- Serial Number -->
-                        <td class="py-3.5 px-4 font-mono font-bold text-slate-900">
+                        <td data-col="serial" class="py-3.5 px-4 font-mono font-bold text-slate-900">
                             <a href="{% url 'purchase_order_detail' o.id %}" class="hover:text-[#27bebe] transition-colors">
                                 {{ o.order_number }}
                             </a>
                         </td>
 
                         <!-- Supplier Name -->
-                        <td class="py-3.5 px-4">
+                        <td data-col="supplier" class="py-3.5 px-4">
                             <a href="{% url 'purchase_order_detail' o.id %}" class="font-bold text-slate-900 hover:text-[#27bebe] transition-colors">
                                 {{ o.supplier.name }}
                             </a>
                         </td>
 
                         <!-- Area -->
-                        <td class="py-3.5 px-4 text-slate-600">
+                        <td data-col="area" class="py-3.5 px-4 text-slate-600">
                             {{ o.supplier.area.name|default:"—" }}
                         </td>
 
                         <!-- Created At -->
-                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono">
                             {{ o.created_at|date:"d/m/Y h:i A" }}
                         </td>
 
                         <!-- Created By -->
-                        <td class="py-3.5 px-4 text-slate-700 font-medium">
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium">
                             {{ o.created_by.get_full_name|default:o.created_by.username|default:"Accountant" }}
                         </td>
 
                         <!-- Status Badge -->
-                        <td class="py-3.5 px-4">
+                        <td data-col="status" class="py-3.5 px-4">
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ o.status_badge_class }}">
                                 {{ o.status_label_en }}
                             </span>
                         </td>
 
                         <!-- Grand Total -->
-                        <td class="py-3.5 px-4 font-bold text-slate-900 font-mono">
+                        <td data-col="total" class="py-3.5 px-4 font-bold text-slate-900 font-mono">
                             {{ o.grand_total|intcomma }} جنيه
                         </td>
 
                         <!-- Delivery Agent -->
-                        <td class="py-3.5 px-4 text-slate-500">
+                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-500">
                             {{ o.delivery_agent|default:"—" }}
                         </td>
 
                         <!-- Delivery Time -->
-                        <td class="py-3.5 px-4 text-slate-500">
+                        <td data-col="delivery_time" class="py-3.5 px-4 text-slate-500">
                             {{ o.delivery_time|default:"—" }}
                         </td>
 
                         <!-- Actions -->
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
                             <a href="{% url 'purchase_order_detail' o.id %}"
                                class="p-1.5 rounded-lg text-slate-400 hover:text-[#27bebe] hover:bg-teal-50 transition-colors inline-block"
                                title="عرض التفاصيل">

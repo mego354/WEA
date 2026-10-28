@@ -7,6 +7,7 @@ urlpatterns = [
 
     # Users Management
     path('users/', views.users_list, name='users_list'),
+    path('users/settings/', views.users_settings_view, name='users_settings'),
     path('users/add/', views.user_create, name='user_create'),
     path('users/<int:pk>/edit/', views.user_edit, name='user_edit'),
     path('users/<int:pk>/effective-permissions/', views.user_effective_permissions, name='user_effective_permissions'),
@@ -22,6 +23,7 @@ urlpatterns = [
     path('roles/<int:pk>/duplicate/', views.role_duplicate, name='role_duplicate'),
     path('roles/<int:pk>/delete/', views.role_delete, name='role_delete'),
 
-    # Security Audit Logs (SuperAdmin)
+    # Security & Operations Audit Logs
     path('audit-logs/', views.audit_logs_list, name='audit_logs_list'),
+    path('audit-logs/<int:pk>/detail/', views.audit_log_detail, name='audit_log_detail'),
 ]

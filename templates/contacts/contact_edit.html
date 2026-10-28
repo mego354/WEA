@@ -435,6 +435,77 @@
             </div>
         </div>
 
+        {% if formatted_custom_fields %}
+        <!-- SECTION 4: الحقول المخصصة (Custom Fields) -->
+        <div class="card-container">
+            <div class="form-section-title">
+                <span class="material-symbols-outlined text-brand-500 text-xl">extension</span>
+                <span>الحقول المخصصة</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {% for item in formatted_custom_fields %}
+                <div class="{% if item.setting.field_type == 'textarea' %}md:col-span-2{% endif %}">
+                    <label class="custom-input-label" for="custom_{{ item.setting.field_key }}">
+                        {{ item.setting.display_name }}
+                        {% if item.setting.is_required %}<span class="required-star">*</span>{% endif %}
+                    </label>
+
+                    {% if item.setting.field_type == 'textarea' %}
+                    <textarea name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}" rows="3"
+                              class="mat-like-input h-auto py-2.5 resize-none"
+                              placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>{{ item.value|default:'' }}</textarea>
+
+                    {% elif item.setting.field_type == 'number' %}
+                    <input type="number" step="any" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
+                           value="{{ item.value|default:'' }}" class="mat-like-input font-mono" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
+
+                    {% elif item.setting.field_type == 'date' %}
+                    <input type="date" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
+                           value="{{ item.value|default:'' }}" class="mat-like-input" {% if item.setting.is_required %}required{% endif %}>
+
+                    {% elif item.setting.field_type == 'boolean' %}
+                    <div class="flex items-center gap-2 h-[48px]">
+                        <input type="checkbox" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
+                               {% if item.value %}checked{% endif %} class="w-5 h-5 rounded text-brand-500 border-slate-300">
+                        <span class="text-xs text-slate-600 font-semibold">{{ item.setting.help_text|default:"نعم / مفعل" }}</span>
+                    </div>
+
+                    {% elif item.setting.field_type == 'single_choice' %}
+                    <select name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}" class="mat-like-select" {% if item.setting.is_required %}required{% endif %}>
+                        <option value="">اختر...</option>
+                        {% for choice in item.setting.choices %}
+                        <option value="{{ choice }}" {% if choice == item.value %}selected{% endif %}>{{ choice }}</option>
+                        {% endfor %}
+                    </select>
+
+                    {% elif item.setting.field_type == 'multi_choice' %}
+                    <div class="p-3 border border-slate-200 rounded-lg bg-slate-50/50 flex flex-wrap gap-4">
+                        {% for choice in item.setting.choices %}
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                            <input type="checkbox" name="custom_{{ item.setting.field_key }}[]" value="{{ choice }}"
+                                   {% if item.value and choice in item.value %}checked{% endif %} class="rounded text-brand-500">
+                            <span>{{ choice }}</span>
+                        </label>
+                        {% empty %}
+                        <span class="text-xs text-slate-400">لا توجد خيارات محددة</span>
+                        {% endfor %}
+                    </div>
+
+                    {% else %}
+                    <input type="text" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
+                           value="{{ item.value|default:'' }}" class="mat-like-input" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
+                    {% endif %}
+
+                    {% if item.setting.help_text and item.setting.field_type != 'boolean' and item.setting.field_type != 'textarea' %}
+                    <span class="text-[11px] text-slate-400 mt-1 block">{{ item.setting.help_text }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Form Actions Footer -->
         <div class="flex items-center justify-end gap-4 mt-8">
             <a href="{% url 'contact_detail_overview' contact.id %}" class="btn-cancel">

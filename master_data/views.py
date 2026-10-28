@@ -11,10 +11,15 @@ from purchases.models import PurchaseOrder
 from treasury.models import VendorAccount, Vault
 from catalog.models import Product
 from contacts.models import Contact
-from inventory.models import InventoryStock
 from sales.models import SalesOrder, SalesReturnOrder, Collection, CustomerAccount
 from activities.models import Visit
-from accounts.permissions import require_permission, has_perm_or_admin, get_scoped_queryset
+from accounts.permissions import (
+    require_permission, has_perm_or_admin, get_scoped_queryset,
+    is_manager_or_higher, is_accountant, is_representative,
+    get_user_managed_representatives, is_manager_eligible_for_user
+)
+from django.contrib.auth import get_user_model
+from inventory.models import Warehouse, InventoryStock
 from .models import (
     CompanyProfile, LocationSettings, Area, ExpenseType,
     TicketType, ApprovalRequestType, AgreementType,
@@ -134,8 +139,47 @@ def _build_reps_sunburst(amount_field='current_balance', user=None):
 @login_required
 def home_view(request):
     """
-    Executive Home Dashboard matching the reference ERP widgets, KPIs, and sunburst charts.
+    Role-Based Executive Home Dashboard with Backend Permission Enforcement:
+    - Superadmin: System-wide metrics, sales, collections, inventory, visits, and all charts.
+    - Manager: Team-scoped metrics for representatives in their main area, plus ability to select an
+      eligible representative to view individual stats, with clear return-to-team option.
+    - Accountant: Financial statistics (sales, collections, customer/vendor balances, treasury/vaults).
+      Excludes field visits and visits chart.
+    - Representative: Individual operational metrics (own sales, collections, visits, warehouse inventory,
+      vault cash balance). Excludes cross-rep balance/debt comparison charts to protect peer privacy.
     """
+    user = request.user
+    UserModel = get_user_model()
+
+    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser or (user.role and user.role.name in ['CEO', 'Admin'])
+    is_acct = not is_super and is_accountant(user)
+    is_mgr = not is_super and not is_acct and is_manager_or_higher(user)
+    is_rep = not is_super and not is_acct and not is_mgr
+
+    # Manager / Superadmin representative selection
+    eligible_reps = []
+    selected_rep = None
+    if is_super or is_mgr:
+        if is_super:
+            eligible_reps = list(UserModel.objects.filter(is_active=True).filter(
+                Q(role__is_rep=True) | Q(assigned_warehouses__isnull=False) | Q(assigned_vaults__isnull=False)
+            ).distinct().select_related('role').order_by('name'))
+        else:
+            eligible_reps = list(get_user_managed_representatives(user).filter(
+                is_active=True
+            ).exclude(id=user.id).select_related('role').order_by('name'))
+
+        selected_rep_id = request.GET.get('rep_id', '').strip()
+        if selected_rep_id and selected_rep_id.isdigit():
+            target_user = UserModel.objects.filter(id=int(selected_rep_id), is_active=True).first()
+            if target_user:
+                if is_super or is_manager_eligible_for_user(user, target_user):
+                    selected_rep = target_user
+                else:
+                    # Security restriction: Rep is outside manager's authorized area scope
+                    selected_rep = None
+                    messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
+
     start_date_str = request.GET.get('start_date', '').strip()
     end_date_str = request.GET.get('end_date', '').strip()
     period = request.GET.get('period', '').strip()
@@ -158,18 +202,42 @@ def home_view(request):
             end_date_str = '2026-10-31'
             display_range = "01/10/2026 – 31/10/2026"
     else:
-        # Default view matching reference ERP active month
         start_date = datetime.date(2026, 10, 1)
         end_date = datetime.date(2026, 10, 31)
         start_date_str = '2026-10-01'
         end_date_str = '2026-10-31'
         display_range = "01/10/2026 – 31/10/2026"
 
-    so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), request.user, 'salesorder')
-    ro_qs = get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), request.user, 'salesreturnorder')
-    col_qs = get_scoped_queryset(Collection.objects.all(), request.user, 'collection')
-    vis_qs = get_scoped_queryset(Visit.objects.all(), request.user, 'visit')
-    cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
+    # Querysets strictly filtered by role and authorized scope
+    if selected_rep:
+        so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
+        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
+        col_qs = Collection.objects.filter(created_by=selected_rep)
+        vis_qs = Visit.objects.filter(Q(owner=selected_rep) | Q(created_by=selected_rep))
+        cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep))
+        cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
+    elif is_rep:
+        so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=user)
+        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=user)
+        col_qs = Collection.objects.filter(created_by=user)
+        vis_qs = Visit.objects.filter(Q(owner=user) | Q(created_by=user))
+        cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=user) | Q(assigned_team=user))
+        cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
+    elif is_acct:
+        so_qs = SalesOrder.objects.exclude(status='cancelled')
+        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled')
+        col_qs = Collection.objects.all()
+        vis_qs = Visit.objects.none()
+        cont_qs = Contact.objects.filter(is_customer=True)
+        cust_acc_qs = CustomerAccount.objects.all()
+    else:
+        # Superadmin or Manager (Team Scope)
+        so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user, 'salesorder')
+        ro_qs = get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), user, 'salesreturnorder')
+        col_qs = get_scoped_queryset(Collection.objects.all(), user, 'collection')
+        vis_qs = get_scoped_queryset(Visit.objects.all(), user, 'visit')
+        cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
+        cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')
 
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
@@ -192,7 +260,6 @@ def home_view(request):
     colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
     cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
 
-    cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), request.user, 'customeraccount')
     cust_acc = cust_acc_qs.aggregate(
         total_balance=Sum('current_balance'),
         accounts_count=Count('id', filter=Q(current_balance__gt=0)),
@@ -201,118 +268,99 @@ def home_view(request):
     )
 
     new_customers_count = cont_qs.count()
-    visits_lead_count = vis_qs.filter(contact__status='lead').count()
-    visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
-    if visits_lead_count == 0 and visits_cust_count == 0:
-        visits_cust_count = vis_qs.count()
 
-    # Reference ERP 14 KPI Cards
-    kpi_cards = [
-        # Row 1
-        {
-            'id': 'pos_created_stats',
-            'title': 'الطلبات المنشأة',
-            'amount': _format_metric_amount(so_created['total']),
-            'subtitle': f"{so_created['count']} طلب",
-        },
-        {
-            'id': 'pos_delivered_stats',
-            'title': 'الطلبات المسلمة',
-            'amount': _format_metric_amount(so_deliv['total']),
-            'subtitle': f"{so_deliv['count']} طلب",
-        },
-        {
-            'id': 'pos_pipeline_stats',
-            'title': 'الطلبات تحت التشغيل',
-            'amount': _format_metric_amount(so_proc['total']),
-            'subtitle': f"{so_proc['count']} طلب",
-        },
-        {
-            'id': 'ros_created_stats',
-            'title': 'المرتجعات المنشأة',
-            'amount': _format_metric_amount(ro_created['total']),
-            'subtitle': f"{ro_created['count']} مرتجع",
-        },
-        # Row 2
-        {
-            'id': 'ros_picked_stats',
-            'title': 'المرتجعات المقبولة',
-            'amount': _format_metric_amount(ro_acc['total']),
-            'subtitle': f"{ro_acc['count']} مرتجع",
-        },
-        {
-            'id': 'net_sales_stats',
-            'title': 'صافي المبيعات',
-            'amount': _format_metric_amount(net_sales),
-            'subtitle': '',
-        },
-        {
-            'id': 'collections_collected_stats',
-            'title': 'التحصيلات',
-            'amount': _format_metric_amount(colls['total']),
-            'subtitle': f"{colls['count']} تحصيل",
-        },
-        {
-            'id': 'collections_waiting_collection_stats',
-            'title': 'شيكات تحت التحصيل',
-            'amount': '',
-            'subtitle': f"{cheques['count']} تحصيل",
-        },
-        # Row 3
-        {
-            'id': 'acc_stats_balance',
-            'title': 'إجمالي الرصيد',
-            'amount': _format_metric_amount(cust_acc['total_balance']),
-            'subtitle': f"{cust_acc['accounts_count']} حساب",
-        },
-        {
-            'id': 'acc_stats_overdue',
-            'title': 'إجمالي المديونية المتأخرة',
-            'amount': _format_metric_amount(cust_acc['total_overdue']),
-            'subtitle': '6.98k جنيه واجب السداد الشهر الحالي',
-        },
-        {
-            'id': 'acc_stat_avg_days_outstanding',
-            'title': 'متوسط الأيام المعلّقة',
-            'amount': f"{round(cust_acc['avg_dso'] or 7.2, 1)}",
-            'subtitle': '',
-        },
-        {
-            'id': 'merchants_to_customers_stats',
-            'title': 'العملاء الجدد',
-            'amount': f"{new_customers_count}",
-            'subtitle': '',
-        },
-        # Row 4
-        {
-            'id': 'visits_created_lead_stats',
-            'title': 'زيارات العملاء المحتملين',
-            'amount': f"{visits_lead_count}",
-            'subtitle': '',
-        },
-        {
-            'id': 'visits_created_customer_stats',
-            'title': 'زيارات العملاء الحاليين',
-            'amount': f"{visits_cust_count}",
-            'subtitle': '',
-        },
-    ]
+    # Build Role-Appropriate KPI Cards
+    if is_acct:
+        vaults_total = Vault.objects.filter(is_active=True).aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        vendors_total = VendorAccount.objects.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        kpi_cards = [
+            {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
+            {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
+            {'id': 'pos_pipeline_stats', 'title': 'الطلبات تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
+            {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
+            {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
+            {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
+            {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
+            {'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
+            {'id': 'acc_stats_balance', 'title': 'إجمالي رصيد العملاء', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
+            {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
+            {'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{Vault.objects.filter(is_active=True).count()} خزنة وحساب"},
+            {'id': 'vendors_total_stats', 'title': 'إجمالي مستحقات الموردين', 'amount': _format_metric_amount(vendors_total), 'subtitle': f"{VendorAccount.objects.count()} مورد"},
+        ]
+    elif is_rep:
+        rep_vault = Vault.objects.filter(assigned_user=user).first()
+        rep_vault_bal = rep_vault.current_balance if rep_vault else Decimal('0.00')
+        rep_wh = Warehouse.objects.filter(assigned_user=user).first()
+        rep_stock_qty = InventoryStock.objects.filter(warehouse=rep_wh).aggregate(total=Sum('qty_on_hand'))['total'] or Decimal('0.00') if rep_wh else Decimal('0.00')
 
-    colls_chart = _build_area_sunburst(col_qs, amount_field='amount')
-    visits_chart = _build_visits_sunburst(vis_qs)
-    orders_created_chart = _build_area_sunburst(so_qs, amount_field='grand_total')
-    orders_deliv_chart = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
-    reps_bal_chart = _build_reps_sunburst('current_balance', user=request.user)
-    reps_ovd_chart = _build_reps_sunburst('overdue_balance', user=request.user)
+        visits_lead_count = vis_qs.filter(contact__status='lead').count()
+        visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
+        if visits_lead_count == 0 and visits_cust_count == 0:
+            visits_cust_count = vis_qs.count()
 
-    charts_json = json.dumps({
-        'collections_by_area': colls_chart,
-        'visits_by_area': visits_chart,
-        'orders_created_by_area': orders_created_chart,
-        'orders_delivered_by_area': orders_deliv_chart,
-        'reps_balance': reps_bal_chart,
-        'reps_overdue': reps_ovd_chart,
-    }, ensure_ascii=False)
+        kpi_cards = [
+            {'id': 'pos_created_stats', 'title': 'طلباتي المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
+            {'id': 'pos_delivered_stats', 'title': 'طلباتي المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
+            {'id': 'pos_pipeline_stats', 'title': 'طلباتي تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
+            {'id': 'ros_created_stats', 'title': 'مرتجعاتي المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
+            {'id': 'ros_picked_stats', 'title': 'مرتجعاتي المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
+            {'id': 'net_sales_stats', 'title': 'صافي مبيعاتي', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
+            {'id': 'collections_collected_stats', 'title': 'تحصيلاتي المكتملة', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
+            {'id': 'collections_waiting_collection_stats', 'title': 'شيكاتي تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
+            {'id': 'rep_vault_stats', 'title': 'رصيد عهدتي النقدية', 'amount': _format_metric_amount(rep_vault_bal), 'subtitle': rep_vault.name if rep_vault else 'لا توجد خزنة معينة'},
+            {'id': 'rep_stock_stats', 'title': 'كمية المخزون بعهدتي', 'amount': f"{rep_stock_qty:,.0f} قطعة", 'subtitle': rep_wh.name if rep_wh else 'لا يوجد مخزن معين'},
+            {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
+            {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
+        ]
+    else:
+        # Superadmin / Manager
+        visits_lead_count = vis_qs.filter(contact__status='lead').count()
+        visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
+        if visits_lead_count == 0 and visits_cust_count == 0:
+            visits_cust_count = vis_qs.count()
+
+        kpi_cards = [
+            {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
+            {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
+            {'id': 'pos_pipeline_stats', 'title': 'الطلبات تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
+            {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
+            {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
+            {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
+            {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
+            {'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
+            {'id': 'acc_stats_balance', 'title': 'إجمالي الرصيد', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
+            {'id': 'acc_stats_overdue', 'title': 'إجمالي المديونية المتأخرة', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
+            {'id': 'acc_stat_avg_days_outstanding', 'title': 'متوسط الأيام المعلّقة', 'amount': f"{round(cust_acc['avg_dso'] or 7.2, 1)}", 'subtitle': ''},
+            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد', 'amount': f"{new_customers_count}", 'subtitle': ''},
+            {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
+            {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
+        ]
+
+    # Build Role-Appropriate Charts
+    charts_dict = {}
+    available_chart_keys = []
+
+    charts_dict['collections_by_area'] = _build_area_sunburst(col_qs, amount_field='amount')
+    available_chart_keys.append('collections_by_area')
+
+    if not is_acct:
+        charts_dict['visits_by_area'] = _build_visits_sunburst(vis_qs)
+        available_chart_keys.append('visits_by_area')
+
+    charts_dict['orders_created_by_area'] = _build_area_sunburst(so_qs, amount_field='grand_total')
+    available_chart_keys.append('orders_created_by_area')
+
+    charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
+    available_chart_keys.append('orders_delivered_by_area')
+
+    if not is_rep:
+        reps_bal_chart = _build_reps_sunburst('current_balance', user=user if not is_super else None)
+        reps_ovd_chart = _build_reps_sunburst('overdue_balance', user=user if not is_super else None)
+        charts_dict['reps_balance'] = reps_bal_chart
+        charts_dict['reps_overdue'] = reps_ovd_chart
+        available_chart_keys.extend(['reps_balance', 'reps_overdue'])
+
+    charts_json = json.dumps(charts_dict, ensure_ascii=False)
 
     context = {
         'display_range': display_range,
@@ -321,6 +369,13 @@ def home_view(request):
         'period': period,
         'kpi_cards': kpi_cards,
         'charts_json': charts_json,
+        'available_charts': available_chart_keys,
+        'is_super': is_super,
+        'is_mgr': is_mgr,
+        'is_acct': is_acct,
+        'is_rep': is_rep,
+        'eligible_reps': eligible_reps,
+        'selected_rep': selected_rep,
     }
     return render(request, 'dashboard/home.html', context)
 
@@ -385,27 +440,30 @@ def location_settings_view(request):
         loc_settings.allow_all_users_to_create_agreements = request.POST.get('allow_all_users_to_create_agreements') == 'on'
         loc_settings.require_manager_approval_for_agreements = request.POST.get('require_manager_approval_for_agreements') == 'on'
 
-        # Configurable Product Suggestions (strictly restricted to eligible sellable products)
-        loc_settings.enable_product_suggestions = request.POST.get('enable_product_suggestions') == 'on'
-        from catalog.models import Product
-        eligible_products = Product.get_eligible_for_visits()
-        raw_suggested_ids = request.POST.getlist('suggested_products')
-        valid_suggested_ids = eligible_products.filter(id__in=raw_suggested_ids).values_list('id', flat=True)
-        loc_settings.suggested_products.set(valid_suggested_ids)
-
         loc_settings.save()
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='LOCATION_SETTINGS_UPDATED',
+            module='settings',
+            actor=request.user,
+            record_id=loc_settings.id,
+            record_name="إعدادات الموقع الجغرافي",
+            description="تحديث إعدادات التحقق من الموقع الجغرافي وسماحية الزيارات",
+            new_values={
+                'tolerance': loc_settings.tolerance,
+                'max_verified_accuracy': loc_settings.max_verified_accuracy,
+                'verify_visits': loc_settings.verify_visits,
+            },
+            status='SUCCESS',
+            request=request,
+        )
 
         messages.success(request, "تم حفظ إعدادات الموقع والزيارات بنجاح.")
         return redirect('location_settings')
 
-    from catalog.models import Product
-    eligible_products = Product.get_eligible_for_visits()
-    saved_suggested_ids = list(loc_settings.suggested_products.values_list('id', flat=True))
-
     return render(request, 'settings/location_settings.html', {
         'settings': loc_settings,
-        'eligible_products': eligible_products,
-        'saved_suggested_ids': saved_suggested_ids,
     })
 
 
@@ -433,10 +491,15 @@ def geofence_settings_api(request):
 @require_permission('settings:areas/manage')
 def areas_settings_view(request):
     """
-    Geographical areas tree matching reference ERP:
-    Collapsible governorates with subareas, code display, and 3-dot action menu.
+    Geographical areas tree representing Egypt's canonical governorates and subareas:
+    Annotates subareas_count, excludes company internal locations, and renders responsive cards.
     """
-    governorates = Area.objects.filter(parent__isnull=True).prefetch_related('subareas').order_by('code', 'name')
+    governorates = (
+        Area.objects.filter(parent__isnull=True, is_company_area=False)
+        .annotate(subareas_count=Count('subareas'))
+        .prefetch_related('subareas')
+        .order_by('code', 'name')
+    )
     return render(request, 'settings/areas_settings.html', {'governorates': governorates})
 
 
@@ -463,7 +526,21 @@ def area_create(request):
             if parent:
                 area_type = 'subarea'
 
-        Area.objects.create(name=name, code=code, area_type=area_type, parent=parent)
+        new_area = Area.objects.create(name=name, code=code, area_type=area_type, parent=parent, is_company_area=False)
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='AREA_CREATED',
+            module='settings',
+            actor=request.user,
+            record_id=new_area.id,
+            record_name=new_area.name,
+            new_values={'name': new_area.name, 'code': new_area.code, 'type': area_type, 'parent': parent.name if parent else None},
+            description=f"إضافة منطقة جديدة: {new_area.name} [{new_area.code}] ({'محافظة' if area_type == 'governorate' else 'منطقة فرعية'})",
+            status='SUCCESS',
+            request=request,
+        )
+
         messages.success(request, f"تم إضافة المنطقة '{name}' بنجاح.")
         return redirect('areas_settings')
 
@@ -486,9 +563,25 @@ def area_edit(request, pk):
             messages.error(request, f"الكود '{code}' مستخدم لمنطقة أخرى.")
             return redirect('areas_settings')
 
+        old_values = {'name': area.name, 'code': area.code}
         area.name = name
         area.code = code
         area.save()
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='AREA_UPDATED',
+            module='settings',
+            actor=request.user,
+            record_id=area.id,
+            record_name=area.name,
+            previous_values=old_values,
+            new_values={'name': area.name, 'code': area.code},
+            description=f"تحديث بيانات المنطقة: {area.name} [{area.code}]",
+            status='SUCCESS',
+            request=request,
+        )
+
         messages.success(request, f"تم تحديث بيانات المنطقة '{area.name}' بنجاح.")
         return redirect('areas_settings')
 
@@ -504,7 +597,22 @@ def area_delete(request, pk):
         return redirect('areas_settings')
 
     name = area.name
+    code = area.code
+    area_id = area.id
     area.delete()
+
+    from accounts.services import AuditLogService
+    AuditLogService.log(
+        action_type='AREA_DELETED',
+        module='settings',
+        actor=request.user,
+        record_id=area_id,
+        record_name=name,
+        description=f"حذف المنطقة الجغرافية: {name} [{code}]",
+        status='SUCCESS',
+        request=request,
+    )
+
     messages.success(request, f"تم حذف المنطقة '{name}' بنجاح.")
     return redirect('areas_settings')
 
@@ -830,34 +938,6 @@ def inventory_settings_view(request):
     return render(request, 'settings/inventory_settings.html', {'profile': profile})
 
 
-# ==========================================
-# 11. CONTACT CUSTOM FIELDS (/settings/contacts-udf)
-# ==========================================
-
-@login_required
-@require_permission('settings:contactsUdf/manage')
-def contacts_udf_view(request):
-    fields = ContactFieldSetting.objects.all().order_by('section', 'order')
-    header_fields = fields.filter(section='header')
-    subheader_fields = fields.filter(section='subheader')
-    basic_fields = fields.filter(section='basic')
-
-    if request.method == 'POST':
-        field_id = request.POST.get('field_id')
-        if field_id:
-            field = get_object_or_404(ContactFieldSetting, pk=field_id)
-            if not field.is_locked:
-                field.is_required = request.POST.get('is_required') == 'on'
-                field.is_filterable = request.POST.get('is_filterable') == 'on'
-                field.save()
-                messages.success(request, f"تم حفظ تخصيص الحقل '{field.display_name}'.")
-        return redirect('contacts_udf')
-
-    return render(request, 'settings/contacts_udf.html', {
-        'header_fields': header_fields,
-        'subheader_fields': subheader_fields,
-        'basic_fields': basic_fields,
-    })
 
 
 # ==========================================

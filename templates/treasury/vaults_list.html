@@ -36,7 +36,7 @@
     {% include 'components/active_filters.html' %}
 
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">account_balance_wallet</span>
                 <span>الخزائن والحسابات النقدية والعهدة</span>
@@ -44,43 +44,57 @@
                     {{ total_count }} خزنة
                 </span>
             </h2>
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='vaults_table' %}
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
-                <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="vaults_table" data-col-table="vaults_table" class="min-w-[800px] w-full text-right text-sm">
+                <thead class="bg-slate-50 text-slate-600 text-xs font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3 px-4">رقم الخزنة</th>
-                        <th class="py-3 px-4">اسم الخزنة / الحساب</th>
-                        <th class="py-3 px-4">نوع الخزنة</th>
-                        <th class="py-3 px-4">المسئول / الحائز للعهدة</th>
-                        <th class="py-3 px-4">الرصيد النقدي الحالي</th>
-                        <th class="py-3 px-4">الحالة</th>
-                        <th class="py-3 px-4 text-center">إجراءات</th>
+                        <th data-col="serial" data-col-label="رقم الخزنة" data-required="true" class="py-3 px-4">رقم الخزنة</th>
+                        <th data-col="name" data-col-label="اسم الخزنة" data-required="true" class="py-3 px-4">اسم الخزنة / الحساب</th>
+                        <th data-col="type" data-col-label="نوع الخزنة" class="py-3 px-4">نوع الخزنة</th>
+                        <th data-col="custodian" data-col-label="المسئول" class="py-3 px-4">المسئول / الحائز للعهدة</th>
+                        <th data-col="balance" data-col-label="الرصيد النقدي" class="py-3 px-4">الرصيد النقدي الحالي</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3 px-4">الحالة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for v in vaults %}
                     <tr class="hover:bg-slate-50/70">
-                        <td class="py-3.5 px-4 font-mono font-bold text-slate-900">#{{ v.serial_num }}</td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">{{ v.name }}</td>
-                        <td class="py-3.5 px-4 text-xs">
+                        <td data-col="serial" class="py-3.5 px-4 font-mono font-bold text-slate-900">#{{ v.serial_num }}</td>
+                        <td data-col="name" class="py-3.5 px-4 font-bold text-slate-900">{{ v.name }}</td>
+                        <td data-col="type" class="py-3.5 px-4 text-xs">
                             <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">{{ v.get_vault_type_display }}</span>
                         </td>
-                        <td class="py-3.5 px-4 text-xs font-semibold text-slate-700">
-                            {{ v.assigned_user|default:"غير محدد" }}
+                        <td data-col="custodian" class="py-3.5 px-4 text-xs font-semibold text-slate-700">
+                            {% if v.assigned_user %}
+                            <div class="font-bold text-slate-900">{{ v.assigned_user.get_full_name|default:v.assigned_user.username }}</div>
+                            <span class="text-[10px] text-brand-700 font-bold">
+                                {% for a in v.assigned_user.get_main_areas %}
+                                {{ a.name }}{% if not forloop.last %}، {% endif %}
+                                {% empty %}
+                                عهدة مندوب
+                                {% endfor %}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 font-medium">خزينة مركزية عامة</span>
+                            {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 font-black text-emerald-700 text-base font-mono">
+                        <td data-col="balance" class="py-3.5 px-4 font-black text-emerald-700 text-base font-mono">
                             {{ v.current_balance|intcomma }} ج.م
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="status" class="py-3.5 px-4">
                             {% if v.is_active %}
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مفعلة</span>
                             {% else %}
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">معطلة</span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
                             <a href="{% url 'vault_transactions_list' %}?vault_id={{ v.id }}" class="px-3 py-1 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1">
                                 <span class="material-symbols-outlined text-sm">history</span>
                                 <span>حركات النقدية</span>

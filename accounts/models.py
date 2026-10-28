@@ -16,6 +16,29 @@ class RoleTag(models.Model):
 
 
 class Role(models.Model):
+    # The 5 Canonical Supported Business Roles
+    ROLE_SUPERADMIN = 'superadmin'
+    ROLE_MANAGER = 'manager'
+    ROLE_ACCOUNTANT = 'accountant'
+    ROLE_REP = 'rep'
+    ROLE_MEDICAL_REP = 'medical_rep'
+
+    CANONICAL_ROLE_KEYS = [
+        ROLE_SUPERADMIN,
+        ROLE_MANAGER,
+        ROLE_ACCOUNTANT,
+        ROLE_REP,
+        ROLE_MEDICAL_REP,
+    ]
+
+    CANONICAL_ROLES = [
+        (ROLE_SUPERADMIN, 'مدير النظام الأعلى'),
+        (ROLE_MANAGER, 'مدير'),
+        (ROLE_ACCOUNTANT, 'محاسب'),
+        (ROLE_REP, 'مندوب مبيعات'),
+        (ROLE_MEDICAL_REP, 'مندوب دعاية طبية'),
+    ]
+
     name = models.CharField(max_length=100, unique=True, verbose_name="اسم الدور البرمجي")
     display_name = models.CharField(max_length=150, verbose_name="المسمى الوظيفي")
     description = models.TextField(blank=True, verbose_name="الوصف")
@@ -47,13 +70,19 @@ class Role(models.Model):
     def __str__(self):
         return self.display_name or self.name
 
+    @classmethod
+    def get_supported_roles(cls):
+        """Returns queryset of the 5 canonical supported roles."""
+        return cls.objects.filter(name__in=cls.CANONICAL_ROLE_KEYS, is_active=True).order_by('id')
+
     @property
     def is_manager_role(self):
+        name_l = (self.name or '').lower()
         return bool(
             self.is_super or
             self.is_area_manager or
             self.is_sub_area_manager or
-            self.name in ['admin', 'manager', 'area_manager', 'sub_area_manager']
+            name_l in ['superadmin', 'admin', 'ceo', 'manager', 'areamanager', 'area_manager', 'sub_area_manager', 'purchasingmanager']
         )
 
 
@@ -85,15 +114,15 @@ class User(AbstractUser):
     def is_super_admin(self):
         """
         Explicit SuperAdmin verification.
-        Only a true superuser or an active user assigned the system-level 'SuperAdmin' role is authorized.
-        Merely having a role named 'Admin' or arbitrary title does NOT grant superadmin privileges.
+        Authorized if user is a true superuser or assigned an active canonical 'superadmin' / 'SuperAdmin' role.
         """
         if not self.is_active:
             return False
         if self.is_superuser:
             return True
-        if self.role and self.role.is_active and self.role.is_super and self.role.name == 'SuperAdmin':
-            return True
+        if self.role and self.role.is_active:
+            if self.role.is_super or (self.role.name and self.role.name.lower() == 'superadmin'):
+                return True
         return False
 
     @property
@@ -106,6 +135,44 @@ class User(AbstractUser):
             return True
         return False
 
+    def get_default_warehouse(self):
+        """
+        Returns the designated default warehouse for this representative.
+        Prefers an active rep warehouse assigned to this user, then any assigned warehouse,
+        then any warehouse where user is manager.
+        """
+        from inventory.models import Warehouse
+        wh = Warehouse.objects.filter(assigned_user=self, is_rep_warehouse=True, is_active=True).first()
+        if not wh:
+            wh = Warehouse.objects.filter(assigned_user=self, is_active=True).first()
+        if not wh:
+            wh = Warehouse.objects.filter(manager=self, is_active=True).first()
+        if wh and not wh.area_id and self.assigned_areas.exists():
+            wh.area = self.assigned_areas.first()
+            wh.save(update_fields=['area'])
+        return wh
+
+    def get_default_treasury(self):
+        """
+        Returns the designated default cash treasury / vault for this representative.
+        """
+        from treasury.models import Vault
+        v = Vault.objects.filter(assigned_user=self, is_rep_vault=True, is_active=True).first()
+        if v:
+            return v
+        v = Vault.objects.filter(assigned_user=self, is_active=True, vault_type='cash').first()
+        if v:
+            return v
+        return Vault.objects.filter(assigned_user=self, is_active=True).first()
+
+    def get_main_areas(self):
+        """
+        Returns QuerySet of root/main areas (governorates) for this user.
+        """
+        from master_data.models import Area
+        from accounts.permissions import get_user_main_areas
+        return get_user_main_areas(self)
+
     def clear_perm_cache(self):
         """Clears in-memory permission cache for this user instance."""
         if hasattr(self, '_cached_perm_codenames'):
@@ -114,6 +181,7 @@ class User(AbstractUser):
     def get_effective_permission_codenames(self):
         """
         Returns a set of all effective permission codenames for this user.
+        Merges role permissions and direct user_permissions with module-level inheritance.
         Cached per user instance for high-performance requests.
         """
         if hasattr(self, '_cached_perm_codenames'):
@@ -129,25 +197,23 @@ class User(AbstractUser):
             self._cached_perm_codenames = all_codenames
             return self._cached_perm_codenames
 
-        if not self.role or not self.role.is_active:
-            self._cached_perm_codenames = set()
-            return self._cached_perm_codenames
-
-        # Get all permissions assigned to the role
-        role_perms = set(self.role.permissions.values_list('codename', flat=True))
+        # Get all permissions assigned to the role plus any direct user permissions
+        role_perms = set(self.role.permissions.values_list('codename', flat=True)) if (self.role and self.role.is_active) else set()
+        user_perms = set(self.user_permissions.values_list('codename', flat=True))
+        all_assigned = role_perms | user_perms
         
         # Enforce Module-Level Inheritance:
         # A child permission is effective IF AND ONLY IF its parent module root permission is enabled!
         from .permission_registry import get_module_for_permission
         effective = set()
-        for codename in role_perms:
+        for codename in all_assigned:
             if codename.startswith('module:'):
                 effective.add(codename)
             else:
                 mod_key = get_module_for_permission(codename)
                 if mod_key:
                     mod_root = f"module:{mod_key}"
-                    if mod_root in role_perms:
+                    if mod_root in all_assigned:
                         effective.add(codename)
                 else:
                     # Non-module or ad-hoc custom permissions
@@ -177,11 +243,136 @@ class User(AbstractUser):
 
 class SecurityAuditLog(models.Model):
     """
-    Audit log tracking all security-sensitive administrative operations:
-    Role creations, modifications, deletions, user role assignments,
-    status changes, password resets, and permission changes.
+    Comprehensive Audit log tracking all security, operational, and financial events across the ERP:
+    User/Role/Perm operations, Contacts, UDF, Todos, Activities/Visits, Visit Templates,
+    Catalog, Inventory/Warehouses, Transfers, Sales Orders/Approvals, Purchases,
+    Treasury, Areas, Settings, Imports/Exports.
     """
+    MODULE_CHOICES = [
+        ('auth', 'المصادقة والأمان'),
+        ('accounts', 'المستخدمين والأدوار'),
+        ('contacts', 'جهات الاتصال'),
+        ('custom_fields', 'الحقول المخصصة (UDF)'),
+        ('todos', 'المهام (Todos)'),
+        ('timeline', 'الأنشطة والجدول الزمني'),
+        ('visits', 'الزيارات الميدانية'),
+        ('templates', 'قوالب الزيارات'),
+        ('catalog', 'المنتجات والكتالوج'),
+        ('inventory', 'المخازن والمخزون'),
+        ('sales', 'المبيعات والطلبات'),
+        ('purchases', 'المشتريات والتوريدات'),
+        ('treasury', 'الخزينة والمالية'),
+        ('areas', 'المناطق الجغرافية'),
+        ('settings', 'الإعدادات العامة'),
+    ]
+
+    STATUS_CHOICES = [
+        ('SUCCESS', 'ناجح'),
+        ('FAILURE', 'فاشل'),
+        ('WARNING', 'تحذير'),
+    ]
+
+    ACTION_LABELS = {
+        # Auth & Security
+        'LOGIN': {'ar': 'تسجيل دخول ناجح', 'en': 'Successful Login'},
+        'LOGOUT': {'ar': 'تسجيل خروج', 'en': 'Logout'},
+        'LOGIN_FAILED': {'ar': 'فشل تسجيل الدخول', 'en': 'Failed Login'},
+        'login': {'ar': 'تسجيل دخول ناجح', 'en': 'Successful Login'},
+        'logout': {'ar': 'تسجيل خروج', 'en': 'Logout'},
+        'login_failed': {'ar': 'فشل تسجيل الدخول', 'en': 'Failed Login'},
+
+        # Roles & Permissions
+        'ROLE_CREATED': {'ar': 'إنشاء دور صلاحيات', 'en': 'Role Created'},
+        'ROLE_UPDATED': {'ar': 'تعديل دور وصلاحيات', 'en': 'Role Updated'},
+        'ROLE_DELETED': {'ar': 'حذف دور صلاحيات', 'en': 'Role Deleted'},
+        'ROLE_DUPLICATED': {'ar': 'استنساخ دور صلاحيات', 'en': 'Role Duplicated'},
+        'PERMISSIONS_SEEDED': {'ar': 'تهيئة وتحديث الصلاحيات', 'en': 'Permissions Seeded'},
+
+        # Users
+        'USER_CREATED': {'ar': 'إنشاء حساب مستخدم', 'en': 'User Created'},
+        'USER_UPDATED': {'ar': 'تعديل بيانات المستخدم', 'en': 'User Updated'},
+        'USER_ROLE_CHANGED': {'ar': 'تغيير الدور الوظيفي', 'en': 'User Role Changed'},
+        'USER_STATUS_TOGGLED': {'ar': 'تفعيل/تعطيل حساب مستخدم', 'en': 'User Status Toggled'},
+        'USER_PASSWORD_RESET': {'ar': 'إعادة تعيين كلمة المرور', 'en': 'Password Reset'},
+        'USER_BYPASS_LOCATION_TOGGLED': {'ar': 'تعديل تجاوز التحقق من الموقع', 'en': 'Location Bypass Toggled'},
+
+        # Contacts
+        'CONTACT_CREATED': {'ar': 'إنشاء جهة اتصال', 'en': 'Contact Created'},
+        'CONTACT_UPDATED': {'ar': 'تعديل بيانات جهة الاتصال', 'en': 'Contact Updated'},
+        'CONTACT_DELETED': {'ar': 'حذف جهة اتصال', 'en': 'Contact Deleted'},
+        'CONTACT_UDF_UPDATED': {'ar': 'تعديل الحقول المخصصة', 'en': 'Custom Fields Updated'},
+
+        # Todos
+        'TODO_CREATED': {'ar': 'إنشاء مهمة (Todo)', 'en': 'Todo Created'},
+        'TODO_TOGGLED': {'ar': 'تغيير حالة مهمة (Todo)', 'en': 'Todo Toggled'},
+        'TODO_DELETED': {'ar': 'حذف مهمة (Todo)', 'en': 'Todo Deleted'},
+
+        # Timeline & Activities
+        'ACTIVITY_LOGGED': {'ar': 'تسجيل نشاط جديد', 'en': 'Activity Logged'},
+
+        # Visits & Templates
+        'VISIT_CREATED': {'ar': 'إنشاء زيارة ميدانية', 'en': 'Visit Created'},
+        'VISIT_APPROVED': {'ar': 'اعتماد زيارة ميدانية', 'en': 'Visit Approved'},
+        'VISIT_REJECTED': {'ar': 'رفض زيارة ميدانية', 'en': 'Visit Rejected'},
+        'VISIT_STARTED': {'ar': 'بدء الزيارة (Check-in)', 'en': 'Visit Started'},
+        'VISIT_COMPLETED': {'ar': 'إنهاء الزيارة (Check-out)', 'en': 'Visit Completed'},
+        'VISIT_ANSWERS_SAVED': {'ar': 'حفظ استبيان الزيارة', 'en': 'Visit Answers Saved'},
+        'TEMPLATE_CREATED': {'ar': 'إنشاء قالب زيارة', 'en': 'Visit Template Created'},
+        'TEMPLATE_UPDATED': {'ar': 'تعديل قالب زيارة', 'en': 'Visit Template Updated'},
+        'TEMPLATE_DELETED': {'ar': 'حذف قالب زيارة', 'en': 'Visit Template Deleted'},
+
+        # Products & Catalog
+        'PRODUCT_CREATED': {'ar': 'إنشاء منتج جديد', 'en': 'Product Created'},
+        'PRODUCT_UPDATED': {'ar': 'تعديل بيانات منتج', 'en': 'Product Updated'},
+
+        # Inventory & Transfers
+        'STOCK_ADJUSTMENT': {'ar': 'تسوية مخزنية', 'en': 'Stock Adjustment'},
+        'STOCK_TRANSFER_REQUEST': {'ar': 'طلب تحويل مخزني', 'en': 'Stock Transfer Requested'},
+        'STOCK_TRANSFER_APPROVED': {'ar': 'اعتماد تحويل مخزني', 'en': 'Stock Transfer Approved'},
+        'STOCK_TRANSFER_REJECTED': {'ar': 'رفض تحويل مخزني', 'en': 'Stock Transfer Rejected'},
+
+        # Sales
+        'SALES_ORDER_CREATED': {'ar': 'إنشاء أمر بيع', 'en': 'Sales Order Created'},
+        'SALES_ORDER_APPROVED': {'ar': 'اعتماد أمر بيع', 'en': 'Sales Order Approved'},
+        'SALES_ORDER_REJECTED': {'ar': 'رفض أمر بيع', 'en': 'Sales Order Rejected'},
+        'SALES_ORDER_INVOICED': {'ar': 'إصدار فاتورة أمر بيع', 'en': 'Sales Order Invoiced'},
+        'SALES_ORDER_CANCELLED': {'ar': 'إلغاء أمر بيع', 'en': 'Sales Order Cancelled'},
+
+        # Treasury & Finance
+        'TREASURY_RECEIPT': {'ar': 'سند قبض / تحصيل نقدية', 'en': 'Treasury Receipt'},
+        'TREASURY_PAYMENT': {'ar': 'سند صرف نقدية', 'en': 'Treasury Payment'},
+
+        # Areas
+        'AREA_CREATED': {'ar': 'إنشاء منطقة جغرافية', 'en': 'Area Created'},
+        'AREA_UPDATED': {'ar': 'تعديل منطقة جغرافية', 'en': 'Area Updated'},
+        'AREA_DELETED': {'ar': 'حذف منطقة جغرافية', 'en': 'Area Deleted'},
+
+        # Settings & Data Operations
+        'SETTINGS_UPDATED': {'ar': 'تحديث إعدادات النظام', 'en': 'Settings Updated'},
+        'BULK_IMPORT': {'ar': 'عملية استيراد جماعي', 'en': 'Bulk Import'},
+        'BULK_EXPORT': {'ar': 'عملية تصدير بيانات', 'en': 'Bulk Export'},
+
+        # Generic & Legacy Action Codes
+        'create': {'ar': 'إنشاء سجل', 'en': 'Create'},
+        'CREATE': {'ar': 'إنشاء سجل', 'en': 'Create'},
+        'update': {'ar': 'تعديل سجل', 'en': 'Update'},
+        'UPDATE': {'ar': 'تعديل سجل', 'en': 'Update'},
+        'edit': {'ar': 'تعديل سجل', 'en': 'Edit'},
+        'EDIT': {'ar': 'تعديل سجل', 'en': 'Edit'},
+        'delete': {'ar': 'حذف سجل', 'en': 'Delete'},
+        'DELETE': {'ar': 'حذف سجل', 'en': 'Delete'},
+        'toggle': {'ar': 'تغيير حالة', 'en': 'Toggle Status'},
+        'TOGGLE': {'ar': 'تغيير حالة', 'en': 'Toggle Status'},
+        'approve': {'ar': 'اعتماد وموافقة', 'en': 'Approve'},
+        'APPROVE': {'ar': 'اعتماد وموافقة', 'en': 'Approve'},
+        'reject': {'ar': 'رفض', 'en': 'Reject'},
+        'REJECT': {'ar': 'رفض', 'en': 'Reject'},
+    }
+
     ACTION_CHOICES = [
+        ('LOGIN', 'تسجيل دخول ناجح'),
+        ('LOGOUT', 'تسجيل خروج'),
+        ('LOGIN_FAILED', 'فشل تسجيل الدخول'),
         ('ROLE_CREATED', 'إنشاء دور صلاحيات'),
         ('ROLE_UPDATED', 'تعديل دور وصلاحيات'),
         ('ROLE_DELETED', 'حذف دور صلاحيات'),
@@ -193,13 +384,51 @@ class SecurityAuditLog(models.Model):
         ('USER_PASSWORD_RESET', 'إعادة تعيين كلمة المرور'),
         ('USER_BYPASS_LOCATION_TOGGLED', 'تعديل صلاحية تجاوز التحقق من الموقع'),
         ('PERMISSIONS_SEEDED', 'تهيئة وتحديث مصفوفة الصلاحيات'),
+        ('CONTACT_CREATED', 'إنشاء جهة اتصال جديدة'),
+        ('CONTACT_UPDATED', 'تعديل بيانات جهة الاتصال'),
+        ('CONTACT_DELETED', 'حذف جهة اتصال'),
+        ('CONTACT_UDF_UPDATED', 'تعديل الحقول المخصصة (UDF)'),
+        ('TODO_CREATED', 'إنشاء مهمة (Todo)'),
+        ('TODO_TOGGLED', 'تغيير حالة مهمة (Todo)'),
+        ('TODO_DELETED', 'حذف مهمة (Todo)'),
+        ('ACTIVITY_LOGGED', 'تسجيل نشاط جهة اتصال'),
+        ('VISIT_CREATED', 'إنشاء زيارة ميدانية'),
+        ('VISIT_APPROVED', 'اعتماد زيارة ميدانية'),
+        ('VISIT_REJECTED', 'رفض زيارة ميدانية'),
+        ('VISIT_STARTED', 'بدء الزيارة (Check-in)'),
+        ('VISIT_COMPLETED', 'إنهاء الزيارة (Check-out)'),
+        ('VISIT_ANSWERS_SAVED', 'حفظ إجابات استبيان الزيارة'),
+        ('TEMPLATE_CREATED', 'إنشاء قالب زيارة'),
+        ('TEMPLATE_UPDATED', 'تعديل قالب زيارة'),
+        ('TEMPLATE_DELETED', 'حذف قالب زيارة'),
+        ('PRODUCT_CREATED', 'إنشاء منتج جديد'),
+        ('PRODUCT_UPDATED', 'تعديل بيانات المنتج'),
+        ('STOCK_ADJUSTMENT', 'تسوية مخزنية'),
+        ('STOCK_TRANSFER_REQUEST', 'طلب تحويل مخزني'),
+        ('STOCK_TRANSFER_APPROVED', 'اعتماد تحويل مخزني'),
+        ('SALES_ORDER_CREATED', 'إنشاء أمر بيع'),
+        ('SALES_ORDER_APPROVED', 'اعتماد أمر بيع'),
+        ('SALES_ORDER_REJECTED', 'رفض أمر بيع'),
+        ('SALES_ORDER_INVOICED', 'إصدار فاتورة أمر بيع'),
+        ('SALES_ORDER_CANCELLED', 'إلغاء أمر بيع'),
+        ('TREASURY_RECEIPT', 'سند قبض / تحصيل نقدية'),
+        ('TREASURY_PAYMENT', 'سند صرف نقدية'),
+        ('AREA_CREATED', 'إنشاء منطقة جغرافية'),
+        ('AREA_UPDATED', 'تعديل منطقة جغرافية'),
+        ('AREA_DELETED', 'حذف منطقة جغرافية'),
+        ('SETTINGS_UPDATED', 'تحديث إعدادات النظام'),
+        ('BULK_IMPORT', 'عملية استيراد جماعي'),
+        ('BULK_EXPORT', 'عملية تصدير بيانات'),
     ]
 
     actor = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='security_actions_performed', verbose_name="المسؤول المنفذ"
     )
-    action_type = models.CharField(max_length=50, choices=ACTION_CHOICES, db_index=True, verbose_name="نوع العملية")
+    module = models.CharField(max_length=50, default='accounts', choices=MODULE_CHOICES, db_index=True, verbose_name="الموديول / النظام")
+    action_type = models.CharField(max_length=100, db_index=True, verbose_name="نوع العملية")
+    record_id = models.CharField(max_length=100, blank=True, db_index=True, verbose_name="معرف السجل")
+    record_name = models.CharField(max_length=255, blank=True, verbose_name="اسم السجل / المرجع")
     target_user = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='security_events_targeted', verbose_name="المستخدم المستهدف"
@@ -209,18 +438,88 @@ class SecurityAuditLog(models.Model):
         related_name='audit_logs', verbose_name="الدور المستهدف"
     )
     description = models.TextField(verbose_name="تفاصيل العملية")
+    previous_values = models.JSONField(null=True, blank=True, verbose_name="القيم السابقة")
+    new_values = models.JSONField(null=True, blank=True, verbose_name="القيم الجديدة")
+    status = models.CharField(max_length=20, default='SUCCESS', choices=STATUS_CHOICES, db_index=True, verbose_name="الحالة")
+    reason = models.TextField(blank=True, verbose_name="السبب / الملاحظات")
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="عنوان IP")
     user_agent = models.TextField(blank=True, verbose_name="متصفح العميل")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="تاريخ ووقت العملية")
 
     class Meta:
-        verbose_name = "سجل تدقيق أمني"
-        verbose_name_plural = "سجلات التدقيق الأمني"
+        verbose_name = "سجل تدقيق أمني وعملياتي"
+        verbose_name_plural = "سجلات التدقيق الشامل"
         ordering = ['-created_at']
 
     def __str__(self):
         actor_name = self.actor.name or self.actor.username if self.actor else "النظام"
-        return f"[{self.get_action_type_display()}] بواسطة {actor_name} في {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+        return f"[{self.get_module_display()} - {self.action_type}] بواسطة {actor_name} في {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+    @property
+    def action(self):
+        return self.action_type
+
+    @property
+    def user(self):
+        return self.actor
+
+    @classmethod
+    def get_label_for_action(cls, code, lang='ar'):
+        """Classmethod returning human-readable label for any action code with clean fallback."""
+        if not code:
+            return 'عملية غير محددة' if lang == 'ar' else 'Unspecified Operation'
+        c = str(code).strip()
+        match = cls.ACTION_LABELS.get(c) or cls.ACTION_LABELS.get(c.upper()) or cls.ACTION_LABELS.get(c.lower())
+        if match:
+            return match.get(lang, match.get('ar', c))
+        # Formatted fallback for unknown codes
+        clean = c.replace('_', ' ').strip().title()
+        return f"عملية ({clean})" if lang == 'ar' else clean
+
+    def get_action_type_display(self, lang='ar'):
+        """
+        Instance method returning localized human-readable label.
+        Ensures template tags {{ log.get_action_type_display }} always produce clear text.
+        """
+        return self.get_label_for_action(self.action_type, lang=lang)
+
+    @property
+    def action_type_display(self):
+        return self.get_action_type_display('ar')
+
+    @property
+    def action_type_display_en(self):
+        return self.get_action_type_display('en')
+
+
+class UserSettings(models.Model):
+    """
+    Global configuration for user provisioning and representative resources.
+    Controls automatic creation of default warehouses and treasuries for representatives.
+    """
+    auto_create_rep_warehouse = models.BooleanField(
+        default=True,
+        verbose_name="إنشاء مخزن تلقائياً لكل مندوب عند التسجيل"
+    )
+    auto_create_rep_treasury = models.BooleanField(
+        default=True,
+        verbose_name="إنشاء خزنة / عهدة نقدية تلقائياً لكل مندوب عند التسجيل"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "إعدادات المستخدمين"
+        verbose_name_plural = "إعدادات المستخدمين"
+
+    def __str__(self):
+        return "إعدادات المستخدمين"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+
 
 
 

@@ -72,6 +72,9 @@
                 <span>تصدير البيانات</span>
             </a>
 
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='visits_table' %}
+
             <!-- Create Visit Button -->
             <a href="{% url 'visit_create' %}"
                class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
@@ -87,31 +90,31 @@
     <!-- TABLE VIEW -->
     {% if view_mode == 'table' %}
     <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right border-collapse">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="visits_table" data-col-table="visits_table" class="min-w-[1000px] w-full text-right border-collapse">
                 <thead>
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
-                        <th class="py-3.5 px-4 w-16">زيارة</th>
-                        <th class="py-3.5 px-4 text-center">النوع</th>
-                        <th class="py-3.5 px-4">جهة الاتصال</th>
-                        <th class="py-3.5 px-4">التاريخ</th>
-                        <th class="py-3.5 px-4">بدأ في</th>
-                        <th class="py-3.5 px-4">انتهى في</th>
-                        <th class="py-3.5 px-4">المدة</th>
-                        <th class="py-3.5 px-4">المسؤول</th>
-                        <th class="py-3.5 px-4">المنطقة</th>
-                        <th class="py-3.5 px-4">نوع الاكونت</th>
-                        <th class="py-3.5 px-4 text-center">ناجحة</th>
-                        <th class="py-3.5 px-4 text-center">مزدوجة</th>
-                        <th class="py-3.5 px-4 text-center">الحالة</th>
-                        <th class="py-3.5 px-4 text-center">الاعتماد</th>
-                        <th class="py-3.5 px-4 text-center w-20">إجراءات</th>
+                        <th data-col="serial" data-col-label="زيارة" data-required="true" class="py-3.5 px-4 w-16">زيارة</th>
+                        <th data-col="type" data-col-label="النوع" class="py-3.5 px-4 text-center">النوع</th>
+                        <th data-col="contact" data-col-label="جهة الاتصال" data-required="true" class="py-3.5 px-4">جهة الاتصال</th>
+                        <th data-col="date" data-col-label="التاريخ" class="py-3.5 px-4">التاريخ</th>
+                        <th data-col="started_at" data-col-label="بدأ في" class="py-3.5 px-4">بدأ في</th>
+                        <th data-col="ended_at" data-col-label="انتهى في" class="py-3.5 px-4">انتهى في</th>
+                        <th data-col="duration" data-col-label="المدة" class="py-3.5 px-4">المدة</th>
+                        <th data-col="owner" data-col-label="المسؤول" class="py-3.5 px-4">المسؤول</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
+                        <th data-col="account_type" data-col-label="نوع الاكونت" class="py-3.5 px-4">نوع الاكونت</th>
+                        <th data-col="is_successful" data-col-label="ناجحة" class="py-3.5 px-4 text-center">ناجحة</th>
+                        <th data-col="doubled" data-col-label="مزدوجة" class="py-3.5 px-4 text-center">مزدوجة</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="approval" data-col-label="الاعتماد" class="py-3.5 px-4 text-center">الاعتماد</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center w-20">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                     {% for v in visits %}
                     <tr class="hover:bg-teal-50/30 transition-colors">
-                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                        <td data-col="serial" class="py-3 px-4 font-mono font-bold text-slate-900">
                             <div class="flex items-center gap-1">
                                 <a href="{% url 'visit_detail' v.pk %}" class="hover:text-[#27bebe]">#{{ v.serial_num }}</a>
                                 {% if v.verification_status == 'verified' %}
@@ -124,12 +127,12 @@
                                 {% endif %}
                             </div>
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="type" class="py-3 px-4 text-center">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
                                 {{ v.plan_type_display_ar }}
                             </span>
                         </td>
-                        <td class="py-3 px-4">
+                        <td data-col="contact" class="py-3 px-4">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-slate-400 text-base">person</span>
                                 <div>
@@ -139,54 +142,54 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="py-3 px-4 text-slate-600 font-mono">
+                        <td data-col="date" class="py-3 px-4 text-slate-600 font-mono">
                             {{ v.date|date:"d/m/Y" }}
                         </td>
-                        <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                        <td data-col="started_at" class="py-3 px-4 text-slate-500 font-mono text-[11px]">
                             {{ v.started_at|date:"H:i"|default:"-" }}
                         </td>
-                        <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                        <td data-col="ended_at" class="py-3 px-4 text-slate-500 font-mono text-[11px]">
                             {{ v.ended_at|date:"H:i"|default:"-" }}
                         </td>
-                        <td class="py-3 px-4 text-slate-600 font-mono">
+                        <td data-col="duration" class="py-3 px-4 text-slate-600 font-mono">
                             {% if v.duration %}{{ v.duration }} ث{% else %}-{% endif %}
                         </td>
-                        <td class="py-3 px-4 text-slate-800">
+                        <td data-col="owner" class="py-3 px-4 text-slate-800">
                             {{ v.owner.get_full_name|default:v.owner.username }}
                         </td>
-                        <td class="py-3 px-4 text-slate-500">
+                        <td data-col="area" class="py-3 px-4 text-slate-500">
                             {{ v.contact.area.name|default:"-" }}
                         </td>
-                        <td class="py-3 px-4">
+                        <td data-col="account_type" class="py-3 px-4">
                             <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px]">
                                 {{ v.contact.account_type|default:"Clinic" }}
                             </span>
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="is_successful" class="py-3 px-4 text-center">
                             {% if v.is_successful %}
                             <span class="text-emerald-600 font-bold">✓</span>
                             {% else %}
                             <span class="text-slate-300">✗</span>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="doubled" class="py-3 px-4 text-center">
                             {% if v.doubled %}
                             <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">مزدوجة</span>
                             {% else %}
                             <span class="text-slate-300">-</span>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="status" class="py-3 px-4 text-center">
                             <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
                                 {{ v.status_display_ar }}
                             </span>
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="approval" class="py-3 px-4 text-center">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
                                 {{ v.approval_display_ar }}
                             </span>
                         </td>
-                        <td class="py-3 px-4 text-center">
+                        <td data-col="actions" class="py-3 px-4 text-center">
                             <div class="flex items-center justify-center gap-1">
                                 {% if v.user_can_approve and v.approval_status != 'approved' %}
                                 <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}" class="inline">

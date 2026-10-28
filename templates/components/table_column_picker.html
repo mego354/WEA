@@ -1,0 +1,37 @@
+{% comment %}
+Reusable Table Column Visibility Picker Component
+Usage:
+  {% include 'components/table_column_picker.html' with table_id='sales_orders_table' %}
+Optional params:
+  btn_class: Custom CSS classes for the trigger button
+{% endcomment %}
+<div class="relative inline-block text-right" data-table-column-picker="{{ table_id }}">
+    <button type="button"
+            onclick="TableColumnManager.toggleDropdown('{{ table_id }}')"
+            class="{{ btn_class|default:'inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold rounded-xl shadow-xs hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[38px]' }}"
+            title="تخصيص الأعمدة المعروضة"
+            aria-label="تخصيص الأعمدة">
+        <span class="material-symbols-outlined text-base text-brand-600">view_column</span>
+        <span class="hidden sm:inline">الأعمدة</span>
+        <span class="material-symbols-outlined text-xs text-slate-400">expand_more</span>
+    </button>
+    <div id="col-picker-dropdown-{{ table_id }}"
+         class="hidden absolute left-0 sm:right-auto sm:left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 transition-all animate-fadeIn">
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm text-brand-600">view_column</span>
+                <span>تخصيص الأعمدة</span>
+            </span>
+            <div class="flex items-center gap-1.5">
+                <button type="button" onclick="TableColumnManager.showAll('{{ table_id }}')" class="text-[11px] text-brand-600 hover:underline font-semibold">عرض الكل</button>
+                <span class="text-slate-300 text-xs">|</span>
+                <button type="button" onclick="TableColumnManager.resetDefaults('{{ table_id }}')" class="text-[11px] text-slate-500 hover:text-slate-800 font-medium">الافتراضي</button>
+            </div>
+        </div>
+        <!-- Column Checkboxes Container -->
+        <div class="max-h-56 overflow-y-auto space-y-0.5 py-1" id="col-picker-list-{{ table_id }}">
+            <div class="p-2 text-center text-xs text-slate-400">جاري تحميل الأعمدة...</div>
+        </div>
+    </div>
+</div>

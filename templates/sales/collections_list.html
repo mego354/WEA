@@ -89,7 +89,7 @@
 
     <!-- Collections Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">receipt</span>
                 <span>سجل سندات التحصيل</span>
@@ -97,47 +97,50 @@
                     {{ total_count }} سند
                 </span>
             </h2>
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='collections_table' %}
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="collections_table" data-col-table="collections_table" class="min-w-[800px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
-                        <th class="py-3.5 px-4">رقم السند</th>
-                        <th class="py-3.5 px-4">العميل</th>
-                        <th class="py-3.5 px-4">الخزنة المودع بها</th>
-                        <th class="py-3.5 px-4">طريقة الدفع</th>
-                        <th class="py-3.5 px-4">تاريخ التحصيل</th>
-                        <th class="py-3.5 px-4">المحصل</th>
-                        <th class="py-3.5 px-4 text-left">المبلغ المحصل</th>
+                        <th data-col="serial" data-col-label="رقم السند" data-required="true" class="py-3.5 px-4">رقم السند</th>
+                        <th data-col="customer" data-col-label="العميل" data-required="true" class="py-3.5 px-4">العميل</th>
+                        <th data-col="vault" data-col-label="الخزنة المودع بها" class="py-3.5 px-4">الخزنة المودع بها</th>
+                        <th data-col="payment_method" data-col-label="طريقة الدفع" class="py-3.5 px-4">طريقة الدفع</th>
+                        <th data-col="collection_date" data-col-label="تاريخ التحصيل" class="py-3.5 px-4">تاريخ التحصيل</th>
+                        <th data-col="collector" data-col-label="المحصل" class="py-3.5 px-4">المحصل</th>
+                        <th data-col="amount" data-col-label="المبلغ المحصل" data-required="true" class="py-3.5 px-4 text-left">المبلغ المحصل</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for col in collections %}
                     <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
+                        <td data-col="serial" class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">
                             #{{ col.serial_num }}
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="customer" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ col.customer.name }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600 text-xs">
+                        <td data-col="vault" class="py-3.5 px-4 text-slate-600 text-xs">
                             <span class="inline-flex items-center gap-1">
                                 <span class="material-symbols-outlined text-sm text-slate-400">account_balance_wallet</span>
                                 <span>{{ col.vault.name }}</span>
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-xs">
+                        <td data-col="payment_method" class="py-3.5 px-4 text-xs">
                             <span class="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
                                 {{ col.get_payment_method_display }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                        <td data-col="collection_date" class="py-3.5 px-4 text-xs font-mono text-slate-600">
                             {{ col.collection_date|date:"Y-m-d" }}
                         </td>
-                        <td class="py-3.5 px-4 text-xs text-slate-600">
+                        <td data-col="collector" class="py-3.5 px-4 text-xs text-slate-600">
                             {{ col.created_by|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-left font-mono font-bold text-emerald-700 text-base">
+                        <td data-col="amount" class="py-3.5 px-4 text-left font-mono font-bold text-emerald-700 text-base">
                             +{{ col.amount|floatformat:2 }} ج.م
                         </td>
                     </tr>

@@ -101,12 +101,30 @@ def sales_order_create(request):
                 'unit_price': price,
             })
 
-        if not customer_id or not warehouse_id:
-            messages.error(request, "يرجى تحديد العميل والمخزن.")
+        from accounts.services import is_representative, get_representative_warehouse
+        is_rep = is_representative(request.user)
+        rep_wh = get_representative_warehouse(request.user) if is_rep else None
+
+        if is_rep:
+            if not rep_wh:
+                messages.error(request, "لم يتم تعيين مخزن عهدة افتراضي لحساب المندوب الخاص بك. يرجى مراجعة إدارة النظام.")
+                return redirect('sales_order_create')
+            warehouse = rep_wh
+        else:
+            if not warehouse_id:
+                messages.error(request, "يرجى تحديد المخزن.")
+                return redirect('sales_order_create')
+            warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+            if warehouse.assigned_user and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+                from accounts.permissions import is_manager_eligible_for_user
+                if not is_manager_eligible_for_user(request.user, warehouse.assigned_user):
+                    return render_forbidden_response(request, "لا يمكنك إجراء مبيعات من مخزن يتبع مندوباً خارج منطقتك الرئيسية.")
+
+        if not customer_id:
+            messages.error(request, "يرجى تحديد العميل.")
             return redirect('sales_order_create')
 
         customer = get_object_or_404(Contact, id=customer_id)
-        warehouse = get_object_or_404(Warehouse, id=warehouse_id)
 
         try:
             order = SalesOrderService.create_order(
@@ -124,13 +142,22 @@ def sales_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('sales_order_create')
 
+    from accounts.services import is_representative, get_representative_warehouse
+    is_rep = is_representative(request.user)
+    user_rep_wh = get_representative_warehouse(request.user) if is_rep else None
+
     customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
-    warehouses = Warehouse.objects.filter(is_active=True)
+    if user_rep_wh:
+        warehouses = Warehouse.objects.filter(id=user_rep_wh.id)
+    else:
+        warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
     products = Product.objects.filter(is_active=True)
 
     context = {
         'customers': customers,
         'warehouses': warehouses,
+        'user_rep_wh': user_rep_wh,
+        'is_rep': is_rep,
         'products': products,
     }
     return render(request, 'sales/sales_order_create.html', context)
@@ -255,6 +282,7 @@ def collections_list(request):
     vault_id = request.GET.get('vault')
 
     qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'collection')
 
     active_filters = []
 
@@ -276,8 +304,8 @@ def collections_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
-    vaults = Vault.objects.filter(is_active=True).order_by('name')
+    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact').order_by('name')[:50]
+    vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -312,6 +340,11 @@ def collection_create(request):
         customer = get_object_or_404(Contact, id=customer_id)
         vault = get_object_or_404(Vault, id=vault_id)
 
+        if not can_user_access_object(request.user, customer, 'view'):
+            return render_forbidden_response(request, "لا يمكنك تسجيل تحصيل لعميل خارج نطاقك الجغرافي أو صلاحياتك.")
+        if not can_user_access_object(request.user, vault, 'deposit'):
+            return render_forbidden_response(request, "لا يمكنك الإيداع في خزنة غير مخصصة لك.")
+
         try:
             col = CollectionService.record_collection(
                 customer=customer,
@@ -327,8 +360,8 @@ def collection_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('collection_create')
 
-    customers = Contact.objects.filter(is_customer=True)
-    vaults = Vault.objects.filter(is_active=True)
+    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
+    vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault')
     initial_customer = request.GET.get('customer_id')
 
     context = {
@@ -346,6 +379,7 @@ def accounting_customers_list(request):
     """
     search = request.GET.get('search', '').strip()
     qs = CustomerAccount.objects.select_related('customer', 'customer__area').order_by('-current_balance')
+    qs = get_scoped_queryset(qs, request.user, 'customeraccount')
 
     active_filters = []
     if search:
@@ -377,6 +411,8 @@ def customer_transactions_list(request):
     search = request.GET.get('search', '').strip()
 
     qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial')
+    scoped_contacts = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
+    qs = qs.filter(account__customer__in=scoped_contacts)
 
     active_filters = []
 
@@ -393,7 +429,7 @@ def customer_transactions_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
+    customers = scoped_contacts.filter(is_customer=True).order_by('name')[:50]
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -452,6 +488,7 @@ def sales_orders_export(request):
 def collections_export(request):
     customer_id = request.GET.get('customer')
     qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'collection')
     if customer_id:
         qs = qs.filter(customer_id=customer_id)
 

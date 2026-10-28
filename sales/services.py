@@ -24,6 +24,16 @@ class SalesOrderService:
         # Ensure customer account exists
         CustomerAccount.get_or_create_for_customer(customer)
 
+        # Resolve and enforce designated warehouse for representatives
+        from accounts.services import is_representative, get_representative_warehouse
+        if is_representative(user):
+            rep_wh = get_representative_warehouse(user)
+            if not rep_wh:
+                raise ValidationError("لم يتم تعيين مخزن عهدة افتراضي لحساب المندوب الخاص بك. يرجى مراجعة إدارة النظام.")
+            if source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+                raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
+            source_warehouse = rep_wh
+
         from master_data.models import SalesSettings
         from accounts.permissions import is_manager_or_higher
         sales_settings = SalesSettings.get_settings()
@@ -90,10 +100,18 @@ class SalesOrderService:
     @transaction.atomic
     def approve_order(cls, order, user, notes=''):
         """
-        Approves the sales order by management.
+        Approves the sales order by management in the same main area.
         """
         if order.status not in ['pending', 'rejected']:
             raise ValidationError(f"لا يمكن اعتماد الطلب في حالته الحالية: {order.get_status_display()}.")
+
+        from accounts.permissions import is_manager_eligible_for_user
+        is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
+        if not is_super:
+            if order.created_by_id == user.id:
+                raise ValidationError("لا يمكن للمنشئ أو المندوب اعتماد أمر البيع الخاص به.")
+            if order.created_by and not is_manager_eligible_for_user(user, order.created_by):
+                raise ValidationError("غير مصرح لك باعتماد أمر البيع لمندوب خارج نطاق منطقتك الرئيسية.")
 
         status_before = order.status
         order.status = 'manager_approval'
@@ -120,12 +138,28 @@ class SalesOrderService:
         """
         Rejects the sales order with a mandatory reason.
         """
-        if order.status not in ['pending', 'manager_approval']:
+        if order.status not in ['pending', 'manager_approval', 'preparing']:
             raise ValidationError(f"لا يمكن رفض الطلب في حالته الحالية: {order.get_status_display()}.")
+
+        from accounts.permissions import is_manager_eligible_for_user
+        is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
+        if not is_super:
+            if order.created_by_id == user.id:
+                raise ValidationError("لا يمكن للمنشئ أو المندوب رفض أمر البيع الخاص به.")
+            if order.created_by and not is_manager_eligible_for_user(user, order.created_by):
+                raise ValidationError("غير مصرح لك برفض أمر البيع لمندوب خارج نطاق منطقتك الرئيسية.")
 
         clean_reason = (reason or '').strip()
         if not clean_reason:
             raise ValidationError("يرجى كتابة سبب رفض أمر البيع.")
+
+        # Release reserved stock if order was in preparing status
+        if order.status == 'preparing':
+            for item in order.items.select_related('product'):
+                stock = InventoryStock.objects.filter(warehouse=order.source_warehouse, product=item.product).first()
+                if stock:
+                    stock.qty_reserved = max(Decimal('0.00'), stock.qty_reserved - item.quantity)
+                    stock.save(update_fields=['qty_reserved'])
 
         status_before = order.status
         order.status = 'rejected'

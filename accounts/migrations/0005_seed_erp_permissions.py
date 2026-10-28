@@ -3,7 +3,7 @@ from django.core.management import call_command
 
 
 def forward_seed_permissions(apps, schema_editor):
-    call_command('setup_permissions')
+    call_command('setup_permissions', no_audit=True)
 
 
 def reverse_seed_permissions(apps, schema_editor):

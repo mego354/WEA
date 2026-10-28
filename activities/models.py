@@ -75,30 +75,15 @@ class Agreement(models.Model):
 
 
 class VisitTemplate(models.Model):
-    MODE_CHOICES = [
-        ('checkin_checkout', 'Checkin and Checkout'),
-        ('normal', 'عادي'),
-    ]
-
-    OUTCOME_MODES = [
-        ('disabled', 'معطل'),
-        ('enabled_auto_approve_unsuccessful', 'Enabled, auto approve unsuccessful'),
-        ('enabled', 'مفعل'),
-    ]
-
     name = models.CharField(max_length=100, unique=True, verbose_name="اسم القالب الداخلي")
     display_name_ar = models.CharField(max_length=150, verbose_name="الاسم بالعربية")
     display_name_en = models.CharField(max_length=150, blank=True, verbose_name="الاسم بالإنجليزية")
     active = models.BooleanField(default=True, verbose_name="نشط")
 
     # Settings
-    mode = models.CharField(max_length=50, default='checkin_checkout', choices=MODE_CHOICES, verbose_name="الوضع")
     allow_unplanned = models.BooleanField(default=True, verbose_name="تفعيل تسجيل زيارات خارج خطة الزيارات")
-    auto_approve_unplanned = models.BooleanField(default=False, verbose_name="موافقة تلقائية للزيارات المنشأة خارج خطة الزيارات")
     enable_product_detailing = models.BooleanField(default=True, verbose_name="تفعيل شرح المنتجات")
     enable_double_visit_assessment_only = models.BooleanField(default=False, verbose_name="تفعيل التقييمات للزيارات المزدوجة فقط")
-    visit_outcome_mode = models.CharField(max_length=50, default='enabled_auto_approve_unsuccessful', choices=OUTCOME_MODES, verbose_name="نتيجة الزيارة")
-    auto_end_visit = models.BooleanField(default=False, verbose_name="إنهاء الزيارة تلقائياً")
 
     # Location
     has_special_location_settings = models.BooleanField(default=False, verbose_name="اعدادات خاصة للتحقق من الموقع")
@@ -144,7 +129,7 @@ class VisitTemplate(models.Model):
         """
         Check if a given user is eligible to use this template based on role restrictions.
         Superusers / SuperAdmins are always eligible.
-        If restricted_roles is empty, all roles are eligible.
+        If restricted_roles is empty, all active roles are eligible.
         """
         if not user or not user.is_authenticated:
             return False
@@ -152,9 +137,9 @@ class VisitTemplate(models.Model):
             return True
         if not self.restricted_roles.exists():
             return True
-        if not getattr(user, 'role', None):
+        if not getattr(user, 'role', None) or not user.role.is_active:
             return False
-        return self.restricted_roles.filter(id=user.role.id).exists()
+        return self.restricted_roles.filter(id=user.role.id, is_active=True).exists()
 
     def is_contact_eligible(self, contact, user=None):
         """
@@ -196,13 +181,29 @@ class VisitTemplate(models.Model):
             return True
 
         contact_type = (getattr(contact, 'account_type', '') or '').strip().lower()
+        if not contact_type:
+            name_l = (getattr(contact, 'name', '') or '').lower()
+            if getattr(contact, 'specialty', None) or any(d in name_l for d in ['د.', 'دكتور', 'طبيب', 'dr.', 'dr ']):
+                contact_type = 'clinic'
+            elif any(p in name_l for p in ['صيدلية', 'صيدليه', 'pharmacy']):
+                contact_type = 'pharmacy'
+            elif any(h in name_l for h in ['مستشفى', 'hospital']):
+                contact_type = 'hospital'
+            elif any(s in name_l for s in ['مخزن', 'store']):
+                contact_type = 'store'
+            elif any(c in name_l for c in ['مركز', 'عيادة', clinic]):
+                contact_type = 'clinic'
+            else:
+                # If account type cannot be determined, allow the rep to proceed
+                return True
+
         if contact_type and contact_type in allowed:
             return True
 
         alias_map = {
             'store': ['drug store', 'store', 'warehouse'],
             'drug store': ['drug store', 'store'],
-            'clinic': ['clinic', 'physician'],
+            'clinic': ['clinic', 'physician', 'doctor'],
             'pharmacy': ['pharmacy', 'pharmacist'],
             'center': ['center', 'medical center'],
             'polyclinic': ['polyclinic'],
@@ -210,7 +211,7 @@ class VisitTemplate(models.Model):
             'distributor': ['distributor'],
             'health unit': ['health unit'],
             'dispensary': ['dispensary'],
-            'physician': ['clinic', 'physician'],
+            'physician': ['clinic', 'physician', 'doctor'],
             'pharmacist': ['pharmacy', 'pharmacist'],
         }
         for al in allowed:
@@ -218,7 +219,7 @@ class VisitTemplate(models.Model):
             if contact_type in aliases:
                 return True
 
-        # Fallback to customer_category if account_type is unset or matches
+        # Fallback to customer_category if account_type matches
         cust_cat = (getattr(contact, 'customer_category', '') or '').strip().lower()
         if cust_cat and (cust_cat in allowed or any(cust_cat in alias_map.get(al, [al]) for al in allowed)):
             return True
@@ -233,7 +234,7 @@ class VisitTemplate(models.Model):
         if not allowed:
             return True
         if not account_type:
-            return False
+            return True
         clean_type = str(account_type).strip().lower()
         if clean_type in allowed:
             return True
@@ -523,6 +524,35 @@ class Visit(models.Model):
         if self.distance is not None:
             return f"{float(self.distance):.2f} m"
         return "غير محدد"
+
+    @property
+    def duration_formatted(self):
+        """
+        Calculates and formats visit duration nicely in Arabic.
+        If duration is 0 but started_at and ended_at exist, computes duration dynamically.
+        """
+        secs = self.duration
+        if (not secs or secs == 0) and self.started_at and self.ended_at:
+            secs = max(1, int((self.ended_at - self.started_at).total_seconds()))
+
+        if not secs or secs <= 0:
+            return "0 دقيقة"
+
+        if secs < 60:
+            return f"{secs} ثانية"
+
+        mins = secs // 60
+        remaining_secs = secs % 60
+        if mins < 60:
+            if remaining_secs > 0:
+                return f"{mins} دقيقة و {remaining_secs} ثانية"
+            return f"{mins} دقيقة"
+
+        hours = mins // 60
+        rem_mins = mins % 60
+        if rem_mins > 0:
+            return f"{hours} ساعة و {rem_mins} دقيقة"
+        return f"{hours} ساعة"
 
     @property
     def verification_status_display_ar(self):

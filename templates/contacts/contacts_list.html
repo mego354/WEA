@@ -165,10 +165,8 @@
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
 
-            <!-- Settings / Columns Gear Button -->
-            <button type="button" class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="إعدادات الأعمدة">
-                <span class="material-symbols-outlined text-xl text-brand-600">settings</span>
-            </button>
+            <!-- Column Selector -->
+            {% include 'components/table_column_picker.html' with table_id='contacts_table' %}
         </div>
     </div>
 
@@ -178,40 +176,40 @@
     <!-- Data Table View -->
     {% if view_mode == 'table' %}
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="contacts_table" data-col-table="contacts_table" class="min-w-[900px] w-full text-right text-xs">
                 <thead class="bg-[#fafbfc] text-slate-600 font-semibold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3 px-3 w-10 text-center">
+                        <th data-col="checkbox" data-required="true" class="py-3 px-3 w-10 text-center">
                             <input type="checkbox" id="selectAllCheckbox" class="rounded text-brand-500 focus:ring-brand-400 cursor-pointer">
                         </th>
-                        <th class="py-3 px-4 font-bold text-slate-800">
+                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3 px-4 font-bold text-slate-800">
                             <div class="flex items-center gap-1.5">
                                 <span>الاسم</span>
                                 <span class="material-symbols-outlined text-sm text-slate-400">menu</span>
                             </div>
                         </th>
-                        <th class="py-3 px-3">حالة العميل</th>
-                        <th class="py-3 px-3">المنطقة</th>
-                        <th class="py-3 px-3">العنوان الرئيسي</th>
-                        <th class="py-3 px-3">الموبايل</th>
-                        <th class="py-3 px-3">تصنيف العميل</th>
-                        <th class="py-3 px-3">التخصص</th>
-                        <th class="py-3 px-3">نوع الاكونت</th>
-                        <th class="py-3 px-3">الكود</th>
-                        <th class="py-3 px-3 text-center">إجراءات</th>
+                        <th data-col="status" data-col-label="حالة العميل" class="py-3 px-3">حالة العميل</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3 px-3">المنطقة</th>
+                        <th data-col="address" data-col-label="العنوان الرئيسي" class="py-3 px-3">العنوان الرئيسي</th>
+                        <th data-col="mobile" data-col-label="الموبايل" class="py-3 px-3">الموبايل</th>
+                        <th data-col="tier" data-col-label="تصنيف العميل" class="py-3 px-3">تصنيف العميل</th>
+                        <th data-col="specialty" data-col-label="التخصص" class="py-3 px-3">التخصص</th>
+                        <th data-col="account_type" data-col-label="نوع الاكونت" class="py-3 px-3">نوع الاكونت</th>
+                        <th data-col="code" data-col-label="الكود" class="py-3 px-3">الكود</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3 px-3 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for c in contacts %}
                     <tr class="hover:bg-slate-50/80 transition-colors group">
                         <!-- Checkbox -->
-                        <td class="py-3 px-3 text-center">
+                        <td data-col="checkbox" class="py-3 px-3 text-center">
                             <input type="checkbox" name="selected_contacts" value="{{ c.id }}" class="rounded text-brand-500 focus:ring-brand-400 cursor-pointer">
                         </td>
 
                         <!-- Name with Avatar and Serial Tag Link -->
-                        <td class="py-3 px-4">
+                        <td data-col="name" class="py-3 px-4">
                             <div class="flex items-center gap-3">
                                 <div class="erp-avatar">
                                     {{ c.initials }}
@@ -228,14 +226,14 @@
                         </td>
 
                         <!-- Customer Status Badge -->
-                        <td class="py-3 px-3">
+                        <td data-col="status" class="py-3 px-3">
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {% if c.status == 'customer' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
                                 {{ c.status_label }}
                             </span>
                         </td>
 
                         <!-- Area / Governorate -->
-                        <td class="py-3 px-3 text-slate-600">
+                        <td data-col="area" class="py-3 px-3 text-slate-600">
                             {% with main_addr=c.addresses.first %}
                                 {% if main_addr and main_addr.sub_area and main_addr.area %}
                                     {{ main_addr.sub_area }} | {{ main_addr.area.name }}
@@ -248,39 +246,39 @@
                         </td>
 
                         <!-- Main Address -->
-                        <td class="py-3 px-3 text-slate-600 truncate max-w-xs">
+                        <td data-col="address" class="py-3 px-3 text-slate-600 truncate max-w-xs">
                             {% with main_addr=c.addresses.first %}
                                 {{ main_addr.street_address|default:"لا يوجد" }}
                             {% endwith %}
                         </td>
 
                         <!-- Mobile -->
-                        <td class="py-3 px-3 font-mono text-slate-700 dir-ltr text-right">
+                        <td data-col="mobile" class="py-3 px-3 font-mono text-slate-700 dir-ltr text-right">
                             {{ c.mobile|default:c.phone|default:"-" }}
                         </td>
 
                         <!-- Customer Category (A, B, C, D, E) -->
-                        <td class="py-3 px-3 font-bold text-slate-800 text-center">
+                        <td data-col="tier" class="py-3 px-3 font-bold text-slate-800 text-center">
                             {{ c.customer_category|default:"-" }}
                         </td>
 
                         <!-- Specialty -->
-                        <td class="py-3 px-3 text-slate-600 truncate max-w-[120px]">
+                        <td data-col="specialty" class="py-3 px-3 text-slate-600 truncate max-w-[120px]">
                             {{ c.specialty|default:"-" }}
                         </td>
 
                         <!-- Account Type -->
-                        <td class="py-3 px-3 text-slate-600 truncate max-w-[120px]">
+                        <td data-col="account_type" class="py-3 px-3 text-slate-600 truncate max-w-[120px]">
                             {{ c.account_type|default:"-" }}
                         </td>
 
                         <!-- Code -->
-                        <td class="py-3 px-3 font-mono text-slate-500">
+                        <td data-col="code" class="py-3 px-3 font-mono text-slate-500">
                             {{ c.code|default:"-" }}
                         </td>
 
                         <!-- Actions Menu -->
-                        <td class="py-3 px-3 text-center relative">
+                        <td data-col="actions" class="py-3 px-3 text-center relative">
                             <div class="relative inline-block text-left" x-data="{ open: false }">
                                 <button type="button" onclick="toggleRowMenu('menu-{{ c.id }}')" class="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100">
                                     <span class="material-symbols-outlined text-base">more_vert</span>

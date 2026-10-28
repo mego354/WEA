@@ -12,7 +12,7 @@
 {% block content %}
 <div class="space-y-5 pb-12" dir="rtl">
 
-    <!-- Top Controls: Date Range Selector (Aligned Right in RTL above Card 1) -->
+    <!-- Top Controls: Date Range Selector and Manager Representative Selector -->
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3">
         <!-- Date Range Filter Trigger / Popover -->
         <div class="relative" id="dateRangePickerContainer">
@@ -63,21 +63,64 @@
                     </div>
 
                     <input type="hidden" name="period" id="input_period" value="{{ period }}">
+                    {% if selected_rep %}
+                        <input type="hidden" name="rep_id" value="{{ selected_rep.id }}">
+                    {% endif %}
 
                     <div class="flex items-center gap-2 pt-2">
                         <button type="submit" class="flex-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition-colors">
                             تطبيق
                         </button>
-                        <a href="{% url 'home' %}?period=all" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors">
+                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors">
                             الكل
                         </a>
                     </div>
                 </form>
             </div>
         </div>
+
+        <!-- Manager / Superadmin Representative Selector -->
+        {% if eligible_reps %}
+        <form method="GET" action="{% url 'home' %}" id="repFilterForm" class="flex items-center w-full sm:w-auto">
+            <input type="hidden" name="start_date" value="{{ start_date_str }}">
+            <input type="hidden" name="end_date" value="{{ end_date_str }}">
+            <input type="hidden" name="period" value="{{ period }}">
+            <div class="relative w-full sm:w-auto min-w-[260px]">
+                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                    <span class="material-symbols-outlined text-lg">badge</span>
+                </div>
+                <select name="rep_id" id="repSelectInput" onchange="this.form.submit()" class="w-full text-xs sm:text-sm pr-9 pl-8 py-2.5 bg-white border border-slate-300 hover:border-brand-500 rounded-lg shadow-sm text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all cursor-pointer">
+                    <option value="">كل الفريق (إحصائيات مجمعة)</option>
+                    {% for rep in eligible_reps %}
+                        <option value="{{ rep.id }}" {% if selected_rep and selected_rep.id == rep.id %}selected{% endif %}>
+                            {{ rep.name }} ({{ rep.role_name }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        {% endif %}
     </div>
 
-    <!-- 14 KPI METRIC CARDS -->
+    <!-- Active Representative Filter Banner (Managers / Superadmin) -->
+    {% if selected_rep %}
+    <div class="bg-brand-50/80 border border-brand-200 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div class="flex items-center gap-3 text-brand-900 text-xs sm:text-sm">
+            <span class="material-symbols-outlined text-brand-600 text-2xl">account_circle</span>
+            <div>
+                <span class="text-slate-600 font-medium">يتم الآن استعراض إحصائيات المندوب:</span>
+                <strong class="font-bold text-brand-800 mr-1">{{ selected_rep.name }}</strong>
+                <span class="text-xs text-brand-700 bg-brand-100 px-2.5 py-0.5 rounded-full mr-1.5 font-semibold">{{ selected_rep.role_name }}</span>
+            </div>
+        </div>
+        <a href="{% url 'home' %}?{% if period == 'all' %}period=all{% elif start_date_str and end_date_str %}start_date={{ start_date_str }}&end_date={{ end_date_str }}{% endif %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-brand-300 text-brand-700 rounded-lg text-xs font-bold shadow-sm transition-colors">
+            <span class="material-symbols-outlined text-sm text-brand-600">close</span>
+            العودة لإحصائيات الفريق كامل
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- ROLE-APPROPRIATE KPI METRIC CARDS -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {% for card in kpi_cards %}
             {% if forloop.counter <= 12 %}
@@ -100,7 +143,8 @@
         {% endfor %}
     </div>
 
-    <!-- Row 4: 2 Additional Metric Cards -->
+    <!-- Row 4: Additional Metric Cards (When Total Cards > 12) -->
+    {% if kpi_cards|length > 12 %}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Spacer for desktop RTL 2 right columns -->
         <div class="hidden lg:block lg:col-span-2"></div>
@@ -121,44 +165,57 @@
             {% endif %}
         {% endfor %}
     </div>
+    {% endif %}
 
-    <!-- 6 VISUALIZATION CHARTS (2-Column Grid matching Reference ERP) -->
+    <!-- ROLE-APPROPRIATE VISUALIZATION CHARTS -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
         <!-- Chart 1: Collections by Area -->
+        {% if 'collections_by_area' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">التحصيلات حسب المنطقة</h3>
             <div id="chart_collections_by_area" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
 
-        <!-- Chart 2: Visits by Area -->
+        <!-- Chart 2: Visits by Area (Omitted for Accountants) -->
+        {% if 'visits_by_area' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الزيارات حسب المنطقة</h3>
             <div id="chart_visits_by_area" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
 
         <!-- Chart 3: Created Orders by Area -->
+        {% if 'orders_created_by_area' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المنشأة حسب المنطقة</h3>
             <div id="chart_orders_created_by_area" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
 
         <!-- Chart 4: Delivered Orders by Area -->
+        {% if 'orders_delivered_by_area' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المسملة حسب المنطقة</h3>
             <div id="chart_orders_delivered_by_area" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
 
-        <!-- Chart 5: Customer Balance by Sales Rep -->
+        <!-- Chart 5: Customer Balance by Sales Rep (Omitted for Representatives) -->
+        {% if 'reps_balance' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">رصيد العملاء بالمندوبين</h3>
             <div id="chart_reps_balance" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
 
-        <!-- Chart 6: Overdue Debt by Sales Rep -->
+        <!-- Chart 6: Overdue Debt by Sales Rep (Omitted for Representatives) -->
+        {% if 'reps_overdue' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">المديونية المتأخرة للعملاء بالمندوبين</h3>
             <div id="chart_reps_overdue" class="w-full h-[420px]"></div>
         </div>
+        {% endif %}
     </div>
 
 </div>
@@ -302,12 +359,24 @@
     }
 
     function initAllCharts() {
-        initChart('chart_collections_by_area', chartsData.collections_by_area, 'جنيه');
-        initChart('chart_visits_by_area', chartsData.visits_by_area, 'زيارة');
-        initChart('chart_orders_created_by_area', chartsData.orders_created_by_area, 'جنيه');
-        initChart('chart_orders_delivered_by_area', chartsData.orders_delivered_by_area, 'جنيه');
-        initChart('chart_reps_balance', chartsData.reps_balance, 'جنيه');
-        initChart('chart_reps_overdue', chartsData.reps_overdue, 'جنيه');
+        if (chartsData.collections_by_area !== undefined) {
+            initChart('chart_collections_by_area', chartsData.collections_by_area, 'جنيه');
+        }
+        if (chartsData.visits_by_area !== undefined) {
+            initChart('chart_visits_by_area', chartsData.visits_by_area, 'زيارة');
+        }
+        if (chartsData.orders_created_by_area !== undefined) {
+            initChart('chart_orders_created_by_area', chartsData.orders_created_by_area, 'جنيه');
+        }
+        if (chartsData.orders_delivered_by_area !== undefined) {
+            initChart('chart_orders_delivered_by_area', chartsData.orders_delivered_by_area, 'جنيه');
+        }
+        if (chartsData.reps_balance !== undefined) {
+            initChart('chart_reps_balance', chartsData.reps_balance, 'جنيه');
+        }
+        if (chartsData.reps_overdue !== undefined) {
+            initChart('chart_reps_overdue', chartsData.reps_overdue, 'جنيه');
+        }
 
         window.addEventListener('resize', () => {
             chartInstances.forEach(c => c.resize());

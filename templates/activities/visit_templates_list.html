@@ -88,11 +88,6 @@
 
                 <!-- Template Settings Pills -->
                 <div class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700">
-                        <span class="material-symbols-outlined text-xs">tune</span>
-                        {{ tmpl.get_mode_display }}
-                    </span>
-
                     {% if tmpl.allow_unplanned %}
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-100" title="مسموح تسجيل زيارات خارج الخطة">
                         <span class="material-symbols-outlined text-xs">add_task</span>
@@ -100,10 +95,15 @@
                     </span>
                     {% endif %}
 
-                    {% if tmpl.auto_approve_unplanned %}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100" title="موافقة تلقائية للزيارات المنشأة خارج الخطة">
-                        <span class="material-symbols-outlined text-xs">verified</span>
-                        موافقة تلقائية
+                    {% if tmpl.restricted_roles.exists %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="مقيد على أدوار محددة">
+                        <span class="material-symbols-outlined text-xs">lock</span>
+                        مقيد ({{ tmpl.restricted_roles.count }})
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600" title="متاح لكافة الأدوار الميدانية">
+                        <span class="material-symbols-outlined text-xs">public</span>
+                        كافة الأدوار
                     </span>
                     {% endif %}
 
