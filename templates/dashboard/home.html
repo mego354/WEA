@@ -218,6 +218,123 @@
         {% endif %}
     </div>
 
+    <!-- RECENT TRANSACTIONS: Purchases and Sales Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+        <!-- Recent Purchases (Accountants & Managers & Superadmins) -->
+        {% if not is_rep or recent_purchases %}
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-teal-600 text-lg">shopping_cart</span>
+                    <h3 class="text-xs sm:text-sm font-bold text-slate-800">أحدث أوامر الشراء</h3>
+                </div>
+                <a href="{% url 'purchase_orders_list' %}" class="text-xs text-brand-600 hover:underline font-semibold">عرض الكل</a>
+            </div>
+            <div class="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table class="w-full text-right text-xs">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-100 pb-1 font-medium">
+                            <th class="py-2 pr-2">رقم الأمر</th>
+                            <th class="py-2">المورد</th>
+                            <th class="py-2">الإجمالي</th>
+                            <th class="py-2">المتبقي</th>
+                            <th class="py-2">الحالة</th>
+                            <th class="py-2 pl-2">تاريخ الاستحقاق</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                        {% for po in recent_purchases %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="py-2.5 pr-2 font-mono font-bold text-brand-700">
+                                <a href="{% url 'purchase_order_detail' po.id %}" class="hover:underline">PO-{{ po.serial_number }}</a>
+                            </td>
+                            <td class="py-2.5 font-medium text-slate-800">{{ po.supplier.name|truncatechars:18 }}</td>
+                            <td class="py-2.5 font-mono text-slate-900 font-semibold">{{ po.grand_total|floatformat:2 }} ج.م</td>
+                            <td class="py-2.5 font-mono {% if po.outstanding_balance > 0 %}text-rose-600 font-bold{% else %}text-emerald-600{% endif %}">
+                                {{ po.outstanding_balance|floatformat:2 }} ج.م
+                            </td>
+                            <td class="py-2.5">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                                    {% if po.status == 'settled' %}bg-emerald-100 text-emerald-800
+                                    {% elif po.status == 'approved' %}bg-blue-100 text-blue-800
+                                    {% elif po.status == 'picked' %}bg-purple-100 text-purple-800
+                                    {% elif po.status == 'pending' %}bg-amber-100 text-amber-800
+                                    {% else %}bg-slate-100 text-slate-700{% endif %}">
+                                    {{ po.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="py-2.5 pl-2 font-mono text-[11px] {% if po.is_overdue %}text-rose-600 font-bold{% else %}text-slate-500{% endif %}">
+                                {{ po.due_date|date:"Y-m-d"|default:"غير محدد" }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-400">لا توجد أوامر شراء حديثة</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Sales Orders -->
+        <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600 text-lg">point_of_sale</span>
+                    <h3 class="text-xs sm:text-sm font-bold text-slate-800">أحدث طلبات البيع</h3>
+                </div>
+                <a href="{% url 'sales_orders_list' %}" class="text-xs text-brand-600 hover:underline font-semibold">عرض الكل</a>
+            </div>
+            <div class="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table class="w-full text-right text-xs">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-100 pb-1 font-medium">
+                            <th class="py-2 pr-2">رقم الطلب</th>
+                            <th class="py-2">العميل</th>
+                            <th class="py-2">الإجمالي</th>
+                            <th class="py-2">المتبقي</th>
+                            <th class="py-2">الحالة</th>
+                            <th class="py-2 pl-2">تاريخ الاستحقاق</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                        {% for so in recent_sales %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="py-2.5 pr-2 font-mono font-bold text-brand-700">
+                                <a href="{% url 'sales_order_detail' so.id %}" class="hover:underline">SO-{{ so.serial_number }}</a>
+                            </td>
+                            <td class="py-2.5 font-medium text-slate-800">{{ so.customer.name|truncatechars:18 }}</td>
+                            <td class="py-2.5 font-mono text-slate-900 font-semibold">{{ so.grand_total|floatformat:2 }} ج.م</td>
+                            <td class="py-2.5 font-mono {% if so.outstanding_balance > 0 %}text-rose-600 font-bold{% else %}text-emerald-600{% endif %}">
+                                {{ so.outstanding_balance|floatformat:2 }} ج.م
+                            </td>
+                            <td class="py-2.5">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                                    {% if so.status == 'delivered' %}bg-emerald-100 text-emerald-800
+                                    {% elif so.status == 'approved' %}bg-blue-100 text-blue-800
+                                    {% elif so.status == 'preparing' %}bg-purple-100 text-purple-800
+                                    {% elif so.status == 'pending' %}bg-amber-100 text-amber-800
+                                    {% else %}bg-slate-100 text-slate-700{% endif %}">
+                                    {{ so.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="py-2.5 pl-2 font-mono text-[11px] {% if so.is_overdue %}text-rose-600 font-bold{% else %}text-slate-500{% endif %}">
+                                {{ so.due_date|date:"Y-m-d"|default:"غير محدد" }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-400">لا توجد طلبات بيع حديثة</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Apache ECharts JS -->

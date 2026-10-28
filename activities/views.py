@@ -168,6 +168,14 @@ def agreements_list(request):
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
     contacts = Contact.objects.all().order_by('name')[:50]
 
+    base_scoped_agreements = get_scoped_queryset(Agreement.objects.all(), request.user, 'agreement')
+    agreements_stats = {
+        'total_count': base_scoped_agreements.count(),
+        'total_amount': base_scoped_agreements.aggregate(s=Sum('amount'))['s'] or Decimal('0.00'),
+        'approved_count': base_scoped_agreements.filter(status='approved').count(),
+        'pending_count': base_scoped_agreements.filter(status='new').count(),
+    }
+
     context = {
         'page_obj': page_obj,
         'paginator': paginator,
@@ -186,6 +194,7 @@ def agreements_list(request):
         'selected_date_to': date_to,
         'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user),
+        'stats': agreements_stats,
     }
     return render(request, 'activities/agreements_list.html', context)
 

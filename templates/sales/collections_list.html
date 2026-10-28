@@ -21,31 +21,85 @@
 {% block content %}
 <div class="space-y-6">
 
-    <!-- Header -->
+    <!-- 1. Header (Clean: Title & Actions) -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">سندات التحصيل (Collections)</h1>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">receipt</span>
+                <span>سندات التحصيل (Collections)</span>
+            </h1>
             <p class="text-sm text-slate-500 mt-0.5">سجل المبالغ المحصلة من العملاء والصيدليات وتوريدها إلى الخزن</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             <a href="{% url 'collections_export' %}?customer={{ selected_customer_id|default:'' }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]"
                title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
                 <span>تصدير إلى Excel</span>
             </a>
-            <a href="{% url 'collection_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+            <a href="{% url 'accounting_customers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
+                <span>أرصدة العملاء</span>
+            </a>
+            <a href="{% url 'collection_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>تسجيل تحصيل نقدية</span>
-            </a>
-            <a href="{% url 'accounting_customers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all">
-                <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
-                <span>أرصدة ومديونيات العملاء</span>
             </a>
         </div>
     </div>
 
-    <!-- Filters & Search Toolbar -->
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Collections -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي سندات التحصيل</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-xl material-symbols-outlined text-lg">receipt</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_count }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">سند محصل</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Collected Amount -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي المبالغ المحصلة</span>
+                <span class="p-2 bg-emerald-50 text-emerald-600 rounded-xl material-symbols-outlined text-lg">payments</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-emerald-700 font-mono">{{ stats.total_amount|intcomma }}</span>
+                <span class="text-xs text-emerald-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Collected This Month -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">تحصيلات الشهر الحالي</span>
+                <span class="p-2 bg-teal-50 text-teal-600 rounded-xl material-symbols-outlined text-lg">calendar_month</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-teal-700 font-mono">{{ stats.month_amount|intcomma }}</span>
+                <span class="text-xs text-teal-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Deposited Vaults -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">الخزن المستلمة للتحصيلات</span>
+                <span class="p-2 bg-blue-50 text-blue-600 rounded-xl material-symbols-outlined text-lg">account_balance_wallet</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-blue-700 font-mono">{{ stats.vaults_count }}</span>
+                <span class="text-xs text-blue-600 mr-1.5">خزنة مودع بها</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Filters & Search Toolbar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
         <form method="GET" class="flex flex-col md:flex-row gap-3">
             <div class="flex-1 relative">
@@ -108,6 +162,7 @@
                         <th data-col="serial" data-col-label="رقم السند" data-required="true" class="py-3.5 px-4">رقم السند</th>
                         <th data-col="customer" data-col-label="العميل" data-required="true" class="py-3.5 px-4">العميل</th>
                         <th data-col="vault" data-col-label="الخزنة المودع بها" class="py-3.5 px-4">الخزنة المودع بها</th>
+                        <th data-col="sales_order" data-col-label="أمر البيع المرتبط" class="py-3.5 px-4">أمر البيع المرتبط</th>
                         <th data-col="payment_method" data-col-label="طريقة الدفع" class="py-3.5 px-4">طريقة الدفع</th>
                         <th data-col="collection_date" data-col-label="تاريخ التحصيل" class="py-3.5 px-4">تاريخ التحصيل</th>
                         <th data-col="collector" data-col-label="المحصل" class="py-3.5 px-4">المحصل</th>
@@ -128,6 +183,16 @@
                                 <span class="material-symbols-outlined text-sm text-slate-400">account_balance_wallet</span>
                                 <span>{{ col.vault.name }}</span>
                             </span>
+                        </td>
+                        <td data-col="sales_order" class="py-3.5 px-4 text-xs font-mono">
+                            {% if col.sales_order %}
+                            <a href="{% url 'sales_order_detail' col.sales_order.pk %}" class="inline-flex items-center gap-1 font-bold text-brand-600 hover:underline">
+                                <span class="material-symbols-outlined text-xs">shopping_bag</span>
+                                <span>#{{ col.sales_order.order_number }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400">سند عام</span>
+                            {% endif %}
                         </td>
                         <td data-col="payment_method" class="py-3.5 px-4 text-xs">
                             <span class="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">

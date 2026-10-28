@@ -154,13 +154,8 @@
                 </div>
             </div>
 
-            <!-- Left Side (in RTL): Controls (FAB, Status Dropdown, Eye, 3-dots) -->
+            <!-- Left Side (in RTL): Controls (Status Dropdown, Eye, 3-dots) -->
             <div class="flex items-center gap-3 w-full md:w-auto justify-end">
-                <!-- Quick Create '+' -->
-                <a href="{% url 'contact_create' %}" class="w-9 h-9 rounded-full bg-[#27bebe] hover:bg-[#1fa8a8] text-white flex items-center justify-center shadow-md transition-transform hover:scale-105" title="انشئ جهة اتصال">
-                    <span class="material-symbols-outlined text-xl">add</span>
-                </a>
-
                 <!-- Status Dropdown (Customer, Lead, Inactive) -->
                 <div class="relative" x-data="{ open: false }">
                     <button type="button" onclick="toggleStatusDropdown()" id="statusDropdownBtn" class="px-3.5 py-1.5 rounded-lg bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-colors">
@@ -348,14 +343,18 @@
                     <div class="erp-detail-row">
                         <span class="erp-detail-label">الموقع الجغرافي (GPS)</span>
                         {% if contact.has_saved_location %}
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-2">
                             <span class="erp-detail-val font-mono text-emerald-700 font-bold">{{ contact.latitude|floatformat:4 }}, {{ contact.longitude|floatformat:4 }}</span>
-                            <a href="https://maps.google.com/?q={{ contact.latitude }},{{ contact.longitude }}" target="_blank" class="text-teal-600 hover:text-teal-700" title="عرض على خرائط Google">
+                            <button type="button" onclick="openContactMapModal()" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 text-[#27bebe] hover:text-[#1fa8a8] text-xs font-bold transition-colors cursor-pointer" title="عرض على الخريطة">
+                                <span class="material-symbols-outlined text-sm">map</span>
+                                <span>عرض</span>
+                            </button>
+                            <a href="https://maps.google.com/?q={{ contact.latitude }},{{ contact.longitude }}" target="_blank" class="text-slate-400 hover:text-teal-600" title="فتح في Google Maps">
                                 <span class="material-symbols-outlined text-sm">open_in_new</span>
                             </a>
                         </div>
                         {% else %}
-                        <span class="text-xs text-amber-600 font-medium">غير محدد (سيتم حفظه بأول زيارة)</span>
+                        <a href="{% url 'contact_edit' contact.id %}" class="erp-detail-action-link">اضغط لتحديد الموقع</a>
                         {% endif %}
                     </div>
                 </div>
@@ -428,6 +427,30 @@
                         <span class="erp-detail-label">فترة الائتمان</span>
                         <span class="erp-detail-val font-bold">{{ contact.credit_period_days }} يوم</span>
                     </div>
+                    {% if contact.is_customer %}
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">المديونية الحالية</span>
+                        <span class="erp-detail-val font-bold {% if contact.is_credit_limit_exceeded %}text-rose-600{% else %}text-slate-900{% endif %}">
+                            {{ contact.total_outstanding_balance|intcomma }} ج.م
+                        </span>
+                    </div>
+                    <div class="erp-detail-row">
+                        <span class="erp-detail-label">حالة الائتمان</span>
+                        {% if contact.credit_limit > 0 and contact.is_credit_limit_exceeded %}
+                        <span class="inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            <span class="material-symbols-outlined text-xs">warning</span>
+                            <span>تجاوز حد الائتمان</span>
+                        </span>
+                        {% elif contact.credit_limit > 0 %}
+                        <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <span class="material-symbols-outlined text-xs">check_circle</span>
+                            <span>ضمن الحد المسموح</span>
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-slate-400">غير محدد</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% if vendor_account %}
                     <div class="erp-detail-row">
                         <span class="erp-detail-label">الرصيد القائم</span>
@@ -1404,6 +1427,9 @@
         if (e.target.id === 'deleteModal') {
             closeDeleteModal();
         }
+        if (e.target.id === 'contactMapModal') {
+            closeContactMapModal();
+        }
         if (e.target.id === 'addAddressModal') {
             closeAddAddressModal();
         }
@@ -1413,8 +1439,49 @@
         if (e.key === 'Escape') {
             closeTimelineModal();
             closeDeleteModal();
+            closeContactMapModal();
             closeAddAddressModal();
         }
     });
+
+    function openContactMapModal() {
+        const m = document.getElementById('contactMapModal');
+        if (m) {
+            m.classList.remove('hidden');
+            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 200);
+        }
+    }
+    function closeContactMapModal() {
+        const m = document.getElementById('contactMapModal');
+        if (m) m.classList.add('hidden');
+    }
 </script>
+
+<!-- Contact Location Modal -->
+<div id="contactMapModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">pin_drop</span>
+                <h3 class="font-bold text-slate-800 text-sm">موقع: {{ contact.name }}</h3>
+            </div>
+            <button type="button" onclick="closeContactMapModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="p-4 space-y-3">
+            {% include 'components/location_picker.html' with picker_id='contact_detail_map' lat_name='modal_lat' lng_name='modal_lng' initial_lat=contact.latitude|default:30.0444 initial_lng=contact.longitude|default:31.2357 has_saved_location=contact.has_saved_location marker_label=contact.name can_edit=False map_height='h-72' %}
+        </div>
+        <div class="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <a href="https://maps.google.com/?q={{ contact.latitude }},{{ contact.longitude }}" target="_blank" class="text-xs font-bold text-[#27bebe] hover:underline flex items-center gap-1">
+                <span>فتح في تطبيق خرائط Google</span>
+                <span class="material-symbols-outlined text-sm">open_in_new</span>
+            </a>
+            <button type="button" onclick="closeContactMapModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors">
+                إغلاق
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
+

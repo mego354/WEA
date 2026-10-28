@@ -12,7 +12,68 @@
 {% block content %}
 <div class="space-y-5">
 
-    <!-- Filter & Search Bar -->
+    <!-- 1. Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">دفتر قيود وعمليات الموردين (Vendor Ledger)</h1>
+            <p class="text-sm text-slate-500 mt-0.5">سجل القيود المحاسبية التفصيلية لفواتير المشتريات وسندات الصرف للموردين</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'accounting_vendors_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
+                <span>حسابات الموردين</span>
+            </a>
+            <a href="{% url 'vendor_payments_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">payments</span>
+                <span>سندات الصرف</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">
+                <span class="material-symbols-outlined text-xl">receipt_long</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي القيود</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_count|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">add_circle</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي الفواتير (+)</p>
+                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.total_credit|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">remove_circle</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي السدادات (-)</p>
+                <p class="text-lg font-black text-blue-700 font-mono">{{ stats.total_debit|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">account_balance</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">صافي رصيد الموردين</p>
+                <p class="text-lg font-black text-purple-700 font-mono">{{ stats.net_balance|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Filter & Search Bar -->
     <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
         <form method="GET" class="flex flex-col sm:flex-row items-center gap-3">
             <div class="flex-1 w-full relative">
@@ -30,12 +91,12 @@
                 </select>
             </div>
 
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">filter_alt</span>
                 <span>تصفية</span>
             </button>
             {% if search_query or selected_vendor_id %}
-            <a href="{% url 'vendor_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+            <a href="{% url 'vendor_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
                 إلغاء
             </a>
             {% endif %}

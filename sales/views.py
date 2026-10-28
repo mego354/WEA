@@ -2,8 +2,9 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Sum, Count
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from django.core.paginator import Paginator
 from master_data.pagination_utils import paginate_queryset
@@ -56,6 +57,15 @@ def sales_orders_list(request):
     # Scoped customer filter options (top 50 active)
     customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
 
+    # Dedicated real scoped statistics cards (excludes cancelled/rejected)
+    scoped_all = get_scoped_queryset(SalesOrder.objects.exclude(status='rejected'), request.user, 'salesorder')
+    stats = {
+        'total_orders': scoped_all.count(),
+        'total_value': scoped_all.aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
+        'invoiced_value': scoped_all.filter(status='invoiced').aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
+        'pending_count': scoped_all.filter(status__in=['pending', 'manager_approval']).count(),
+    }
+
     context = {
         'orders': page_obj.object_list,
         'page_obj': page_obj,
@@ -66,6 +76,7 @@ def sales_orders_list(request):
         'customers': customers,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': stats,
     }
     return render(request, 'sales/sales_orders_list.html', context)
 
@@ -77,6 +88,7 @@ def sales_order_create(request):
         warehouse_id = request.POST.get('warehouse')
         order_date = request.POST.get('order_date')
         delivery_date = request.POST.get('delivery_date') or None
+        due_date = request.POST.get('due_date') or None
         notes = request.POST.get('notes', '').strip()
 
         # Parse item rows
@@ -134,6 +146,7 @@ def sales_order_create(request):
                 items_data=items_data,
                 user=request.user,
                 delivery_date=delivery_date,
+                due_date=due_date,
                 notes=notes
             )
             messages.success(request, f"تم إنشاء أمر البيع بنجاح ({order.order_number}) بإجمالي {order.grand_total:,.2f} ج.م.")
@@ -161,6 +174,112 @@ def sales_order_create(request):
         'products': products,
     }
     return render(request, 'sales/sales_order_create.html', context)
+
+
+@require_permission('sales:orders/edit')
+def sales_order_edit(request, pk):
+    order = get_object_or_404(
+        SalesOrder.objects.select_related('customer', 'source_warehouse').prefetch_related('items__product'),
+        pk=pk
+    )
+    if not can_user_access_object(request.user, order, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحياتك.")
+
+    if order.status in ['preparing', 'delivered', 'invoiced', 'cancelled']:
+        messages.error(request, f"لا يمكن تعديل أمر البيع في حالته الحالية ({order.get_status_display()}).")
+        return redirect('sales_order_detail', pk=order.pk)
+
+    if request.method == 'POST':
+        customer_id = request.POST.get('customer')
+        warehouse_id = request.POST.get('warehouse')
+        order_date = request.POST.get('order_date')
+        delivery_date = request.POST.get('delivery_date') or None
+        due_date = request.POST.get('due_date') or None
+        notes = request.POST.get('notes', '').strip()
+
+        product_ids = request.POST.getlist('product_id[]')
+        quantities = request.POST.getlist('quantity[]')
+        unit_prices = request.POST.getlist('unit_price[]')
+
+        items_data = []
+        for i in range(len(product_ids)):
+            p_id = product_ids[i]
+            if not p_id:
+                continue
+            prod = Product.objects.filter(id=p_id).first()
+            if not prod:
+                continue
+            qty = Decimal(quantities[i] or '1')
+            price = Decimal(unit_prices[i] or '0')
+            items_data.append({
+                'product': prod,
+                'quantity': qty,
+                'unit_price': price,
+            })
+
+        from accounts.services import is_representative, get_representative_warehouse
+        is_rep = is_representative(request.user)
+        rep_wh = get_representative_warehouse(request.user) if is_rep else None
+
+        if is_rep:
+            if not rep_wh:
+                messages.error(request, "لم يتم تعيين مخزن عهدة افتراضي لحساب المندوب الخاص بك.")
+                return redirect('sales_order_edit', pk=order.pk)
+            warehouse = rep_wh
+        else:
+            if not warehouse_id:
+                messages.error(request, "يرجى تحديد المخزن.")
+                return redirect('sales_order_edit', pk=order.pk)
+            warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+            if warehouse.assigned_user and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+                from accounts.permissions import is_manager_eligible_for_user
+                if not is_manager_eligible_for_user(request.user, warehouse.assigned_user):
+                    return render_forbidden_response(request, "لا يمكنك إجراء مبيعات من مخزن يتبع مندوباً خارج منطقتك الرئيسية.")
+
+        if not customer_id:
+            messages.error(request, "يرجى تحديد العميل.")
+            return redirect('sales_order_edit', pk=order.pk)
+
+        customer = get_object_or_404(Contact, id=customer_id)
+
+        try:
+            order = SalesOrderService.update_order(
+                order=order,
+                customer=customer,
+                source_warehouse=warehouse,
+                order_date=order_date,
+                items_data=items_data,
+                user=request.user,
+                delivery_date=delivery_date,
+                due_date=due_date,
+                notes=notes
+            )
+            messages.success(request, f"تم تعديل أمر البيع بنجاح ({order.order_number}) بإجمالي {order.grand_total:,.2f} ج.م.")
+            return redirect('sales_order_detail', pk=order.pk)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+            return redirect('sales_order_edit', pk=order.pk)
+
+    from accounts.services import is_representative, get_representative_warehouse
+    is_rep = is_representative(request.user)
+    user_rep_wh = get_representative_warehouse(request.user) if is_rep else None
+
+    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
+    if user_rep_wh:
+        warehouses = Warehouse.objects.filter(id=user_rep_wh.id)
+    else:
+        warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
+    products = Product.objects.filter(is_active=True)
+
+    context = {
+        'order': order,
+        'customers': customers,
+        'warehouses': warehouses,
+        'user_rep_wh': user_rep_wh,
+        'is_rep': is_rep,
+        'products': products,
+    }
+    return render(request, 'sales/sales_order_edit.html', context)
 
 
 @require_permission('sales:orders/view')
@@ -309,6 +428,16 @@ def collections_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    # Dedicated real scoped statistics cards
+    scoped_col = get_scoped_queryset(Collection.objects.all(), request.user, 'collection')
+    now = timezone.now()
+    stats = {
+        'total_count': scoped_col.count(),
+        'total_amount': scoped_col.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+        'month_amount': scoped_col.filter(collection_date__year=now.year, collection_date__month=now.month).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+        'vaults_count': scoped_col.values('vault').distinct().count(),
+    }
+
     context = {
         'collections': page_obj.object_list,
         'page_obj': page_obj,
@@ -320,6 +449,7 @@ def collections_list(request):
         'selected_vault_id': vault_id,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': stats,
     }
     return render(request, 'sales/collections_list.html', context)
 
@@ -330,6 +460,9 @@ def collection_create(request):
         customer_id = request.POST.get('customer')
         vault_id = request.POST.get('vault')
         amount = request.POST.get('amount')
+        sales_order_id = request.POST.get('sales_order')
+        collection_date = request.POST.get('collection_date') or None
+        due_date = request.POST.get('due_date') or None
         payment_method = request.POST.get('payment_method', 'cash')
         notes = request.POST.get('notes', '').strip()
 
@@ -345,6 +478,12 @@ def collection_create(request):
         if not can_user_access_object(request.user, vault, 'deposit'):
             return render_forbidden_response(request, "لا يمكنك الإيداع في خزنة غير مخصصة لك.")
 
+        sales_order = None
+        if sales_order_id:
+            sales_order = get_object_or_404(SalesOrder, id=sales_order_id)
+            if not can_user_access_object(request.user, sales_order, 'view'):
+                return render_forbidden_response(request, "لا يمكنك تسجيل تحصيل لأمر بيع خارج نطاق صلاحياتك.")
+
         try:
             col = CollectionService.record_collection(
                 customer=customer,
@@ -352,9 +491,13 @@ def collection_create(request):
                 amount=Decimal(amount),
                 user=request.user,
                 payment_method=payment_method,
-                notes=notes
+                notes=notes,
+                sales_order=sales_order,
+                collection_date=collection_date,
+                due_date=due_date
             )
-            messages.success(request, f"تم تسجيل سند التحصيل #{col.serial_num} بنجاح بمبلغ {col.amount:,.2f} ج.م من العميل {customer.name}.")
+            order_info = f" لأمر بيع {sales_order.order_number}" if sales_order else ""
+            messages.success(request, f"تم تسجيل سند التحصيل #{col.serial_num} بنجاح بمبلغ {col.amount:,.2f} ج.م من العميل {customer.name}{order_info}.")
             return redirect('collections_list')
         except ValidationError as e:
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
@@ -363,11 +506,23 @@ def collection_create(request):
     customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
     vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault')
     initial_customer = request.GET.get('customer_id')
+    initial_order = request.GET.get('order_id')
+
+    if initial_order and not initial_customer:
+        ord_obj = SalesOrder.objects.filter(id=initial_order).first()
+        if ord_obj:
+            initial_customer = ord_obj.customer_id
+
+    # Open sales orders for dropdown linking
+    orders_qs = SalesOrder.objects.exclude(status='cancelled').select_related('customer').order_by('-order_date')
+    orders_qs = get_scoped_queryset(orders_qs, request.user, 'salesorder')
 
     context = {
         'customers': customers,
         'vaults': vaults,
-        'selected_customer_id': initial_customer,
+        'orders': orders_qs,
+        'selected_customer_id': int(initial_customer) if initial_customer and str(initial_customer).isdigit() else None,
+        'selected_order_id': int(initial_order) if initial_order and str(initial_order).isdigit() else None,
     }
     return render(request, 'sales/collection_create.html', context)
 
@@ -389,6 +544,14 @@ def accounting_customers_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
+    base_scoped = get_scoped_queryset(CustomerAccount.objects.all(), request.user, 'customeraccount')
+    account_stats = {
+        'total_customers': base_scoped.count(),
+        'total_receivable': base_scoped.filter(current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
+        'total_overdue': base_scoped.filter(overdue_balance__gt=0).aggregate(tot=Sum('overdue_balance'))['tot'] or Decimal('0.00'),
+        'total_credit_limit': base_scoped.aggregate(tot=Sum('credit_limit'))['tot'] or Decimal('0.00'),
+    }
+
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
@@ -398,6 +561,7 @@ def accounting_customers_list(request):
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': account_stats,
     }
     return render(request, 'sales/accounting_customers_list.html', context)
 
@@ -431,6 +595,14 @@ def customer_transactions_list(request):
 
     customers = scoped_contacts.filter(is_customer=True).order_by('name')[:50]
 
+    base_scoped_tx = CustomerTransaction.objects.filter(account__customer__in=scoped_contacts)
+    tx_stats = {
+        'total_count': base_scoped_tx.count(),
+        'total_debit': base_scoped_tx.aggregate(tot=Sum('debit_amount'))['tot'] or Decimal('0.00'),
+        'total_credit': base_scoped_tx.aggregate(tot=Sum('credit_amount'))['tot'] or Decimal('0.00'),
+    }
+    tx_stats['net_balance'] = tx_stats['total_debit'] - tx_stats['total_credit']
+
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
@@ -442,6 +614,7 @@ def customer_transactions_list(request):
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': tx_stats,
     }
     return render(request, 'sales/customer_transactions_list.html', context)
 

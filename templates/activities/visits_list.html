@@ -7,51 +7,17 @@
 <div class="relative min-h-[calc(100vh-5rem)]">
 
     <!-- Top Action Bar -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-        <div class="flex flex-wrap items-center gap-2">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الزيارات</h1>
-            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                {{ total_count }} زيارة
-            </span>
-            <a href="?plan_type=planned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
-               class="text-xs px-2.5 py-1 {% if selected_plan_type == 'planned' %}bg-blue-600 text-white font-black shadow-xs{% else %}bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold{% endif %} rounded-full border border-blue-200 transition-colors">
-                {{ planned_count }} زيارة مخططة
-            </a>
-            <a href="?plan_type=unplanned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
-               class="text-xs px-2.5 py-1 {% if selected_plan_type == 'unplanned' %}bg-purple-600 text-white font-black shadow-xs{% else %}bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold{% endif %} rounded-full border border-purple-200 transition-colors">
-                {{ unplanned_count }} خارج الخطة
-            </a>
-            <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">
-                {{ approved_count }} معتمدة
-            </span>
-            <span class="text-xs px-2.5 py-1 bg-amber-50 text-amber-700 font-bold rounded-full border border-amber-200">
-                {{ pending_count }} قيد الاعتماد
-            </span>
+    <!-- 1. Page Header Section (Clean: Title, Actions - No crowded statistics or search bars) -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-2xl">pin_drop</span>
+                <span>سجل الزيارات الميدانية</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">متابعة زيارات المناديب الميدانية، مطابقة المواقع الجغرافية GPS، واعتمادات المشرفين.</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Search Bar -->
-            <form method="GET" class="relative">
-                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-                {% if selected_approval_status %}<input type="hidden" name="approval_status" value="{{ selected_approval_status }}">{% endif %}
-                {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
-                {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
-                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
-                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
-                <div class="relative">
-                    <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو المسؤول أو الرقم..."
-                           class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
-                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
-                </div>
-            </form>
-
-            <!-- Filter Drawer Button -->
-            <button type="button" onclick="openFilterDrawer()"
-                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">filter_list</span>
-                <span>فلتر</span>
-            </button>
-
             <!-- View Toggle: Table / Cards -->
             <div class="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
                 <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
@@ -69,7 +35,7 @@
                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير البيانات">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير البيانات</span>
+                <span class="hidden sm:inline">تصدير البيانات</span>
             </a>
 
             <!-- Column Picker -->
@@ -81,6 +47,101 @@
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>تسجيل زيارة</span>
             </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Card 1: Total Visits -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي الزيارات</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-lg">pin_drop</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ total_count }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">زيارة منفذة</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Planned Visits -->
+        <a href="?plan_type=planned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+           class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all block">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">الزيارات المخططة</span>
+                <span class="p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-lg">event_available</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-blue-700 font-mono">{{ planned_count }}</span>
+                <span class="text-xs text-blue-600 mr-1.5 font-semibold">ضمن الخطة</span>
+            </div>
+        </a>
+
+        <!-- Card 3: Free / Unplanned Visits -->
+        <a href="?plan_type=unplanned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+           class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all block">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">الزيارات الحرة (خارج الخطة)</span>
+                <span class="p-2 bg-purple-50 text-purple-600 rounded-lg material-symbols-outlined text-lg">explore</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-purple-700 font-mono">{{ unplanned_count }}</span>
+                <span class="text-xs text-purple-600 mr-1.5 font-semibold">زيارة حرة</span>
+            </div>
+        </a>
+
+        <!-- Card 4: Approvals Status Breakdown -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">حالة الاعتماد الإداري</span>
+                <span class="p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-lg">verified</span>
+            </div>
+            <div class="mt-3 flex items-center justify-between text-xs">
+                <div>
+                    <span class="block text-slate-400">معتمدة:</span>
+                    <strong class="text-emerald-700 font-mono font-bold text-base">{{ approved_count }}</strong>
+                </div>
+                <div class="border-r border-slate-200 pr-3">
+                    <span class="block text-slate-400">قيد الاعتماد:</span>
+                    <strong class="text-amber-700 font-mono font-bold text-base">{{ pending_count }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Dedicated Search & Filters Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <form method="GET" class="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
+                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                {% if selected_approval_status %}<input type="hidden" name="approval_status" value="{{ selected_approval_status }}">{% endif %}
+                {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
+                {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
+                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
+                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+
+                <div class="relative flex-1 w-full sm:w-auto">
+                    <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو المسؤول أو رقم الزيارة..."
+                           class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                </div>
+
+                <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-base">search</span>
+                    <span>بحث</span>
+                </button>
+                {% if selected_q or selected_status or selected_plan_type %}
+                <a href="{% url 'visits_list' %}" class="w-full sm:w-auto px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-colors min-h-[40px] flex items-center justify-center">
+                    إلغاء
+                </a>
+                {% endif %}
+            </form>
+
+            <button type="button" onclick="openFilterDrawer()"
+                    class="relative inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] w-full sm:w-auto justify-center">
+                <span class="material-symbols-outlined text-base">tune</span>
+                <span>فلاتر متقدمة</span>
+            </button>
         </div>
     </div>
 

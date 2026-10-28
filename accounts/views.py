@@ -11,7 +11,11 @@ from django.http import HttpResponse, JsonResponse
 from .models import User, Role, RoleTag, SecurityAuditLog
 from .services import AuditLogService
 from master_data.models import Area
-from .permissions import require_permission, require_super_admin, has_perm_or_admin
+from .permissions import (
+    require_permission, require_super_admin, has_perm_or_admin,
+    can_user_access_object, get_scoped_queryset, is_accountant,
+    is_representative, render_forbidden_response
+)
 from master_data.pagination_utils import paginate_queryset
 from .permission_registry import ERP_PERMISSIONS_CATALOG
 
@@ -168,12 +172,22 @@ def users_list(request):
     """
     User accounts list matching reference ERP:
     Columns: الاسم, البريد الإلكتروني, مفعل, الدور, إجراءات
+    Enforces strict RBAC: Accountant and Representative restricted; Manager scoped to region.
     """
+    # 1. Accountant restriction
+    if is_accountant(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/list', 'عذراً، لا يمتلك المحاسب صلاحية إدارة المستخدمين.')
+
+    # 2. Representative restriction
+    if is_representative(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/list', 'عذراً، لا تمتلك صلاحية استعراض قائمة المستخدمين.')
+
     query = request.GET.get('q', '').strip()
     role_filter = request.GET.get('role', '').strip()
     status_filter = request.GET.get('status', '').strip()
 
     users_qs = User.objects.select_related('role').prefetch_related('assigned_areas').order_by('-created_at')
+    users_qs = get_scoped_queryset(users_qs, request.user, 'user')
 
     if query:
         users_qs = users_qs.filter(
@@ -204,8 +218,19 @@ def users_list(request):
     paginator, page_obj = paginate_queryset(request, users_qs, default_per_page=25)
 
     roles = Role.get_supported_roles()
+    if not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        roles = roles.exclude(name__iexact='superadmin').exclude(is_super=True)
+
     hierarchical_areas = get_hierarchical_areas(request.user)
     areas = Area.objects.all().order_by('name')
+
+    base_scoped_qs = get_scoped_queryset(User.objects.all(), request.user, 'user')
+    stats = {
+        'total_users': base_scoped_qs.count(),
+        'active_users': base_scoped_qs.filter(is_active=True).count(),
+        'inactive_users': base_scoped_qs.filter(is_active=False).count(),
+        'roles_count': roles.count(),
+    }
 
     context = {
         'users': page_obj.object_list,
@@ -218,6 +243,7 @@ def users_list(request):
         'role_filter': role_filter,
         'status_filter': status_filter,
         'active_filters': active_filters,
+        'stats': stats,
     }
     return render(request, 'accounts/users_list.html', context)
 
@@ -226,35 +252,79 @@ def users_list(request):
 @require_permission('users:users/create')
 def user_create(request):
     """
-    Handles user creation with privilege escalation safeguards and audit logging.
-    Strictly restricts role assignment to the 5 supported canonical roles.
+    Dedicated full HTML page for user creation.
+    Enforces strict server-side validation, privilege escalation safeguards, and audit logging.
     """
+    # 1. RBAC check: Accountant and Representative cannot create users
+    if is_accountant(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/create', 'عذراً، لا يمتلك المحاسب صلاحية إنشاء مستخدمين.')
+
+    from accounts.permissions import is_manager_or_higher
+    if not is_manager_or_higher(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/create', 'عذراً، لا تمتلك الصلاحية لإنشاء مستخدمين.')
+
+    roles = Role.get_supported_roles()
+    if not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        # Manager can only create Representatives in their area
+        roles = roles.exclude(name__iexact='superadmin').exclude(is_super=True)
+
+    hierarchical_areas = get_hierarchical_areas(request.user)
+
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         email = request.POST.get('email', '').strip().lower()
         code = request.POST.get('code', '').strip()
+        mobile = request.POST.get('mobile', '').strip()
         password = request.POST.get('password', '')
+        confirm_password = request.POST.get('confirm_password', '')
         role_id = request.POST.get('role', '')
+        is_active = request.POST.get('is_active') == 'on' or 'is_active' in request.POST
+        area_ids = request.POST.getlist('assigned_areas')
 
-        # Server validation
+        form_data = {
+            'name': name,
+            'email': email,
+            'code': code,
+            'mobile': mobile,
+            'role': role_id,
+            'assigned_areas': [int(a) for a in area_ids if a.isdigit()],
+        }
+
+        # Server validations
+        errors = []
         if not name or not email or not password or not role_id:
-            messages.error(request, "يرجى ملء جميع الحقول الإلزامية المطلوبة (الاسم، البريد الإلكتروني، كلمة المرور، الدور).")
-            return redirect('users_list')
+            errors.append("يرجى ملء جميع الحقول الإلزامية المطلوبة (الاسم، البريد الإلكتروني، كلمة المرور، الدور).")
 
-        # Check unique email
-        if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
-            messages.error(request, f"البريد الإلكتروني '{email}' مسجل بالفعل لمستخدم آخر.")
-            return redirect('users_list')
+        if password and len(password) < 6:
+            errors.append("يجب أن تكون كلمة المرور مكونة من 6 أحرف أو أرقام على الأقل.")
+
+        if confirm_password and password != confirm_password:
+            errors.append("كلمة المرور وتأكيد كلمة المرور غير متطابقين.")
+
+        if email and (User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists()):
+            errors.append(f"البريد الإلكتروني '{email}' مسجل بالفعل لمستخدم آخر.")
 
         role = Role.get_supported_roles().filter(pk=role_id).first() or Role.objects.filter(pk=role_id, is_active=True).first()
         if not role:
-            messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
-            return redirect('users_list')
+            errors.append("الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
+        elif role.is_super and not getattr(request.user, 'is_super_admin', False):
+            errors.append("عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin). هذا الإجراء مقصور على مدراء النظام الأعلى.")
+        elif not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+            if role.name.lower() in ['superadmin', 'manager']:
+                errors.append("مدير المنطقة يمكنه فقط إنشاء حسابات للمندوبين التابعين لمنطقته.")
 
-        # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
-        if role.is_super and not getattr(request.user, 'is_super_admin', False):
-            messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin). هذا الإجراء مقصور على مدراء النظام الأعلى.")
-            return redirect('users_list')
+        is_valid_areas, err_msg_areas, cleaned_area_ids = validate_assigned_areas_for_user(request.user, area_ids)
+        if not is_valid_areas:
+            errors.append(err_msg_areas)
+
+        if errors:
+            for err in errors:
+                messages.error(request, err)
+            return render(request, 'accounts/user_create.html', {
+                'roles': roles,
+                'hierarchical_areas': hierarchical_areas,
+                'form_data': form_data,
+            })
 
         # Create user
         user = User.objects.create_user(
@@ -263,19 +333,14 @@ def user_create(request):
             password=password,
             name=name,
             code=code,
+            mobile=mobile,
             role=role,
-            is_active=True,
+            is_active=is_active,
             locale='ar'
         )
 
-        # Handle areas if provided with strict backend validation
-        area_ids = request.POST.getlist('assigned_areas')
-        if area_ids:
-            is_valid, err_msg, cleaned_ids = validate_assigned_areas_for_user(request.user, area_ids)
-            if not is_valid:
-                messages.error(request, err_msg)
-                return redirect('users_list')
-            user.assigned_areas.set(cleaned_ids)
+        if cleaned_area_ids:
+            user.assigned_areas.set(cleaned_area_ids)
 
         # Record Security Audit Log
         AuditLogService.log(
@@ -286,30 +351,80 @@ def user_create(request):
             target_role=role,
             record_id=user.id,
             record_name=user.name,
-            new_values={'name': user.name, 'email': user.email, 'role': role.display_name, 'code': user.code},
+            new_values={'name': user.name, 'email': user.email, 'role': role.display_name, 'code': user.code, 'mobile': user.mobile},
             description=f"إنشاء حساب مستخدم جديد: {user.name} ({user.email}) وتعيين الدور: {role.display_name}",
             status='SUCCESS',
             request=request,
         )
 
         messages.success(request, f"تم إنشاء حساب المستخدم '{user.name}' بنجاح.")
-        return redirect('users_list')
+        return redirect('user_detail', pk=user.pk)
 
-    return redirect('users_list')
+    return render(request, 'accounts/user_create.html', {
+        'roles': roles,
+        'hierarchical_areas': hierarchical_areas,
+        'form_data': {},
+    })
+
+
+@login_required
+@require_permission('users:users/list')
+def user_detail(request, pk):
+    """
+    Dedicated full HTML page for viewing a user profile, roles, assigned areas,
+    warehouses, vaults, and recent audit logs.
+    """
+    target_user = get_object_or_404(User, pk=pk)
+
+    if not can_user_access_object(request.user, target_user, 'view'):
+        return render_forbidden_response(request, 'users:users/list', 'عذراً، لا تمتلك الصلاحية لعرض بيانات هذا المستخدم.')
+
+    from inventory.models import Warehouse
+    from treasury.models import Vault
+
+    assigned_areas = target_user.assigned_areas.select_related('parent').all().order_by('name')
+    assigned_warehouses = Warehouse.objects.filter(assigned_user=target_user)
+    assigned_vaults = Vault.objects.filter(assigned_user=target_user)
+    recent_audit_logs = SecurityAuditLog.objects.filter(
+        Q(actor=target_user) | Q(target_user=target_user)
+    ).order_by('-created_at')[:20]
+
+    can_edit = can_user_access_object(request.user, target_user, 'edit')
+
+    context = {
+        'target_user': target_user,
+        'assigned_areas': assigned_areas,
+        'assigned_warehouses': assigned_warehouses,
+        'warehouses': assigned_warehouses,
+        'assigned_vaults': assigned_vaults,
+        'vaults': assigned_vaults,
+        'recent_audit_logs': recent_audit_logs,
+        'can_edit': can_edit,
+    }
+    return render(request, 'accounts/user_detail.html', context)
 
 
 @login_required
 @require_permission('users:users/edit')
 def user_edit(request, pk):
     """
-    Edit user profile, role, status, code, and assigned areas with privilege escalation protection.
+    Dedicated full HTML page to edit user profile, role, status, code, and assigned areas with privilege escalation protection.
     """
     target_user = get_object_or_404(User, pk=pk)
+
+    if not can_user_access_object(request.user, target_user, 'edit'):
+        return render_forbidden_response(request, 'users:users/edit', 'عذراً، لا تمتلك الصلاحية لتعديل بيانات هذا المستخدم.')
 
     # Protect target superadmin: only superadmin can edit another superadmin
     if target_user.is_super_admin and not getattr(request.user, 'is_super_admin', False):
         messages.error(request, "عذراً، لا تمتلك الصلاحية الكافية لتعديل حساب مدير النظام الأعلى.")
         return redirect('users_list')
+
+    roles = Role.get_supported_roles()
+    if not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        roles = roles.exclude(name__iexact='superadmin').exclude(is_super=True)
+
+    hierarchical_areas = get_hierarchical_areas(request.user)
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -321,19 +436,34 @@ def user_edit(request, pk):
 
         if not name or not email:
             messages.error(request, "الاسم والبريد الإلكتروني حقول إلزامية.")
-            return redirect('user_edit', pk=pk)
+            return render(request, 'accounts/user_edit.html', {
+                'target_user': target_user,
+                'roles': roles,
+                'hierarchical_areas': hierarchical_areas,
+                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+            })
 
         # Check unique email against others
         if User.objects.filter(email__iexact=email).exclude(pk=target_user.pk).exists():
             messages.error(request, f"البريد الإلكتروني '{email}' مسجل لمستخدم آخر.")
-            return redirect('user_edit', pk=pk)
+            return render(request, 'accounts/user_edit.html', {
+                'target_user': target_user,
+                'roles': roles,
+                'hierarchical_areas': hierarchical_areas,
+                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+            })
 
         # Safeguard: cannot deactivate last superadmin
         if target_user.is_superuser and not is_active:
             active_superusers = User.objects.filter(is_superuser=True, is_active=True).exclude(pk=target_user.pk).count()
             if active_superusers == 0:
                 messages.error(request, "لا يمكن تعطيل مدير النظام الأعلى الأخير للنظام لمنع قفل النظام!")
-                return redirect('user_edit', pk=pk)
+                return render(request, 'accounts/user_edit.html', {
+                    'target_user': target_user,
+                    'roles': roles,
+                    'hierarchical_areas': hierarchical_areas,
+                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+                })
 
         old_values = {
             'name': target_user.name,
@@ -356,11 +486,21 @@ def user_edit(request, pk):
             new_role = Role.get_supported_roles().filter(pk=role_id).first() or Role.objects.filter(pk=role_id, is_active=True).first()
             if not new_role:
                 messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
-                return redirect('user_edit', pk=pk)
+                return render(request, 'accounts/user_edit.html', {
+                    'target_user': target_user,
+                    'roles': roles,
+                    'hierarchical_areas': hierarchical_areas,
+                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+                })
             # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
             if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
                 messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
-                return redirect('user_edit', pk=pk)
+                return render(request, 'accounts/user_edit.html', {
+                    'target_user': target_user,
+                    'roles': roles,
+                    'hierarchical_areas': hierarchical_areas,
+                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+                })
             target_user.role = new_role
         else:
             if not target_user.is_superuser:
@@ -374,7 +514,12 @@ def user_edit(request, pk):
         is_valid, err_msg, cleaned_ids = validate_assigned_areas_for_user(request.user, area_ids)
         if not is_valid:
             messages.error(request, err_msg)
-            return redirect('user_edit', pk=pk)
+            return render(request, 'accounts/user_edit.html', {
+                'target_user': target_user,
+                'roles': roles,
+                'hierarchical_areas': hierarchical_areas,
+                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
+            })
         target_user.assigned_areas.set(cleaned_ids)
 
         new_values = {
@@ -403,10 +548,8 @@ def user_edit(request, pk):
         )
 
         messages.success(request, f"تم تحديث بيانات المستخدم '{target_user.name}' بنجاح.")
-        return redirect('users_list')
+        return redirect('user_detail', pk=target_user.pk)
 
-    roles = Role.get_supported_roles()
-    hierarchical_areas = get_hierarchical_areas(request.user)
     selected_area_ids = list(target_user.assigned_areas.values_list('id', flat=True))
     areas = Area.objects.all().order_by('name')
     return render(request, 'accounts/user_edit.html', {
@@ -425,6 +568,9 @@ def user_reset_password(request, pk):
     Reset user password with server-side validation and audit logging.
     """
     target_user = get_object_or_404(User, pk=pk)
+
+    if not can_user_access_object(request.user, target_user, 'reset_password'):
+        return render_forbidden_response(request, 'users:users/edit', 'عذراً، لا تمتلك الصلاحية لتغيير كلمة مرور هذا المستخدم.')
 
     if target_user.is_super_admin and not getattr(request.user, 'is_super_admin', False):
         messages.error(request, "عذراً، لا تمتلك الصلاحية لتغيير كلمة مرور مدير النظام الأعلى.")
@@ -459,9 +605,9 @@ def user_reset_password(request, pk):
         )
 
         messages.success(request, f"تم تغيير كلمة المرور للمستخدم '{target_user.name}' بنجاح.")
-        return redirect('user_edit', pk=pk)
+        return redirect('user_detail', pk=pk)
 
-    return redirect('user_edit', pk=pk)
+    return redirect('user_detail', pk=pk)
 
 
 @login_required
@@ -471,6 +617,9 @@ def user_toggle_status(request, pk):
     Toggles is_active on user with superuser lockout safeguard and audit logging.
     """
     target_user = get_object_or_404(User, pk=pk)
+
+    if not can_user_access_object(request.user, target_user, 'deactivate'):
+        return render_forbidden_response(request, 'users:users/edit', 'عذراً، لا تمتلك الصلاحية لتعديل حالة هذا المستخدم.')
 
     if target_user.is_active:
         if target_user.is_superuser:

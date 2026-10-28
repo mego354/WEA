@@ -178,7 +178,10 @@ class Command(BaseCommand):
         accountant.save()
 
         acc_codenames = [
-            'module:treasury', 'treasury:vaults/view', 'treasury:vaults/transactions',
+            'module:treasury', 'treasury:treasury/view', 'treasury:reports/view',
+            'treasury:vaults/view', 'treasury:vaults/transfer',
+            'treasury:transactions/list', 'treasury:transactions/create', 'treasury:transactions/edit',
+            'treasury:transactions/approve', 'treasury:transactions/reverse',
             'treasury:payments/list', 'treasury:payments/create', 'treasury:payments/requests',
             'treasury:payments/export', 'treasury:vendors/accounting', 'treasury:vendors/transactions',
             'module:purchases', 'purchases:orders/list', 'purchases:orders/view',
@@ -226,7 +229,6 @@ class Command(BaseCommand):
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create',
             'sales:collections/list', 'sales:collections/create',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
-            'module:treasury', 'treasury:vaults/view', 'treasury:vaults/transactions',
         ]
         rep_role.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
 

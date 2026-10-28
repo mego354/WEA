@@ -128,11 +128,21 @@ def contacts_list(request):
     if not governorates.exists():
         governorates = Area.objects.all().order_by('name')
 
+    # Dedicated real scoped statistics cards
+    scoped_all = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
+    stats = {
+        'total_contacts': scoped_all.count(),
+        'total_customers': scoped_all.filter(is_customer=True, status='active').count(),
+        'total_leads': scoped_all.filter(is_customer=True, status='lead').count(),
+        'total_suppliers': scoped_all.filter(is_supplier=True).count(),
+    }
+
     context = {
         'contacts': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'total_count': paginator.count,
+        'stats': stats,
         'active_filters_count': len(active_filters),
         'active_filters': active_filters,
         'current_relation': relation,
@@ -308,11 +318,39 @@ def contact_create(request):
         job_title = request.POST.get('job_title', '').strip()
         is_kol = request.POST.get('is_kol') in ['نعم', 'true', 'on']
 
-        credit_limit = request.POST.get('credit_limit', 0)
+        # Financial Details
+        credit_limit_raw = request.POST.get('credit_limit', '0.00')
         try:
-            credit_limit = float(credit_limit) if credit_limit else 0.00
-        except ValueError:
-            credit_limit = 0.00
+            credit_limit = Decimal(str(credit_limit_raw or '0.00'))
+            if credit_limit < Decimal('0.00'):
+                credit_limit = Decimal('0.00')
+        except Exception:
+            credit_limit = Decimal('0.00')
+
+        credit_period_days_raw = request.POST.get('credit_period_days', 0)
+        try:
+            credit_period_days = max(0, int(credit_period_days_raw or 0))
+        except Exception:
+            credit_period_days = 0
+
+        # Coordinates
+        latitude_raw = request.POST.get('latitude')
+        longitude_raw = request.POST.get('longitude')
+        lat_val = None
+        lng_val = None
+        if latitude_raw and longitude_raw:
+            try:
+                lat_val = Decimal(str(latitude_raw))
+                lng_val = Decimal(str(longitude_raw))
+            except Exception:
+                lat_val, lng_val = None, None
+
+        # Status: Requirement 3 - newly created contact MUST default to Lead, not Customer
+        status_input = (request.POST.get('status') or '').strip().lower()
+        if status_input in ['lead', 'customer', 'active', 'inactive']:
+            status_val = status_input
+        else:
+            status_val = 'lead'
 
         # Area / Address info
         area_id = request.POST.get('area_id') or request.POST.get('area')
@@ -341,7 +379,8 @@ def contact_create(request):
             job_title=job_title,
             is_kol=is_kol,
             credit_limit=credit_limit,
-            status='customer' if is_customer else 'active',
+            credit_period_days=credit_period_days,
+            status=status_val,
             notes=notes,
             custom_values=custom_values,
             created_by=request.user
@@ -354,6 +393,7 @@ def contact_create(request):
         address_streets = request.POST.getlist('address_street[]')
         address_is_mains = request.POST.getlist('address_is_main[]')
 
+        main_addr_created = False
         if address_areas:
             for idx, a_id in enumerate(address_areas):
                 card_area = Area.objects.filter(id=a_id).first() if a_id else area
@@ -362,26 +402,38 @@ def contact_create(request):
                 title = address_titles[idx] if idx < len(address_titles) else ''
                 is_main = (idx == 0) or (idx < len(address_is_mains) and address_is_mains[idx] in ['on', 'true', '1'])
 
-                if card_area or street or title:
+                if card_area or street or title or (is_main and lat_val is not None):
+                    addr_lat = lat_val if is_main else None
+                    addr_lng = lng_val if is_main else None
                     ContactAddress.objects.create(
                         contact=contact,
-                        title=title,
+                        title=title or ("العنوان الرئيسي" if is_main else ""),
                         area=card_area,
                         sub_area=sub_name,
                         street_address=street,
+                        latitude=addr_lat,
+                        longitude=addr_lng,
                         is_main=is_main
                     )
-        elif area:
+                    if is_main:
+                        main_addr_created = True
+        elif area or street or lat_val is not None:
             sub_name = request.POST.get('sub_area', '')
             street = request.POST.get('street_address', '')
             ContactAddress.objects.create(
                 contact=contact,
-                title=request.POST.get('address_title', ''),
+                title=request.POST.get('address_title', 'العنوان الرئيسي'),
                 area=area,
                 sub_area=sub_name,
                 street_address=street,
+                latitude=lat_val,
+                longitude=lng_val,
                 is_main=True
             )
+            main_addr_created = True
+
+        if not main_addr_created and (lat_val is not None or lng_val is not None):
+            contact.set_location(lat_val, lng_val)
 
         if is_supplier:
             VendorAccount.get_or_create_for_supplier(contact)
@@ -501,19 +553,45 @@ def contact_edit(request, pk):
         contact.job_title = request.POST.get('job_title', '').strip()
         contact.is_kol = request.POST.get('is_kol') in ['نعم', 'true', 'on']
 
+        # Preserve existing location if not modified or keep new coordinates
+        old_lat = contact.latitude
+        old_lng = contact.longitude
+
+        latitude_raw = request.POST.get('latitude', '').strip()
+        longitude_raw = request.POST.get('longitude', '').strip()
+        lat_val = None
+        lng_val = None
+        if latitude_raw and longitude_raw:
+            try:
+                lat_val = Decimal(str(latitude_raw))
+                lng_val = Decimal(str(longitude_raw))
+            except Exception:
+                lat_val, lng_val = None, None
+        elif old_lat is not None and old_lng is not None:
+            lat_val = old_lat
+            lng_val = old_lng
+
         credit_limit = request.POST.get('credit_limit')
         if credit_limit is not None and credit_limit != '':
             try:
-                contact.credit_limit = float(credit_limit)
-            except ValueError:
+                cl = Decimal(str(credit_limit))
+                if cl >= Decimal('0.00'):
+                    contact.credit_limit = cl
+            except Exception:
                 pass
 
         credit_period_days = request.POST.get('credit_period_days')
         if credit_period_days is not None and credit_period_days != '':
             try:
-                contact.credit_period_days = int(credit_period_days)
-            except ValueError:
+                cp = int(credit_period_days)
+                if cp >= 0:
+                    contact.credit_period_days = cp
+            except Exception:
                 pass
+
+        status_input = (request.POST.get('status') or '').strip().lower()
+        if status_input in ['lead', 'customer', 'active', 'inactive']:
+            contact.status = status_input
 
         area_id = request.POST.get('area_id') or request.POST.get('area')
         if area_id:
@@ -529,6 +607,7 @@ def contact_edit(request, pk):
         address_streets = request.POST.getlist('address_street[]')
         address_is_mains = request.POST.getlist('address_is_main[]')
 
+        main_addr_created = False
         if address_areas:
             contact.addresses.all().delete()
             for idx, a_id in enumerate(address_areas):
@@ -538,15 +617,39 @@ def contact_edit(request, pk):
                 title = address_titles[idx] if idx < len(address_titles) else ''
                 is_main = (idx == 0) or (idx < len(address_is_mains) and address_is_mains[idx] in ['on', 'true', '1'])
 
-                if card_area or street or title:
+                if card_area or street or title or (is_main and lat_val is not None):
+                    addr_lat = lat_val if is_main else None
+                    addr_lng = lng_val if is_main else None
                     ContactAddress.objects.create(
                         contact=contact,
-                        title=title,
+                        title=title or ("العنوان الرئيسي" if is_main else ""),
                         area=card_area,
                         sub_area=sub_name,
                         street_address=street,
+                        latitude=addr_lat,
+                        longitude=addr_lng,
                         is_main=is_main
                     )
+                    if is_main:
+                        main_addr_created = True
+        elif request.POST.get('street_address') or contact.area or lat_val is not None:
+            sub_name = request.POST.get('sub_area', '')
+            street = request.POST.get('street_address', '')
+            contact.addresses.all().delete()
+            ContactAddress.objects.create(
+                contact=contact,
+                title=request.POST.get('address_title', 'العنوان الرئيسي'),
+                area=contact.area,
+                sub_area=sub_name,
+                street_address=street,
+                latitude=lat_val,
+                longitude=lng_val,
+                is_main=True
+            )
+            main_addr_created = True
+
+        if not main_addr_created and (lat_val is not None or lng_val is not None):
+            contact.set_location(lat_val, lng_val)
 
         if is_supplier:
             VendorAccount.get_or_create_for_supplier(contact)

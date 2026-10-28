@@ -26,30 +26,56 @@
 
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">العميل <span class="text-rose-500">*</span></label>
-                <select name="customer" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                <select name="customer" id="customerSelect" required onchange="filterSalesOrders()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
                     <option value="">-- اختر العميل --</option>
                     {% for c in customers %}
-                    <option value="{{ c.id }}" {% if selected_customer_id|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>
+                    <option value="{{ c.id }}" {% if selected_customer_id == c.id %}selected{% endif %}>
                         {{ c.name }} ({{ c.area.name|default:"عام" }})
                     </option>
                     {% endfor %}
                 </select>
             </div>
 
+            <!-- Linked Sales Order -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">الخزنة المودع بها <span class="text-rose-500">*</span></label>
-                <select name="vault" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
-                    <option value="">-- اختر الخزنة المستلمة --</option>
-                    {% for v in vaults %}
-                    <option value="{{ v.id }}">{{ v.name }} (الرصيد: {{ v.current_balance|floatformat:2 }} ج.م)</option>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">أمر البيع المرتبط (اختياري / لسداد فاتورة محددة)</label>
+                <select name="sales_order" id="salesOrderSelect" onchange="onOrderSelected()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                    <option value="">-- تحصيل حر / بدون ربط بأمر محدد --</option>
+                    {% for o in orders %}
+                    <option value="{{ o.id }}" data-customer="{{ o.customer_id }}" data-outstanding="{{ o.outstanding_balance }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
+                            {% if selected_order_id == o.id %}selected{% endif %}>
+                        أمر بيع #{{ o.order_number }} - الإجمالي: {{ o.grand_total }} ج.م - المتبقي: {{ o.outstanding_balance }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
+                    </option>
                     {% endfor %}
                 </select>
+                <div id="orderBalanceNotice" class="hidden mt-1.5 text-xs font-bold text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100 flex items-center justify-between">
+                    <span>المبلغ المتبقي على هذا الطلب: <span id="orderBalanceVal">0.00</span> ج.م</span>
+                    <button type="button" onclick="fillFullBalance()" class="text-[11px] underline text-brand-800 hover:text-brand-900">سداد المبلغ بالكامل</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">الخزنة المودع بها <span class="text-rose-500">*</span></label>
+                    <select name="vault" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                        <option value="">-- اختر الخزنة المستلمة --</option>
+                        {% for v in vaults %}
+                        <option value="{{ v.id }}">{{ v.name }} (الرصيد: {{ v.current_balance|floatformat:2 }} ج.م)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ التحصيل</label>
+                    <input type="date" name="collection_date" value="{% now 'Y-m-d' %}" required
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">المبلغ المحصل (ج.م) <span class="text-rose-500">*</span></label>
-                    <input type="number" step="0.01" min="0.01" name="amount" required placeholder="0.00"
+                    <input type="number" step="0.01" min="0.01" name="amount" id="amountInput" required placeholder="0.00"
                            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
                 </div>
 
@@ -58,13 +84,14 @@
                     <select name="payment_method" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
                         <option value="cash">نقدي (Cash)</option>
                         <option value="cheque">شيك (Cheque)</option>
+                        <option value="bank_transfer">تحويل بنكي (Bank Transfer)</option>
                     </select>
                 </div>
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات التحصيل</label>
-                <textarea name="notes" rows="3" placeholder="أدخل رقم الشيك أو أي ملاحظات أخرى..."
+                <textarea name="notes" rows="2" placeholder="أدخل رقم الشيك أو أي ملاحظات أخرى..."
                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
             </div>
 
@@ -81,4 +108,60 @@
     </div>
 
 </div>
+
+<script>
+function filterSalesOrders() {
+    const custId = document.getElementById('customerSelect').value;
+    const orderSelect = document.getElementById('salesOrderSelect');
+    const options = orderSelect.querySelectorAll('option');
+
+    let currentValStillValid = false;
+    options.forEach(opt => {
+        if (!opt.value) {
+            opt.style.display = '';
+            return;
+        }
+        const optCust = opt.getAttribute('data-customer');
+        if (!custId || optCust === custId) {
+            opt.style.display = '';
+            if (opt.value === orderSelect.value) currentValStillValid = true;
+        } else {
+            opt.style.display = 'none';
+        }
+    });
+
+    if (!currentValStillValid && orderSelect.value) {
+        orderSelect.value = '';
+    }
+    onOrderSelected();
+}
+
+function onOrderSelected() {
+    const orderSelect = document.getElementById('salesOrderSelect');
+    const selectedOpt = orderSelect.selectedOptions[0];
+    const notice = document.getElementById('orderBalanceNotice');
+    const balanceSpan = document.getElementById('orderBalanceVal');
+
+    if (selectedOpt && selectedOpt.value) {
+        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
+        balanceSpan.textContent = parseFloat(outstanding).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        notice.classList.remove('hidden');
+    } else {
+        notice.classList.add('hidden');
+    }
+}
+
+function fillFullBalance() {
+    const orderSelect = document.getElementById('salesOrderSelect');
+    const selectedOpt = orderSelect.selectedOptions[0];
+    if (selectedOpt && selectedOpt.value) {
+        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
+        document.getElementById('amountInput').value = parseFloat(outstanding).toFixed(2);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    filterSalesOrders();
+});
+</script>
 {% endblock %}

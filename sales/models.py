@@ -86,6 +86,7 @@ class SalesOrder(models.Model):
     
     order_date = models.DateField(default=timezone.now, verbose_name="تاريخ الطلب")
     delivery_date = models.DateField(null=True, blank=True, verbose_name="تاريخ التسليم")
+    due_date = models.DateField(null=True, blank=True, db_index=True, verbose_name="تاريخ الاستحقاق")
     
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
     memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_order", verbose_name="إذن صرف المخزن")
@@ -130,6 +131,27 @@ class SalesOrder(models.Model):
         }
         return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
 
+    @property
+    def total_paid(self):
+        """Total payments collected and linked to this sales order."""
+        res = self.collections.all().aggregate(total=models.Sum('amount'))['total']
+        return res or Decimal('0.00')
+
+    @property
+    def outstanding_balance(self):
+        """Remaining unpaid balance on this sales order."""
+        return max(Decimal('0.00'), self.grand_total - self.total_paid)
+
+    @property
+    def is_paid(self):
+        return self.grand_total > Decimal('0.00') and self.outstanding_balance <= Decimal('0.00')
+
+    @property
+    def is_overdue(self):
+        if not self.due_date:
+            return False
+        return self.due_date < timezone.now().date() and self.outstanding_balance > Decimal('0.00')
+
     def save(self, *args, **kwargs):
         if not self.serial_num:
             max_s = SalesOrder.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 500
@@ -152,10 +174,12 @@ class SalesOrderItem(models.Model):
 
 class Collection(models.Model):
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم التحصيل")
+    sales_order = models.ForeignKey(SalesOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="collections", verbose_name="أمر البيع المرتبط")
     customer = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="collections", verbose_name="العميل")
     vault = models.ForeignKey(Vault, on_delete=models.PROTECT, related_name="collections", verbose_name="الخزنة المودع بها")
     amount = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="المبلغ المحصل (ج.م)")
     collection_date = models.DateField(default=timezone.now, verbose_name="تاريخ التحصيل")
+    due_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستحقاق")
     payment_method = models.CharField(max_length=20, default='cash', choices=[('cash', 'نقدي'), ('cheque', 'شيك')])
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المحصل")

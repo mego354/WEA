@@ -195,19 +195,37 @@ ERP_PERMISSIONS_CATALOG = {
         'icon': 'account_balance_wallet',
         'root_perm': 'module:treasury',
         'pages': {
+            'overview': {
+                'name_ar': 'لوحة الخزينة والتقارير',
+                'actions': [
+                    ('treasury:treasury/view', 'عرض لوحة الخزينة والمعلومات المالية العامة', 'read'),
+                    ('treasury:reports/view', 'عرض كشوفات وتقارير الخزينة والسيولة النقدية', 'read'),
+                ]
+            },
             'vaults': {
                 'name_ar': 'الخزن النقدية وحسابات العهد',
                 'actions': [
-                    ('treasury:vaults/view', 'عرض الخزن النقدية وأرصدتها الحالية', 'read'),
-                    ('treasury:vaults/transactions', 'عرض وتسجيل حركات النقدية وسندات الصرف والقبض', 'financial'),
+                    ('treasury:vaults/view', 'عرض الخزن النقدية وأرصدتها الحالية المصرح بها', 'read'),
+                    ('treasury:vaults/manage', 'إدارة وإنشاء وتعديل وتفعيل الخزن النقدية', 'admin'),
+                    ('treasury:vaults/transfer', 'إجراء تحويلات نقدية بين الخزن والحسابات المصرح بها', 'financial'),
+                ]
+            },
+            'transactions': {
+                'name_ar': 'حركات وسندات الخزن',
+                'actions': [
+                    ('treasury:transactions/list', 'عرض سجل وتاريخ حركات الخزن النقدية', 'read'),
+                    ('treasury:transactions/create', 'تسجيل حركة خزينة وسند قبض/صرف نقدي', 'financial'),
+                    ('treasury:transactions/edit', 'تعديل بيانات وحركات الخزينة غير المقفلة', 'write'),
+                    ('treasury:transactions/approve', 'اعتماد حركات الخزينة والتحويلات المالية', 'workflow'),
+                    ('treasury:transactions/reverse', 'عكس وتسوية الحركات النقدية الخاطئة (Financial Reversal)', 'financial'),
                 ]
             },
             'vendor_payments': {
                 'name_ar': 'مدفوعات الموردين',
                 'actions': [
-                    ('treasury:payments/list', 'عرض قائمة مدفوعات الموردين', 'read'),
+                    ('treasury:payments/list', 'عرض قائمة مدفوعات وسندات صرف الموردين', 'read'),
                     ('treasury:payments/create', 'تسجيل مدفوعة نقدية/بنكية لمورد', 'financial'),
-                    ('treasury:payments/requests', 'عرض واعتماد طلبات الدفع للموردين', 'financial'),
+                    ('treasury:payments/requests', 'عرض واعتماد طلبات الدفع للموردين', 'workflow'),
                     ('treasury:payments/export', 'تصدير مدفوعات الموردين إلى Excel', 'export'),
                 ]
             },

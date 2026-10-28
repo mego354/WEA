@@ -121,6 +121,18 @@
             </form>
             {% endif %}
 
+            {% if can_edit %}
+            <a href="{% url 'purchase_order_edit' order.id %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل</span>
+            </a>
+            {% endif %}
+
+            <a href="{% url 'vendor_payment_create' %}?supplier_id={{ order.supplier.id }}&order_id={{ order.id }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">payments</span>
+                <span>تسجيل سداد</span>
+            </a>
+
             <!-- Print Button -->
             <a href="{% url 'purchase_order_print' order.id %}" target="_blank"
                class="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors" title="طباعة">
@@ -294,10 +306,21 @@
                     {% endif %}
                 </div>
 
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
                     <div>
-                        <span class="text-slate-400 block mb-0.5">التاريخ</span>
+                        <span class="text-slate-400 block mb-0.5">تاريخ الطلب</span>
                         <strong class="font-mono text-slate-800">{{ order.order_date|date:"d/m/Y" }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-0.5">تاريخ الاستحقاق</span>
+                        {% if order.due_date %}
+                        <strong class="font-mono {% if order.is_overdue %}text-rose-600 font-bold{% else %}text-slate-800{% endif %}">
+                            {{ order.due_date|date:"d/m/Y" }}
+                            {% if order.is_overdue %}<span class="inline-block px-1.5 py-0.2 text-[10px] bg-rose-100 text-rose-700 rounded font-bold">متأخر</span>{% endif %}
+                        </strong>
+                        {% else %}
+                        <span class="text-slate-400">غير محدد</span>
+                        {% endif %}
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-0.5">القيمة الكلية</span>
@@ -305,41 +328,41 @@
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-0.5">القيمة المسددة</span>
-                        <strong class="font-mono text-emerald-700 font-bold">
-                            {% if order.status == 'settled' %}25,000.000 جنيه{% else %}0.000 جنيه{% endif %}
-                        </strong>
+                        <strong class="font-mono text-emerald-700 font-bold">{{ order.total_paid|intcomma }} جنيه</strong>
                     </div>
                     <div>
-                        <span class="text-slate-400 block mb-0.5">المديونية</span>
-                        <strong class="font-mono text-red-600 font-bold">
-                            {% if order.status == 'settled' %}33,849.200 جنيه{% else %}{{ order.grand_total|intcomma }} جنيه{% endif %}
+                        <span class="text-slate-400 block mb-0.5">المتبقي المطلوب</span>
+                        <strong class="font-mono {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %} font-bold">
+                            {{ order.outstanding_balance|intcomma }} جنيه
                         </strong>
                     </div>
                 </div>
 
-                <!-- Settlements Table (التسوية) -->
-                {% if order.status == 'settled' %}
+                <!-- Real Settlements Table (التسوية وسندات الصرف) -->
+                {% if order.vendor_payments.all %}
                 <div class="pt-3 border-t border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-700 mb-2">التسوية (سندات الصرف والربط)</h3>
+                    <h3 class="text-xs font-bold text-slate-700 mb-2">التسوية (سندات الصرف والمدفوعات المرتبطة)</h3>
                     <div class="overflow-x-auto border border-slate-100 rounded-lg">
                         <table class="w-full text-right text-xs">
                             <thead class="bg-slate-50 text-slate-500 font-medium">
                                 <tr>
-                                    <th class="py-2 px-3">التوصيف</th>
-                                    <th class="py-2 px-3">التاريخ</th>
-                                    <th class="py-2 px-3">مدين</th>
-                                    <th class="py-2 px-3">القيمة المرتبطة</th>
-                                    <th class="py-2 px-3">الرصيد</th>
+                                    <th class="py-2 px-3">رقم السند</th>
+                                    <th class="py-2 px-3">الخزنة / الحساب</th>
+                                    <th class="py-2 px-3">طريقة السداد</th>
+                                    <th class="py-2 px-3">تاريخ الصرف</th>
+                                    <th class="py-2 px-3 text-left">المبلغ المدفوع</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 text-slate-700">
+                                {% for vp in order.vendor_payments.all %}
                                 <tr>
-                                    <td class="py-2.5 px-3 font-bold">دفع [#10027] {{ order.supplier.name }}</td>
-                                    <td class="py-2.5 px-3 font-mono text-slate-500">{{ order.order_date|date:"d/m/Y" }}</td>
-                                    <td class="py-2.5 px-3 font-mono text-emerald-700">25,000.00 جنيه</td>
-                                    <td class="py-2.5 px-3 font-mono">25,000.00 جنيه</td>
-                                    <td class="py-2.5 px-3 font-mono font-bold text-red-600">33,849.20 جنيه</td>
+                                    <td class="py-2.5 px-3 font-bold font-mono text-brand-700">#{{ vp.serial_num }}</td>
+                                    <td class="py-2.5 px-3 font-medium">{{ vp.vault.name }}</td>
+                                    <td class="py-2.5 px-3 text-slate-500">{{ vp.get_payment_method_display }}</td>
+                                    <td class="py-2.5 px-3 font-mono text-slate-500">{{ vp.created_at|date:"Y-m-d H:i" }}</td>
+                                    <td class="py-2.5 px-3 font-mono font-bold text-emerald-700 text-left">{{ vp.amount|intcomma }} جنيه</td>
                                 </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>

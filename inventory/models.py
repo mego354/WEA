@@ -31,7 +31,14 @@ class Warehouse(models.Model):
         related_name='warehouses',
         verbose_name="المنطقة الجغرافية"
     )
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط العرض (Latitude)")
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط الطول (Longitude)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    @property
+    def has_saved_location(self):
+        return bool(self.latitude is not None and self.longitude is not None)
+
 
     @property
     def main_area(self):

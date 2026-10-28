@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load erp_tags %}
+{% load humanize erp_tags %}
 
 {% block title %}أوامر البيع - WEA Pharma ERP{% endblock %}
 
@@ -21,27 +21,81 @@
 {% block content %}
 <div class="space-y-6">
 
-    <!-- Header & Summary -->
+    <!-- 1. Header & Summary (Clean: Title & Actions) -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">أوامر البيع (Sales Orders)</h1>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">point_of_sale</span>
+                <span>أوامر البيع (Sales Orders)</span>
+            </h1>
             <p class="text-sm text-slate-500 mt-0.5">متابعة طلبات العملاء، اعتمادات الإدارة، التجهيز بالمستودع والتسليم والفوترة</p>
         </div>
         <div class="flex items-center gap-2">
             <a href="{% url 'sales_orders_export' %}?status={{ current_status }}&customer={{ selected_customer|default:'' }}&search={{ search_query }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]"
                title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
                 <span>تصدير إلى Excel</span>
             </a>
-            <a href="{% url 'sales_order_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+            <a href="{% url 'sales_order_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إنشاء أمر بيع جديد</span>
             </a>
         </div>
     </div>
 
-    <!-- Filters & Search Bar -->
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Orders -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي أوامر البيع</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-xl material-symbols-outlined text-lg">receipt_long</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_orders }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">طلب نشط</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Sales Value -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي قيمة المبيعات</span>
+                <span class="p-2 bg-teal-50 text-teal-600 rounded-xl material-symbols-outlined text-lg">payments</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-brand-600 font-mono">{{ stats.total_value|intcomma }}</span>
+                <span class="text-xs text-brand-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Invoiced Sales Value -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">مبيعات مفوترة رسمياً</span>
+                <span class="p-2 bg-emerald-50 text-emerald-600 rounded-xl material-symbols-outlined text-lg">verified</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-emerald-700 font-mono">{{ stats.invoiced_value|intcomma }}</span>
+                <span class="text-xs text-emerald-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Pending Orders Count -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">طلبات بانتظار المراجعة والاعتماد</span>
+                <span class="p-2 bg-amber-50 text-amber-600 rounded-xl material-symbols-outlined text-lg">pending_actions</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-amber-700 font-mono">{{ stats.pending_count }}</span>
+                <span class="text-xs text-amber-600 mr-1.5">طلب قيد المتابعة</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Filters & Search Bar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
         <!-- Status Pills -->
         <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-100">
@@ -108,10 +162,12 @@
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
                         <th data-col="order_number" data-col-label="رقم الطلب" data-required="true" class="py-3.5 px-4">رقم الطلب</th>
                         <th data-col="customer" data-col-label="العميل" data-required="true" class="py-3.5 px-4">العميل</th>
-                        <th data-col="warehouse" data-col-label="مخزن الصرف" class="py-3.5 px-4">مخزن الصرف</th>
-                        <th data-col="order_date" data-col-label="تاريخ الطلب" class="py-3.5 px-4">تاريخ الطلب</th>
-                        <th data-col="representative" data-col-label="المندوب" class="py-3.5 px-4">المندوب</th>
+                        <th data-col="warehouse" data-col-label="مخزن الصرف" class="py-3.5 px-4 hidden md:table-cell">مخزن الصرف</th>
+                        <th data-col="order_date" data-col-label="تاريخ الطلب" class="py-3.5 px-4 hidden sm:table-cell">تاريخ الطلب</th>
+                        <th data-col="due_date" data-col-label="تاريخ الاستحقاق" class="py-3.5 px-4 font-mono">تاريخ الاستحقاق</th>
+                        <th data-col="representative" data-col-label="المندوب" class="py-3.5 px-4 hidden lg:table-cell">المندوب</th>
                         <th data-col="total" data-col-label="إجمالي القيمة" class="py-3.5 px-4 text-left">إجمالي القيمة</th>
+                        <th data-col="outstanding_balance" data-col-label="المتبقي" class="py-3.5 px-4 text-left">المتبقي</th>
                         <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
                         <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
@@ -128,17 +184,26 @@
                             <div class="font-bold text-slate-900">{{ order.customer.name }}</div>
                             <div class="text-[11px] text-slate-400">{{ order.customer.area.name|default:"بدون منطقة" }}</div>
                         </td>
-                        <td data-col="warehouse" class="py-3.5 px-4 text-slate-600 text-xs">
+                        <td data-col="warehouse" class="py-3.5 px-4 text-slate-600 text-xs hidden md:table-cell">
                             {{ order.source_warehouse.name }}
                         </td>
-                        <td data-col="order_date" class="py-3.5 px-4 text-xs font-mono text-slate-600">
+                        <td data-col="order_date" class="py-3.5 px-4 text-xs font-mono text-slate-600 hidden sm:table-cell">
                             {{ order.order_date|date:"Y-m-d" }}
                         </td>
-                        <td data-col="representative" class="py-3.5 px-4 text-xs text-slate-600">
+                        <td data-col="due_date" class="py-3.5 px-4 text-xs font-mono {% if order.is_overdue %}text-rose-600 font-bold{% else %}text-slate-600{% endif %}">
+                            {{ order.due_date|date:"Y-m-d"|default:"—" }}
+                            {% if order.is_overdue %}
+                            <span class="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1" title="متأخر"></span>
+                            {% endif %}
+                        </td>
+                        <td data-col="representative" class="py-3.5 px-4 text-xs text-slate-600 hidden lg:table-cell">
                             {{ order.created_by|default:"—" }}
                         </td>
                         <td data-col="total" class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">
                             {{ order.grand_total|floatformat:2 }} ج.م
+                        </td>
+                        <td data-col="outstanding_balance" class="py-3.5 px-4 text-left font-mono font-bold {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
+                            {{ order.outstanding_balance|floatformat:2 }} ج.م
                         </td>
                         <td data-col="status" class="py-3.5 px-4 text-center">
                             {% if order.status == 'pending' %}

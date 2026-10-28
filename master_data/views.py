@@ -1,5 +1,7 @@
 import json
 import datetime
+import urllib.request
+import urllib.parse
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -8,7 +10,7 @@ from django.db.models import Sum, Count, Q, Avg
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from purchases.models import PurchaseOrder
-from treasury.models import VendorAccount, Vault
+from treasury.models import VendorAccount, Vault, VendorPayment
 from catalog.models import Product
 from contacts.models import Contact
 from sales.models import SalesOrder, SalesReturnOrder, Collection, CustomerAccount
@@ -216,6 +218,8 @@ def home_view(request):
         vis_qs = Visit.objects.filter(Q(owner=selected_rep) | Q(created_by=selected_rep))
         cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep))
         cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
+        po_qs = PurchaseOrder.objects.filter(created_by=selected_rep)
+        vendor_payments_qs = VendorPayment.objects.filter(created_by=selected_rep)
     elif is_rep:
         so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=user)
         ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=user)
@@ -223,6 +227,8 @@ def home_view(request):
         vis_qs = Visit.objects.filter(Q(owner=user) | Q(created_by=user))
         cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=user) | Q(assigned_team=user))
         cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
+        po_qs = PurchaseOrder.objects.filter(created_by=user)
+        vendor_payments_qs = VendorPayment.objects.filter(created_by=user)
     elif is_acct:
         so_qs = SalesOrder.objects.exclude(status='cancelled')
         ro_qs = SalesReturnOrder.objects.exclude(status='cancelled')
@@ -230,6 +236,8 @@ def home_view(request):
         vis_qs = Visit.objects.none()
         cont_qs = Contact.objects.filter(is_customer=True)
         cust_acc_qs = CustomerAccount.objects.all()
+        po_qs = PurchaseOrder.objects.all()
+        vendor_payments_qs = VendorPayment.objects.all()
     else:
         # Superadmin or Manager (Team Scope)
         so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user, 'salesorder')
@@ -238,6 +246,8 @@ def home_view(request):
         vis_qs = get_scoped_queryset(Visit.objects.all(), user, 'visit')
         cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
         cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')
+        po_qs = get_scoped_queryset(PurchaseOrder.objects.all(), user, 'purchaseorder')
+        vendor_payments_qs = get_scoped_queryset(VendorPayment.objects.all(), user, 'vendorpayment')
 
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
@@ -245,6 +255,10 @@ def home_view(request):
         col_qs = col_qs.filter(collection_date__range=(start_date, end_date))
         vis_qs = vis_qs.filter(date__range=(start_date, end_date))
         cont_qs = cont_qs.filter(created_at__date__range=(start_date, end_date))
+        po_period_qs = po_qs.filter(order_date__range=(start_date, end_date))
+        vendor_payments_qs = vendor_payments_qs.filter(payment_date__range=(start_date, end_date))
+    else:
+        po_period_qs = po_qs
 
     so_created = so_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
     so_deliv = so_qs.filter(status='delivered').aggregate(total=Sum('grand_total'), count=Count('id'))
@@ -269,6 +283,24 @@ def home_view(request):
 
     new_customers_count = cont_qs.count()
 
+    # Purchase calculations
+    po_active = po_period_qs.exclude(status='cancelled')
+    po_created = po_active.aggregate(total=Sum('grand_total'), count=Count('id'))
+    po_settled = po_period_qs.filter(status='settled').aggregate(total=Sum('grand_total'), count=Count('id'))
+    vendor_paid_agg = vendor_payments_qs.aggregate(total=Sum('amount'), count=Count('id'))
+    total_vendor_paid = vendor_paid_agg['total'] or Decimal('0.00')
+    po_outstanding = sum((p.outstanding_balance for p in po_active), Decimal('0.00'))
+    po_overdue_count = sum(1 for p in po_active if p.is_overdue)
+
+    # Scoped Contact classification metrics
+    all_contacts_scoped = get_scoped_queryset(Contact.objects.all(), user, 'contact')
+    leads_count = all_contacts_scoped.filter(status='lead').count()
+    customers_count = all_contacts_scoped.filter(status__in=['customer', 'active']).count()
+
+    # Recent orders for dashboard table
+    recent_sales = so_qs.select_related('customer').order_by('-order_date', '-id')[:5]
+    recent_purchases = po_qs.select_related('supplier').order_by('-order_date', '-id')[:5]
+
     # Build Role-Appropriate KPI Cards
     if is_acct:
         vaults_total = Vault.objects.filter(is_active=True).aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
@@ -277,11 +309,11 @@ def home_view(request):
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
             {'id': 'pos_pipeline_stats', 'title': 'الطلبات تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
-            {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
-            {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
             {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
             {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
-            {'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
+            {'id': 'po_total_stats', 'title': 'إجمالي المشتريات', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"},
+            {'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"},
+            {'id': 'po_outstanding_stats', 'title': 'مستحقات أوامر الشراء', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'},
             {'id': 'acc_stats_balance', 'title': 'إجمالي رصيد العملاء', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
             {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
             {'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{Vault.objects.filter(is_active=True).count()} خزنة وحساب"},
@@ -322,16 +354,16 @@ def home_view(request):
         kpi_cards = [
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
-            {'id': 'pos_pipeline_stats', 'title': 'الطلبات تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
-            {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
-            {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
             {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
             {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
-            {'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
+            {'id': 'po_total_stats', 'title': 'أوامر الشراء', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"},
+            {'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"},
+            {'id': 'po_outstanding_stats', 'title': 'مستحقات الشراء المتبقية', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'},
+            {'id': 'leads_count_stats', 'title': 'العملاء المحتملين (Leads)', 'amount': f"{leads_count}", 'subtitle': 'قيد المتابعة'},
+            {'id': 'customers_count_stats', 'title': 'العملاء المعتمدين', 'amount': f"{customers_count}", 'subtitle': 'حساب نشط'},
             {'id': 'acc_stats_balance', 'title': 'إجمالي الرصيد', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
             {'id': 'acc_stats_overdue', 'title': 'إجمالي المديونية المتأخرة', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
-            {'id': 'acc_stat_avg_days_outstanding', 'title': 'متوسط الأيام المعلّقة', 'amount': f"{round(cust_acc['avg_dso'] or 7.2, 1)}", 'subtitle': ''},
-            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد', 'amount': f"{new_customers_count}", 'subtitle': ''},
+            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد بالفترة', 'amount': f"{new_customers_count}", 'subtitle': ''},
             {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
             {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
         ]
@@ -376,6 +408,8 @@ def home_view(request):
         'is_rep': is_rep,
         'eligible_reps': eligible_reps,
         'selected_rep': selected_rep,
+        'recent_sales': recent_sales,
+        'recent_purchases': recent_purchases,
     }
     return render(request, 'dashboard/home.html', context)
 
@@ -972,3 +1006,129 @@ def sync_data_trigger(request, sync_type):
 
     messages.success(request, f"تم بدء مزامنة '{cfg.title}' بنجاح.")
     return redirect('sync_data')
+
+
+# ==========================================
+# 13. GEOCODING & MAP PROXY APIS (/api/geocoding/*)
+# ==========================================
+
+@login_required
+def geocoding_search_api(request):
+    """
+    Unified Geocoding Search Proxy:
+    Takes search query 'q', queries Google Maps Geocoding API if key is available,
+    otherwise queries OpenStreetMap Nominatim with a valid custom User-Agent to prevent HTTP 403.
+    Returns JSON array of normalized results: [{'lat': float, 'lon': float, 'display_name': str}].
+    """
+    query = request.GET.get('q', '').strip()
+    if len(query) < 2:
+        return JsonResponse({'results': []})
+
+    from django.conf import settings
+    google_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', '').strip()
+
+    # 1. Try Google Maps Geocoding if key configured
+    if google_key:
+        try:
+            params = urllib.parse.urlencode({'address': query, 'key': google_key, 'language': 'ar'})
+            url = f"https://maps.googleapis.com/maps/api/geocode/json?{params}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'WEAPharma-ERP/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if data.get('status') == 'OK' and data.get('results'):
+                    results = []
+                    for item in data['results']:
+                        loc = item.get('geometry', {}).get('location', {})
+                        results.append({
+                            'lat': float(loc.get('lat', 0)),
+                            'lon': float(loc.get('lng', 0)),
+                            'display_name': item.get('formatted_address', '')
+                        })
+                    return JsonResponse({'results': results})
+        except Exception:
+            pass  # Fallback to OSM
+
+    # 2. Fallback to OpenStreetMap Nominatim with valid enterprise User-Agent
+    try:
+        params = urllib.parse.urlencode({
+            'q': query,
+            'format': 'json',
+            'limit': 6,
+            'accept-language': 'ar,en'
+        })
+        url = f"https://nominatim.openstreetmap.org/search?{params}"
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'WEAPharma-ERP/1.0 (contact: admin@weapharma.com)'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            results = []
+            for item in data:
+                results.append({
+                    'lat': float(item.get('lat', 0)),
+                    'lon': float(item.get('lon', 0)),
+                    'display_name': item.get('display_name', '')
+                })
+            return JsonResponse({'results': results})
+    except Exception:
+        return JsonResponse({'results': []})
+
+
+@login_required
+def geocoding_reverse_api(request):
+    """
+    Unified Reverse Geocoding Proxy:
+    Takes 'lat' and 'lng' (or 'lon'), queries Google Maps Geocoding API if key is available,
+    otherwise queries OpenStreetMap Nominatim with a valid custom User-Agent.
+    Returns JSON: {'display_name': str, 'address': dict}.
+    """
+    lat = request.GET.get('lat')
+    lng = request.GET.get('lng') or request.GET.get('lon')
+    if not lat or not lng:
+        return JsonResponse({'error': 'Missing coordinates', 'display_name': ''}, status=400)
+
+    from django.conf import settings
+    google_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', '').strip()
+
+    # 1. Try Google Maps Reverse Geocoding if key configured
+    if google_key:
+        try:
+            params = urllib.parse.urlencode({'latlng': f"{lat},{lng}", 'key': google_key, 'language': 'ar'})
+            url = f"https://maps.googleapis.com/maps/api/geocode/json?{params}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'WEAPharma-ERP/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if data.get('status') == 'OK' and data.get('results'):
+                    first_res = data['results'][0]
+                    return JsonResponse({
+                        'display_name': first_res.get('formatted_address', ''),
+                        'address': {
+                            'road': first_res.get('formatted_address', '').split(',')[0],
+                        }
+                    })
+        except Exception:
+            pass  # Fallback to OSM
+
+    # 2. Fallback to OpenStreetMap Nominatim with valid enterprise User-Agent
+    try:
+        params = urllib.parse.urlencode({
+            'lat': lat,
+            'lon': lng,
+            'format': 'json',
+            'accept-language': 'ar,en'
+        })
+        url = f"https://nominatim.openstreetmap.org/reverse?{params}"
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'WEAPharma-ERP/1.0 (contact: admin@weapharma.com)'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return JsonResponse({
+                'display_name': data.get('display_name', ''),
+                'address': data.get('address', {})
+            })
+    except Exception:
+        return JsonResponse({'display_name': '', 'address': {}})
+

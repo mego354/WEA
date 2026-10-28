@@ -26,12 +26,56 @@
                 <span>إعدادات المستخدمين</span>
             </a>
             {% endif %}
-            <button type="button" onclick="openAddUserModal()" class="px-5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-lg border border-slate-200 shadow-xs transition-all flex items-center gap-2">
+            <a href="{% url 'user_create' %}" class="px-5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-lg border border-slate-200 shadow-xs transition-all flex items-center gap-2">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">person_add</span>
                 <span>اضف مستخدم</span>
-            </button>
+            </a>
             <a href="{% url 'users_export' %}" class="px-5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
                 <span>تصدير البيانات</span>
             </a>
+        </div>
+    </div>
+
+    <!-- Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
+                <span class="material-symbols-outlined text-xl">group</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي المستخدمين</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_users|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">check_circle</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">المستخدمين المفعلين</p>
+                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.active_users|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                <span class="material-symbols-outlined text-xl">block</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">المستخدمين المعطلين</p>
+                <p class="text-lg font-black text-slate-600 font-mono">{{ stats.inactive_users|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">shield_person</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">الأدوار المتاحة</p>
+                <p class="text-lg font-black text-indigo-700 font-mono">{{ stats.roles_count|default:0 }}</p>
+            </div>
         </div>
     </div>
 
@@ -94,7 +138,7 @@
                     <tr class="hover:bg-slate-50/60 transition-colors">
                         <!-- User Name with blue/teal link matching reference -->
                         <td data-col="name" class="py-3.5 px-6 font-semibold">
-                            <a href="{% url 'user_edit' u.pk %}" class="text-blue-700 hover:text-[#27bebe] hover:underline transition-colors flex items-center gap-2">
+                            <a href="{% url 'user_detail' u.pk %}" class="text-blue-700 hover:text-[#27bebe] hover:underline transition-colors flex items-center gap-2">
                                 <span>{{ u.name|default:u.username }}</span>
                                 {% if u.code %}
                                 <span class="text-xs text-slate-400 font-mono">({{ u.code }})</span>
@@ -142,6 +186,10 @@
                         <!-- Actions Menu -->
                         <td data-col="actions" class="py-3.5 px-6 text-center">
                             <div class="flex items-center justify-center gap-1.5">
+                                <a href="{% url 'user_detail' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="عرض الملف الشخصي">
+                                    <span class="material-symbols-outlined text-lg">visibility</span>
+                                </a>
+
                                 <a href="{% url 'user_edit' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="تعديل">
                                     <span class="material-symbols-outlined text-lg">edit</span>
                                 </a>
@@ -188,115 +236,4 @@
     </div>
 
 </div>
-
-<!-- ADD USER MODAL matching Reference ERP (media_1792379917014.png) -->
-<div id="addUserModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 transition-all transform animate-in fade-in zoom-in-95 duration-200">
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
-            <h2 class="text-xl font-bold text-[#27bebe]">إضافة مستخدم جديد</h2>
-            <button type="button" onclick="closeAddUserModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
-                <span class="material-symbols-outlined text-2xl">close</span>
-            </button>
-        </div>
-
-        <!-- Modal Form -->
-        <form method="POST" action="{% url 'user_create' %}" id="addUserForm" class="space-y-4">
-            {% csrf_token %}
-
-            <!-- الاسم* -->
-            <div>
-                <label for="modal_user_name" class="block text-xs font-bold text-slate-700 mb-1.5 text-right">الاسم*</label>
-                <input type="text" name="name" id="modal_user_name" required oninput="validateAddUserForm()"
-                       class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all">
-            </div>
-
-            <!-- البريد الإلكتروني* -->
-            <div>
-                <label for="modal_user_email" class="block text-xs font-bold text-slate-700 mb-1.5 text-right">البريد الإلكتروني*</label>
-                <input type="email" name="email" id="modal_user_email" required oninput="validateAddUserForm()" dir="ltr"
-                       class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 text-right focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all">
-            </div>
-
-            <!-- الكود -->
-            <div>
-                <label for="modal_user_code" class="block text-xs font-bold text-slate-700 mb-1.5 text-right">الكود</label>
-                <input type="text" name="code" id="modal_user_code"
-                       class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all">
-            </div>
-
-            <!-- كلمة المرور* -->
-            <div>
-                <label for="modal_user_password" class="block text-xs font-bold text-slate-700 mb-1.5 text-right">كلمة المرور*</label>
-                <input type="password" name="password" id="modal_user_password" required minlength="6" oninput="validateAddUserForm()" dir="ltr"
-                       class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 text-right focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all">
-            </div>
-
-            <!-- الدور* -->
-            <div>
-                <label for="modal_user_role" class="block text-xs font-bold text-slate-700 mb-1.5 text-right">الدور*</label>
-                <select name="role" id="modal_user_role" required onchange="validateAddUserForm()"
-                        class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all">
-                    <option value="">اختر الدور الوظيفي...</option>
-                    {% for r in roles %}
-                    <option value="{{ r.id }}">{{ r.display_name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Assigned Areas (Hierarchical Geographic Area Selector Component) -->
-            <div>
-                {% include 'components/geographic_area_selector.html' with selector_id='add_user' hierarchical_areas=hierarchical_areas selected_area_ids='' %}
-            </div>
-
-            <!-- Action buttons -->
-            <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
-                <button type="button" onclick="closeAddUserModal()" class="px-5 py-2.5 text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors">
-                    إلغاء
-                </button>
-                <button type="submit" id="saveUserBtn" disabled
-                        class="px-6 py-2.5 bg-slate-200 text-slate-400 text-sm font-bold rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-not-allowed">
-                    <span class="material-symbols-outlined text-lg">save</span>
-                    <span>حفظ</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-    function openAddUserModal() {
-        document.getElementById('addUserModal').classList.remove('hidden');
-        document.getElementById('modal_user_name').focus();
-    }
-
-    function closeAddUserModal() {
-        document.getElementById('addUserModal').classList.add('hidden');
-        document.getElementById('addUserForm').reset();
-        validateAddUserForm();
-    }
-
-    function validateAddUserForm() {
-        const name = document.getElementById('modal_user_name').value.trim();
-        const email = document.getElementById('modal_user_email').value.trim();
-        const password = document.getElementById('modal_user_password').value.trim();
-        const role = document.getElementById('modal_user_role').value;
-        const btn = document.getElementById('saveUserBtn');
-
-        if (name && email && password.length >= 6 && role) {
-            btn.disabled = false;
-            btn.className = "px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2 cursor-pointer";
-        } else {
-            btn.disabled = true;
-            btn.className = "px-6 py-2.5 bg-slate-200 text-slate-400 text-sm font-bold rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-not-allowed";
-        }
-    }
-
-    // Close on backdrop click
-    document.getElementById('addUserModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeAddUserModal();
-        }
-    });
-</script>
 {% endblock %}
