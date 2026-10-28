@@ -94,6 +94,19 @@ class Contact(models.Model):
             if hasattr(self, '_temp_lng'):
                 delattr(self, '_temp_lng')
 
+        if self.is_customer:
+            try:
+                from sales.models import CustomerAccount
+                CustomerAccount.get_or_create_for_customer(self)
+            except Exception:
+                pass
+        if self.is_supplier:
+            try:
+                from treasury.models import VendorAccount
+                VendorAccount.get_or_create_for_supplier(self)
+            except Exception:
+                pass
+
     @property
     def formatted_number(self):
         return f"#{self.serial_num}"

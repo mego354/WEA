@@ -329,3 +329,93 @@ class TreasuryRBACAndStatsTestCase(TestCase):
         self.assertEqual(stats['total_balance'], total_balance_db)
         self.assertEqual(stats['cash_balance'], cash_balance_db)
         self.assertEqual(stats['bank_balance'], bank_balance_db)
+
+    def test_vault_deposit_service_and_view(self):
+        """Test depositing money into a vault via service and view."""
+        self.client.login(username='accountant@wea.com', password='TestPassword123!')
+        init_balance = self.cairo_rep_vault.current_balance
+        dep_amount = Decimal('1500.00')
+
+        # GET deposit page
+        res = self.client.get(reverse('vault_deposit') + f'?vault={self.cairo_rep_vault.id}')
+        self.assertEqual(res.status_code, 200)
+
+        # POST deposit
+        post_data = {
+            'vault_id': self.cairo_rep_vault.id,
+            'amount': str(dep_amount),
+            'description': 'إيداع نقدي تجريبي',
+            'reference_number': 'DEP-999',
+            'notes': 'ملاحظات إيداع'
+        }
+        post_res = self.client.post(reverse('vault_deposit'), post_data)
+        self.assertEqual(post_res.status_code, 302)
+
+        self.cairo_rep_vault.refresh_from_db()
+        self.assertEqual(self.cairo_rep_vault.current_balance, init_balance + dep_amount)
+
+        # Check transaction
+        tx = VaultTransaction.objects.filter(vault=self.cairo_rep_vault, reference_type='deposit').first()
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx.amount, dep_amount)
+        self.assertEqual(tx.transaction_type, 'inflow')
+
+        # Check Audit Log
+        audit = SecurityAuditLog.objects.filter(action_type='VAULT_DEPOSIT', record_id=str(tx.id)).first()
+        self.assertIsNotNone(audit)
+
+    def test_vault_withdrawal_service_and_view(self):
+        """Test withdrawing money from a vault via service and view."""
+        self.client.login(username='accountant@wea.com', password='TestPassword123!')
+        init_balance = self.cairo_rep_vault.current_balance
+        wth_amount = Decimal('1000.00')
+
+        # GET withdraw page
+        res = self.client.get(reverse('vault_withdraw') + f'?vault={self.cairo_rep_vault.id}')
+        self.assertEqual(res.status_code, 200)
+
+        # POST withdraw
+        post_data = {
+            'vault_id': self.cairo_rep_vault.id,
+            'amount': str(wth_amount),
+            'description': 'صرف نثريات تجريبية',
+            'reference_number': 'WTH-888',
+        }
+        post_res = self.client.post(reverse('vault_withdraw'), post_data)
+        self.assertEqual(post_res.status_code, 302)
+
+        self.cairo_rep_vault.refresh_from_db()
+        self.assertEqual(self.cairo_rep_vault.current_balance, init_balance - wth_amount)
+
+        # Check transaction
+        tx = VaultTransaction.objects.filter(vault=self.cairo_rep_vault, reference_type='withdrawal').first()
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx.amount, wth_amount)
+        self.assertEqual(tx.transaction_type, 'outflow')
+
+        # Check Audit Log
+        audit = SecurityAuditLog.objects.filter(action_type='VAULT_WITHDRAWAL', record_id=str(tx.id)).first()
+        self.assertIsNotNone(audit)
+
+    def test_vault_withdrawal_insufficient_funds_rejected(self):
+        """Test that withdrawal exceeding available balance is rejected."""
+        self.client.login(username='accountant@wea.com', password='TestPassword123!')
+        huge_amount = self.cairo_rep_vault.current_balance + Decimal('999999.00')
+
+        post_data = {
+            'vault_id': self.cairo_rep_vault.id,
+            'amount': str(huge_amount),
+            'description': 'محاولة سحب أكبر من الرصيد',
+        }
+        post_res = self.client.post(reverse('vault_withdraw'), post_data)
+        self.assertEqual(post_res.status_code, 200)  # Re-renders form with error message
+        self.assertContains(post_res, "غير كافٍ")
+
+    def test_vault_deposit_and_withdrawal_unauthorized_user_forbidden(self):
+        """Representative with no deposit/withdrawal permissions is denied access."""
+        self.client.login(username='rep.cairo@wea.com', password='TestPassword123!')
+        res_dep = self.client.get(reverse('vault_deposit'))
+        self.assertEqual(res_dep.status_code, 403)
+        res_wth = self.client.get(reverse('vault_withdraw'))
+        self.assertEqual(res_wth.status_code, 403)
+

@@ -378,6 +378,8 @@ def vault_transactions_list(request):
 
     vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
     can_reverse = has_perm_or_admin(request.user, 'treasury:transactions/reverse')
+    can_create_tx = has_perm_or_admin(request.user, 'treasury:transactions/create')
+    can_transfer = has_perm_or_admin(request.user, 'treasury:vaults/transfer')
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -393,6 +395,8 @@ def vault_transactions_list(request):
         'total_count': paginator.count,
         'stats': stats,
         'can_reverse': can_reverse,
+        'can_create_tx': can_create_tx,
+        'can_transfer': can_transfer,
     }
     return render(request, 'treasury/vault_transactions_list.html', context)
 
@@ -515,3 +519,150 @@ def vault_create(request):
 def vendor_payment_requests_list(request):
     """View matching /vendor-payment-requests in reference ERP."""
     return render(request, 'treasury/vendor_payment_requests_list.html')
+
+
+@require_permission('treasury:transactions/create')
+def vault_deposit(request):
+    """
+    Deposit cash/funds into an authorized vault.
+    """
+    preselected_vault_id = request.GET.get('vault') or request.POST.get('vault_id')
+    available_vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
+
+    if request.method == 'POST':
+        vault_id = request.POST.get('vault_id')
+        amount_raw = request.POST.get('amount', '').strip()
+        description = request.POST.get('description', '').strip()
+        reference_number = request.POST.get('reference_number', '').strip()
+        transaction_date = request.POST.get('transaction_date') or timezone.now().date()
+        notes = request.POST.get('notes', '').strip()
+
+        if not vault_id:
+            messages.error(request, "يرجى تحديد الخزنة المراد الإيداع فيها.")
+            return render(request, 'treasury/vault_deposit.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': preselected_vault_id,
+            })
+
+        vault = get_object_or_404(Vault, pk=vault_id)
+        if not can_user_access_object(request.user, vault, 'view'):
+            return render_forbidden_response(request, "لا يمكنك إجراء إيداع في خزنة تقع خارج نطاق صلاحياتك.")
+
+        if not description:
+            messages.error(request, "يرجى كتابة سبب أو بيان الإيداع.")
+            return render(request, 'treasury/vault_deposit.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': int(vault_id) if str(vault_id).isdigit() else None,
+                'vault': vault,
+            })
+
+        try:
+            amount = Decimal(amount_raw)
+            tx = TreasuryService.deposit_funds(
+                vault=vault,
+                amount=amount,
+                user=request.user,
+                description=description,
+                transaction_date=transaction_date,
+                reference_number=reference_number,
+                notes=notes
+            )
+            messages.success(request, f"تم بنجاح إيداع {amount:,.2f} ج.م في خزنة ({vault.name}). رقم الحركة: #{tx.id}.")
+            return redirect('vaults_list')
+        except (ValidationError, Exception) as e:
+            msg = str(e.message if hasattr(e, 'message') else e)
+            messages.error(request, f"فشل الإيداع: {msg}")
+            return render(request, 'treasury/vault_deposit.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': int(vault_id) if str(vault_id).isdigit() else None,
+                'vault': vault,
+                'amount': amount_raw,
+                'description': description,
+                'reference_number': reference_number,
+                'notes': notes,
+            })
+
+    selected_vault = None
+    if preselected_vault_id and str(preselected_vault_id).isdigit():
+        selected_vault = available_vaults.filter(id=int(preselected_vault_id)).first()
+
+    return render(request, 'treasury/vault_deposit.html', {
+        'vaults': available_vaults,
+        'selected_vault': selected_vault,
+        'selected_vault_id': int(preselected_vault_id) if preselected_vault_id and str(preselected_vault_id).isdigit() else None,
+        'today': timezone.now().date(),
+    })
+
+
+@require_permission('treasury:transactions/create')
+def vault_withdraw(request):
+    """
+    Withdraw cash/funds from an authorized vault.
+    """
+    preselected_vault_id = request.GET.get('vault') or request.POST.get('vault_id')
+    available_vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
+
+    if request.method == 'POST':
+        vault_id = request.POST.get('vault_id')
+        amount_raw = request.POST.get('amount', '').strip()
+        description = request.POST.get('description', '').strip()
+        reference_number = request.POST.get('reference_number', '').strip()
+        transaction_date = request.POST.get('transaction_date') or timezone.now().date()
+        notes = request.POST.get('notes', '').strip()
+
+        if not vault_id:
+            messages.error(request, "يرجى تحديد الخزنة المراد الصرف / السحب منها.")
+            return render(request, 'treasury/vault_withdraw.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': preselected_vault_id,
+            })
+
+        vault = get_object_or_404(Vault, pk=vault_id)
+        if not can_user_access_object(request.user, vault, 'view'):
+            return render_forbidden_response(request, "لا يمكنك إجراء صرف من خزنة تقع خارج نطاق صلاحياتك.")
+
+        if not description:
+            messages.error(request, "يرجى كتابة سبب أو بيان الصرف.")
+            return render(request, 'treasury/vault_withdraw.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': int(vault_id) if str(vault_id).isdigit() else None,
+                'vault': vault,
+            })
+
+        try:
+            amount = Decimal(amount_raw)
+            tx = TreasuryService.withdraw_funds(
+                vault=vault,
+                amount=amount,
+                user=request.user,
+                description=description,
+                transaction_date=transaction_date,
+                reference_number=reference_number,
+                notes=notes
+            )
+            messages.success(request, f"تم بنجاح صرف {amount:,.2f} ج.م من خزنة ({vault.name}). رقم الحركة: #{tx.id}.")
+            return redirect('vaults_list')
+        except (ValidationError, Exception) as e:
+            msg = str(e.message if hasattr(e, 'message') else e)
+            messages.error(request, f"فشل الصرف: {msg}")
+            return render(request, 'treasury/vault_withdraw.html', {
+                'vaults': available_vaults,
+                'selected_vault_id': int(vault_id) if str(vault_id).isdigit() else None,
+                'vault': vault,
+                'amount': amount_raw,
+                'description': description,
+                'reference_number': reference_number,
+                'notes': notes,
+            })
+
+    selected_vault = None
+    if preselected_vault_id and str(preselected_vault_id).isdigit():
+        selected_vault = available_vaults.filter(id=int(preselected_vault_id)).first()
+
+    return render(request, 'treasury/vault_withdraw.html', {
+        'vaults': available_vaults,
+        'selected_vault': selected_vault,
+        'selected_vault_id': int(preselected_vault_id) if preselected_vault_id and str(preselected_vault_id).isdigit() else None,
+        'today': timezone.now().date(),
+    })
+

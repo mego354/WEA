@@ -8,6 +8,9 @@ from django.utils import timezone
 
 from django.core.paginator import Paginator
 from master_data.pagination_utils import paginate_queryset
+from master_data.models import Area
+from contacts.constants import CUSTOMER_CATEGORIES
+from contacts.views import contact_detail, contact_create, contact_edit
 from .models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
 from .services import SalesOrderService, CollectionService
 from contacts.models import Contact
@@ -527,6 +530,101 @@ def collection_create(request):
     return render(request, 'sales/collection_create.html', context)
 
 
+@require_permission(['contacts:contacts/list', 'sales:orders/list', 'sales:customers/accounting'])
+def sales_customers_list(request):
+    """
+    Sales Customer Directory & Profiles (دليل وبيانات العملاء).
+    Fully scoped by user role and geographic territory.
+    """
+    search = request.GET.get('search', '').strip() or request.GET.get('q', '').strip()
+    status = request.GET.get('status', 'all').strip()
+    area_id = request.GET.get('area_id', '').strip()
+    category = request.GET.get('category', 'all').strip()
+
+    qs = Contact.objects.filter(is_customer=True).select_related('area', 'customer_account', 'created_by').prefetch_related('addresses__area')
+    qs = get_scoped_queryset(qs, request.user, 'contact')
+
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+    if area_id:
+        qs = qs.filter(Q(area_id=area_id) | Q(addresses__area_id=area_id)).distinct()
+    if category and category != 'all':
+        qs = qs.filter(customer_category=category)
+
+    if search:
+        qs = qs.filter(
+            Q(name__icontains=search) |
+            Q(serial_num__icontains=search) |
+            Q(mobile__icontains=search) |
+            Q(phone__icontains=search) |
+            Q(code__icontains=search) |
+            Q(contact_person__icontains=search) |
+            Q(tax_id__icontains=search)
+        ).distinct()
+
+    qs = qs.order_by('name')
+
+    # Dedicated scoped statistics
+    base_scoped = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
+    stats = {
+        'total_customers': base_scoped.count(),
+        'active_customers': base_scoped.filter(status__in=['active', 'customer']).count(),
+        'lead_customers': base_scoped.filter(status='lead').count(),
+        'total_receivable': CustomerAccount.objects.filter(customer__in=base_scoped, current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
+    }
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
+
+    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
+    if not governorates.exists():
+        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+
+    categories = [c[0] if isinstance(c, (list, tuple)) else c for c in CUSTOMER_CATEGORIES]
+
+    context = {
+        'customers': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'total_count': paginator.count,
+        'stats': stats,
+        'search_query': search,
+        'current_status': status,
+        'current_area_id': area_id,
+        'current_category': category,
+        'governorates': governorates,
+        'categories': categories,
+    }
+    return render(request, 'sales/customers_list.html', context)
+
+
+@require_permission(['contacts:contacts/create', 'sales:orders/create'])
+def sales_customer_create(request):
+    """
+    Create a new customer in sales context.
+    """
+    if request.method == 'GET' and 'relation' not in request.GET:
+        get_copy = request.GET.copy()
+        get_copy['relation'] = 'customer'
+        request.GET = get_copy
+    return contact_create(request)
+
+
+@require_permission(['contacts:contacts/view', 'sales:orders/list', 'sales:customers/accounting'])
+def sales_customer_detail(request, pk):
+    """
+    View customer profile with full detail, tabs, balances, and history.
+    """
+    return contact_detail(request, pk=pk)
+
+
+@require_permission(['contacts:contacts/edit', 'sales:orders/create'])
+def sales_customer_edit(request, pk):
+    """
+    Edit existing customer record with authorization checks and audit logging.
+    """
+    return contact_edit(request, pk=pk)
+
+
 @require_permission('sales:customers/accounting')
 def accounting_customers_list(request):
     """
@@ -598,8 +696,8 @@ def customer_transactions_list(request):
     base_scoped_tx = CustomerTransaction.objects.filter(account__customer__in=scoped_contacts)
     tx_stats = {
         'total_count': base_scoped_tx.count(),
-        'total_debit': base_scoped_tx.aggregate(tot=Sum('debit_amount'))['tot'] or Decimal('0.00'),
-        'total_credit': base_scoped_tx.aggregate(tot=Sum('credit_amount'))['tot'] or Decimal('0.00'),
+        'total_debit': base_scoped_tx.aggregate(tot=Sum('debit'))['tot'] or Decimal('0.00'),
+        'total_credit': base_scoped_tx.aggregate(tot=Sum('credit'))['tot'] or Decimal('0.00'),
     }
     tx_stats['net_balance'] = tx_stats['total_debit'] - tx_stats['total_credit']
 

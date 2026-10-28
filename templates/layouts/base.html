@@ -291,6 +291,9 @@
                     <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
                 <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'contacts:contacts/list' or request.user|has_permission:'sales:orders/list' or request.user|is_super_admin %}
+                    <a href="{% url 'sales_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">العملاء</a>
+                    {% endif %}
                     {% if request.user|has_permission:'sales:orders/list' %}
                     <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أوامر البيع</a>
                     {% endif %}

@@ -50,20 +50,27 @@ def inventory_stock_list(request):
     base_scoped = get_scoped_queryset(InventoryStock.objects.all(), request.user, 'inventorystock')
     stock_aggregates = base_scoped.aggregate(
         total_items=Count('id'),
-        total_qty_on_hand=Sum('quantity_on_hand'),
-        total_qty_reserved=Sum('quantity_reserved'),
-        total_qty_available=Sum('quantity_available'),
+        total_qty_on_hand=Sum('qty_on_hand'),
+        total_qty_reserved=Sum('qty_reserved'),
     )
+    tot_on_hand = stock_aggregates['total_qty_on_hand'] or Decimal('0.00')
+    tot_reserved = stock_aggregates['total_qty_reserved'] or Decimal('0.00')
+    tot_available = max(Decimal('0.00'), tot_on_hand - tot_reserved)
+
     total_cost_val = base_scoped.annotate(
-        val=ExpressionWrapper(F('quantity_on_hand') * F('product__cost_price'), output_field=DecimalField(max_digits=14, decimal_places=2))
+        val=ExpressionWrapper(F('qty_on_hand') * F('product_cost'), output_field=DecimalField(max_digits=14, decimal_places=2))
     ).aggregate(tot=Sum('val'))['tot'] or Decimal('0.00')
+
+    low_stock_count = base_scoped.annotate(
+        avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    ).filter(avail__lte=5).count()
 
     stats = {
         'total_items': stock_aggregates['total_items'] or 0,
-        'total_qty_on_hand': stock_aggregates['total_qty_on_hand'] or 0,
-        'total_qty_available': stock_aggregates['total_qty_available'] or 0,
+        'total_qty_on_hand': tot_on_hand,
+        'total_qty_available': tot_available,
         'total_cost_value': total_cost_val,
-        'low_stock_count': base_scoped.filter(quantity_available__lte=5).count(),
+        'low_stock_count': low_stock_count,
     }
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
