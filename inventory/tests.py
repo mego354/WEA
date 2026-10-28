@@ -55,3 +55,20 @@ class InventoryExcelExportTestCase(TestCase):
         self.assertTrue(ws.sheet_view.rightToLeft)
         found = any(cell.value == 'AMP-500' for row in ws.iter_rows() for cell in row)
         self.assertTrue(found)
+
+    def test_inventory_stock_list_view_and_aggregations(self):
+        """Test that inventory_stock_list loads with 200 and calculates aggregates without FieldError."""
+        response = self.client.get(reverse('inventory_stock_list'))
+        self.assertEqual(response.status_code, 200)
+        stats = response.context['stats']
+        self.assertEqual(stats['total_items'], 1)
+        self.assertEqual(stats['total_qty_on_hand'], Decimal('150.00'))
+        self.assertEqual(stats['total_qty_available'], Decimal('140.00'))
+        self.assertEqual(stats['total_cost_value'], Decimal('2700.00'))
+
+    def test_inventory_stock_list_warehouse_filter(self):
+        """Test warehouse filtering on inventory_stock_list."""
+        response = self.client.get(reverse('inventory_stock_list') + f'?warehouse={self.warehouse.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['stocks']), 1)
+

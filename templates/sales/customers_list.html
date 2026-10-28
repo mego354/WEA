@@ -1,0 +1,320 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}دليل وبيانات العملاء - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">المبيعات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">العملاء</span>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- 1. Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">groups</span>
+                <span>دليل وبيانات العملاء (Customers)</span>
+            </h1>
+            <p class="text-sm text-slate-500 mt-0.5">إدارة بيانات العملاء، التصنيفات، العناوين الجغرافية، وسجلات المبيعات والمديونيات المصرح بها.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            {% if request.user|has_permission:'contacts:contacts/create' %}
+            <a href="{% url 'sales_customer_create' %}?relation=customer" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">person_add</span>
+                <span>إضافة عميل جديد</span>
+            </a>
+            {% endif %}
+            <a href="{% url 'accounting_customers_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
+                <span>حسابات العملاء (AR)</span>
+            </a>
+            <a href="{% url 'customer_transactions_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">receipt_long</span>
+                <span>دفتر العمليات</span>
+            </a>
+            <a href="{% url 'contacts_export' %}?relation=customer" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]" title="تصدير إلى Excel">
+                <span class="material-symbols-outlined text-base text-emerald-600">download</span>
+                <span>تصدير</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- Card 1: Total Customers -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-brand-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">groups</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي العملاء المصرح بهم</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_customers|default:0 }}</p>
+            </div>
+        </div>
+
+        <!-- Card 2: Active Customers -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">verified</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">عملاء نشطون (Active)</p>
+                <p class="text-lg font-black text-emerald-600 font-mono">{{ stats.active_customers|default:0 }}</p>
+            </div>
+        </div>
+
+        <!-- Card 3: Lead Customers -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">person_search</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">عملاء محتملون (Leads)</p>
+                <p class="text-lg font-black text-blue-600 font-mono">{{ stats.lead_customers|default:0 }}</p>
+            </div>
+        </div>
+
+        <!-- Card 4: Total Receivables -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">trending_up</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي المديونيات المستحقة</p>
+                <p class="text-lg font-black text-rose-600 font-mono">{{ stats.total_receivable|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Search & Filter Controls Toolbar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <form method="GET" class="flex flex-col md:flex-row flex-wrap items-center gap-3">
+            <!-- Search Query -->
+            <div class="flex-1 min-w-[240px] relative w-full">
+                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم العميل، الكود، الموبايل، أو البطاقة الضريبية..."
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
+            </div>
+
+            <!-- Area / Governorate Filter -->
+            <div class="w-full sm:w-44">
+                <select name="area_id" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[44px]">
+                    <option value="">جميع المحافظات/المناطق</option>
+                    {% for gov in governorates %}
+                    <option value="{{ gov.id }}" {% if selected_area_id|stringformat:"s" == gov.id|stringformat:"s" %}selected{% endif %}>{{ gov.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="w-full sm:w-36">
+                <select name="category" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[44px]">
+                    <option value="">جميع التصنيفات</option>
+                    {% for cat in customer_categories %}
+                    <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>تصنيف {{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div class="w-full sm:w-32">
+                <select name="status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[44px]">
+                    <option value="all" {% if selected_status == 'all' %}selected{% endif %}>كل الحالات</option>
+                    <option value="active" {% if selected_status == 'active' %}selected{% endif %}>نشط (Active)</option>
+                    <option value="lead" {% if selected_status == 'lead' %}selected{% endif %}>محتمل (Lead)</option>
+                    <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>غير نشط</option>
+                </select>
+            </div>
+
+            <!-- Buttons -->
+            <button type="submit" class="w-full sm:w-auto px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">filter_alt</span>
+                <span>تصفية</span>
+            </button>
+            {% if search_query or selected_area_id or selected_category or selected_specialty or selected_status != 'all' %}
+            <a href="{% url 'sales_customers_list' %}" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
+                إلغاء
+            </a>
+            {% endif %}
+
+            <!-- Column Visibility Picker -->
+            {% include 'components/table_column_picker.html' with table_id='customers_table' %}
+        </form>
+    </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
+    <!-- 4. Main Customers Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">badge</span>
+                <span>سجل العملاء</span>
+                <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
+                    {{ total_count }} عميل
+                </span>
+            </h2>
+        </div>
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="customers_table" data-col-table="customers_table" class="min-w-[950px] w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                        <th data-col="code" data-col-label="الكود" data-col-required="true" class="py-3.5 px-4">الكود</th>
+                        <th data-col="name" data-col-label="اسم العميل" data-col-required="true" class="py-3.5 px-4">اسم العميل</th>
+                        <th data-col="phone" data-col-label="الاتصال" class="py-3.5 px-4">الهاتف / الموبايل</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المحافظة / المنطقة</th>
+                        <th data-col="category" data-col-label="التصنيف والتخصص" class="py-3.5 px-4 text-center">التصنيف / التخصص</th>
+                        <th data-col="location" data-col-label="الموقع" class="py-3.5 px-4 text-center">الموقع الجغرافي</th>
+                        <th data-col="balance" data-col-label="الرصيد المدين" class="py-3.5 px-4 text-left">الرصيد المدين</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-col-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for c in customers %}
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <!-- Code -->
+                        <td data-col="code" class="py-3.5 px-4 font-mono text-xs font-bold text-slate-600">
+                            {{ c.code|default:c.formatted_number }}
+                        </td>
+
+                        <!-- Name -->
+                        <td data-col="name" class="py-3.5 px-4">
+                            <a href="{% url 'sales_customer_detail' pk=c.id %}" class="font-bold text-slate-900 hover:text-brand-600 transition-colors block">
+                                {{ c.name }}
+                            </a>
+                            {% if c.contact_person %}
+                            <span class="text-xs text-slate-400 block mt-0.5">المسؤول: {{ c.contact_person }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Phone -->
+                        <td data-col="phone" class="py-3.5 px-4 font-mono text-xs text-slate-600">
+                            {% if c.mobile %}
+                            <div class="flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs text-emerald-600">phone_iphone</span>
+                                <span dir="ltr">{{ c.mobile }}</span>
+                            </div>
+                            {% endif %}
+                            {% if c.phone %}
+                            <div class="flex items-center gap-1 text-slate-400">
+                                <span class="material-symbols-outlined text-xs">call</span>
+                                <span dir="ltr">{{ c.phone }}</span>
+                            </div>
+                            {% endif %}
+                            {% if not c.mobile and not c.phone %}
+                            <span class="text-slate-300">—</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Area -->
+                        <td data-col="area" class="py-3.5 px-4 text-xs">
+                            <span class="font-medium text-slate-800">{{ c.area.name|default:"عام" }}</span>
+                            {% if c.main_address %}
+                            <span class="text-slate-400 block truncate max-w-[180px]">{{ c.main_address.address }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Category / Specialty -->
+                        <td data-col="category" class="py-3.5 px-4 text-center text-xs">
+                            {% if c.customer_category %}
+                            <span class="px-2 py-0.5 rounded-md bg-teal-50 text-brand-700 font-bold border border-teal-200">
+                                {{ c.customer_category }}
+                            </span>
+                            {% endif %}
+                            {% if c.specialty %}
+                            <span class="text-slate-500 block text-[11px] mt-0.5">{{ c.specialty }}</span>
+                            {% endif %}
+                            {% if not c.customer_category and not c.specialty %}
+                            <span class="text-slate-300">—</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Location / GPS -->
+                        <td data-col="location" class="py-3.5 px-4 text-center">
+                            {% if c.has_saved_location %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="إحداثيات GPS محفوظة">
+                                <span class="material-symbols-outlined text-xs">location_on</span>
+                                <span>محدد</span>
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-400" title="لم يتم تحديد الموقع على الخريطة">
+                                <span class="material-symbols-outlined text-xs">location_off</span>
+                                <span>غير محدد</span>
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Balance -->
+                        <td data-col="balance" class="py-3.5 px-4 text-left font-mono font-bold text-sm {% if c.customer_account and c.customer_account.current_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
+                            {% if c.customer_account %}
+                            {{ c.customer_account.current_balance|floatformat:2 }} ج.م
+                            {% else %}
+                            0.00 ج.م
+                            {% endif %}
+                        </td>
+
+                        <!-- Status -->
+                        <td data-col="status" class="py-3.5 px-4 text-center">
+                            {% if c.status == 'active' or c.status == 'customer' %}
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">نشط</span>
+                            {% elif c.status == 'lead' %}
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">محتمل</span>
+                            {% else %}
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">غير نشط</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Actions -->
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
+                            <div class="flex items-center justify-center gap-1">
+                                <a href="{% url 'sales_customer_detail' pk=c.id %}" title="عرض تفاصيل العميل" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-lg">visibility</span>
+                                </a>
+                                {% if request.user|has_permission:'contacts:contacts/edit' %}
+                                <a href="{% url 'sales_customer_edit' pk=c.id %}" title="تعديل بيانات العميل" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-lg">edit</span>
+                                </a>
+                                {% endif %}
+                                <a href="{% url 'customer_transactions_list' %}?customer_id={{ c.id }}" title="كشف الحساب" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-lg">receipt_long</span>
+                                </a>
+                                {% if request.user|has_permission:'sales:collections/create' %}
+                                <a href="{% url 'collection_create' %}?customer_id={{ c.id }}" title="سند تحصيل جديد" class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-lg">payments</span>
+                                </a>
+                                {% endif %}
+                                {% if request.user|has_permission:'sales:orders/create' %}
+                                <a href="{% url 'sales_order_create' %}?customer={{ c.id }}" title="أمر بيع جديد" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-lg">add_shopping_cart</span>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">groups</span>
+                            <p class="font-bold text-slate-600">لا يوجد عملاء مطابقون لمعايير البحث أو ضمن نطاقك المصرح به</p>
+                            <p class="text-xs text-slate-400 mt-1">تأكد من إعدادات التصفية أو قم بإضافة عميل جديد.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 5. Standardized Pagination -->
+        {% include 'components/pagination.html' %}
+    </div>
+
+</div>
+{% endblock %}

@@ -393,8 +393,131 @@ class TreasuryService:
 
         return tx
 
+    @staticmethod
+    @transaction.atomic
+    def deposit_funds(vault: Vault, amount: Decimal, user, description: str, transaction_date=None, reference_number: str = '', notes: str = ''):
+        """
+        Executes a cash deposit into a vault:
+        1. Validates positive amount and active vault status.
+        2. Acquires row-level lock on the vault (select_for_update).
+        3. Authoritatively updates vault current_balance.
+        4. Records VaultTransaction (inflow) with running balance.
+        5. Logs security audit trail via AuditLogService.
+        """
+        amount = Decimal(str(amount))
+        if amount <= Decimal('0.00'):
+            raise ValidationError("مبلغ الإيداع يجب أن يكون أكبر من الصفر.")
+
+        vault_locked = Vault.objects.select_for_update().get(id=vault.id)
+        if not vault_locked.is_active:
+            raise ValidationError(f"الخزنة ({vault_locked.name}) معطلة حالياً ولا يمكن إيداع مبالغ بها.")
+
+        vault_locked.current_balance += amount
+        vault_locked.save(update_fields=['current_balance'])
+
+        full_desc = description.strip()
+        if reference_number:
+            full_desc += f" (مرجع: {reference_number.strip()})"
+        if notes:
+            full_desc += f" - {notes.strip()}"
+
+        tx = VaultTransaction.objects.create(
+            vault=vault_locked,
+            transaction_type='inflow',
+            amount=amount,
+            running_balance=vault_locked.current_balance,
+            reference_type='deposit',
+            description=full_desc,
+            created_by=user
+        )
+
+        AuditLogService.log(
+            action_type='VAULT_DEPOSIT',
+            module='treasury',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"إيداع نقدي #{tx.id}",
+            description=f"إيداع مبلغ {amount:,.2f} ج.م في خزنة {vault_locked.name} - {description}",
+            new_values={
+                'tx_id': tx.id,
+                'vault': vault_locked.name,
+                'amount': str(amount),
+                'new_balance': str(vault_locked.current_balance),
+                'reference_number': reference_number,
+                'description': full_desc,
+                'date': str(transaction_date or timezone.now().date())
+            }
+        )
+        return tx
+
+    @staticmethod
+    @transaction.atomic
+    def withdraw_funds(vault: Vault, amount: Decimal, user, description: str, transaction_date=None, reference_number: str = '', notes: str = ''):
+        """
+        Executes a cash withdrawal/expense from a vault:
+        1. Validates positive amount and active vault status.
+        2. Acquires row-level lock on the vault (select_for_update).
+        3. Validates available balance; prevents overdrafts.
+        4. Authoritatively updates vault current_balance.
+        5. Records VaultTransaction (outflow) with running balance.
+        6. Logs security audit trail via AuditLogService.
+        """
+        amount = Decimal(str(amount))
+        if amount <= Decimal('0.00'):
+            raise ValidationError("مبلغ الصرف / السحب يجب أن يكون أكبر من الصفر.")
+
+        vault_locked = Vault.objects.select_for_update().get(id=vault.id)
+        if not vault_locked.is_active:
+            raise ValidationError(f"الخزنة ({vault_locked.name}) معطلة حالياً ولا يمكن صرف مبالغ منها.")
+
+        if vault_locked.current_balance < amount:
+            raise ValidationError(
+                f"رصيد الخزنة ({vault_locked.name}: {vault_locked.current_balance:,.2f} ج.م) غير كافٍ لصرف {amount:,.2f} ج.م."
+            )
+
+        vault_locked.current_balance -= amount
+        vault_locked.save(update_fields=['current_balance'])
+
+        full_desc = description.strip()
+        if reference_number:
+            full_desc += f" (مرجع: {reference_number.strip()})"
+        if notes:
+            full_desc += f" - {notes.strip()}"
+
+        tx = VaultTransaction.objects.create(
+            vault=vault_locked,
+            transaction_type='outflow',
+            amount=amount,
+            running_balance=vault_locked.current_balance,
+            reference_type='withdrawal',
+            description=full_desc,
+            created_by=user
+        )
+
+        AuditLogService.log(
+            action_type='VAULT_WITHDRAWAL',
+            module='treasury',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"صرف نقدي #{tx.id}",
+            description=f"صرف مبلغ {amount:,.2f} ج.م من خزنة {vault_locked.name} - {description}",
+            new_values={
+                'tx_id': tx.id,
+                'vault': vault_locked.name,
+                'amount': str(amount),
+                'new_balance': str(vault_locked.current_balance),
+                'reference_number': reference_number,
+                'description': full_desc,
+                'date': str(transaction_date or timezone.now().date())
+            }
+        )
+        return tx
+
 
 # Module-level convenience aliases
 transfer_funds = TreasuryService.transfer_funds
 reverse_vault_transaction = TreasuryService.reverse_vault_transaction
 record_vault_manual_transaction = TreasuryService.record_vault_manual_transaction
+deposit_funds = TreasuryService.deposit_funds
+withdraw_funds = TreasuryService.withdraw_funds
+

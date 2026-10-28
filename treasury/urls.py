@@ -13,4 +13,6 @@ urlpatterns = [
     path('vault-transactions/', views.vault_transactions_list, name='vault_transactions_list'),
     path('vault-transactions/<int:pk>/reverse/', views.vault_transaction_reverse, name='vault_transaction_reverse'),
     path('transfer/', views.vault_transfer, name='vault_transfer'),
+    path('deposit/', views.vault_deposit, name='vault_deposit'),
+    path('withdraw/', views.vault_withdraw, name='vault_withdraw'),
 ]

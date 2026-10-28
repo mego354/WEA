@@ -1,0 +1,100 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}إيداع نقدي في الخزينة - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'vaults_list' %}" class="hover:text-brand-600 transition-colors">الخزن النقدية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">إيداع نقدي</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-emerald-600">arrow_downward</span>
+                <span>إيداع نقدي في الخزينة (Deposit)</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">تسجيل حركة توريد / إيداع أموال في الخزينة مع توثيق الحركة بالقيد المالي وسجل الرقابة.</p>
+        </div>
+        <a href="{% url 'vaults_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+            <span>العودة للخزن</span>
+        </a>
+    </div>
+
+    <!-- Deposit Form Card -->
+    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8">
+        <form method="POST" action="{% url 'vault_deposit' %}" class="space-y-6" onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').classList.add('opacity-50');">
+            {% csrf_token %}
+
+            <div class="space-y-5">
+                <!-- Vault Selector -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">الخزنة / الحساب المستلم للإيداع *</label>
+                    <select name="vault_id" required class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
+                        <option value="">-- اختر الخزنة المستلمة --</option>
+                        {% for v in vaults %}
+                        <option value="{{ v.id }}" {% if selected_vault_id == v.id %}selected{% endif %}>
+                            {{ v.name }} (الرصيد الحالي: {{ v.current_balance|intcomma }} ج.م)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Amount and Date in Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-2">مبلغ الإيداع (ج.م) *</label>
+                        <input type="number" step="0.01" min="0.01" name="amount" value="{{ amount|default:'' }}" required placeholder="0.00"
+                               class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-base font-bold text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-2">تاريخ الإيداع *</label>
+                        <input type="date" name="transaction_date" value="{{ today|date:'Y-m-d' }}" required
+                               class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
+                    </div>
+                </div>
+
+                <!-- Description / Reason -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">البيان / سبب الإيداع *</label>
+                    <input type="text" name="description" value="{{ description|default:'' }}" required placeholder="مثال: توريد نقدي من الإدارة، إيداع رأس مال، تسوية عهدة..."
+                           class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
+                </div>
+
+                <!-- Reference Number (Optional) -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">رقم الإيصال / المرجع (اختياري)</label>
+                    <input type="text" name="reference_number" value="{{ reference_number|default:'' }}" placeholder="رقم إيصال الاستلام، رقم التحويل البنكي، أو السند..."
+                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                </div>
+
+                <!-- Notes (Optional) -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">ملاحظات إضافية (اختياري)</label>
+                    <textarea name="notes" rows="2" placeholder="أي تفاصيل أو ملاحظات إضافية..."
+                              class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">{{ notes|default:'' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'vaults_list' %}" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl transition-all min-h-[44px] flex items-center">
+                    إلغاء
+                </a>
+                <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all min-h-[44px] flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base">check</span>
+                    <span>تأكيد الإيداع الآن</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

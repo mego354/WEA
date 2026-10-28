@@ -24,14 +24,26 @@
             <p class="text-sm text-slate-500 mt-1">سجل مقيد لكافة الإيداعات والمصروفات، التحويلات بين الخزن، والعمليات العكسية.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2.5">
+            {% if can_create_tx %}
+            <a href="{% url 'vault_deposit' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">arrow_downward</span>
+                <span>إيداع نقدي</span>
+            </a>
+            <a href="{% url 'vault_withdraw' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-rose-600/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">arrow_upward</span>
+                <span>صرف نقدي</span>
+            </a>
+            {% endif %}
             <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
                 <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
                 <span>الخزن النقدية</span>
             </a>
+            {% if can_transfer %}
             <a href="{% url 'vault_transfer' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
                 <span class="material-symbols-outlined text-base">swap_horiz</span>
                 <span>تحويل أموال</span>
             </a>
+            {% endif %}
         </div>
     </div>
 

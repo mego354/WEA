@@ -11,6 +11,11 @@ urlpatterns = [
     path('collections/', views.collections_list, name='collections_list'),
     path('collections/export/', views.collections_export, name='collections_export'),
     path('collections/create/', views.collection_create, name='collection_create'),
-    path('customers/', views.accounting_customers_list, name='accounting_customers_list'),
+    path('customers/', views.sales_customers_list, name='sales_customers_list'),
+    path('customers/create/', views.sales_customer_create, name='sales_customer_create'),
+    path('customers/<int:pk>/', views.sales_customer_detail, name='sales_customer_detail'),
+    path('customers/<int:pk>/edit/', views.sales_customer_edit, name='sales_customer_edit'),
+    path('customers/accounts/', views.accounting_customers_list, name='accounting_customers_list'),
+    path('accounting/customers/', views.accounting_customers_list),
     path('customer-transactions/', views.customer_transactions_list, name='customer_transactions_list'),
 ]
