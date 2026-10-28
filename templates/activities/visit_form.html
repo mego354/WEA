@@ -401,8 +401,8 @@
 
         navigator.geolocation.getCurrentPosition(
             function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
+                const lat = Number(position.coords.latitude.toFixed(6));
+                const lng = Number(position.coords.longitude.toFixed(6));
                 const acc = Math.round(position.coords.accuracy || 0);
 
                 currentDeviceCoords = { lat: lat, lng: lng, accuracy: acc };

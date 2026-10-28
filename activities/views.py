@@ -1277,6 +1277,8 @@ def visit_create(request):
                     # Initial location verification if coordinates provided
                     lat = request.POST.get('latitude') or request.POST.get('lat')
                     lng = request.POST.get('longitude') or request.POST.get('lng')
+                    print('lat', lat)
+                    print('lng', lng)
                     acc = request.POST.get('device_accuracy')
                     photo_file = request.FILES.get('location_photo')
                     force_bypass = bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps)
