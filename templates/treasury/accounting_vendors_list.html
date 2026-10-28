@@ -1,31 +1,105 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}حسابات وأرصدة الموردين (Vendor Accounts){% endblock %}
+{% block title %}حسابات وأرصدة الموردين (Vendor Accounts) - WEA Pharma ERP{% endblock %}
 
 {% block breadcrumb %}
-    <span class="text-slate-400">المشتريات</span>
+    <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">حسابات الموردين (Vendor Balances)</span>
+    <span class="text-slate-400">المالية والمشتريات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">حسابات وأرصدة الموردين (Vendor Balances)</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-5">
+<div class="space-y-6">
 
-    <!-- Search Toolbar -->
+    <!-- 1. Page Header Section (Clean: Title, Actions - No statistics or search bars) -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">account_balance</span>
+                <span>حسابات وأرصدة الموردين</span>
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">متابعة المديونيات المستحقة للموردين، حدود الائتمان، ومواعيد وفترات السداد.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5">
+            <a href="{% url 'vendor_payments_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">receipt_long</span>
+                <span>سندات صرف الموردين</span>
+            </a>
+            <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>سند صرف جديد</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Suppliers -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي الموردين المسجلين</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-xl material-symbols-outlined text-lg">domain</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_suppliers }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">حساب مورد</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Payable Balance -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي المديونية المستحقة للموردين</span>
+                <span class="p-2 bg-rose-50 text-rose-600 rounded-xl material-symbols-outlined text-lg">credit_card</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-rose-700 font-mono">{{ stats.total_payable|intcomma }}</span>
+                <span class="text-xs text-rose-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Overdue Balance -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">المديونية المتأخرة واجبة السداد</span>
+                <span class="p-2 bg-amber-50 text-amber-600 rounded-xl material-symbols-outlined text-lg">warning</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-amber-700 font-mono">{{ stats.total_overdue|intcomma }}</span>
+                <span class="text-xs text-amber-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Total Credit Limits -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي حدود الائتمان الممنوحة</span>
+                <span class="p-2 bg-teal-50 text-teal-600 rounded-xl material-symbols-outlined text-lg">verified</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-teal-700 font-mono">{{ stats.total_credit_limit|intcomma }}</span>
+                <span class="text-xs text-teal-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Dedicated Search & Filters Toolbar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
         <form method="GET" class="flex flex-col sm:flex-row gap-3">
             <div class="flex-1 relative">
                 <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم المورد أو كود المورد..."
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
             </div>
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">search</span>
                 <span>بحث</span>
             </button>
             {% if search_query %}
-            <a href="{% url 'accounting_vendors_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+            <a href="{% url 'accounting_vendors_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
                 إلغاء
             </a>
             {% endif %}
@@ -35,10 +109,11 @@
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
 
+    <!-- 4. Main Content / Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">account_balance</span>
+                <span class="material-symbols-outlined text-brand-600">table_chart</span>
                 <span>أرصدة حسابات الموردين ومتابعة المديونيات</span>
                 <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
                     {{ total_count }} مورد
@@ -70,17 +145,17 @@
                         <td data-col="area" class="py-3.5 px-4 text-xs text-slate-600">{{ acc.supplier.area.name|default:"-" }}</td>
                         <td data-col="credit_limit" class="py-3.5 px-4 font-mono font-semibold">{{ acc.credit_limit|intcomma }} ج.م</td>
                         <td data-col="credit_period" class="py-3.5 px-4 text-xs text-slate-600 font-mono">{{ acc.credit_period_days }} يوم</td>
-                        <td data-col="current_balance" class="py-3.5 px-4 font-black text-amber-700 text-base font-mono">
+                        <td data-col="current_balance" class="py-3.5 px-4 font-black text-rose-700 text-base font-mono">
                             {{ acc.current_balance|intcomma }} ج.م
                         </td>
                         <td data-col="last_transaction" class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ acc.last_transaction_date|date:"Y-m-d"|default:"-" }}</td>
                         <td data-col="actions" class="py-3.5 px-4 text-center">
                             <div class="inline-flex items-center gap-2">
-                                <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ acc.supplier.id }}" class="px-2.5 py-1 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                                <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ acc.supplier.id }}" class="px-3 py-1.5 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]">
                                     <span class="material-symbols-outlined text-sm">receipt_long</span>
                                     <span>كشف حساب</span>
                                 </a>
-                                <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="px-2.5 py-1 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1">
+                                <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 min-h-[36px]">
                                     <span class="material-symbols-outlined text-sm">payments</span>
                                     <span>سداد</span>
                                 </a>
@@ -89,14 +164,17 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="py-8 text-center text-slate-400">لا توجد حسابات موردين مسجلة.</td>
+                        <td colspan="7" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">account_balance</span>
+                            <span class="font-bold">لا توجد حسابات موردين مسجلة أو مطابقة لمعايير البحث.</span>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
-        <!-- Standardized Pagination -->
+        <!-- 5. Pagination Section -->
         {% include 'components/pagination.html' %}
     </div>
 

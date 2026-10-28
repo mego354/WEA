@@ -52,4 +52,9 @@ urlpatterns = [
     # Data Sync
     path('settings/sync-data/', views.sync_data_view, name='sync_data'),
     path('settings/sync-data/<str:sync_type>/sync/', views.sync_data_trigger, name='sync_data_trigger'),
+
+    # Geocoding & Map Proxy APIs
+    path('api/geocoding/search/', views.geocoding_search_api, name='geocoding_search_api'),
+    path('api/geocoding/reverse/', views.geocoding_reverse_api, name='geocoding_reverse_api'),
 ]
+

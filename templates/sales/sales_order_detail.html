@@ -76,6 +76,18 @@
             </a>
             {% endif %}
 
+            {% if can_edit %}
+            <a href="{% url 'sales_order_edit' order.pk %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل الطلب</span>
+            </a>
+            {% endif %}
+
+            <a href="{% url 'collection_create' %}?customer_id={{ order.customer.id }}&order_id={{ order.id }}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">payments</span>
+                <span>تسجيل تحصيل</span>
+            </a>
+
             <a href="{% url 'sales_orders_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[44px] inline-flex items-center justify-center">
                 رجوع
             </a>
@@ -115,40 +127,71 @@
     {% endif %}
 
     <!-- Master Info Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Customer Info -->
         <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base text-brand-600">person</span>
                 <span>بيانات العميل</span>
             </h3>
-            <p class="font-bold text-slate-900 text-base">{{ order.customer.name }}</p>
+            <p class="font-bold text-slate-900 text-sm">{{ order.customer.name }}</p>
             <p class="text-xs text-slate-500 mt-1">المنطقة: {{ order.customer.area.name|default:"غير محدد" }}</p>
             <p class="text-xs text-slate-500 mt-0.5">الهاتف: {{ order.customer.mobile|default:"—" }}</p>
         </div>
 
         <!-- Warehouse & Delivery -->
         <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base text-brand-600">warehouse</span>
                 <span>المخزن والتسليم</span>
             </h3>
-            <p class="font-bold text-slate-900 text-sm">مخزن الصرف: {{ order.source_warehouse.name }}</p>
+            <p class="font-bold text-slate-900 text-xs">مخزن الصرف: {{ order.source_warehouse.name }}</p>
             <p class="text-xs text-slate-500 mt-1">تاريخ الطلب: {{ order.order_date|date:"Y-m-d" }}</p>
             <p class="text-xs text-slate-500 mt-0.5">تاريخ التسليم: {{ order.delivery_date|date:"Y-m-d"|default:"غير محدد" }}</p>
         </div>
 
-        <!-- Financial Summary -->
+        <!-- Due Date Card -->
         <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base text-brand-600">payments</span>
-                <span>القيمة الإجمالية</span>
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-brand-600">calendar_clock</span>
+                <span>استحقاق السداد (Due Date)</span>
             </h3>
-            <p class="text-2xl font-black font-mono text-brand-700">{{ order.grand_total|floatformat:2 }} ج.م</p>
+            {% if order.due_date %}
+            <p class="text-base font-bold font-mono {% if order.is_overdue %}text-rose-600{% else %}text-slate-900{% endif %}">
+                {{ order.due_date|date:"Y-m-d" }}
+            </p>
+            {% if order.is_overdue %}
+            <span class="inline-block mt-1 px-2 py-0.5 text-[10px] bg-rose-100 text-rose-700 font-bold rounded-full">متأخر عن السداد</span>
+            {% else %}
+            <span class="inline-block mt-1 px-2 py-0.5 text-[10px] bg-slate-100 text-slate-600 font-bold rounded-full">ساري الميعاد</span>
+            {% endif %}
+            {% else %}
+            <p class="text-xs text-slate-400">غير محدد</p>
+            {% endif %}
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-brand-600">payments</span>
+                <span>الحسابات والموقف المالي</span>
+            </h3>
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">الإجمالي:</span>
+                <span class="font-bold font-mono text-slate-900">{{ order.grand_total|floatformat:2 }} ج.م</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">المحصل:</span>
+                <span class="font-bold font-mono text-emerald-600">{{ order.total_paid|floatformat:2 }} ج.م</span>
+            </div>
+            <div class="flex justify-between items-center text-xs pt-1 border-t border-slate-100">
+                <span class="text-slate-700 font-bold">المتبقي:</span>
+                <span class="font-bold font-mono {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">{{ order.outstanding_balance|floatformat:2 }} ج.م</span>
+            </div>
             {% if order.memo %}
-            <p class="text-xs text-emerald-600 font-bold mt-2 flex items-center gap-1">
-                <span class="material-symbols-outlined text-sm">check_circle</span>
-                <span>إذن صرف مخزن: {{ order.memo.memo_number }}</span>
+            <p class="text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                <span class="material-symbols-outlined text-xs">check_circle</span>
+                <span>إذن صرف: {{ order.memo.memo_number }}</span>
             </p>
             {% endif %}
         </div>
@@ -191,6 +234,43 @@
             </table>
         </div>
     </div>
+
+    <!-- Linked Collections Table -->
+    {% if order.collections.all %}
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">receipt</span>
+                <span>سندات التحصيل والمدفوعات المرتبطة بأمر البيع</span>
+            </h3>
+            <span class="text-xs font-bold text-slate-500">{{ order.collections.count }} سند</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm">
+                <thead>
+                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase">
+                        <th class="py-3 px-4">رقم السند</th>
+                        <th class="py-3 px-4">الخزنة المودع بها</th>
+                        <th class="py-3 px-4">تاريخ التحصيل</th>
+                        <th class="py-3 px-4">طريقة الدفع</th>
+                        <th class="py-3 px-4 text-left">المبلغ المحصل</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for col in order.collections.all %}
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="py-3.5 px-4 font-mono font-bold text-xs text-brand-700">#{{ col.serial_num }}</td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">{{ col.vault.name }}</td>
+                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ col.collection_date|date:"Y-m-d" }}</td>
+                        <td class="py-3.5 px-4 text-xs text-slate-600">{{ col.get_payment_method_display }}</td>
+                        <td class="py-3.5 px-4 text-left font-mono font-bold text-emerald-600">{{ col.amount|floatformat:2 }} ج.م</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Approval Audit History Log (Requirement 3 & 5) -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">

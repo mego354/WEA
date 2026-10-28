@@ -6,56 +6,103 @@
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Top Action Bar -->
+    <!-- 1. Header Section -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div class="flex items-center gap-3">
             <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">أوامر إرجاع المشتريات</h1>
-            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                {{ total_count }} أمر
-            </span>
+            <a href="{% url 'purchase_orders_list' %}" class="text-xs px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-[#27bebe] font-bold rounded-full border border-teal-200 transition-colors">
+                أوامر الشراء
+            </a>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Search Bar -->
-            <form method="GET" class="relative">
-                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
-                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
-                <div class="relative">
-                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالرقم أو المورد..."
-                           class="w-52 sm:w-60 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
-                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
-                </div>
-            </form>
-
             <!-- Export to Excel -->
             <a href="{% url 'purchase_return_orders_export' %}?status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span class="hidden sm:inline">تصدير إلى Excel</span>
+                <span>تصدير إلى Excel</span>
             </a>
-
-            <!-- Slide-out Filter Drawer Button -->
-            <button type="button" onclick="openFilterDrawer()"
-                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
-                <span class="material-symbols-outlined text-base">filter_list</span>
-                <span>فلتر</span>
-                {% if active_filters_count > 0 %}
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                    {{ active_filters_count }}
-                </span>
-                {% endif %}
-            </button>
-
-            <!-- Column Visibility Picker -->
-            {% include 'components/table_column_picker.html' with table_id='purchase_returns_table' %}
 
             <!-- New Return Order Button -->
             <a href="{% url 'purchase_return_order_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>أمر إرجاع مشتريات جديد</span>
             </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
+                <span class="material-symbols-outlined text-xl">assignment_return</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي أوامر الإرجاع</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_orders|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">payments</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي قيمة المرتجعات</p>
+                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.total_value|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">pending_actions</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">مسودة / قيد المراجعة</p>
+                <p class="text-lg font-black text-amber-700 font-mono">{{ stats.draft_count|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">task_alt</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">تمت التسوية المالية</p>
+                <p class="text-lg font-black text-blue-700 font-mono">{{ stats.settled_count|default:0 }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Search & Filter Bar -->
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 max-w-md relative">
+                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
+                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالرقم المسلسل أو المورد..."
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
+                <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
+            </form>
+
+            <div class="flex items-center gap-2">
+                <!-- Slide-out Filter Drawer Button -->
+                <button type="button" onclick="openFilterDrawer()"
+                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
+                    <span>فلترة متقدمة</span>
+                    {% if active_filters_count > 0 %}
+                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
+                        {{ active_filters_count }}
+                    </span>
+                    {% endif %}
+                </button>
+
+                <!-- Column Visibility Picker -->
+                {% include 'components/table_column_picker.html' with table_id='purchase_returns_table' %}
+            </div>
         </div>
     </div>
 

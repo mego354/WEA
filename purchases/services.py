@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
 from inventory.models import InventoryMemo, InventoryMemoItem, InventoryStock, InventoryLot
 from treasury.models import VendorAccount, VendorTransaction, VendorInstallment
+from accounts.services import AuditLogService
 
 
 
@@ -13,10 +14,10 @@ class PurchaseOrderService:
     @staticmethod
     @transaction.atomic
     def create_order(supplier, target_warehouse, order_date, items_data, user, 
-                     delivery_address=None, expected_delivery_date=None,
+                     delivery_address=None, expected_delivery_date=None, due_date=None,
                      custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'), notes=""):
         """
-        Creates a new purchase order with validated line items.
+        Creates a new purchase order with validated line items and audit log.
         """
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر الشراء.")
@@ -39,6 +40,7 @@ class PurchaseOrderService:
             delivery_address=delivery_address,
             order_date=order_date or timezone.now().date(),
             expected_delivery_date=expected_delivery_date,
+            due_date=due_date,
             custom_discount_percentage=Decimal(str(custom_discount_percentage or 0)),
             shipping_fees=Decimal(str(shipping_fees or 0)),
             notes=notes,
@@ -63,6 +65,106 @@ class PurchaseOrderService:
             )
 
         order.recalculate_totals()
+
+        # Audit Logging
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_CREATED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"إنشاء أمر مشتريات {order.order_number} للمورد {order.supplier.name} بإجمالي {order.grand_total:,.2f} ج.م",
+            new_values={
+                'order_number': order.order_number,
+                'supplier': order.supplier.name,
+                'target_warehouse': order.target_warehouse.name,
+                'items_count': order.items_count,
+                'items_quantity': str(order.items_quantity),
+                'subtotal': str(order.subtotal),
+                'grand_total': str(order.grand_total),
+                'due_date': str(order.due_date) if order.due_date else None,
+                'status': order.status,
+            }
+        )
+        return order
+
+    @staticmethod
+    @transaction.atomic
+    def update_order(order: PurchaseOrder, supplier, target_warehouse, order_date, items_data, user,
+                     delivery_address=None, expected_delivery_date=None, due_date=None,
+                     custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'),
+                     delivery_agent="", delivery_time="", notes=""):
+        """
+        Updates an editable purchase order (pending or rejected or approved before stocking).
+        """
+        if order.status in ['picked', 'settled', 'cancelled']:
+            raise ValidationError(f"لا يمكن تعديل أمر مشتريات بحالة: {order.status_label_ar}")
+
+        prev_values = {
+            'supplier': order.supplier.name,
+            'target_warehouse': order.target_warehouse.name,
+            'items_count': order.items_count,
+            'items_quantity': str(order.items_quantity),
+            'grand_total': str(order.grand_total),
+            'due_date': str(order.due_date) if order.due_date else None,
+        }
+
+        order.supplier = supplier
+        order.target_warehouse = target_warehouse
+        order.delivery_address = delivery_address
+        order.order_date = order_date or order.order_date
+        order.expected_delivery_date = expected_delivery_date
+        order.due_date = due_date
+        order.custom_discount_percentage = Decimal(str(custom_discount_percentage or 0))
+        order.shipping_fees = Decimal(str(shipping_fees or 0))
+        if delivery_agent:
+            order.delivery_agent = delivery_agent
+        if delivery_time:
+            order.delivery_time = delivery_time
+        order.notes = notes
+        order.updated_by = user
+        order.save(update_fields=[
+            'supplier', 'target_warehouse', 'delivery_address', 'order_date',
+            'expected_delivery_date', 'due_date', 'custom_discount_percentage',
+            'shipping_fees', 'delivery_agent', 'delivery_time', 'notes', 'updated_by', 'updated_at'
+        ])
+
+        # Replace line items
+        order.items.all().delete()
+        for idx, itm in enumerate(items_data, start=1):
+            PurchaseOrderItem.objects.create(
+                order=order,
+                item_order=idx,
+                product=itm['product'],
+                quantity=Decimal(str(itm['quantity'])),
+                unit_price=Decimal(str(itm['unit_price'])),
+                product_batch_number=itm.get('batch_number', ''),
+                product_expiry_date=itm.get('expiry_date') or None,
+                discount_percentage=Decimal(str(itm.get('discount_percentage', 0))),
+                tax_percentage=Decimal(str(itm.get('tax_percentage', 0)))
+            )
+
+        order.recalculate_totals()
+
+        new_values = {
+            'supplier': order.supplier.name,
+            'target_warehouse': order.target_warehouse.name,
+            'items_count': order.items_count,
+            'items_quantity': str(order.items_quantity),
+            'grand_total': str(order.grand_total),
+            'due_date': str(order.due_date) if order.due_date else None,
+        }
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_UPDATED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"تعديل بيانات وبنود أمر المشتريات {order.order_number} (الإجمالي الجديد: {order.grand_total:,.2f} ج.م)",
+            previous_values=prev_values,
+            new_values=new_values
+        )
         return order
 
     @staticmethod
@@ -93,6 +195,18 @@ class PurchaseOrderService:
             status_before=status_before,
             status_after='approved',
             reason=notes or 'تم اعتماد أمر الشراء'
+        )
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_APPROVED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"اعتماد أمر مشتريات {order.order_number} للمورد {order.supplier.name}",
+            previous_values={'status': status_before},
+            new_values={'status': 'approved', 'approved_by': user.username},
+            reason=notes or ''
         )
         return order
 
@@ -125,6 +239,17 @@ class PurchaseOrderService:
             status_after='rejected',
             reason=reason
         )
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_REJECTED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"رفض أمر مشتريات {order.order_number} للمورد {order.supplier.name}: {reason}",
+            previous_values={'status': status_before},
+            new_values={'status': 'rejected', 'rejection_reason': reason},
+            reason=reason
+        )
         return order
 
     @staticmethod
@@ -149,6 +274,17 @@ class PurchaseOrderService:
             status_before=status_before,
             status_after='pending',
             reason="إعادة تقديم أمر الشراء للاعتماد بعد المراجعة والتعديل"
+        )
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_UPDATED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"إعادة تقديم أمر مشتريات {order.order_number} للاعتماد",
+            previous_values={'status': status_before},
+            new_values={'status': 'pending'}
         )
         return order
 
@@ -227,6 +363,17 @@ class PurchaseOrderService:
         order.status = 'picked'
         order.updated_by = user
         order.save(update_fields=['memo', 'stocked_at', 'status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_PICKED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"استلام بضاعة أمر مشتريات {order.order_number} بمخزن {order.target_warehouse.name} (إذن إضافة {memo.memo_number})",
+            previous_values={'status': 'approved'},
+            new_values={'status': 'picked', 'memo_number': memo.memo_number, 'warehouse': order.target_warehouse.name}
+        )
         return order
 
     @staticmethod
@@ -252,7 +399,7 @@ class PurchaseOrderService:
             transaction_type='credit',
             reason='purchase',
             transaction_date=timezone.now().date(),
-            due_date=timezone.now().date() + timezone.timedelta(days=account.credit_period_days),
+            due_date=order.due_date or (timezone.now().date() + timezone.timedelta(days=account.credit_period_days)),
             credit=order.grand_total,
             debit=Decimal('0.00'),
             running_balance=new_balance,
@@ -277,6 +424,17 @@ class PurchaseOrderService:
         order.status = 'settled'
         order.updated_by = user
         order.save(update_fields=['invoiced_at', 'status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_SETTLED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"ترحيل أمر مشتريات {order.order_number} للحسابات (قيد رقم #{tx.serial} بمبلغ {order.grand_total:,.2f} ج.م)",
+            previous_values={'status': 'picked'},
+            new_values={'status': 'settled', 'transaction_serial': tx.serial, 'supplier_balance': str(new_balance), 'due_date': str(tx.due_date)}
+        )
         return order
 
     @staticmethod
@@ -323,6 +481,17 @@ class PurchaseOrderService:
         order.invoiced_at = None
         order.updated_by = user
         order.save(update_fields=['status', 'invoiced_at', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_UPDATED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"إلغاء فوترة أمر مشتريات {order.order_number} وإعادة الحالة إلى استلام المخزن (Picked)",
+            previous_values={'status': 'settled'},
+            new_values={'status': 'picked'}
+        )
         return order
 
     @staticmethod
@@ -331,9 +500,21 @@ class PurchaseOrderService:
         """Cancels a pending or approved order before stocking."""
         if order.status in ['picked', 'settled']:
             raise ValidationError("لا يمكن إلغاء طلب تم استلامه أو فوترته. يجب استخدام أمر المرتجعات.")
+        status_before = order.status
         order.status = 'cancelled'
         order.updated_by = user
         order.save(update_fields=['status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_CANCELLED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"إلغاء أمر مشتريات {order.order_number}",
+            previous_values={'status': status_before},
+            new_values={'status': 'cancelled'}
+        )
         return order
 
     @staticmethod
@@ -356,6 +537,7 @@ class PurchaseOrderService:
             delivery_address=order.delivery_address,
             order_date=order.order_date,
             expected_delivery_date=order.expected_delivery_date,
+            due_date=order.due_date,
             delivery_agent=order.delivery_agent,
             delivery_time=order.delivery_time,
             custom_discount_percentage=order.custom_discount_percentage,
@@ -404,6 +586,16 @@ class PurchaseOrderService:
         order.save(update_fields=['is_split', 'updated_at'])
         order.recalculate_totals()
         child_order.recalculate_totals()
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_SPLIT',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} -> {child_order.order_number}",
+            description=f"تقسيم أمر مشتريات {order.order_number} وإنشاء أمر مشتريات فرعي {child_order.order_number}",
+            new_values={'child_order': child_order.order_number, 'child_grand_total': str(child_order.grand_total)}
+        )
         return child_order
 
 
@@ -445,6 +637,21 @@ class PurchaseReturnOrderService:
             )
 
         return_order.recalculate_totals()
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_CREATED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"إنشاء أمر إرجاع مشتريات {return_order.order_number} للمورد {return_order.supplier.name} بقيمة {return_order.grand_total:,.2f} ج.م",
+            new_values={
+                'order_number': return_order.order_number,
+                'supplier': return_order.supplier.name,
+                'warehouse': return_order.warehouse.name,
+                'grand_total': str(return_order.grand_total)
+            }
+        )
         return return_order
 
     @staticmethod
@@ -456,6 +663,17 @@ class PurchaseReturnOrderService:
         return_order.status = 'approved'
         return_order.updated_by = user
         return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_APPROVED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"اعتماد أمر إرجاع مشتريات {return_order.order_number}",
+            previous_values={'status': 'pending'},
+            new_values={'status': 'approved'}
+        )
         return return_order
 
     @staticmethod
@@ -518,6 +736,17 @@ class PurchaseReturnOrderService:
         return_order.status = 'delivered'
         return_order.updated_by = user
         return_order.save(update_fields=['memo', 'dispatched_at', 'status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_DELIVERED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"صرف مرتجع مشتريات {return_order.order_number} من مخزن {return_order.warehouse.name} (إذن صرف {memo.memo_number})",
+            previous_values={'status': 'approved'},
+            new_values={'status': 'delivered', 'memo_number': memo.memo_number}
+        )
         return return_order
 
     @staticmethod
@@ -556,6 +785,17 @@ class PurchaseReturnOrderService:
         return_order.status = 'settled'
         return_order.updated_by = user
         return_order.save(update_fields=['settled_at', 'status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_SETTLED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"ترحيل مرتجع مشتريات {return_order.order_number} للحسابات (إشعار خصم #{tx.serial} بمبلغ {return_order.grand_total:,.2f} ج.م)",
+            previous_values={'status': 'delivered'},
+            new_values={'status': 'settled', 'transaction_serial': tx.serial, 'supplier_balance': str(new_balance)}
+        )
         return return_order
 
     @staticmethod
@@ -564,8 +804,21 @@ class PurchaseReturnOrderService:
         """Cancels a pending or approved return order before unstocking."""
         if return_order.status in ['delivered', 'settled']:
             raise ValidationError("لا يمكن إلغاء أمر مرتجع بعد خروج البضاعة من المخزن أو ترحيله للحسابات.")
+        status_before = return_order.status
         return_order.status = 'cancelled'
         return_order.updated_by = user
         return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_CANCELLED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"إلغاء أمر إرجاع مشتريات {return_order.order_number}",
+            previous_values={'status': status_before},
+            new_values={'status': 'cancelled'}
+        )
         return return_order
+
 

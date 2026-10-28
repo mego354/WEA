@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from master_data.models import Area
@@ -50,7 +51,7 @@ class Contact(models.Model):
     credit_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="حد الائتمان (ج.م)")
     credit_period_days = models.PositiveIntegerField(default=30, verbose_name="فترة الائتمان (أيام)")
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='customer', verbose_name="الحالة")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='lead', verbose_name="الحالة")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     custom_values = models.JSONField(default=dict, blank=True, verbose_name="القيم المخصصة")
 
@@ -192,6 +193,21 @@ class Contact(models.Model):
             addr.longitude = lng
             addr.save()
         return addr
+
+    @property
+    def total_outstanding_balance(self):
+        """Sum of unpaid balances across active sales orders for this customer."""
+        if not self.is_customer or not self.pk:
+            return Decimal('0.00')
+        active_orders = self.sales_orders.exclude(status='cancelled')
+        return sum((order.outstanding_balance for order in active_orders), Decimal('0.00'))
+
+    @property
+    def is_credit_limit_exceeded(self):
+        """Check if customer's outstanding balance exceeds their approved credit limit."""
+        if not self.is_customer or not self.credit_limit:
+            return False
+        return self.total_outstanding_balance > self.credit_limit
 
 
 

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Sum, Count
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, JsonResponse
@@ -21,7 +21,7 @@ from contacts.models import Contact, ContactAddress
 from catalog.models import Product
 from inventory.models import Warehouse
 from treasury.models import VendorTransaction
-from accounts.permissions import require_permission, has_perm_or_admin, render_forbidden_response
+from accounts.permissions import require_permission, has_perm_or_admin, render_forbidden_response, can_user_access_object, get_scoped_queryset
 
 
 @require_permission('purchases:orders/list')
@@ -35,6 +35,16 @@ def purchase_orders_list(request):
     qs = PurchaseOrder.objects.select_related(
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
+
+    # Dedicated real scoped statistics cards (excludes cancelled orders from financial values)
+    scoped_active = get_scoped_queryset(PurchaseOrder.objects.exclude(status='cancelled'), request.user, 'purchaseorder')
+    stats = {
+        'total_orders': scoped_active.count(),
+        'total_value': scoped_active.aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
+        'total_pending': scoped_active.filter(status='manager_approval').count(),
+        'total_settled': scoped_active.filter(status='settled').count(),
+    }
 
     active_filters = []
 
@@ -65,7 +75,7 @@ def purchase_orders_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
+    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
 
     # Bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
@@ -83,6 +93,7 @@ def purchase_orders_list(request):
         'active_filters': active_filters,
         'active_filters_count': len(active_filters),
         'total_count': paginator.count,
+        'stats': stats,
     }
     return render(request, 'purchases/purchase_orders_list.html', context)
 
@@ -94,6 +105,7 @@ def purchase_order_create(request):
         warehouse_id = request.POST.get('warehouse')
         order_date = request.POST.get('order_date') or timezone.now().date()
         expected_delivery_date = request.POST.get('expected_delivery_date') or None
+        due_date = request.POST.get('due_date') or None
         custom_discount_percentage = request.POST.get('custom_discount_percentage') or '0.00'
         shipping_fees = request.POST.get('shipping_fees') or '0.00'
         delivery_agent = request.POST.get('delivery_agent', '').strip()
@@ -144,6 +156,7 @@ def purchase_order_create(request):
                 target_warehouse=warehouse,
                 order_date=order_date,
                 expected_delivery_date=expected_delivery_date,
+                due_date=due_date,
                 items_data=items_data,
                 user=request.user,
                 custom_discount_percentage=Decimal(custom_discount_percentage),
@@ -173,12 +186,112 @@ def purchase_order_create(request):
     return render(request, 'purchases/purchase_order_create.html', context)
 
 
+@require_permission('purchases:orders/edit')
+def purchase_order_edit(request, pk):
+    order = get_object_or_404(
+        PurchaseOrder.objects.select_related('supplier', 'target_warehouse').prefetch_related('items__product'),
+        pk=pk
+    )
+    if not can_user_access_object(request.user, order, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+
+    if order.status in ['picked', 'settled', 'cancelled']:
+        messages.error(request, f"لا يمكن تعديل أمر الشراء في حالته الحالية ({order.get_status_display()}).")
+        return redirect('purchase_order_detail', pk=order.pk)
+
+    if request.method == 'POST':
+        supplier_id = request.POST.get('supplier')
+        warehouse_id = request.POST.get('warehouse')
+        order_date = request.POST.get('order_date') or order.order_date
+        expected_delivery_date = request.POST.get('expected_delivery_date') or None
+        due_date = request.POST.get('due_date') or None
+        custom_discount_percentage = request.POST.get('custom_discount_percentage') or '0.00'
+        shipping_fees = request.POST.get('shipping_fees') or '0.00'
+        delivery_agent = request.POST.get('delivery_agent', '').strip()
+        delivery_time = request.POST.get('delivery_time', '').strip()
+        notes = request.POST.get('notes', '').strip()
+
+        product_ids = request.POST.getlist('product_id[]')
+        quantities = request.POST.getlist('quantity[]')
+        unit_prices = request.POST.getlist('unit_price[]')
+        batch_numbers = request.POST.getlist('batch_number[]')
+        expiry_dates = request.POST.getlist('expiry_date[]')
+        discounts = request.POST.getlist('discount_percentage[]')
+
+        items_data = []
+        for i in range(len(product_ids)):
+            p_id = product_ids[i]
+            if not p_id:
+                continue
+            prod = Product.objects.filter(id=p_id).first()
+            if not prod:
+                continue
+            qty = Decimal(quantities[i] or '1')
+            price = Decimal(unit_prices[i] or '0')
+            batch = batch_numbers[i] if i < len(batch_numbers) else ''
+            exp = expiry_dates[i] if (i < len(expiry_dates) and expiry_dates[i]) else None
+            disc = Decimal(discounts[i] or '0') if i < len(discounts) else Decimal('0')
+
+            items_data.append({
+                'product': prod,
+                'quantity': qty,
+                'unit_price': price,
+                'batch_number': batch,
+                'expiry_date': exp,
+                'discount_percentage': disc
+            })
+
+        if not supplier_id or not warehouse_id:
+            messages.error(request, "يرجى تحديد المورد والمخزن المستلم.")
+            return redirect('purchase_order_edit', pk=order.pk)
+
+        supplier = get_object_or_404(Contact, id=supplier_id)
+        warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+
+        try:
+            order = PurchaseOrderService.update_order(
+                order=order,
+                supplier=supplier,
+                target_warehouse=warehouse,
+                order_date=order_date,
+                expected_delivery_date=expected_delivery_date,
+                due_date=due_date,
+                items_data=items_data,
+                user=request.user,
+                custom_discount_percentage=Decimal(custom_discount_percentage),
+                shipping_fees=Decimal(shipping_fees),
+                notes=notes
+            )
+            if delivery_agent or delivery_time:
+                order.delivery_agent = delivery_agent
+                order.delivery_time = delivery_time
+                order.save(update_fields=['delivery_agent', 'delivery_time'])
+
+            messages.success(request, f"تم تعديل أمر الشراء بنجاح ({order.order_number}) بإجمالي {order.grand_total:,.2f} ج.م.")
+            return redirect('purchase_order_detail', pk=order.pk)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+            return redirect('purchase_order_edit', pk=order.pk)
+
+    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
+    warehouses = Warehouse.objects.filter(is_active=True).order_by('name')
+    products = Product.objects.filter(is_active=True).order_by('name')
+
+    context = {
+        'order': order,
+        'suppliers': suppliers,
+        'warehouses': warehouses,
+        'products': products,
+    }
+    return render(request, 'purchases/purchase_order_edit.html', context)
+
+
 @require_permission('purchases:orders/view')
 def purchase_order_detail(request, pk):
     order = get_object_or_404(
         PurchaseOrder.objects.select_related(
             'supplier', 'supplier__area', 'target_warehouse', 'created_by', 'memo', 'memo__warehouse'
-        ).prefetch_related('items__product', 'attachments', 'comments__author'),
+        ).prefetch_related('items__product', 'attachments', 'comments__author', 'vendor_payments__vault'),
         pk=pk
     )
 
@@ -198,6 +311,7 @@ def purchase_order_detail(request, pk):
 
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     can_approve = has_perm_or_admin(request.user, 'purchases:orders/approve') and (is_super or order.created_by_id != request.user.id)
+    can_edit = has_perm_or_admin(request.user, 'purchases:orders/edit') and can_user_access_object(request.user, order, 'edit') and order.status in ['pending', 'rejected', 'approved']
     can_resubmit = (order.status == 'rejected') and (order.created_by_id == request.user.id or is_super)
     approval_history = order.approval_history.select_related('actor').order_by('-created_at')
 
@@ -209,6 +323,7 @@ def purchase_order_detail(request, pk):
         'current_vendor_balance': current_vendor_balance,
         'status_choices': PurchaseOrder.STATUS_CHOICES,
         'can_approve': can_approve,
+        'can_edit': can_edit,
         'can_resubmit': can_resubmit,
         'approval_history': approval_history,
     }
@@ -460,6 +575,7 @@ def purchase_return_orders_list(request):
     qs = PurchaseReturnOrder.objects.select_related(
         'supplier', 'supplier__area', 'warehouse', 'created_by'
     ).all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
     active_filters = []
 
@@ -491,6 +607,15 @@ def purchase_return_orders_list(request):
 
     suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
 
+    # Scoped real statistics
+    base_scoped = get_scoped_queryset(PurchaseReturnOrder.objects.all(), request.user, 'purchasereturnorder')
+    return_stats = {
+        'total_orders': base_scoped.count(),
+        'total_value': base_scoped.aggregate(tot=Sum('grand_total'))['tot'] or Decimal('0.00'),
+        'draft_count': base_scoped.filter(status='draft').count(),
+        'settled_count': base_scoped.filter(status='settled').count(),
+    }
+
     # Bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -507,6 +632,7 @@ def purchase_return_orders_list(request):
         'active_filters': active_filters,
         'active_filters_count': len(active_filters),
         'total_count': paginator.count,
+        'stats': return_stats,
     }
     return render(request, 'purchases/purchase_return_orders.html', context)
 

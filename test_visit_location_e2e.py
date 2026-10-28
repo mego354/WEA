@@ -40,9 +40,17 @@ def run_e2e_tests():
     superadmin.save()
 
     rep_role, _ = Role.objects.get_or_create(
-        name="med_rep_test",
-        defaults={"display_name": "مندوب دعاية", "is_rep": True, "is_area_manager": False}
+        name=Role.ROLE_MEDICAL_REP,
+        defaults={"display_name": "مندوب دعاية", "is_rep": True, "is_area_manager": False, "is_active": True}
     )
+    rep_role.is_active = True
+    rep_role.save()
+    from django.contrib.auth.models import Permission
+    for codename in ['activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'module:activities', 'module:contacts']:
+        p = Permission.objects.filter(codename=codename).first()
+        if p:
+            rep_role.permissions.add(p)
+
     rep_user, _ = User.objects.get_or_create(
         username="rep_test",
         defaults={
@@ -55,9 +63,11 @@ def run_e2e_tests():
             "bypass_location_verification": False
         }
     )
+    rep_user.role = rep_role
     rep_user.set_password("RepPass123!")
     rep_user.bypass_location_verification = False
     rep_user.save()
+    rep_user.clear_perm_cache()
 
     # 2. Location Settings Setup
     loc_settings = LocationSettings.get_settings()
@@ -108,11 +118,14 @@ def run_e2e_tests():
     cust_no_gps.is_customer = True
     cust_no_gps.status = "customer"
     cust_no_gps.save()
+    Visit.objects.filter(contact__in=[cust_with_gps, cust_no_gps]).delete()
 
     template, _ = VisitTemplate.objects.get_or_create(
         name="Single visit (DR)",
         defaults={"display_name_ar": "زيارة فردية لطبيب", "active": True}
     )
+    template.restrict_account_types = []
+    template.save()
 
     # 4. Test Customer Search API
     client.login(username="superadmin_test", password="AdminPass123!")
@@ -196,7 +209,7 @@ def run_e2e_tests():
         "feedback": "أول زيارة للعميل لتثبيت الإحداثيات تلقائياً"
     })
     assert v_first_res.status_code == 302
-    cust_no_gps.refresh_from_db()
+    cust_no_gps = Contact.objects.get(pk=cust_no_gps.pk)
     assert cust_no_gps.has_saved_location is True, "Customer should have saved location after first visit"
     assert abs(float(cust_no_gps.latitude) - 31.2005) < 0.001, "Customer latitude not auto-set correctly"
     print(f"  ✓ [6/7] Auto-Set Customer GPS on First Visit: Saved ({cust_no_gps.latitude}, {cust_no_gps.longitude})")
@@ -205,13 +218,13 @@ def run_e2e_tests():
     # A. Rep tries to access /settings/location/ -> denied
     client.login(username="rep_test", password="RepPass123!")
     rep_sett_res = client.get("/settings/location/")
-    assert rep_sett_res.status_code == 302, "Non-superuser should be redirected from /settings/location/"
+    assert rep_sett_res.status_code in [302, 403], "Non-superuser should be denied from /settings/location/"
     
     # B. Superadmin accesses and updates settings
     client.login(username="superadmin_test", password="AdminPass123!")
     admin_sett_res = client.get("/settings/location/")
     assert admin_sett_res.status_code == 200, f"Superadmin GET /settings/location/ failed: {admin_sett_res.status_code}"
-    assert "معايير ودقة الموقع" in admin_sett_res.content.decode("utf-8")
+    assert "اعدادات الموقع" in admin_sett_res.content.decode("utf-8")
     
     # C. Superadmin updates settings POST
     post_sett_res = client.post("/settings/location/", {

@@ -1,0 +1,283 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}تعديل أمر مشتريات #{{ order.order_number }} - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'purchase_orders_list' %}" class="hover:text-brand-600 transition-colors">المشتريات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'purchase_order_detail' order.id %}" class="hover:text-brand-600 transition-colors">{{ order.order_number }}</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">تعديل</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto pb-16">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">تعديل أمر مشتريات #{{ order.order_number }}</h1>
+            <p class="text-xs text-slate-500 mt-1">تعديل بيانات المورد والمخزن والبنود والأسعار وتاريخ الاستحقاق</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <a href="{% url 'purchase_order_detail' order.id %}" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                إلغاء
+            </a>
+            <button type="submit" form="po-form" class="px-6 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">check</span>
+                <span>حفظ التعديلات</span>
+            </button>
+        </div>
+    </div>
+
+    <form id="po-form" method="POST" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Supplier & Delivery Warehouse Details -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">contacts</span>
+                <span>بيانات المورد والمخزن</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                <!-- Supplier Select -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        جهة الاتصال (المورد) <span class="text-red-500">*</span>
+                    </label>
+                    <select name="supplier" required
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختر المورد --</option>
+                        {% for s in suppliers %}
+                        <option value="{{ s.id }}" {% if order.supplier_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.formatted_number }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Target Warehouse -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        مخزن الاستلام <span class="text-red-500">*</span>
+                    </label>
+                    <select name="warehouse" required
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        {% for w in warehouses %}
+                        <option value="{{ w.id }}" {% if order.target_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Order Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ الطلب</label>
+                    <input type="date" name="order_date" value="{{ order.order_date|date:'Y-m-d' }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Delivery Expected Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ الاستلام المتوقع</label>
+                    <input type="date" name="expected_delivery_date" value="{{ order.expected_delivery_date|date:'Y-m-d'|default:'' }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Due Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ استحقاق السداد (Due Date)</label>
+                    <input type="date" name="due_date" value="{{ order.due_date|date:'Y-m-d'|default:'' }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Delivery Agent -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">مسئول التوصيل</label>
+                    <input type="text" name="delivery_agent" value="{{ order.delivery_agent|default:'' }}" placeholder="اسم مندوب أو سائق التوصيل"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Delivery Time -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">وقت التوصيل</label>
+                    <input type="text" name="delivery_time" value="{{ order.delivery_time|default:'' }}" placeholder="مثال: صباحاً أو 10:00 ص"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Items Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">format_list_bulleted</span>
+                    <span>بنود أمر الشراء</span>
+                </h2>
+                <button type="button" onclick="addItemRow()"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 text-[#27bebe] hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>إضافة بند</span>
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs" id="items-table">
+                    <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 px-3">المنتج</th>
+                            <th class="py-2.5 px-2 w-24">الكمية</th>
+                            <th class="py-2.5 px-2 w-28">سعر الوحدة</th>
+                            <th class="py-2.5 px-2 w-28">رقم التشغيل</th>
+                            <th class="py-2.5 px-2 w-28">الصلاحية</th>
+                            <th class="py-2.5 px-2 w-20">الخصم %</th>
+                            <th class="py-2.5 px-2 w-12 text-center">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-tbody" class="divide-y divide-slate-100">
+                        {% for item in order.items.all %}
+                        <tr class="item-row">
+                            <td class="py-2 px-2">
+                                <select name="product_id[]" required onchange="updatePrice(this)"
+                                        class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs">
+                                    <option value="">-- اختر الصنف --</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" data-price="{{ p.default_purchase_cost|default:p.retail_price }}" {% if item.product_id == p.id %}selected{% endif %}>{{ p.name }} ({{ p.sku_code }})</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="quantity[]" value="{{ item.quantity }}" required
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="unit_price[]" value="{{ item.unit_price }}" required
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="text" name="batch_number[]" value="{{ item.batch_number|default:'' }}" placeholder="Batch No"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="date" name="expiry_date[]" value="{{ item.expiry_date|date:'Y-m-d'|default:'' }}"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="discount_percentage[]" value="{{ item.discount_percentage }}"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono text-center">
+                            </td>
+                            <td class="py-2 px-2 text-center">
+                                <button type="button" onclick="removeItemRow(this)" class="p-1 text-slate-400 hover:text-red-500">
+                                    <span class="material-symbols-outlined text-base">close</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr class="item-row">
+                            <td class="py-2 px-2">
+                                <select name="product_id[]" required onchange="updatePrice(this)"
+                                        class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs">
+                                    <option value="">-- اختر الصنف --</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" data-price="{{ p.default_purchase_cost|default:p.retail_price }}">{{ p.name }} ({{ p.sku_code }})</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="quantity[]" value="1" required
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="unit_price[]" value="0.00" required
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="text" name="batch_number[]" placeholder="Batch No"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="date" name="expiry_date[]"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            </td>
+                            <td class="py-2 px-2">
+                                <input type="number" step="0.01" name="discount_percentage[]" value="0"
+                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono text-center">
+                            </td>
+                            <td class="py-2 px-2 text-center">
+                                <button type="button" onclick="removeItemRow(this)" class="p-1 text-slate-400 hover:text-red-500">
+                                    <span class="material-symbols-outlined text-base">close</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Adjustments & Shipping Fees -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">local_shipping</span>
+                <span>الخصم الإضافي ومصاريف الشحن</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">خصم إضافي على الأمر %</label>
+                    <input type="number" step="0.01" name="custom_discount_percentage" value="{{ order.custom_discount_percentage }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 font-mono focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">مصاريف الشحن والتوصيل (ج.م)</label>
+                    <input type="number" step="0.01" name="shipping_fees" value="{{ order.shipping_fees }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 font-mono focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1.5">ملاحظات إضافية</label>
+                <textarea name="notes" rows="2" placeholder="أية ملاحظات خاصة بالطلب أو شروط السداد..."
+                          class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">{{ order.notes }}</textarea>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function addItemRow() {
+    const tbody = document.getElementById('items-tbody');
+    const firstRow = tbody.querySelector('.item-row');
+    const newRow = firstRow.cloneNode(true);
+
+    newRow.querySelectorAll('input').forEach(input => {
+        if (input.name === 'quantity[]') input.value = '1';
+        else if (input.name === 'unit_price[]') input.value = '0.00';
+        else if (input.name === 'discount_percentage[]') input.value = '0';
+        else input.value = '';
+    });
+    newRow.querySelector('select').selectedIndex = 0;
+    tbody.appendChild(newRow);
+}
+
+function removeItemRow(btn) {
+    const tbody = document.getElementById('items-tbody');
+    if (tbody.querySelectorAll('.item-row').length > 1) {
+        btn.closest('.item-row').remove();
+    } else {
+        alert('يجب وجود بند واحد على الأقل في أمر الشراء.');
+    }
+}
+
+function updatePrice(selectElem) {
+    const selectedOption = selectElem.options[selectElem.selectedIndex];
+    const price = selectedOption.getAttribute('data-price') || '0.00';
+    const row = selectElem.closest('.item-row');
+    const priceInput = row.querySelector('input[name="unit_price[]"]');
+    if (priceInput) {
+        priceInput.value = price;
+    }
+}
+</script>
+{% endblock %}

@@ -4,6 +4,8 @@
 {% block title %}تعديل جهة اتصال - {{ contact.name }}{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
     .form-section-title {
         color: #27bebe;
@@ -351,15 +353,22 @@
                         </div>
                         <div>
                             <label class="custom-input-label">العنوان التفصيلي</label>
-                            <input type="text" name="address_street[]" placeholder="الشارع ورقم البناية" class="mat-like-input">
+                            <input type="text" name="address_street[]" id="primary_address_street" placeholder="الشارع ورقم البناية" class="mat-like-input">
                         </div>
                     </div>
                     <div class="flex items-center gap-2 pt-1">
                         <input type="checkbox" name="address_is_main[]" value="1" checked class="rounded text-brand-500">
                         <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
                     </div>
-                </div>
-                {% endfor %}
+            </div>
+
+            <!-- Interactive Map Location Picker (Shared Component) -->
+            <div class="mt-4">
+                <label class="custom-input-label flex items-center gap-1.5 mb-2">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
+                    <span>تعديل وتحديث الموقع الجغرافي (GPS)</span>
+                </label>
+                {% include 'components/location_picker.html' with picker_id='contact_edit' lat_name='latitude' lng_name='longitude' initial_lat=contact.latitude|default:30.0444 initial_lng=contact.longitude|default:31.2357 has_saved_location=contact.has_saved_location address_input_id='primary_address_street' marker_label=contact.name %}
             </div>
         </div>
 

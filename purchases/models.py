@@ -27,6 +27,7 @@ class PurchaseOrder(models.Model):
     
     order_date = models.DateField(default=timezone.now, verbose_name="تاريخ الطلب")
     expected_delivery_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستلام المتوقع")
+    due_date = models.DateField(null=True, blank=True, db_index=True, verbose_name="تاريخ الاستحقاق")
     
     delivery_agent = models.CharField(max_length=150, blank=True, verbose_name="مسئول التوصيل")
     delivery_time = models.CharField(max_length=100, blank=True, verbose_name="وقت التوصيل")
@@ -149,6 +150,27 @@ class PurchaseOrder(models.Model):
             'split': 'bg-purple-50 text-purple-700 border border-purple-200',
         }
         return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
+
+    @property
+    def total_paid(self):
+        """Total settled/cleared vendor payments explicitly linked to this purchase order."""
+        res = self.vendor_payments.filter(status='cleared').aggregate(total=models.Sum('amount'))['total']
+        return res or Decimal('0.00')
+
+    @property
+    def outstanding_balance(self):
+        """Remaining unpaid balance on this purchase order."""
+        return max(Decimal('0.00'), self.grand_total - self.total_paid)
+
+    @property
+    def is_paid(self):
+        return self.grand_total > Decimal('0.00') and self.outstanding_balance <= Decimal('0.00')
+
+    @property
+    def is_overdue(self):
+        if not self.due_date:
+            return False
+        return self.due_date < timezone.now().date() and self.outstanding_balance > Decimal('0.00')
 
 
 class PurchaseOrderItem(models.Model):

@@ -35,6 +35,48 @@
                 <span class="material-symbols-outlined text-base text-slate-500">warehouse</span>
                 <span>إدارة المخازن</span>
             </a>
+    </div>
+
+    <!-- Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-brand-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">inventory_2</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">أصناف المخزون</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_items|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">fact_check</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">الرصيد الفعلي الإجمالي</p>
+                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.total_qty_on_hand|intcomma }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">shopping_cart_checkout</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">المتاح للبيع</p>
+                <p class="text-lg font-black text-blue-700 font-mono">{{ stats.total_qty_available|intcomma }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">attach_money</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي القيمة التقديرية</p>
+                <p class="text-lg font-black text-purple-700 font-mono">{{ stats.total_cost_value|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
         </div>
     </div>
 

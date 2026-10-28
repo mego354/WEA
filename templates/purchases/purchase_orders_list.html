@@ -6,71 +6,138 @@
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Top Action Bar -->
+    <!-- 1. Page Header Section (Clean: Title, Actions - No statistics or search bars) -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">أوامر المشتريات</h1>
-            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                {{ total_count }} أمر
-            </span>
+        <div>
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-2xl">shopping_cart</span>
+                <span>أوامر المشتريات (Purchase Orders)</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">إدارة أوامر الشراء، اعتمادات الإدارة، استلام البضائع بالمستودعات والفوترة.</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Search Bar -->
-            <form method="GET" class="relative">
-                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
-                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
-                <div class="relative">
-                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالمورد أو رقم الأمر..."
-                           class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
-                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
-                </div>
-            </form>
-
-            <!-- Slide-out Filter Drawer Button with Badge -->
-            <button type="button" onclick="openFilterDrawer()"
-                    class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
-                <span class="material-symbols-outlined text-base">filter_list</span>
-                <span>فلتر</span>
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                    {{ active_filters_count }}
-                </span>
-            </button>
-
             <!-- Print Batch Button -->
             <button type="button" onclick="window.print()"
-                    class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
                 <span class="material-symbols-outlined text-base">print</span>
                 <span class="hidden md:inline">اطبع</span>
             </button>
 
             <!-- Export to Excel -->
             <a href="{% url 'purchase_orders_export' %}?search={{ search_query }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
 
-            <!-- View Switchers & Settings -->
-            <div class="hidden lg:flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                <button type="button" class="p-2 text-slate-400 hover:text-slate-600 bg-slate-50">
-                    <span class="material-symbols-outlined text-base">table_chart</span>
-                </button>
-                <button type="button" class="p-2 text-slate-400 hover:text-slate-600">
-                    <span class="material-symbols-outlined text-base">view_agenda</span>
-                </button>
-            </div>
-
-            <!-- Column Picker -->
-            {% include 'components/table_column_picker.html' with table_id='purchase_orders_table' %}
-
             <!-- Create Purchase Order Button -->
             <a href="{% url 'purchase_order_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>أمر مشتريات جديد</span>
             </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Card 1: Total Orders -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي أوامر الشراء</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-lg">receipt_long</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_orders }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">أمر شراء نشط</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Purchase Value -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي قيمة المشتريات</span>
+                <span class="p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-lg">payments</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-[#27bebe] font-mono">{{ stats.total_value|intcomma }}</span>
+                <span class="text-xs text-[#27bebe] mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Pending Manager Approval -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">بانتظار الاعتماد الإداري</span>
+                <span class="p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-lg">pending_actions</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-amber-700 font-mono">{{ stats.total_pending }}</span>
+                <span class="text-xs text-amber-600 mr-1.5">أمر بانتظار المدير</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Settled / Invoiced Orders -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">أوامر مرحلة ومفوترة</span>
+                <span class="p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-lg">verified</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-emerald-700 font-mono">{{ stats.total_settled }}</span>
+                <span class="text-xs text-emerald-600 mr-1.5">أمر مكتمل</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Dedicated Search & Filters Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <form method="GET" class="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
+                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
+                <div class="relative flex-1 w-full sm:w-auto">
+                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالمورد أو رقم الأمر أو المنطقة..."
+                           class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
+                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
+                </div>
+
+                <div class="w-full sm:w-48">
+                    <select name="supplier" onchange="this.form.submit()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-[#27bebe] min-h-[40px]">
+                        <option value="">كافة الموردين</option>
+                        {% for s in suppliers %}
+                        <option value="{{ s.id }}" {% if selected_supplier|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-base">filter_alt</span>
+                    <span>تصفية</span>
+                </button>
+                {% if search_query or selected_supplier or current_status != 'all' %}
+                <a href="{% url 'purchase_orders_list' %}" class="w-full sm:w-auto px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-colors min-h-[40px] flex items-center justify-center">
+                    إلغاء
+                </a>
+                {% endif %}
+            </form>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <!-- Slide-out Filter Drawer Button with Badge -->
+                <button type="button" onclick="openFilterDrawer()"
+                        class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">tune</span>
+                    <span>فلاتر متقدمة</span>
+                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
+                        {{ active_filters_count }}
+                    </span>
+                </button>
+
+                <!-- Column Picker -->
+                {% include 'components/table_column_picker.html' with table_id='purchase_orders_table' %}
+            </div>
         </div>
     </div>
 
@@ -85,13 +152,14 @@
                     <tr>
                         <th data-col="serial" data-col-label="رقم المسلسل" data-required="true" class="py-3.5 px-4">رقم المسلسل</th>
                         <th data-col="supplier" data-col-label="المورد" data-required="true" class="py-3.5 px-4">الاسم</th>
-                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
-                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4">انشئ فى</th>
-                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4">المنشئ</th>
-                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4">الحالة</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4 hidden md:table-cell">المنطقة</th>
+                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4 hidden sm:table-cell">انشئ فى</th>
+                        <th data-col="due_date" data-col-label="تاريخ الاستحقاق" class="py-3.5 px-4 font-mono">تاريخ الاستحقاق</th>
+                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4 hidden lg:table-cell">المنشئ</th>
                         <th data-col="total" data-col-label="اجمالى القيمة" class="py-3.5 px-4">اجمالى القيمة</th>
-                        <th data-col="delivery_agent" data-col-label="مسئول التوصيل" class="py-3.5 px-4">مسئول التوصيل</th>
-                        <th data-col="delivery_time" data-col-label="وقت التوصيل" class="py-3.5 px-4">وقت التوصيل</th>
+                        <th data-col="outstanding_balance" data-col-label="المتبقي" class="py-3.5 px-4">المتبقي</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4">الحالة</th>
+                        <th data-col="delivery_agent" data-col-label="مسئول التوصيل" class="py-3.5 px-4 hidden xl:table-cell">مسئول التوصيل</th>
                         <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
@@ -113,18 +181,36 @@
                         </td>
 
                         <!-- Area -->
-                        <td data-col="area" class="py-3.5 px-4 text-slate-600">
+                        <td data-col="area" class="py-3.5 px-4 text-slate-600 hidden md:table-cell">
                             {{ o.supplier.area.name|default:"—" }}
                         </td>
 
                         <!-- Created At -->
-                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono">
-                            {{ o.created_at|date:"d/m/Y h:i A" }}
+                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono hidden sm:table-cell">
+                            {{ o.created_at|date:"d/m/Y" }}
+                        </td>
+
+                        <!-- Due Date -->
+                        <td data-col="due_date" class="py-3.5 px-4 font-mono {% if o.is_overdue %}text-rose-600 font-bold{% else %}text-slate-600{% endif %}">
+                            {{ o.due_date|date:"Y-m-d"|default:"—" }}
+                            {% if o.is_overdue %}
+                            <span class="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1" title="متأخر"></span>
+                            {% endif %}
                         </td>
 
                         <!-- Created By -->
-                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium">
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium hidden lg:table-cell">
                             {{ o.created_by.get_full_name|default:o.created_by.username|default:"Accountant" }}
+                        </td>
+
+                        <!-- Grand Total -->
+                        <td data-col="total" class="py-3.5 px-4 font-bold text-slate-900 font-mono">
+                            {{ o.grand_total|intcomma }} جنيه
+                        </td>
+
+                        <!-- Outstanding Balance -->
+                        <td data-col="outstanding_balance" class="py-3.5 px-4 font-bold font-mono {% if o.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
+                            {{ o.outstanding_balance|intcomma }} جنيه
                         </td>
 
                         <!-- Status Badge -->
@@ -134,19 +220,9 @@
                             </span>
                         </td>
 
-                        <!-- Grand Total -->
-                        <td data-col="total" class="py-3.5 px-4 font-bold text-slate-900 font-mono">
-                            {{ o.grand_total|intcomma }} جنيه
-                        </td>
-
                         <!-- Delivery Agent -->
-                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-500">
+                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-500 hidden xl:table-cell">
                             {{ o.delivery_agent|default:"—" }}
-                        </td>
-
-                        <!-- Delivery Time -->
-                        <td data-col="delivery_time" class="py-3.5 px-4 text-slate-500">
-                            {{ o.delivery_time|default:"—" }}
                         </td>
 
                         <!-- Actions -->

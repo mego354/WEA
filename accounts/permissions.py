@@ -107,9 +107,10 @@ def render_forbidden_response(request, message: str = None, perm_codename: str =
     return render(request, '403.html', {'perm_codename': perm_codename, 'detail': message}, status=403)
 
 
-def require_permission(perm_codename: str, redirect_url: str = None):
+def require_permission(perm_codename, redirect_url: str = None):
     """
     View decorator to enforce backend authorization.
+    Accepts either a single codename string or an iterable of acceptable codenames (OR logic).
     Rejects unauthorized access with:
     - HTTP 403 JSON response for API/AJAX requests.
     - HTTP 403 Forbidden rendered page (or redirect if redirect_url specified) for normal browser requests.
@@ -134,15 +135,17 @@ def require_permission(perm_codename: str, redirect_url: str = None):
                 messages.error(request, "هذا الحساب معطل حالياً. يرجى مراجعة إدارة النظام.")
                 return redirect('login')
 
-            if has_perm_or_admin(request.user, perm_codename):
+            codenames = [perm_codename] if isinstance(perm_codename, str) else list(perm_codename)
+            if any(has_perm_or_admin(request.user, c) for c in codenames):
                 return view_func(request, *args, **kwargs)
 
             # Access Denied
+            perm_str = " أو ".join(codenames)
             if redirect_url:
-                messages.error(request, f"عذراً، لا تمتلك الصلاحية الكافية ({perm_codename}) للوصول إلى هذه الصفحة.")
+                messages.error(request, f"عذراً، لا تمتلك الصلاحية الكافية ({perm_str}) للوصول إلى هذه الصفحة.")
                 return redirect(redirect_url)
 
-            return render_forbidden_response(request, perm_codename=perm_codename)
+            return render_forbidden_response(request, perm_codename=perm_str)
 
         return _wrapped_view
     return decorator
@@ -644,9 +647,9 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
             return queryset
         if not is_manager_or_higher(user):
             return queryset.filter(assigned_user=user)
-        # Manager sees central company vaults, plus vaults of reps in their main area
+        # Manager sees vaults of reps in their managed scope or assigned to themselves
         return queryset.filter(
-            Q(assigned_user__isnull=True) |
+            Q(assigned_user=user) |
             Q(assigned_user__in=managed_reps)
         ).distinct()
 
@@ -657,6 +660,32 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
         from treasury.models import Vault
         scoped_vaults = get_scoped_queryset(Vault.objects.all(), user, 'vault')
         return queryset.filter(vault__in=scoped_vaults)
+
+    # 15. Treasury: VendorPayment
+    elif m_name == 'vendorpayment':
+        if is_accountant(user):
+            return queryset
+        if not is_manager_or_higher(user):
+            return queryset.filter(created_by=user)
+        return queryset.filter(created_by__in=managed_reps).distinct()
+
+    # 16. Treasury: VendorTransaction
+    elif m_name == 'vendortransaction':
+        if is_accountant(user):
+            return queryset
+        if not is_manager_or_higher(user):
+            return queryset.filter(created_by=user)
+        return queryset.filter(created_by__in=managed_reps).distinct()
+
+    # 17. Accounts: User
+    elif m_name == 'user':
+        if is_accountant(user) and not (getattr(user, 'is_super_admin', False) or user.is_superuser):
+            return queryset.none()
+        if not is_manager_or_higher(user):
+            return queryset.filter(pk=user.pk)
+        return queryset.filter(
+            Q(pk=user.pk) | Q(assigned_areas__in=managed_areas)
+        ).distinct()
 
     return queryset
 
@@ -794,15 +823,22 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
             return True
         if obj.assigned_user_id == user.id:
             return True
-        # Managers have READ-ONLY oversight over representative treasuries
-        if action in ['deposit', 'withdraw', 'transfer', 'adjust', 'edit', 'delete']:
-            return False
         if not is_manager_or_higher(user):
             return False
-        if obj.assigned_user_id is None:
-            return True  # Central company vault
         vault_rep = obj.assigned_user
-        return is_manager_eligible_for_user(user, vault_rep) if vault_rep else False
+        rep_auth = is_manager_eligible_for_user(user, vault_rep) if vault_rep else False
+        if action == 'view':
+            return rep_auth or (obj.assigned_user_id is None and has_perm_or_admin(user, 'treasury:vaults/view'))
+        if action in ['transfer', 'withdraw', 'deposit']:
+            return (rep_auth or obj.assigned_user_id == user.id) and has_perm_or_admin(user, 'treasury:vaults/transfer')
+        if action in ['edit', 'manage', 'delete']:
+            return has_perm_or_admin(user, 'treasury:vaults/manage')
+        return False
+
+    elif model_name == 'vaulttransaction':
+        if is_accountant(user):
+            return True
+        return can_user_access_object(user, obj.vault, action)
 
     elif model_name == 'producttransferrequest':
         if is_accountant(user):
@@ -834,5 +870,30 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
         # Approving and executing inter-warehouse transfers is strictly superadmin / accountant
         return False
 
+    elif model_name in ['vendorpayment', 'vendortransaction']:
+        if is_accountant(user):
+            return True
+        if not is_manager_or_higher(user):
+            return obj.created_by_id == user.id
+        rep = obj.created_by
+        return is_manager_eligible_for_user(user, rep) if rep else False
+
+    elif model_name == 'user':
+        # Accountant must not receive user admin or security management access
+        if is_accountant(user) and not (getattr(user, 'is_super_admin', False) or user.is_superuser):
+            return False
+        # Representative cannot manage users
+        if not is_manager_or_higher(user):
+            if action in ['edit', 'change_role', 'assign_area', 'deactivate', 'delete', 'reset_password']:
+                return False
+            return user.id == obj.id
+        # Manager: can view/edit representatives in their managed areas
+        if getattr(obj, 'is_super_admin', False) or obj.is_superuser or is_manager_or_higher(obj):
+            if obj.id == user.id:
+                return action == 'view'
+            return False
+        return is_manager_eligible_for_user(user, obj)
+
     return True
+
 

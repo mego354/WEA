@@ -6,64 +6,105 @@
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Top Action Bar -->
+    <!-- 1. Header Section -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الاتفاقيات</h1>
-            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                {{ total_count }} اتفاقية
-            </span>
-            <span class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">
-                المجموع: {{ total_amount|intcomma }} ج.م
-            </span>
+        <div>
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">الاتفاقيات والعقود</h1>
+            <p class="text-xs text-slate-500 mt-0.5">إدارة الاتفاقيات المالية والتجارية مع العملاء وجهات الاتصال</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Normal Actions (Hidden when rows are selected) -->
-            <div id="default-actions" class="flex flex-wrap items-center gap-2.5">
-                <!-- Search Bar -->
-                <form method="GET" class="relative">
-                    {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
-                    {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-                    {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
-                    {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
-                    <div class="relative">
-                        <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو العنوان أو الرقم..."
-                               class="w-56 sm:w-64 pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-sm">
-                        <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
-                    </div>
-                </form>
+            <!-- Export to Excel -->
+            <a href="{% url 'agreements_export' %}?q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
+               title="تصدير البيانات">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span>تصدير البيانات</span>
+            </a>
 
+            <!-- Create Agreement Button -->
+            <button type="button" onclick="openCreateModal()"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>إضافة اتفاقية</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
+                <span class="material-symbols-outlined text-xl">handshake</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي الاتفاقيات</p>
+                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_count|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">payments</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">إجمالي القيمة المالية</p>
+                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.total_amount|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">verified</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">اتفاقيات معتمدة</p>
+                <p class="text-lg font-black text-blue-700 font-mono">{{ stats.approved_count|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <span class="material-symbols-outlined text-xl">pending_actions</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-500">بانتظار الاعتماد</p>
+                <p class="text-lg font-black text-amber-700 font-mono">{{ stats.pending_count|default:0 }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Search & Filter Bar -->
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 max-w-md relative">
+                {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
+                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
+                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو العنوان أو الرقم..."
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
+                <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
+            </form>
+
+            <div class="flex items-center gap-2">
                 <!-- Filter Drawer Button -->
                 <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
                     <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>فلتر</span>
+                    <span>فلترة متقدمة</span>
                 </button>
-
-                <!-- Export to Excel -->
-                <a href="{% url 'agreements_export' %}?q={{ selected_q }}&type={{ selected_type|default:'' }}&status={{ selected_status|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
-                   class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-                   title="تصدير البيانات">
-                    <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                    <span>تصدير البيانات</span>
-                </a>
 
                 <!-- Column Picker -->
                 {% include 'components/table_column_picker.html' with table_id='agreements_table' %}
-
-                <!-- Create Agreement Button -->
-                <button type="button" onclick="openCreateModal()"
-                        class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
-                    <span class="material-symbols-outlined text-base">add</span>
-                    <span>إضافة اتفاقية</span>
-                </button>
             </div>
+        </div>
 
-            <!-- Bulk Selection Action Bar (Shown when 1 or more rows selected) -->
-            <div id="bulk-actions" class="hidden flex items-center gap-2.5 bg-teal-50/80 border border-teal-200 px-3 py-1.5 rounded-xl shadow-xs">
-                <span id="selected-counter" class="text-xs font-bold text-[#27bebe]">تم اختيار 0 اتفاقية</span>
+        <!-- Bulk Selection Action Bar (Shown when 1 or more rows selected) -->
+        <div id="bulk-actions" class="hidden mt-3 flex items-center justify-between gap-2.5 bg-teal-50/80 border border-teal-200 px-3.5 py-2 rounded-lg shadow-2xs">
+            <span id="selected-counter" class="text-xs font-bold text-[#27bebe]">تم اختيار 0 اتفاقية</span>
 
+            <div class="flex items-center gap-2">
                 <!-- Status Change Dropdown -->
                 {% if can_manage_approvals %}
                 <div class="relative inline-block" id="status-dropdown-container">

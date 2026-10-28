@@ -1,0 +1,392 @@
+{% comment %}
+    Enterprise Location Picker Component (WEA Pharma ERP)
+    Parameters:
+    - picker_id: Unique identifier string for DOM IDs (default: 'location_picker')
+    - lat_name: Name attribute for latitude input (default: 'latitude')
+    - lng_name: Name attribute for longitude input (default: 'longitude')
+    - initial_lat: Initial latitude float or decimal (default: 30.0444)
+    - initial_lng: Initial longitude float or decimal (default: 31.2357)
+    - has_saved_location: Boolean indicating whether coordinates are already saved
+    - marker_label: Label displayed in popup (default: 'الموقع المحدد')
+    - address_input_id: Optional ID of a text/textarea field to auto-fill street name
+    - map_height: Tailwind height class (default: 'h-64 sm:h-72')
+    - can_edit: Boolean indicating whether interactive editing is allowed (default: True)
+{% endcomment %}
+
+<div id="{{ picker_id|default:'loc_picker' }}_wrapper" class="space-y-2.5">
+    <!-- Top Search & Quick Actions Bar -->
+    {% if can_edit|default:True %}
+    <div class="flex items-center gap-2">
+        <!-- Geocoding Search Input -->
+        <div class="relative flex-1">
+            <input type="text"
+                   id="{{ picker_id|default:'loc_picker' }}_search_input"
+                   placeholder="ابحث بالاسم، الشارع، المدينة، أو المعلم..."
+                   autocomplete="off"
+                   class="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all shadow-xs">
+            <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-base">search</span>
+            <!-- Spinner -->
+            <span id="{{ picker_id|default:'loc_picker' }}_spinner" class="material-symbols-outlined absolute left-3 top-2.5 text-[#27bebe] text-base animate-spin hidden">progress_activity</span>
+
+            <!-- Autocomplete Results Dropdown -->
+            <div id="{{ picker_id|default:'loc_picker' }}_results"
+                 class="absolute right-0 left-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 hidden">
+            </div>
+        </div>
+
+        <!-- Locate Me (Current GPS) Button -->
+        <button type="button"
+                id="{{ picker_id|default:'loc_picker' }}_locate_btn"
+                title="تحديد موقعي الحالي بالـ GPS"
+                class="px-3 py-2 bg-white hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-[#27bebe] text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+            <span class="material-symbols-outlined text-base text-[#27bebe]">my_location</span>
+            <span class="hidden sm:inline">موقعي الحالي</span>
+        </button>
+
+        <!-- Toggle Manual Coordinates Drawer Button -->
+        <button type="button"
+                id="{{ picker_id|default:'loc_picker' }}_toggle_manual_btn"
+                title="إدخال أو تعديل الإحداثيات يدوياً"
+                class="px-2.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold rounded-xl transition-all flex items-center gap-1 shadow-xs">
+            <span class="material-symbols-outlined text-base">pin_drop</span>
+        </button>
+    </div>
+
+    <!-- Manual Coordinates Drawer (Collapsible) -->
+    <div id="{{ picker_id|default:'loc_picker' }}_manual_drawer" class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 hidden">
+        <p class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm text-[#27bebe]">edit_location_alt</span>
+            <span>إدخال الإحداثيات الجغرافية يدوياً:</span>
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+                <label class="block text-[10px] text-slate-500 font-semibold mb-1">خط العرض (Latitude)</label>
+                <input type="number" step="any" id="{{ picker_id|default:'loc_picker' }}_manual_lat" dir="ltr"
+                       placeholder="30.044400"
+                       class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+            </div>
+            <div>
+                <label class="block text-[10px] text-slate-500 font-semibold mb-1">خط الطول (Longitude)</label>
+                <input type="number" step="any" id="{{ picker_id|default:'loc_picker' }}_manual_lng" dir="ltr"
+                       placeholder="31.235700"
+                       class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+            </div>
+        </div>
+        <div class="flex justify-end">
+            <button type="button" id="{{ picker_id|default:'loc_picker' }}_apply_manual_btn"
+                    class="px-3 py-1 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-all">
+                تطبيق الإحداثيات على الخريطة
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Interactive Map Container -->
+    <div class="relative rounded-2xl overflow-hidden border border-slate-200/90 shadow-xs bg-slate-100">
+        <div id="{{ picker_id|default:'loc_picker' }}_map" class="{{ map_height|default:'h-64 sm:h-72' }} w-full z-10"></div>
+
+        <!-- Touch Hint on Mobile -->
+        <div class="absolute bottom-2 left-2 z-20 pointer-events-none bg-slate-900/60 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-md">
+            {% if can_edit|default:True %}انقر على الخريطة أو اسحب العلامة لتحديد الموقع بدقة{% else %}عرض الموقع الجغرافي{% endif %}
+        </div>
+    </div>
+
+    <!-- Hidden Form Inputs for Coordinate Submission -->
+    <input type="hidden" name="{{ lat_name|default:'latitude' }}" id="{{ picker_id|default:'loc_picker' }}_lat" value="{% if initial_lat %}{{ initial_lat }}{% endif %}">
+    <input type="hidden" name="{{ lng_name|default:'longitude' }}" id="{{ picker_id|default:'loc_picker' }}_lng" value="{% if initial_lng %}{{ initial_lng }}{% endif %}">
+
+    <!-- Status & Confirmation Badge -->
+    <div id="{{ picker_id|default:'loc_picker' }}_status_badge"
+         class="flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all {% if has_saved_location %}bg-emerald-50 border-emerald-200 text-emerald-800{% else %}bg-slate-50 border-slate-200 text-slate-600{% endif %}">
+        <div class="flex items-center gap-2 overflow-hidden">
+            <span id="{{ picker_id|default:'loc_picker' }}_status_icon" class="material-symbols-outlined text-base {% if has_saved_location %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                {% if has_saved_location %}check_circle{% else %}location_off{% endif %}
+            </span>
+            <span id="{{ picker_id|default:'loc_picker' }}_status_text" class="font-medium truncate text-[11px] sm:text-xs">
+                {% if has_saved_location %}الموقع مثبت ومحفوظ بالنظام{% else %}لم يتم تحديد الموقع بعد (انقر على الخريطة للتعيين){% endif %}
+            </span>
+        </div>
+        <div class="font-mono text-[11px] font-bold text-slate-700 bg-white/80 px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0">
+            <span id="{{ picker_id|default:'loc_picker' }}_coords_display">
+                {% if has_saved_location and initial_lat and initial_lng %}
+                    {{ initial_lat|floatformat:4 }}, {{ initial_lng|floatformat:4 }}
+                {% else %}
+                    غير محدد
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const pickerId = "{{ picker_id|default:'loc_picker' }}";
+    const mapEl = document.getElementById(pickerId + '_map');
+    const latInput = document.getElementById(pickerId + '_lat');
+    const lngInput = document.getElementById(pickerId + '_lng');
+    const coordsDisplay = document.getElementById(pickerId + '_coords_display');
+    const statusBadge = document.getElementById(pickerId + '_status_badge');
+    const statusIcon = document.getElementById(pickerId + '_status_icon');
+    const statusText = document.getElementById(pickerId + '_status_text');
+    const searchInput = document.getElementById(pickerId + '_search_input');
+    const searchResults = document.getElementById(pickerId + '_results');
+    const searchSpinner = document.getElementById(pickerId + '_spinner');
+    const locateBtn = document.getElementById(pickerId + '_locate_btn');
+    const toggleManualBtn = document.getElementById(pickerId + '_toggle_manual_btn');
+    const manualDrawer = document.getElementById(pickerId + '_manual_drawer');
+    const manualLat = document.getElementById(pickerId + '_manual_lat');
+    const manualLng = document.getElementById(pickerId + '_manual_lng');
+    const applyManualBtn = document.getElementById(pickerId + '_apply_manual_btn');
+    const addressInputId = "{{ address_input_id|default:'' }}";
+    const canEdit = {% if can_edit|default:True %}true{% else %}false{% endif %};
+
+    if (!mapEl) return;
+
+    const hasSaved = {% if has_saved_location %}true{% else %}false{% endif %};
+    const defaultLat = {% if initial_lat %}{{ initial_lat }}{% else %}30.0444{% endif %};
+    const defaultLng = {% if initial_lng %}{{ initial_lng }}{% else %}31.2357{% endif %};
+    const initialZoom = hasSaved ? 16 : 12;
+    const markerTitle = "{{ marker_label|default:'الموقع المحدد'|escapejs }}";
+
+    let leafletMap = null;
+    let leafletMarker = null;
+    let searchDebounce = null;
+
+    // Initialize Map with Leaflet (or Google Maps if available)
+    function initMap() {
+        if (typeof L === 'undefined') {
+            console.warn('Leaflet library is loading...');
+            setTimeout(initMap, 200);
+            return;
+        }
+
+        leafletMap = L.map(pickerId + '_map', {
+            scrollWheelZoom: 'center',
+            attributionControl: false
+        }).setView([defaultLat, defaultLng], initialZoom);
+
+        // OpenStreetMap Tile Layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(leafletMap);
+
+        // Add Leaflet Draggable Marker
+        leafletMarker = L.marker([defaultLat, defaultLng], {
+            draggable: canEdit,
+            autoPan: true
+        }).addTo(leafletMap);
+
+        if (hasSaved) {
+            leafletMarker.bindPopup(`<b>${markerTitle}</b><br>الموقع المحفوظ`).openPopup();
+        }
+
+        // Map Click Event
+        if (canEdit) {
+            leafletMap.on('click', function(e) {
+                updatePosition(e.latlng.lat, e.latlng.lng, 'تم تحديد الموقع من الخريطة', true);
+            });
+
+            leafletMarker.on('dragend', function(e) {
+                const pos = e.target.getLatLng();
+                updatePosition(pos.lat, pos.lng, 'تم تعديل الموقع بالسحب', true);
+            });
+        }
+
+        // Auto invalidate size on resize / tab toggle / modal open
+        if (window.ResizeObserver) {
+            const observer = new ResizeObserver(() => {
+                if (leafletMap) leafletMap.invalidateSize();
+            });
+            observer.observe(mapEl);
+        }
+
+        // Ensure proper rendering after initial mount
+        setTimeout(() => {
+            if (leafletMap) leafletMap.invalidateSize();
+        }, 300);
+    }
+
+    function updatePosition(lat, lng, labelText, triggerReverse = true) {
+        const numLat = parseFloat(lat);
+        const numLng = parseFloat(lng);
+        if (isNaN(numLat) || isNaN(numLng)) return;
+
+        const formattedLat = numLat.toFixed(6);
+        const formattedLng = numLng.toFixed(6);
+
+        latInput.value = formattedLat;
+        lngInput.value = formattedLng;
+
+        if (manualLat) manualLat.value = formattedLat;
+        if (manualLng) manualLng.value = formattedLng;
+
+        if (leafletMarker) {
+            leafletMarker.setLatLng([numLat, numLng]);
+        }
+        if (leafletMap) {
+            leafletMap.panTo([numLat, numLng]);
+        }
+
+        coordsDisplay.textContent = `${formattedLat}, ${formattedLng}`;
+        statusBadge.className = 'flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all bg-emerald-50 border-emerald-200 text-emerald-800';
+        statusIcon.className = 'material-symbols-outlined text-base text-emerald-600';
+        statusIcon.textContent = 'check_circle';
+        statusText.textContent = labelText || 'تم تثبيت الموقع بنجاح';
+
+        if (triggerReverse) {
+            reverseGeocode(formattedLat, formattedLng);
+        }
+    }
+
+    // Reverse Geocoding via secure backend proxy (eliminates browser 403)
+    function reverseGeocode(lat, lng) {
+        if (searchSpinner) searchSpinner.classList.remove('hidden');
+        fetch(`/api/geocoding/reverse/?lat=${lat}&lng=${lng}`)
+            .then(res => res.json())
+            .then(data => {
+                if (searchSpinner) searchSpinner.classList.add('hidden');
+                if (data && data.display_name) {
+                    statusText.textContent = data.display_name.split(',').slice(0, 3).join(', ');
+                    if (addressInputId) {
+                        const addrEl = document.getElementById(addressInputId);
+                        if (addrEl && !addrEl.value.trim()) {
+                            addrEl.value = data.display_name.split(',').slice(0, 2).join(', ');
+                        }
+                    }
+                }
+            })
+            .catch(() => {
+                if (searchSpinner) searchSpinner.classList.add('hidden');
+            });
+    }
+
+    // Geocoding Autocomplete Search via secure backend proxy
+    if (searchInput && searchResults) {
+        searchInput.addEventListener('input', function() {
+            const q = searchInput.value.trim();
+            clearTimeout(searchDebounce);
+
+            if (q.length < 2) {
+                searchResults.classList.add('hidden');
+                searchResults.innerHTML = '';
+                return;
+            }
+
+            if (searchSpinner) searchSpinner.classList.remove('hidden');
+
+            searchDebounce = setTimeout(() => {
+                fetch(`/api/geocoding/search/?q=${encodeURIComponent(q)}`)
+                    .then(res => res.json())
+                    .then(payload => {
+                        if (searchSpinner) searchSpinner.classList.add('hidden');
+                        searchResults.innerHTML = '';
+                        const items = payload.results || [];
+                        if (items.length === 0) {
+                            searchResults.innerHTML = '<div class="p-3 text-xs text-slate-400 text-center">لا توجد نتائج مطابقة</div>';
+                            searchResults.classList.remove('hidden');
+                            return;
+                        }
+
+                        items.forEach(item => {
+                            const row = document.createElement('div');
+                            row.className = 'p-2.5 hover:bg-slate-50 cursor-pointer text-xs text-slate-700 flex items-start gap-2 transition-colors';
+                            row.innerHTML = `
+                                <span class="material-symbols-outlined text-sm text-[#27bebe] mt-0.5">location_on</span>
+                                <div class="flex-1 overflow-hidden">
+                                    <p class="font-bold text-slate-800">${item.display_name.split(',')[0]}</p>
+                                    <p class="text-[11px] text-slate-500 truncate">${item.display_name}</p>
+                                </div>
+                            `;
+                            row.addEventListener('click', function() {
+                                updatePosition(item.lat, item.lon, item.display_name.split(',')[0], false);
+                                if (leafletMap) leafletMap.setView([item.lat, item.lon], 16);
+                                searchInput.value = item.display_name.split(',')[0];
+                                searchResults.classList.add('hidden');
+
+                                if (addressInputId) {
+                                    const addrEl = document.getElementById(addressInputId);
+                                    if (addrEl && !addrEl.value.trim()) {
+                                        addrEl.value = item.display_name.split(',').slice(0, 2).join(', ');
+                                    }
+                                }
+                            });
+                            searchResults.appendChild(row);
+                        });
+                        searchResults.classList.remove('hidden');
+                    })
+                    .catch(() => {
+                        if (searchSpinner) searchSpinner.classList.add('hidden');
+                    });
+            }, 300);
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+    }
+
+    // Locate Me (Current GPS)
+    if (locateBtn) {
+        locateBtn.addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                alert('متصفحك لا يدعم تحديد الموقع الجغرافي');
+                return;
+            }
+            locateBtn.disabled = true;
+            locateBtn.classList.add('opacity-50');
+
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    locateBtn.disabled = false;
+                    locateBtn.classList.remove('opacity-50');
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    updatePosition(lat, lng, 'تم تحديد موقعك الحالي عبر GPS الجهاز', true);
+                    if (leafletMap) leafletMap.setView([lat, lng], 17);
+                },
+                function(err) {
+                    locateBtn.disabled = false;
+                    locateBtn.classList.remove('opacity-50');
+                    alert('تعذر تحديد موقعك الحالي: ' + (err.message || 'تم رفض الإذن'));
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+
+    // Manual Drawer Toggle & Apply
+    if (toggleManualBtn && manualDrawer) {
+        toggleManualBtn.addEventListener('click', function() {
+            manualDrawer.classList.toggle('hidden');
+            if (!manualDrawer.classList.contains('hidden')) {
+                if (manualLat) manualLat.value = latInput.value;
+                if (manualLng) manualLng.value = lngInput.value;
+            }
+        });
+    }
+
+    if (applyManualBtn) {
+        applyManualBtn.addEventListener('click', function() {
+            const mLat = parseFloat(manualLat.value);
+            const mLng = parseFloat(manualLng.value);
+            if (isNaN(mLat) || isNaN(mLng)) {
+                alert('يرجى إدخال إحداثيات صالحة');
+                return;
+            }
+            updatePosition(mLat, mLng, 'تم تعيين الإحداثيات يدوياً', true);
+            if (leafletMap) leafletMap.setView([mLat, mLng], 16);
+            manualDrawer.classList.add('hidden');
+        });
+    }
+
+    // Run map initialization
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMap);
+    } else {
+        initMap();
+    }
+})();
+</script>

@@ -67,6 +67,13 @@ def products_list(request):
     # Safe bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
+    stats = {
+        'total_products': Product.objects.count(),
+        'sellable_products': Product.objects.filter(sellable=True).count(),
+        'unsellable_products': Product.objects.filter(sellable=False).count(),
+        'categories_count': categories.count(),
+    }
+
     context = {
         'products': page_obj.object_list,
         'page_obj': page_obj,
@@ -80,6 +87,7 @@ def products_list(request):
         'active_filters_count': len(active_filters),
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': stats,
     }
     return render(request, 'catalog/products_list.html', context)
 

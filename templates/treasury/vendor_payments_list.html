@@ -1,35 +1,114 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}المدفوعات وسندات الصرف (Vendor Payments){% endblock %}
+{% block title %}المدفوعات وسندات الصرف (Vendor Payments) - WEA Pharma ERP{% endblock %}
 
 {% block breadcrumb %}
-    <span class="text-slate-400">المشتريات</span>
+    <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">المدفوعات وسندات الصرف (Vendor Payments)</span>
-{% endblock %}
-
-{% block top_actions %}
-    <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
-        <span class="material-symbols-outlined text-base">payments</span>
-        <span>سند صرف جديد (New Payment)</span>
-    </a>
+    <span class="text-slate-400">المالية والمشتريات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">مدفوعات الموردين (Vendor Payments)</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-5">
+<div class="space-y-6">
 
-    <!-- Filters & Search Toolbar -->
+    <!-- 1. Page Header Section (Clean: Title, Actions - No statistics or search bars) -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">receipt_long</span>
+                <span>سندات صرف دفعات الموردين</span>
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">سجل مدفوعات وسندات صرف الموردين وربطها بأوامر الشراء والحسابات.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5">
+            <a href="{% url 'vendor_payments_export' %}?supplier={{ selected_supplier_id|default:'' }}"
+               class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]"
+               title="تصدير إلى Excel (.xlsx)">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span>تصدير إلى Excel</span>
+            </a>
+            <a href="{% url 'accounting_vendors_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-slate-500">account_balance</span>
+                <span>حسابات وأرصدة الموردين</span>
+            </a>
+            <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>سند صرف جديد</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Payments Count -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي سندات الصرف</span>
+                <span class="p-2 bg-slate-100 text-slate-600 rounded-xl material-symbols-outlined text-lg">receipt</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_count }}</span>
+                <span class="text-xs text-slate-400 mr-1.5">سند صادر</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Amount Paid -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">إجمالي المبالغ المنصرفة</span>
+                <span class="p-2 bg-rose-50 text-rose-600 rounded-xl material-symbols-outlined text-lg">payments</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-rose-700 font-mono">{{ stats.total_amount|intcomma }}</span>
+                <span class="text-xs text-rose-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Payments This Month -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">منصرفات الشهر الحالي</span>
+                <span class="p-2 bg-amber-50 text-amber-600 rounded-xl material-symbols-outlined text-lg">calendar_month</span>
+            </div>
+            <div class="mt-3">
+                <span class="text-2xl font-black text-amber-700 font-mono">{{ stats.month_amount|intcomma }}</span>
+                <span class="text-xs text-amber-600 mr-1 font-semibold">ج.م</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Cash vs Bank breakdown -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500">الدفع النقدي / البنكي</span>
+                <span class="p-2 bg-teal-50 text-teal-600 rounded-xl material-symbols-outlined text-lg">account_balance</span>
+            </div>
+            <div class="mt-3 flex items-center justify-between text-xs">
+                <div>
+                    <span class="block text-slate-400">نقدي:</span>
+                    <strong class="text-teal-700 font-mono font-bold">{{ stats.cash_amount|intcomma }} ج.م</strong>
+                </div>
+                <div class="border-r border-slate-200 pr-3">
+                    <span class="block text-slate-400">بنكي / شيك:</span>
+                    <strong class="text-blue-700 font-mono font-bold">{{ stats.bank_amount|intcomma }} ج.م</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Dedicated Search & Filters Toolbar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
         <form method="GET" class="flex flex-col md:flex-row gap-3">
             <div class="flex-1 relative">
                 <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم السند، المورد، الشيك أو الملاحظات..."
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
             </div>
 
             <div class="w-full md:w-56">
-                <select name="supplier" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                <select name="supplier" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
                     <option value="">كافة الموردين</option>
                     {% for s in suppliers %}
                     <option value="{{ s.id }}" {% if selected_supplier_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
@@ -38,7 +117,7 @@
             </div>
 
             <div class="w-full md:w-48">
-                <select name="vault" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                <select name="vault" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
                     <option value="">كافة الخزن</option>
                     {% for v in vaults %}
                     <option value="{{ v.id }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
@@ -46,12 +125,12 @@
                 </select>
             </div>
 
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">filter_alt</span>
                 <span>تصفية</span>
             </button>
             {% if search_query or selected_supplier_id or selected_vault_id or selected_payment_method %}
-            <a href="{% url 'vendor_payments_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
+            <a href="{% url 'vendor_payments_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
                 إلغاء
             </a>
             {% endif %}
@@ -61,28 +140,19 @@
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
 
+    <!-- 4. Main Content / Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">receipt</span>
-                <span>سندات صرف دفعات الموردين</span>
+                <span class="material-symbols-outlined text-brand-600">table_chart</span>
+                <span>سجل سندات الصرف والمدفوعات</span>
                 <span class="text-xs px-2.5 py-0.5 bg-teal-50 text-brand-700 font-bold rounded-full border border-teal-200">
                     {{ total_count }} سند
                 </span>
             </h2>
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{% url 'vendor_payments_export' %}?supplier={{ selected_supplier_id|default:'' }}"
-                   class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
-                   title="تصدير إلى Excel (.xlsx)">
-                    <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                    <span>تصدير إلى Excel</span>
-                </a>
-                {% include 'components/table_column_picker.html' with table_id='vendor_payments_table' %}
-                <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
-                    <span class="material-symbols-outlined text-base">add</span>
-                    <span>سند صرف جديد</span>
-                </a>
-            </div>
+
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='vendor_payments_table' %}
         </div>
 
         <div class="overflow-x-auto scrollbar-thin">
@@ -91,40 +161,47 @@
                     <tr>
                         <th data-col="serial_num" data-col-label="رقم السند" data-col-required="true" class="py-3 px-4">رقم السند</th>
                         <th data-col="supplier" data-col-label="المورد" data-col-required="true" class="py-3 px-4">المورد</th>
+                        <th data-col="purchase_order" data-col-label="أمر الشراء المرتبط" class="py-3 px-4">أمر الشراء المرتبط</th>
                         <th data-col="payment_date" data-col-label="تاريخ الصرف" class="py-3 px-4">تاريخ الصرف</th>
                         <th data-col="amount" data-col-label="المبلغ المسدد" class="py-3 px-4">المبلغ المسدد</th>
                         <th data-col="payment_method" data-col-label="وسيلة الدفع" class="py-3 px-4">وسيلة الدفع</th>
                         <th data-col="vault" data-col-label="الخزنة" class="py-3 px-4">الخزنة</th>
                         <th data-col="reference_number" data-col-label="المرجع" class="py-3 px-4">المرجع</th>
                         <th data-col="created_by" data-col-label="المسئول" class="py-3 px-4">المسئول</th>
-                        <th data-col="status" data-col-label="الحالة" data-col-required="true" class="py-3 px-4">الحالة</th>
+                        <th data-col="notes" data-col-label="ملاحظات" class="py-3 px-4">ملاحظات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for p in payments %}
                     <tr class="hover:bg-slate-50/70">
-                        <td data-col="serial_num" class="py-3.5 px-4 font-mono font-bold text-brand-700">#{{ p.serial_num }}</td>
+                        <td data-col="serial_num" class="py-3.5 px-4 font-mono font-bold text-slate-900">#{{ p.serial_num }}</td>
                         <td data-col="supplier" class="py-3.5 px-4 font-bold text-slate-900">{{ p.supplier.name }}</td>
-                        <td data-col="payment_date" class="py-3.5 px-4 text-xs text-slate-500 font-mono">{{ p.payment_date|date:"Y-m-d" }}</td>
-                        <td data-col="amount" class="py-3.5 px-4 font-black text-slate-900 text-sm">{{ p.amount|intcomma }} ج.م</td>
-                        <td data-col="payment_method" class="py-3.5 px-4 text-xs font-semibold">{{ p.get_payment_method_display }}</td>
-                        <td data-col="vault" class="py-3.5 px-4 text-xs text-slate-700">{{ p.vault.name }}</td>
-                        <td class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ p.reference_number|default:"-" }}</td>
-                        <td class="py-3.5 px-4 text-xs">{{ p.created_by.name|default:p.created_by.username }}</td>
-                        <td class="py-3.5 px-4">
-                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                {{ p.get_status_display }}
-                            </span>
+                        <td data-col="purchase_order" class="py-3.5 px-4">
+                            {% if p.purchase_order %}
+                            <a href="{% url 'purchase_order_detail' p.purchase_order.id %}" class="inline-flex items-center gap-1 font-mono text-xs font-bold text-brand-600 hover:text-brand-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                <span>{{ p.purchase_order.order_number }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                            {% endif %}
                         </td>
+                        <td data-col="payment_date" class="py-3.5 px-4 text-xs font-medium text-slate-600 font-mono">{{ p.payment_date|date:"Y-m-d" }}</td>
+                        <td data-col="amount" class="py-3.5 px-4 font-black text-rose-700 text-base font-mono">
+                            {{ p.amount|intcomma }} ج.م
+                        </td>
+                        <td data-col="payment_method" class="py-3.5 px-4 text-xs">
+                            <span class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-medium">{{ p.get_payment_method_display }}</span>
+                        </td>
+                        <td data-col="vault" class="py-3.5 px-4 text-xs font-medium text-slate-700">{{ p.vault.name }}</td>
+                        <td data-col="reference_number" class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ p.reference_number|default:"—" }}</td>
+                        <td data-col="created_by" class="py-3.5 px-4 text-xs text-slate-600">{{ p.created_by.get_full_name|default:p.created_by.username }}</td>
+                        <td data-col="notes" class="py-3.5 px-4 text-xs text-slate-500 max-w-xs truncate">{{ p.notes|default:"—" }}</td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="py-12 text-center text-slate-400">
-                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">payments</span>
-                            <p class="text-sm font-semibold">لا توجد مدفوعات مسجلة بعد.</p>
-                            <a href="{% url 'vendor_payment_create' %}" class="inline-block mt-3 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm">
-                                إنشاء سند صرف جديد
-                            </a>
+                        <td colspan="10" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">receipt_long</span>
+                            <span class="font-bold">لا توجد سندات صرف مطابقة لمعايير البحث.</span>
                         </td>
                     </tr>
                     {% endfor %}
@@ -132,8 +209,20 @@
             </table>
         </div>
 
-        <!-- Standardized Pagination -->
-        {% include 'components/pagination.html' %}
+        <!-- 5. Pagination Section -->
+        {% if page_obj.has_other_pages %}
+        <div class="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+            <span>صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }} (إجمالي {{ total_count }} سند)</span>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_supplier_id %}&supplier={{ selected_supplier_id }}{% endif %}{% if selected_vault_id %}&vault={{ selected_vault_id }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 font-bold min-h-[36px] flex items-center">السابق</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_supplier_id %}&supplier={{ selected_supplier_id }}{% endif %}{% if selected_vault_id %}&vault={{ selected_vault_id }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 font-bold min-h-[36px] flex items-center">التالي</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
 </div>

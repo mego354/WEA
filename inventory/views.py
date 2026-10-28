@@ -2,7 +2,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Sum, F, ExpressionWrapper, DecimalField
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 
@@ -46,6 +46,26 @@ def inventory_stock_list(request):
     # Scoped warehouses available for filter dropdown
     warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
 
+    # Real scoped statistics
+    base_scoped = get_scoped_queryset(InventoryStock.objects.all(), request.user, 'inventorystock')
+    stock_aggregates = base_scoped.aggregate(
+        total_items=Count('id'),
+        total_qty_on_hand=Sum('quantity_on_hand'),
+        total_qty_reserved=Sum('quantity_reserved'),
+        total_qty_available=Sum('quantity_available'),
+    )
+    total_cost_val = base_scoped.annotate(
+        val=ExpressionWrapper(F('quantity_on_hand') * F('product__cost_price'), output_field=DecimalField(max_digits=14, decimal_places=2))
+    ).aggregate(tot=Sum('val'))['tot'] or Decimal('0.00')
+
+    stats = {
+        'total_items': stock_aggregates['total_items'] or 0,
+        'total_qty_on_hand': stock_aggregates['total_qty_on_hand'] or 0,
+        'total_qty_available': stock_aggregates['total_qty_available'] or 0,
+        'total_cost_value': total_cost_val,
+        'low_stock_count': base_scoped.filter(quantity_available__lte=5).count(),
+    }
+
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     context = {
@@ -57,6 +77,7 @@ def inventory_stock_list(request):
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': stats,
     }
     return render(request, 'inventory/stock_list.html', context)
 
@@ -114,8 +135,19 @@ def warehouses_list(request):
         name = request.POST.get('name', '').strip()
         code = request.POST.get('code', '').strip()
         address = request.POST.get('address', '').strip()
+        lat_raw = request.POST.get('latitude', '').strip()
+        lng_raw = request.POST.get('longitude', '').strip()
+        lat = None
+        lng = None
+        if lat_raw and lng_raw:
+            try:
+                lat = Decimal(str(lat_raw))
+                lng = Decimal(str(lng_raw))
+            except Exception:
+                pass
+
         if name and code:
-            Warehouse.objects.create(name=name, code=code, address=address)
+            Warehouse.objects.create(name=name, code=code, address=address, latitude=lat, longitude=lng)
             messages.success(request, f"تم إنشاء المخزن '{name}' بنجاح.")
         return redirect('warehouses_list')
 
@@ -126,6 +158,15 @@ def warehouses_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    # Dedicated real scoped statistics cards
+    scoped_all = get_scoped_queryset(Warehouse.objects.all(), request.user, 'warehouse')
+    stats = {
+        'total_warehouses': scoped_all.count(),
+        'main_warehouses': scoped_all.filter(is_main=True).count(),
+        'rep_warehouses': scoped_all.filter(assigned_user__isnull=False).count(),
+        'active_warehouses': scoped_all.filter(is_active=True).count(),
+    }
+
     context = {
         'warehouses': page_obj.object_list,
         'page_obj': page_obj,
@@ -133,6 +174,7 @@ def warehouses_list(request):
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'stats': stats,
         'can_manage_warehouses': has_perm_or_admin(request.user, 'inventory:warehouses/manage'),
     }
     return render(request, 'inventory/warehouses_list.html', context)

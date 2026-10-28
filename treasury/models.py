@@ -133,6 +133,7 @@ class VendorPayment(models.Model):
     ]
 
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم سند الصرف")
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="vendor_payments", verbose_name="أمر الشراء المرتبط")
     supplier = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="vendor_payments", verbose_name="المورد")
     vault = models.ForeignKey(Vault, on_delete=models.PROTECT, related_name="vendor_payments", verbose_name="خزنة الصرف")
     payment_date = models.DateField(default=timezone.now, verbose_name="تاريخ الصرف")
@@ -186,6 +187,9 @@ class VaultTransaction(models.Model):
     reference_id = models.PositiveIntegerField(null=True, blank=True, verbose_name="معرف العملية المرجعية")
     description = models.CharField(max_length=255, verbose_name="البيان")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المسئول")
+    is_reversed = models.BooleanField(default=False, verbose_name="حركة معكوسة")
+    reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reversed_vault_transactions", verbose_name="المسئول عن العكس")
+    reversal_transaction = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, blank=True, related_name="original_transaction", verbose_name="حركة العكس المرتبطة")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الحركة")
 
     class Meta:
