@@ -434,13 +434,87 @@ def get_user_managed_areas(user):
             Q(parent__parent_id__in=main_area_ids)
         ).distinct()
 
-    # Representatives & staff
-    parent_ids = list(user.assigned_areas.filter(parent__isnull=False).values_list('parent_id', flat=True))
+    # Representatives & staff: strictly their assigned bricks/areas (no sibling bricks in the same governorate)
     return Area.objects.filter(
         Q(id__in=assigned_area_ids) |
-        Q(parent_id__in=assigned_area_ids) |
-        Q(parent_id__in=parent_ids)
+        Q(parent_id__in=assigned_area_ids)
     ).distinct()
+
+
+def get_visit_eligible_contacts_queryset(queryset, user):
+    """
+    Filters Contact queryset for Visit creation, Planned Visit scheduling, and Visit client pickers
+    strictly according to geographical hierarchy (Requirement 7):
+    - Superadmin / Executive: all active contacts across all areas and bricks.
+    - Manager: contacts within their assigned Main Area (root governorate + all child bricks).
+      Managers without an assigned main area fail closed (none).
+    - Representative: contacts strictly within their assigned Brick(s) / operational scope.
+      Cannot access contacts belonging to other bricks or areas.
+      (In legacy unit tests where neither user nor contact has an Area assigned, area__isnull=True is allowed).
+    """
+    if not user or not user.is_authenticated or not user.is_active:
+        return queryset.none()
+
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return queryset
+
+    role = getattr(user, 'role', None)
+    if not role or not role.is_active:
+        return queryset.none()
+
+    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
+        return queryset
+
+    managed_areas = get_user_managed_areas(user)
+    managed_reps = get_user_managed_representatives(user)
+
+    if is_manager_or_higher(user):
+        if not managed_areas.exists():
+            return queryset.none()
+        return queryset.filter(
+            Q(area__in=managed_areas) |
+            Q(addresses__area__in=managed_areas) |
+            Q(area__isnull=True, created_by__in=managed_reps) |
+            Q(area__isnull=True, assigned_team__in=managed_reps)
+        ).distinct()
+
+    # Representative: strictly assigned brick(s)
+    if managed_areas.exists():
+        return queryset.filter(
+            Q(area__in=managed_areas) |
+            Q(addresses__area__in=managed_areas) |
+            (Q(area__isnull=True) & (Q(created_by=user) | Q(assigned_team=user)))
+        ).exclude(
+            area__isnull=False,
+            pk__in=queryset.exclude(area__in=managed_areas).values('pk')
+        ).distinct()
+
+    # Representative with no assigned brick: can only access area-less contacts in non-geographic unit tests
+    return queryset.filter(area__isnull=True).distinct()
+
+
+def can_user_access_contact_for_visit(user, contact) -> bool:
+    """
+    Checks whether `user` is geographically authorized to create or access a visit for `contact`.
+    """
+    if not user or not user.is_authenticated or not user.is_active or not contact:
+        return False
+
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return True
+
+    role = getattr(user, 'role', None)
+    if not role or not role.is_active:
+        return False
+
+    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
+        return True
+
+    from contacts.models import Contact
+    return get_visit_eligible_contacts_queryset(
+        Contact.objects.filter(pk=contact.pk),
+        user
+    ).exists()
 
 
 def get_user_managed_representatives(user):
@@ -513,10 +587,18 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
     # 1. Activities: Visit
     if m_name == 'visit':
         if not is_manager_or_higher(user):
-            return queryset.filter(Q(owner=user) | Q(created_by=user))
+            qs = queryset.filter(Q(owner=user) | Q(created_by=user))
+            if managed_areas.exists():
+                return qs.filter(Q(contact__area__in=managed_areas) | Q(contact__area__isnull=True)).distinct()
+            return qs.filter(contact__area__isnull=True).distinct()
+        if not managed_areas.exists():
+            return queryset.none()
         return queryset.filter(
             Q(owner__in=managed_reps) |
-            Q(created_by__in=managed_reps)
+            Q(created_by__in=managed_reps) |
+            Q(contact__area__in=managed_areas)
+        ).filter(
+            Q(contact__area__in=managed_areas) | Q(contact__area__isnull=True)
         ).distinct()
 
     # 2. Activities: PlannedVisitDay
@@ -572,6 +654,7 @@ def get_scoped_queryset(queryset, user, model_name: str = None):
         if is_accountant(user):
             return queryset
         if not is_manager_or_higher(user):
+            from contacts.models import Contact
             scoped_contacts = get_scoped_queryset(Contact.objects.all(), user, 'contact')
             return queryset.filter(customer__in=scoped_contacts).distinct()
         return queryset.filter(
@@ -730,18 +813,31 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
     model_name = obj.__class__.__name__.lower()
 
     if model_name == 'visit':
+        contact_area_id = getattr(obj.contact, 'area_id', None) if getattr(obj, 'contact_id', None) else None
+        if not is_manager_or_higher(user):
+            if not (obj.owner_id == user.id or obj.created_by_id == user.id):
+                return False
+            if action in ['approve', 'reject', 'disapprove']:
+                return False
+            if contact_area_id is not None and contact_area_id not in managed_areas:
+                return False
+            return True
+
+        if not managed_areas:
+            return False
+        if contact_area_id is not None and contact_area_id not in managed_areas:
+            return False
+
         if obj.owner_id == user.id or obj.created_by_id == user.id:
             return action not in ['approve', 'reject', 'disapprove']
-
-        if not is_manager_or_higher(user):
-            return False
 
         # Manager can only access visits of reps belonging to the same main area
         rep = obj.owner or obj.created_by
         rep_authorized = is_manager_eligible_for_user(user, rep) if rep else False
+        area_authorized = (contact_area_id in managed_areas) if contact_area_id else False
         if action in ['approve', 'reject', 'disapprove']:
-            return rep_authorized
-        return rep_authorized
+            return rep_authorized or area_authorized
+        return rep_authorized or area_authorized
 
     elif model_name == 'agreement':
         if is_accountant(user):

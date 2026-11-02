@@ -130,12 +130,11 @@ class DashboardRolePermissionsAndMobileNavTests(TestCase):
             area=self.cairo_sub,
             created_by=self.cairo_rep
         )
-        self.cairo_cust_account = CustomerAccount.objects.create(
-            customer=self.cairo_cust,
-            current_balance=Decimal('5000.00'),
-            overdue_balance=Decimal('1200.00'),
-            credit_period_days=30
-        )
+        self.cairo_cust_account, _ = CustomerAccount.objects.get_or_create(customer=self.cairo_cust)
+        self.cairo_cust_account.current_balance = Decimal('5000.00')
+        self.cairo_cust_account.overdue_balance = Decimal('1200.00')
+        self.cairo_cust_account.credit_period_days = 30
+        self.cairo_cust_account.save()
 
         # Cairo Sales Order & Collection
         self.cairo_so = SalesOrder.objects.create(

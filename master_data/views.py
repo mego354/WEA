@@ -450,7 +450,9 @@ def location_settings_view(request):
     """
     Location settings view matching https://weapharma.bricks-rep.com/settings/location
     """
+    from accounts.models import Role
     loc_settings = LocationSettings.get_settings()
+    all_roles = Role.objects.filter(is_active=True).order_by('id')
 
     if request.method == 'POST':
         try:
@@ -464,17 +466,31 @@ def location_settings_view(request):
         loc_settings.auto_set_customer_location_in_visit = request.POST.get('auto_set_customer_location_in_visit') == 'on'
 
         # Workflow verification dropdowns
-        loc_settings.verify_visits = request.POST.get('verify_visits') == '1'
-        loc_settings.verify_sales_orders = request.POST.get('verify_sales_orders') == '1'
-        loc_settings.verify_sales_returns = request.POST.get('verify_sales_returns') == '1'
+        loc_settings.verify_visits = request.POST.get('verify_visits') in ('1', 'on', 'true')
+        loc_settings.verify_sales_orders = request.POST.get('verify_sales_orders') in ('1', 'on', 'true')
+        loc_settings.verify_sales_returns = request.POST.get('verify_sales_returns') in ('1', 'on', 'true')
 
         # User creation and manager approval controls
-        loc_settings.allow_all_users_to_create_visits = request.POST.get('allow_all_users_to_create_visits') == 'on'
-        loc_settings.require_manager_approval_for_visits = request.POST.get('require_manager_approval_for_visits') == 'on'
-        loc_settings.allow_all_users_to_create_agreements = request.POST.get('allow_all_users_to_create_agreements') == 'on'
-        loc_settings.require_manager_approval_for_agreements = request.POST.get('require_manager_approval_for_agreements') == 'on'
+        loc_settings.allow_all_users_to_create_visits = request.POST.get('allow_all_users_to_create_visits') in ('on', '1', 'true')
+        loc_settings.require_manager_approval_for_visits = request.POST.get('require_manager_approval_for_visits') in ('on', '1', 'true')
+        loc_settings.allow_all_users_to_create_agreements = request.POST.get('allow_all_users_to_create_agreements') in ('on', '1', 'true')
+        loc_settings.require_manager_approval_for_agreements = request.POST.get('require_manager_approval_for_agreements') in ('on', '1', 'true')
+
+        # Distance & Bypass Governance Controls
+        if 'allow_template_distance_override' in request.POST or 'distance_governance_submitted' in request.POST:
+            loc_settings.allow_template_distance_override = request.POST.get('allow_template_distance_override') in ('on', '1', 'true')
+            loc_settings.verify_unplanned_visit_distance = request.POST.get('verify_unplanned_visit_distance') in ('on', '1', 'true')
+            loc_settings.verify_end_visit_distance = request.POST.get('verify_end_visit_distance') in ('on', '1', 'true')
+            loc_settings.bypass_reason_mandatory = request.POST.get('bypass_reason_mandatory') in ('on', '1', 'true')
+            loc_settings.distance_bypass_requires_approval = request.POST.get('distance_bypass_requires_approval') in ('on', '1', 'true')
 
         loc_settings.save()
+
+        if 'distance_governance_submitted' in request.POST or 'roles_can_bypass_distance_creation' in request.POST:
+            creation_role_ids = [int(r) for r in request.POST.getlist('roles_can_bypass_distance_creation') if str(r).isdigit()]
+            ending_role_ids = [int(r) for r in request.POST.getlist('roles_can_bypass_distance_ending') if str(r).isdigit()]
+            loc_settings.roles_can_bypass_distance_creation.set(creation_role_ids)
+            loc_settings.roles_can_bypass_distance_ending.set(ending_role_ids)
 
         from accounts.services import AuditLogService
         AuditLogService.log(
@@ -483,11 +499,16 @@ def location_settings_view(request):
             actor=request.user,
             record_id=loc_settings.id,
             record_name="إعدادات الموقع الجغرافي",
-            description="تحديث إعدادات التحقق من الموقع الجغرافي وسماحية الزيارات",
+            description="تحديث إعدادات التحقق من الموقع الجغرافي وسماحية الزيارات وصلاحيات التجاوز",
             new_values={
                 'tolerance': loc_settings.tolerance,
                 'max_verified_accuracy': loc_settings.max_verified_accuracy,
                 'verify_visits': loc_settings.verify_visits,
+                'allow_template_distance_override': loc_settings.allow_template_distance_override,
+                'verify_unplanned_visit_distance': loc_settings.verify_unplanned_visit_distance,
+                'verify_end_visit_distance': loc_settings.verify_end_visit_distance,
+                'bypass_reason_mandatory': loc_settings.bypass_reason_mandatory,
+                'distance_bypass_requires_approval': loc_settings.distance_bypass_requires_approval,
             },
             status='SUCCESS',
             request=request,
@@ -498,6 +519,9 @@ def location_settings_view(request):
 
     return render(request, 'settings/location_settings.html', {
         'settings': loc_settings,
+        'all_roles': all_roles,
+        'selected_creation_bypass_roles': list(loc_settings.roles_can_bypass_distance_creation.values_list('id', flat=True)),
+        'selected_ending_bypass_roles': list(loc_settings.roles_can_bypass_distance_ending.values_list('id', flat=True)),
     })
 
 
@@ -513,6 +537,13 @@ def geofence_settings_api(request):
             'max_verified_accuracy': loc_settings.max_verified_accuracy,
             'max_verified_warn_accuracy': loc_settings.max_verified_warn_accuracy,
             'verify_visits': loc_settings.verify_visits,
+            'allow_template_distance_override': loc_settings.allow_template_distance_override,
+            'verify_unplanned_visit_distance': loc_settings.verify_unplanned_visit_distance,
+            'verify_end_visit_distance': loc_settings.verify_end_visit_distance,
+            'bypass_reason_mandatory': loc_settings.bypass_reason_mandatory,
+            'distance_bypass_requires_approval': loc_settings.distance_bypass_requires_approval,
+            'can_user_bypass_creation': loc_settings.can_user_bypass_without_approval(request.user, stage='create'),
+            'can_user_bypass_ending': loc_settings.can_user_bypass_without_approval(request.user, stage='end'),
         }
     })
 

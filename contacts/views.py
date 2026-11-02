@@ -1532,26 +1532,12 @@ def customers_search_api(request):
     qs = Contact.objects.filter(
         Q(is_customer=True) | Q(status='customer') | Q(account_type__gt='')
     ).exclude(status='inactive')\
-        .select_related('area', 'created_by')\
+        .select_related('area', 'area__parent', 'created_by')\
         .prefetch_related('addresses__area')
 
-    # Authorization Scoping
-    user = request.user
-    is_manager = (
-        user.is_superuser or
-        getattr(user, 'is_super_admin', False) or
-        (user.role and (
-            user.role.is_area_manager or
-            any(t in (user.role.name or '').lower() for t in ['manager', 'admin', 'supervisor', 'director']) or
-            any(t in (user.role.display_name or '').lower() for t in ['مدير', 'مشرف'])
-        ))
-    )
-
-    if not is_manager:
-        # Reps see all active customers — they need to be able to visit any customer.
-        # The area/assignment scoping is enforced at the visit record level, not at contact selection.
-        # No additional filter needed; the base queryset (active customers) is sufficient.
-        pass
+    # Authorization Scoping (Superadmin: all, Manager: Main Area, Representative: Brick)
+    from accounts.permissions import get_visit_eligible_contacts_queryset
+    qs = get_visit_eligible_contacts_queryset(qs, request.user)
 
     contact_id = request.GET.get('id') or request.POST.get('id')
     if contact_id and str(contact_id).isdigit():

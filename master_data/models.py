@@ -101,6 +101,82 @@ class LocationSettings(models.Model):
         verbose_name="المنتجات المقترحة للزيارات"
     )
 
+    # Distance Validation & Bypass Governance Settings
+    allow_template_distance_override = models.BooleanField(
+        default=True,
+        verbose_name="السماح لقوالب الزيارات بتجاوز سماحية المسافة الافتراضية"
+    )
+    verify_unplanned_visit_distance = models.BooleanField(
+        default=True,
+        verbose_name="التحقق من مسافة الزيارات غير المخططة عند الإنشاء"
+    )
+    verify_end_visit_distance = models.BooleanField(
+        default=True,
+        verbose_name="التحقق من المسافة عند إنهاء الزيارة"
+    )
+    bypass_reason_mandatory = models.BooleanField(
+        default=False,
+        verbose_name="إلزامية ذكر السبب عند تجاوز المسافة للمصرح لهم"
+    )
+    distance_bypass_requires_approval = models.BooleanField(
+        default=True,
+        verbose_name="تجاوز المسافة لغير المصرح لهم يتطلب اعتماد المدير"
+    )
+    roles_can_bypass_distance_creation = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='location_settings_bypass_creation',
+        verbose_name="الأدوار المصرح لها بتجاوز المسافة عند الإنشاء بدون اعتماد"
+    )
+    roles_can_bypass_distance_ending = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='location_settings_bypass_ending',
+        verbose_name="الأدوار المصرح لها بتجاوز المسافة عند الإنهاء بدون اعتماد"
+    )
+
+    def get_effective_tolerance(self, template=None) -> int:
+        """
+        Determine the allowed distance threshold dynamically:
+        - Uses template's special_tolerance if allow_template_distance_override is True
+          and the template has custom distance settings configured.
+        - Otherwise falls back to default tolerance configured in LocationSettings.
+        """
+        default_tol = int(self.tolerance or 300)
+        if self.allow_template_distance_override and template is not None:
+            special = getattr(template, 'special_tolerance', None)
+            has_special = getattr(template, 'has_special_location_settings', False) or (
+                special is not None and int(special) > 0 and int(special) != 300
+            )
+            if has_special and special is not None and int(special) > 0:
+                return int(special)
+        return default_tol
+
+    def can_user_bypass_without_approval(self, user, stage: str = 'end') -> bool:
+        """
+        Check if user is authorized to bypass distance validation without requiring manager approval.
+        Managers, Superadmins, users with bypass_location_verification, and roles configured
+        in LocationSettings can bypass directly.
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
+            return True
+        if getattr(user, 'bypass_location_verification', False):
+            return True
+        from accounts.permissions import is_manager_or_higher
+        if is_manager_or_higher(user):
+            return True
+        role = getattr(user, 'role', None)
+        if role and role.is_active:
+            if stage == 'create':
+                if self.roles_can_bypass_distance_creation.filter(pk=role.pk).exists():
+                    return True
+            else:
+                if self.roles_can_bypass_distance_ending.filter(pk=role.pk).exists():
+                    return True
+        return False
+
     def get_eligible_suggested_products(self):
         """Returns suggested products strictly filtered to active, sellable products."""
         if not self.enable_product_suggestions:

@@ -158,7 +158,13 @@ REDACTED_KEYS = {
 
 
 def redact_sensitive_data(data):
-    """Recursively redacts passwords, tokens, and secrets from JSON/dicts."""
+    """Recursively redacts passwords, tokens, and secrets from JSON/dicts and normalizes Decimals/dates."""
+    from decimal import Decimal
+    import datetime
+    if isinstance(data, Decimal):
+        return float(data)
+    if isinstance(data, (datetime.date, datetime.datetime)):
+        return data.isoformat()
     if not isinstance(data, dict):
         return data
     cleaned = {}
@@ -168,7 +174,11 @@ def redact_sensitive_data(data):
         elif isinstance(v, dict):
             cleaned[k] = redact_sensitive_data(v)
         elif isinstance(v, list):
-            cleaned[k] = [redact_sensitive_data(item) if isinstance(item, dict) else item for item in v]
+            cleaned[k] = [redact_sensitive_data(item) for item in v]
+        elif isinstance(v, Decimal):
+            cleaned[k] = float(v)
+        elif isinstance(v, (datetime.date, datetime.datetime)):
+            cleaned[k] = v.isoformat()
         else:
             cleaned[k] = v
     return cleaned
@@ -198,7 +208,7 @@ class AuditLogService:
         try:
             from accounts.models import SecurityAuditLog
 
-            action_val = action or action_type or 'action'
+            action_val = action_type or action or 'action'
             actor_val = user or actor
 
             ip_val = ip_address

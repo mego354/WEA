@@ -82,4 +82,7 @@ class Command(BaseCommand):
         govs = Area.objects.filter(parent__isnull=True, is_company_area=False).annotate(sub_cnt=Count('subareas')).order_by('code')
         self.stdout.write(f"Active Egyptian Governorates total: {govs.count()}")
         for g in govs:
-            self.stdout.write(f"  [{g.code}] {g.name} ({g.name_en}) - {g.sub_cnt} subareas")
+            try:
+                self.stdout.write(f"  [{g.code}] {g.name} ({g.name_en}) - {g.sub_cnt} subareas")
+            except (UnicodeEncodeError, Exception):
+                self.stdout.write(f"  [{g.code}] {g.name_en} - {g.sub_cnt} subareas")

@@ -28,16 +28,21 @@ from .forms import (
 )
 from django.core.exceptions import ValidationError
 from contacts.models import Contact
+from contacts.constants import ACCOUNT_TYPES, CUSTOMER_CATEGORIES, SPECIALTIES
 from master_data.models import Area
 from catalog.models import Product
 from .services import (
     verify_visit_location, can_start_visit, start_visit,
-    can_submit_answers, save_visit_answers, can_end_visit, end_visit
+    can_submit_answers, save_visit_answers, can_end_visit, end_visit,
+    build_visit_timeline
 )
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
-    get_scoped_queryset, can_user_access_object, get_user_managed_representatives
+    get_scoped_queryset, can_user_access_object, get_user_managed_representatives,
+    get_visit_eligible_contacts_queryset, can_user_access_contact_for_visit,
+    get_user_managed_areas, get_user_main_areas, is_manager_or_higher
 )
+from accounts.services import AuditLogService
 
 User = get_user_model()
 
@@ -449,19 +454,28 @@ def agreements_export(request):
 @require_permission('activities:planned/list')
 def planned_visits_list(request):
     """
-    Day-by-day accordion planner view for selected representative and date range.
+    Day-by-day accordion planner view for selected representative and date range,
+    with Bulk Daily Planning (Section 8) and strict geographical scoping (Section 7).
     Matches https://weapharma.bricks-rep.com/planned-visits
     """
-    # Selected representative (rep scoping: non-managers can only view their own plan)
+    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     can_view_others = (
-        request.user.is_superuser or
-        getattr(request.user, 'is_super_admin', False) or
+        is_super or
         (request.user.role and request.user.role.is_manager_role) or
         has_perm_or_admin(request.user, 'activities:planned/manage')
     )
+    if is_super:
+        all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    elif can_view_others:
+        all_reps = get_user_managed_representatives(request.user).order_by('first_name', 'username')
+    else:
+        all_reps = User.objects.filter(id=request.user.id)
+
     rep_id = request.GET.get('assignee')
     if rep_id and can_view_others:
         selected_rep = get_object_or_404(User, pk=rep_id)
+        if not is_super and not all_reps.filter(pk=selected_rep.pk).exists():
+            return render_forbidden_response(request, "غير مصرح لك بعرض خطة زيارات مندوب خارج نطاق منطقتك الجغرافية.")
     else:
         selected_rep = request.user
 
@@ -494,9 +508,10 @@ def planned_visits_list(request):
     
     plan_days_map = {p.date: p for p in plan_days}
 
-    # Build calendar day cards
+    # Build calendar day cards and scheduled map for duplicate prevention
     current_date = start_date
     days_list = []
+    scheduled_contacts_by_date = {}
     arabic_weekdays = {
         0: 'الاثنين',
         1: 'الثلاثاء',
@@ -510,8 +525,11 @@ def planned_visits_list(request):
     while current_date <= end_date:
         plan_day = plan_days_map.get(current_date)
         items = list(plan_day.items.all()) if plan_day else []
+        d_key = current_date.strftime('%Y-%m-%d')
+        scheduled_contacts_by_date[d_key] = [it.contact_id for it in items]
         days_list.append({
             'date': current_date,
+            'date_str': d_key,
             'weekday_ar': arabic_weekdays[current_date.weekday()],
             'formatted_date': current_date.strftime('%d/%m/%Y'),
             'plan_day': plan_day,
@@ -521,41 +539,116 @@ def planned_visits_list(request):
         })
         current_date += datetime.timedelta(days=1)
 
-    # Contacts for drawer filter (scoped to representative's assigned area/hierarchy)
-    contacts_qs = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
-    area_filter = request.GET.get('area')
-    specialty_filter = request.GET.get('specialty')
-    search_contact = request.GET.get('contact_search')
+    # Contacts for drawer & bulk planner (scoped strictly to user's permitted geographical scope)
+    base_contacts_qs = get_visit_eligible_contacts_queryset(
+        Contact.objects.select_related('area', 'area__parent').exclude(status='inactive'),
+        request.user
+    )
+    contacts_qs = base_contacts_qs
 
-    if area_filter:
-        contacts_qs = contacts_qs.filter(area_id=area_filter)
+    main_area_filter = (request.GET.get('main_area') or '').strip()
+    area_filter = (request.GET.get('brick') or request.GET.get('area') or '').strip()
+    account_type_filter = (request.GET.get('account_type') or '').strip()
+    category_filter = (request.GET.get('customer_category') or '').strip()
+    specialty_filter = (request.GET.get('specialty') or '').strip()
+    search_contact = (request.GET.get('contact_search') or '').strip()
+
+    if main_area_filter and main_area_filter.isdigit():
+        contacts_qs = contacts_qs.filter(Q(area_id=int(main_area_filter)) | Q(area__parent_id=int(main_area_filter)))
+    if area_filter and area_filter.isdigit():
+        contacts_qs = contacts_qs.filter(area_id=int(area_filter))
+    if account_type_filter:
+        contacts_qs = contacts_qs.filter(account_type__iexact=account_type_filter)
+    if category_filter:
+        contacts_qs = contacts_qs.filter(customer_category__iexact=category_filter)
     if specialty_filter:
         contacts_qs = contacts_qs.filter(specialty__icontains=specialty_filter)
     if search_contact:
-        contacts_qs = contacts_qs.filter(Q(name__icontains=search_contact) | Q(code__icontains=search_contact))
+        contacts_qs = contacts_qs.filter(
+            Q(name__icontains=search_contact) |
+            Q(code__icontains=search_contact) |
+            Q(phone__icontains=search_contact)
+        )
 
-    drawer_contacts = contacts_qs.order_by('name')[:40]
+    # AJAX Incremental Client Loader (Requirement 2: Performance & See More)
+    if (request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json') and request.GET.get('action') == 'load_contacts':
+        try:
+            offset = max(0, int(request.GET.get('offset', 0)))
+        except (ValueError, TypeError):
+            offset = 0
+        try:
+            limit = max(1, min(50, int(request.GET.get('limit', 10))))
+        except (ValueError, TypeError):
+            limit = 10
 
-    # Dropdowns for UI
-    if can_view_others:
-        all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
+        total_count = contacts_qs.count()
+        batch = list(contacts_qs.order_by('name')[offset:offset+limit])
+        items_data = []
+        for c in batch:
+            items_data.append({
+                'id': c.id,
+                'name': c.name,
+                'code': c.code or c.formatted_number or '',
+                'account_type': c.account_type or 'عميل',
+                'customer_category': c.customer_category or '',
+                'specialty': c.specialty or 'عام',
+                'area_name': c.area.name if c.area else '',
+                'parent_area_name': c.area.parent.name if c.area and c.area.parent else '',
+            })
+        return JsonResponse({
+            'success': True,
+            'total_count': total_count,
+            'offset': offset,
+            'limit': limit,
+            'has_more': (offset + len(batch)) < total_count,
+            'contacts': items_data
+        })
+
+    # Requirement 2: Initially display only first 10 clients
+    total_clients_count = contacts_qs.count()
+    initial_contacts = list(contacts_qs.order_by('name')[:10])
+    has_more_clients = total_clients_count > 10
+
+    # Geographical areas scoped to user
+    if is_super:
+        areas = Area.objects.select_related('parent').all().order_by('name')
+        main_areas = Area.objects.filter(parent__isnull=True).order_by('name')
+        bricks = Area.objects.filter(parent__isnull=False).select_related('parent').order_by('name')
     else:
-        all_reps = User.objects.filter(id=request.user.id)
-    areas = Area.objects.all().order_by('name')
-    visit_templates = VisitTemplate.objects.filter(active=True)
+        managed_areas = get_user_managed_areas(request.user)
+        root_areas = get_user_main_areas(request.user)
+        areas = managed_areas.select_related('parent').order_by('name')
+        main_areas = root_areas.order_by('name')
+        bricks = managed_areas.filter(parent__isnull=False).select_related('parent').order_by('name')
+
+    # Templates eligible for current user's role
+    visit_templates = [t for t in VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles').order_by('name') if t.is_user_eligible(request.user)]
 
     context = {
         'selected_rep': selected_rep,
         'all_reps': all_reps,
         'start_date': start_date.strftime('%Y-%m-%d'),
         'end_date': end_date.strftime('%Y-%m-%d'),
+        'today': today,
+        'today_str': today.strftime('%Y-%m-%d'),
         'days_list': days_list,
-        'drawer_contacts': drawer_contacts,
+        'drawer_contacts': initial_contacts,
+        'total_clients_count': total_clients_count,
+        'has_more_clients': has_more_clients,
         'areas': areas,
+        'main_areas': main_areas,
+        'bricks': bricks,
+        'account_types': ACCOUNT_TYPES,
+        'customer_categories': CUSTOMER_CATEGORIES,
+        'specialties': SPECIALTIES,
         'visit_templates': visit_templates,
+        'selected_main_area': main_area_filter,
         'selected_area': area_filter,
+        'selected_account_type': account_type_filter,
+        'selected_customer_category': category_filter,
         'selected_specialty': specialty_filter,
         'selected_contact_search': search_contact,
+        'scheduled_contacts_json': json.dumps(scheduled_contacts_by_date),
     }
     return render(request, 'activities/planned_visits_list.html', context)
 
@@ -564,27 +657,55 @@ def planned_visits_list(request):
 def visit_templates_api(request):
     """
     API endpoint returning active visit templates.
-    Supports filtering by contact_id or account_type.
-    Returns template metadata, questions schema, and product detailing capabilities.
+    Supports filtering by:
+    - contact_id / contact (single client)
+    - contact_ids / contact_ids[] (multiple clients for bulk planning -> common eligible templates)
+    - account_type
+    Returns template metadata, questions schema, product detailing capabilities,
+    and dynamic allowed distance threshold (Section 3.A & Requirement 1).
     """
+    from master_data.models import LocationSettings
+    from accounts.permissions import get_visit_eligible_contacts_queryset
+    loc_settings = LocationSettings.get_settings()
+
+    # Parse contact_ids (multiple or single)
+    raw_cids = request.GET.getlist('contact_ids') or request.GET.getlist('contact_ids[]') or request.GET.get('contact_ids')
+    cids_list = []
+    if isinstance(raw_cids, str):
+        cids_list = [c.strip() for c in raw_cids.split(',') if c.strip()]
+    elif isinstance(raw_cids, (list, tuple)):
+        for item in raw_cids:
+            if isinstance(item, str) and ',' in item:
+                cids_list.extend([x.strip() for x in item.split(',') if x.strip()])
+            elif item:
+                cids_list.append(str(item).strip())
+
     contact_id = request.GET.get('contact_id') or request.GET.get('contact')
+    if contact_id and str(contact_id).strip() not in cids_list:
+        cids_list.append(str(contact_id).strip())
+
+    valid_cids = [int(x) for x in cids_list if x.isdigit()]
+    contacts = []
+    if valid_cids:
+        contacts = list(get_visit_eligible_contacts_queryset(
+            Contact.objects.filter(pk__in=valid_cids).select_related('area', 'area__parent'),
+            request.user
+        ))
+
     account_type = request.GET.get('account_type', '').strip().lower()
 
-    contact = None
-    if contact_id:
-        contact = Contact.objects.filter(pk=contact_id).first()
-        if contact and contact.account_type:
-            account_type = contact.account_type.strip().lower()
-
-    qs = VisitTemplate.objects.filter(active=True).prefetch_related('questions')
+    qs = VisitTemplate.objects.filter(active=True).prefetch_related('questions', 'restricted_roles')
 
     results = []
     for tmpl in qs:
-        # Centralized check via model method
+        # 1. Role restriction check (centralized model method)
         if not tmpl.is_user_eligible(request.user):
             continue
-        if contact:
-            is_eligible = tmpl.is_contact_eligible(contact, user=request.user)
+
+        # 2. Client / Group eligibility check
+        if contacts:
+            # Common eligible template: must be eligible for ALL selected clients (Requirement 1)
+            is_eligible = all(tmpl.is_contact_eligible(c, user=request.user) for c in contacts)
         elif account_type:
             is_eligible = tmpl.is_account_type_eligible(account_type)
         else:
@@ -606,6 +727,7 @@ def visit_templates_api(request):
                     'stage': q.stage,
                     'order': q.order
                 })
+            effective_tol = loc_settings.get_effective_tolerance(tmpl)
             results.append({
                 'id': tmpl.id,
                 'name': tmpl.name,
@@ -615,16 +737,27 @@ def visit_templates_api(request):
                 'enable_product_detailing': tmpl.enable_product_detailing,
                 'supports_product_detailing': tmpl.is_product_detailing_supported(),
                 'restrict_account_types': tmpl.restrict_account_types or [],
+                'restricted_roles': [r.name for r in tmpl.restricted_roles.all()],
+                'has_special_location_settings': tmpl.has_special_location_settings,
+                'special_tolerance': tmpl.special_tolerance,
+                'effective_tolerance': effective_tol,
+                'default_tolerance': loc_settings.tolerance,
+                'allow_template_distance_override': loc_settings.allow_template_distance_override,
                 'questions': questions_data
             })
 
-    return JsonResponse({'results': results})
-
+    return JsonResponse({
+        'results': results,
+        'templates': results,
+        'count': len(results),
+        'default_tolerance': loc_settings.tolerance,
+        'allow_template_distance_override': loc_settings.allow_template_distance_override,
+    })
 
 
 @require_permission('activities:planned/manage')
 def planned_visit_add_item(request):
-    """Add a contact to a specific day's plan with strict parity and duplicate checks."""
+    """Add a contact to a specific day's plan with strict parity, geographical scope, and duplicate checks."""
     if request.method == 'POST':
         assignee_id = request.POST.get('assignee_id') or request.user.id
         date_str = request.POST.get('date')
@@ -657,24 +790,54 @@ def planned_visit_add_item(request):
             messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
+        # Date Validation (Requirement 4): No past dates
+        today = timezone.now().date()
+        if target_date < today:
+            msg = "لا يمكن إضافة خطة زيارة في تاريخ سابق. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
+
         assignee = get_object_or_404(User, pk=assignee_id)
-        # Rep permission check: non-managers cannot add items to another representative's plan
+        is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
         can_manage_others = (
-            request.user.is_superuser or
-            getattr(request.user, 'is_super_admin', False) or
+            is_super or
             (request.user.role and request.user.role.is_manager_role)
         )
-        if assignee != request.user and not can_manage_others:
-            msg = "غير مصرح لك بإضافة زيارات لخطة مندوب آخر."
+        if assignee != request.user:
+            if not can_manage_others or (not is_super and not get_user_managed_representatives(request.user).filter(pk=assignee.pk).exists()):
+                msg = "غير مصرح لك بإضافة زيارات لخطة مندوب آخر خارج نطاق مسؤوليتك الجغرافية."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message': msg}, status=403)
+                messages.error(request, msg)
+                return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+        contact = get_object_or_404(Contact, pk=contact_id)
+        if not can_user_access_contact_for_visit(request.user, contact):
+            msg = f"غير مصرح لك بجدولة زيارة للعميل '{contact.name}' لأنه يقع خارج نطاق منطقتك أو خطك الجغرافي."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
             messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
-        contact = get_object_or_404(Contact, pk=contact_id)
-        template = VisitTemplate.objects.filter(pk=template_id).first() if template_id else None
+        # Mandatory template validation & eligibility (Requirement 1)
+        if not template_id or not str(template_id).isdigit():
+            msg = "اختيار قالب الزيارة إلزامي لإتمام التخطيط."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
-        if template and not template.is_contact_eligible(contact, user=request.user):
+        template = VisitTemplate.objects.filter(pk=int(template_id), active=True).first()
+        if not template or not template.is_user_eligible(request.user):
+            msg = "قالب الزيارة المحدد غير موجود أو غير مصرح لدورك الوظيفي باستخدامه."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
+
+        if not template.is_contact_eligible(contact, user=request.user):
             allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
             msg = f"قالب الزيارة '{template.display_name_ar}' غير مصرح به لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
             if is_ajax:
@@ -704,10 +867,215 @@ def planned_visit_add_item(request):
                 template=template,
                 notes=notes
             )
+            AuditLogService.log(
+                action='create',
+                action_type='PLANNED_VISIT_CREATED',
+                module='activities',
+                user=request.user,
+                request=request,
+                record_id=item.id,
+                object_repr=f"PlannedVisitItem #{item.id} ({contact.name} on {date_str})",
+                new_values={'date': date_str, 'contact_id': contact.id, 'assignee_id': assignee.id}
+            )
             msg = f"تمت إضافة {contact.name} إلى خطة يوم {date_str} بنجاح."
             if is_ajax:
                 return JsonResponse({'success': True, 'message': msg, 'item_id': item.id, 'contact_name': contact.name})
             messages.success(request, msg)
+
+    return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
+
+
+@require_permission(['activities:planned/manage', 'activities:planned/list', 'activities:visits/create'])
+def planned_visits_bulk_add(request):
+    """
+    Bulk Daily Planning (Section 8):
+    Create planned visits for multiple selected clients on a single planning date
+    in one atomic operation, enforcing geographical scope and duplicate prevention.
+    """
+    if request.method != 'POST':
+        return redirect('planned_visits_list')
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    assignee_id = request.POST.get('assignee_id') or request.user.id
+    date_str = (request.POST.get('date') or '').strip()
+    template_id = (request.POST.get('template_id') or '').strip()
+    notes = (request.POST.get('notes') or '').strip()
+
+    raw_contact_ids = request.POST.getlist('contact_ids') or request.POST.getlist('contact_ids[]')
+    if len(raw_contact_ids) == 1 and ',' in raw_contact_ids[0]:
+        raw_contact_ids = [x.strip() for x in raw_contact_ids[0].split(',') if x.strip()]
+    contact_ids = []
+    for cid in raw_contact_ids:
+        if str(cid).isdigit() and int(cid) not in contact_ids:
+            contact_ids.append(int(cid))
+
+    if not date_str:
+        msg = "يرجى تحديد تاريخ اليوم المطلوب تخطيط الزيارات فيه."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    try:
+        target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        msg = "صيغة التاريخ غير صالحة."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    # Date Validation (Requirement 4): No past dates
+    today = timezone.now().date()
+    if target_date < today:
+        msg = "لا يمكن جدولة خطة زيارات في تاريخ سابق. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    if not contact_ids:
+        msg = "يرجى اختيار عميل واحد على الأقل لإضافته إلى خطة اليوم."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    # Mandatory template validation & eligibility (Requirement 1)
+    if not template_id or not str(template_id).isdigit():
+        msg = "اختيار قالب الزيارة إلزامي لإتمام التخطيط المجمع."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    template = VisitTemplate.objects.filter(pk=int(template_id), active=True).first()
+    if not template or not template.is_user_eligible(request.user):
+        msg = "قالب الزيارة المحدد غير موجود أو غير مصرح لدورك الوظيفي باستخدامه."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=403)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    assignee = get_object_or_404(User, pk=assignee_id)
+    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    can_manage_others = (
+        is_super or
+        (request.user.role and request.user.role.is_manager_role)
+    )
+    if assignee != request.user:
+        if not can_manage_others or (not is_super and not get_user_managed_representatives(request.user).filter(pk=assignee.pk).exists()):
+            msg = "غير مصرح لك بإضافة زيارات مجمعة لخطة مندوب آخر خارج نطاق مسؤوليتك الجغرافية."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    contacts = list(Contact.objects.filter(id__in=contact_ids).select_related('area', 'area__parent'))
+    if len(contacts) != len(contact_ids):
+        msg = "بعض العملاء المحددين غير موجودين."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    # Enforce geographical scope for every selected client
+    for c in contacts:
+        if not can_user_access_contact_for_visit(request.user, c):
+            msg = f"غير مصرح لك بجدولة زيارة للعميل '{c.name}' لأنه يقع خارج نطاق منطقتك أو خطك الجغرافي."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+
+    template = VisitTemplate.objects.filter(pk=template_id).first() if template_id and template_id.isdigit() else None
+
+    with transaction.atomic():
+        plan_day, _ = PlannedVisitDay.objects.get_or_create(
+            assignee=assignee,
+            date=target_date,
+            defaults={'created_by': request.user}
+        )
+        existing_contact_ids = set(
+            PlannedVisitItem.objects.filter(plan_day=plan_day).values_list('contact_id', flat=True)
+        )
+        current_order = plan_day.items.count()
+        created_items = []
+        skipped_duplicates = []
+        skipped_ineligible = []
+
+        # Preserve order of contact_ids
+        contacts_by_id = {c.id: c for c in contacts}
+        for cid in contact_ids:
+            c = contacts_by_id.get(cid)
+            if not c:
+                continue
+            if cid in existing_contact_ids:
+                skipped_duplicates.append(c.name)
+                continue
+            item_template = template
+            if item_template and not item_template.is_contact_eligible(c, user=request.user):
+                skipped_ineligible.append(c.name)
+                continue
+            current_order += 1
+            item = PlannedVisitItem.objects.create(
+                plan_day=plan_day,
+                order=current_order,
+                contact=c,
+                template=item_template,
+                notes=notes
+            )
+            created_items.append(item)
+            existing_contact_ids.add(cid)
+
+        if created_items:
+            AuditLogService.log(
+                action='create',
+                action_type='BULK_PLANNED_VISITS_CREATED',
+                module='activities',
+                user=request.user,
+                request=request,
+                record_id=plan_day.id,
+                object_repr=f"Bulk Planned Visits ({len(created_items)} items on {date_str} for {assignee.username})",
+                new_values={
+                    'date': date_str,
+                    'assignee_id': assignee.id,
+                    'template_id': template.id if template else None,
+                    'created_count': len(created_items),
+                    'skipped_duplicates_count': len(skipped_duplicates),
+                    'contact_ids': [it.contact_id for it in created_items],
+                }
+            )
+
+    if not created_items and skipped_duplicates:
+        msg = f"جميع العملاء المحددين ({len(skipped_duplicates)}) مضافون بالفعل لخطة يوم {date_str}."
+        if is_ajax:
+            return JsonResponse({
+                'success': False,
+                'created_count': 0,
+                'skipped_duplicates_count': len(skipped_duplicates),
+                'message': msg
+            }, status=400)
+        messages.warning(request, msg)
+    elif not created_items and skipped_ineligible:
+        msg = f"تعذر إضافة العملاء المحددين لعدم توافق نوع حساباتهم مع القالب المختار."
+        if is_ajax:
+            return JsonResponse({'success': False, 'created_count': 0, 'message': msg}, status=400)
+        messages.error(request, msg)
+    else:
+        msg = f"تم إنشاء خطة يوم {date_str} بنجاح لـ ({len(created_items)}) عميل."
+        if skipped_duplicates:
+            msg += f" (تم تخطي {len(skipped_duplicates)} عميل مكرر في نفس اليوم)."
+        if skipped_ineligible:
+            msg += f" (تم تخطي {len(skipped_ineligible)} عميل غير متوافق مع القالب)."
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'created_count': len(created_items),
+                'skipped_duplicates_count': len(skipped_duplicates),
+                'message': msg
+            })
+        messages.success(request, msg)
 
     return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
@@ -933,7 +1301,7 @@ def visit_detail(request, pk):
     verifying GPS, saving draft progress, completing, cancelling, and manager approvals.
     """
     visit = get_object_or_404(
-        Visit.objects.select_related('contact', 'template', 'owner', 'approved_by', 'created_by')
+        Visit.objects.select_related('contact', 'contact__area', 'template', 'owner', 'approved_by', 'created_by', 'bypassed_by')
         .prefetch_related('samples__product', 'expenses', 'detailed_products'),
         pk=pk
     )
@@ -941,7 +1309,9 @@ def visit_detail(request, pk):
     if not can_user_access_object(request.user, visit, 'view'):
         return render_forbidden_response(request, "غير مصرح لك بالوصول إلى تفاصيل هذه الزيارة.")
 
-    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    from master_data.models import LocationSettings
+    location_settings = LocationSettings.get_settings()
+    can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='end')
     template = visit.template
     supports_detailing = template.is_product_detailing_supported() if template else False
 
@@ -949,8 +1319,33 @@ def visit_detail(request, pk):
         action = request.POST.get('action', 'complete').strip()
 
         if action == 'cancel':
+            if not can_user_access_object(request.user, visit, 'edit') and visit.owner != request.user:
+                return render_forbidden_response(request, "غير مصرح لك بإلغاء هذه الزيارة.")
+            old_status = visit.status
             visit.status = 'cancelled'
-            visit.save()
+            visit.save(update_fields=['status'])
+            cancel_reason = (request.POST.get('cancel_reason') or 'إلغاء الزيارة').strip()
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='cancelled',
+                actor=request.user,
+                status_before=old_status,
+                status_after='cancelled',
+                reason=cancel_reason,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            AuditLogService.log(
+                action='update',
+                action_type='VISIT_CANCELLED',
+                module='visits',
+                user=request.user,
+                request=request,
+                record_id=visit.pk,
+                object_repr=f"Visit #{visit.serial_num}",
+                previous_values={'status': old_status},
+                new_values={'status': 'cancelled', 'reason': cancel_reason}
+            )
             messages.warning(request, f"تم إلغاء الزيارة #{visit.serial_num}.")
             return redirect('visit_detail', pk=visit.pk)
 
@@ -1010,23 +1405,38 @@ def visit_detail(request, pk):
         lng = request.POST.get('longitude') or visit.longitude
         acc = request.POST.get('device_accuracy') or visit.device_accuracy
         photo_file = request.FILES.get('location_photo')
-        force_bypass = bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps)
-        bypass_reason = request.POST.get('bypass_reason', '')
+        force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
+        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
+        force_bypass = bool(force_bypass_raw and can_bypass_gps)
+        request_distance_exception = bool((request_exception_raw or (force_bypass_raw and not can_bypass_gps)) and not can_bypass_gps)
+        bypass_reason = (request.POST.get('bypass_reason') or '').strip()
 
-        from master_data.models import LocationSettings
-        location_settings = LocationSettings.get_settings()
+        # Enforce GPS and Distance Validation when completing visit (Section 3.C & 3.D)
+        if action == 'complete':
+            if location_settings.verify_visits and not force_bypass and not can_bypass_gps and not request_distance_exception:
+                if not lat or not lng:
+                    validation_errors.append("تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لإنهاء الزيارة.")
 
-        # Enforce GPS and Photo requirement when completing visit (Requirement 7)
-        if action == 'complete' and location_settings.verify_visits and not force_bypass and not can_bypass_gps:
-            if not lat or not lng:
-                validation_errors.append("تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لإنهاء الزيارة.")
-            if not photo_file and not visit.location_photo:
-                validation_errors.append("التقاط صورة إثبات الموقع الحالية إلزامي لإنهاء الزيارة.")
+            if not validation_errors:
+                try:
+                    verify_visit_location(
+                        visit, request.user, visit.contact,
+                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                        photo_file=photo_file, force_bypass=force_bypass,
+                        bypass_reason=bypass_reason, stage='end',
+                        request_distance_exception=request_distance_exception,
+                        strict_distance=bool(location_settings.verify_visits and location_settings.verify_end_visit_distance)
+                    )
+                except ValidationError as ve:
+                    err_text = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
+                    validation_errors.append(err_text)
+                except Exception as e:
+                    validation_errors.append(f"خطأ في معالجة الموقع أو الصورة: {str(e)}")
 
         if validation_errors:
-            # Preserve answers when a validation error occurs! (Requirement 4)
+            # Preserve answers when a validation error occurs!
             visit.questionnaire_answers = answers
-            visit.save()
+            visit.save(update_fields=['questionnaire_answers'])
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
             if is_ajax:
                 return JsonResponse({
@@ -1049,22 +1459,23 @@ def visit_detail(request, pk):
                     visit.visit_outcome = visit_outcome
                     visit.is_successful = (visit_outcome == 'successful')
 
-                # Location & Photo Evidence Verification
-                try:
-                    verify_visit_location(
-                        visit, request.user, visit.contact,
-                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                        photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
-                    )
-                except Exception as e:
-                    messages.error(request, f"خطأ في معالجة الموقع أو الصورة: {str(e)}")
+                if action != 'complete' and (lat or lng or photo_file or force_bypass):
+                    try:
+                        verify_visit_location(
+                            visit, request.user, visit.contact,
+                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                            photo_file=photo_file, force_bypass=force_bypass,
+                            bypass_reason=bypass_reason, stage='end',
+                            request_distance_exception=request_distance_exception,
+                            strict_distance=False
+                        )
+                    except Exception:
+                        pass
 
                 # Product Detailing (Requirement 8): Restricted to the three templates
                 if template and template.is_product_detailing_supported():
                     detailed_product_ids = request.POST.getlist('detailed_products')
                     if detailed_product_ids:
-                        # Products not intended for sale must not be selectable for new visit-related operations.
-                        # Preserve historical detailed products already linked to this visit.
                         eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
                         historical_ids = set(visit.detailed_products.values_list('id', flat=True))
                         allowed_ids = eligible_ids | historical_ids
@@ -1076,6 +1487,7 @@ def visit_detail(request, pk):
                     visit.detailed_products.clear()
 
                 if action == 'complete':
+                    old_status = visit.status
                     visit.status = 'finished'
                     visit.ended_at = timezone.now()
                     if visit.started_at:
@@ -1092,20 +1504,109 @@ def visit_detail(request, pk):
                         planned_item.is_executed = True
                         planned_item.save(update_fields=['is_executed'])
 
+                    if visit.requires_approval_due_to_distance:
+                        ApprovalAuditLog.objects.create(
+                            record_type='visit',
+                            visit=visit,
+                            action='distance_exception_requested',
+                            actor=request.user,
+                            status_before=old_status,
+                            status_after='pending',
+                            reason=f"طلب استثناء لتجاوز المسافة عند الإنهاء ({visit.distance}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason}",
+                            ip_address=request.META.get('REMOTE_ADDR')
+                        )
+                        AuditLogService.log(
+                            action='update',
+                            action_type='VISIT_DISTANCE_EXCEPTION_REQUESTED',
+                            module='visits',
+                            user=request.user,
+                            request=request,
+                            record_id=visit.pk,
+                            object_repr=f"Visit #{visit.serial_num}",
+                            new_values={
+                                'stage': 'end',
+                                'distance': float(visit.distance) if visit.distance is not None else None,
+                                'allowed_distance': visit.allowed_distance,
+                                'distance_discrepancy': visit.distance_discrepancy,
+                                'bypass_reason': bypass_reason,
+                                'approval_status': visit.approval_status,
+                            }
+                        )
+                    elif visit.verification_status == 'force_bypassed':
+                        ApprovalAuditLog.objects.create(
+                            record_type='visit',
+                            visit=visit,
+                            action='distance_bypass',
+                            actor=request.user,
+                            status_before=old_status,
+                            status_after=visit.approval_status,
+                            reason=f"تجاوز المسافة عند الإنهاء ({visit.distance or 0}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason or 'تجاوز مباشر بصلاحية المدير/المشرف'}",
+                            ip_address=request.META.get('REMOTE_ADDR')
+                        )
+                        AuditLogService.log(
+                            action='update',
+                            action_type='VISIT_DISTANCE_BYPASSED',
+                            module='visits',
+                            user=request.user,
+                            request=request,
+                            record_id=visit.pk,
+                            object_repr=f"Visit #{visit.serial_num}",
+                            new_values={
+                                'stage': 'end',
+                                'distance': float(visit.distance) if visit.distance is not None else None,
+                                'allowed_distance': visit.allowed_distance,
+                                'distance_discrepancy': visit.distance_discrepancy,
+                                'bypassed_by': request.user.username,
+                                'bypass_reason': bypass_reason,
+                            }
+                        )
+
                     ApprovalAuditLog.objects.create(
                         record_type='visit',
                         visit=visit,
                         action='status_changed',
                         actor=request.user,
-                        status_before='started',
+                        status_before=old_status,
                         status_after='finished',
                         reason='إنهاء الزيارة وتوثيق الإجراءات رسمياً (Check-out)',
                         ip_address=request.META.get('REMOTE_ADDR')
                     )
-                    messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}.")
+                    AuditLogService.log(
+                        action='update',
+                        action_type='VISIT_COMPLETED',
+                        module='visits',
+                        user=request.user,
+                        request=request,
+                        record_id=visit.pk,
+                        object_repr=f"Visit #{visit.serial_num}",
+                        previous_values={'status': old_status},
+                        new_values={
+                            'status': 'finished',
+                            'duration': visit.duration,
+                            'verification_status': visit.verification_status,
+                            'approval_status': visit.approval_status,
+                        }
+                    )
+                    if visit.requires_approval_due_to_distance:
+                        messages.warning(
+                            request,
+                            f"تم إنهاء الزيارة #{visit.serial_num} وإرسالها لاعتماد المدير بسبب تجاوز المسافة المسموح بها ({visit.distance}م مقابل {visit.allowed_distance}م)."
+                        )
+                    else:
+                        messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}.")
                 else:
                     # Save Draft (Status remains 'started', resumable)
                     visit.save()
+                    AuditLogService.log(
+                        action='update',
+                        action_type='VISIT_DRAFT_SAVED',
+                        module='visits',
+                        user=request.user,
+                        request=request,
+                        record_id=visit.pk,
+                        object_repr=f"Visit #{visit.serial_num}",
+                        new_values={'questionnaire_answers': answers, 'feedback': visit.feedback}
+                    )
                     messages.success(request, f"تم حفظ مسودة إجابات الزيارة #{visit.serial_num} بنجاح (الزيارة لا تزال جارية).")
 
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
@@ -1113,6 +1614,8 @@ def visit_detail(request, pk):
                 return JsonResponse({
                     'success': True,
                     'status': visit.status,
+                    'approval_status': visit.approval_status,
+                    'requires_approval_due_to_distance': visit.requires_approval_due_to_distance,
                     'serial_num': visit.serial_num,
                     'duration': visit.duration,
                     'duration_formatted': visit.duration_formatted,
@@ -1146,9 +1649,6 @@ def visit_detail(request, pk):
                     'is_meeting_question': ('meet' in q.text_ar.lower() or 'قابلت' in q.text_ar)
                 })
 
-    from master_data.models import LocationSettings
-    location_settings = LocationSettings.get_settings()
-
     # Configurable Product Suggestions: collect from template & global settings
     suggested_product_ids = set()
     if template:
@@ -1166,10 +1666,11 @@ def visit_detail(request, pk):
     can_resubmit = (visit.approval_status in ('disapproved', 'rejected')) and (
         visit.owner == request.user or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     )
-    # can_start_visit: centralized service check
     can_start_visit_val, _ = can_start_visit(visit, request.user)
     approval_history = visit.approval_history.select_related('actor').all()
+    timeline_events = build_visit_timeline(visit)
     is_in_agenda = PlannedVisitItem.objects.filter(visit=visit).exists()
+    effective_allowed_distance = visit.effective_allowed_distance
 
     return render(request, 'activities/visit_detail.html', {
         'visit': visit,
@@ -1179,33 +1680,82 @@ def visit_detail(request, pk):
         'suggested_product_ids': suggested_product_ids,
         'supports_detailing': supports_detailing,
         'can_bypass_gps': can_bypass_gps,
+        'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
+        'distance_bypass_requires_approval': location_settings.distance_bypass_requires_approval,
         'verify_visits_enabled': location_settings.verify_visits,
-        'gps_tolerance': location_settings.tolerance,
+        'verify_end_visit_distance': location_settings.verify_end_visit_distance,
+        'gps_tolerance': effective_allowed_distance,
+        'allowed_distance': effective_allowed_distance,
+        'default_tolerance': location_settings.tolerance,
         'can_manage_approvals': can_manage_approvals(request.user),
         'can_approve': can_approve,
         'can_resubmit': can_resubmit,
         'can_start_visit': can_start_visit_val,
         'approval_history': approval_history,
+        'timeline_events': timeline_events,
         'is_in_agenda': is_in_agenda,
         'status_choices': Visit.STATUS_CHOICES,
         'approval_choices': Visit.APPROVAL_CHOICES,
     })
 
 
+@require_permission(['activities:visits/create', 'activities:visits/list', 'activities:planned/list'])
+def visit_check_duplicate_api(request):
+    """
+    AJAX endpoint checking whether the selected client already has a scheduled
+    or recorded visit on the selected date (Section 4.D).
+    """
+    contact_id = (request.GET.get('contact_id') or request.GET.get('contact') or '').strip()
+    date_str = (request.GET.get('date') or '').strip()
+    planned_item_id = (request.GET.get('planned_item_id') or '').strip()
+
+    if not contact_id or not contact_id.isdigit() or not date_str:
+        return JsonResponse({'has_duplicate': False, 'visits_count': 0, 'planned_count': 0})
+
+    try:
+        target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'has_duplicate': False, 'visits_count': 0, 'planned_count': 0})
+
+    contact = Contact.objects.filter(pk=int(contact_id)).select_related('area', 'area__parent').first()
+    if not contact or not can_user_access_contact_for_visit(request.user, contact):
+        return JsonResponse({'has_duplicate': False, 'visits_count': 0, 'planned_count': 0})
+
+    existing_visits = Visit.objects.filter(contact=contact, date=target_date).exclude(status='cancelled')
+    existing_plans = PlannedVisitItem.objects.filter(contact=contact, plan_day__date=target_date, visit__isnull=True)
+    if planned_item_id and planned_item_id.isdigit():
+        existing_plans = existing_plans.exclude(pk=int(planned_item_id))
+
+    v_count = existing_visits.count()
+    p_count = existing_plans.count()
+    has_dup = (v_count + p_count) > 0
+    msg = ""
+    if has_dup:
+        msg = (
+            f"تنبيه: يوجد بالفعل ({v_count} زيارة مسجلة و {p_count} زيارة مجدولة) "
+            f"للعميل '{contact.name}' في تاريخ {date_str}. يرجى تأكيد الرغبة في المتابعة لإنشاء زيارة إضافية في نفس اليوم."
+        )
+    return JsonResponse({
+        'has_duplicate': has_dup,
+        'visits_count': v_count,
+        'planned_count': p_count,
+        'message': msg,
+    })
+
+
 @require_permission('activities:visits/create')
 def visit_create(request):
     """
-    Standardized Unified Visit Registration endpoint: /visits/create/
-    Used by both planned visits (via planned-visits/ with planned_item_id)
-    and unplanned visits (via floating '+' or quick add without planned_item_id).
-    Validates permissions, template restrictions, representative locking, and persists
-    the visit record first with status='started' before directing to questionnaire.
+    Standardized Unified Visit Registration endpoint: /visits/create/ (Section 4)
+    Used by both planned visits and unplanned visits with a single common form.
+    Enforces geographical scope (Section 7), dynamic distance validation (Section 3),
+    date rules, and duplicate visit confirmation (Section 4.D).
     """
     planned_item_id = request.POST.get('planned_item_id') or request.GET.get('planned_item_id')
     planned_item = None
     if planned_item_id:
         try:
-            planned_item = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'template').get(pk=planned_item_id)
+            planned_item = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'contact__area', 'template').get(pk=planned_item_id)
             is_owner = (planned_item.plan_day.assignee == request.user)
             can_override = (
                 request.user.is_superuser or
@@ -1222,95 +1772,252 @@ def visit_create(request):
             messages.error(request, "عنصر الخطة المطلوب غير موجود أو غير صالح.")
             return redirect('visits_list')
 
-    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    from master_data.models import LocationSettings
+    location_settings = LocationSettings.get_settings()
+    can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='create')
+
+    visit_type_param = (request.POST.get('visit_type') or request.GET.get('visit_type') or '').strip().lower()
+    is_planned_param = (request.POST.get('is_planned') or request.GET.get('is_planned') or '').strip().lower()
+    is_planned_visit = bool(
+        planned_item or
+        visit_type_param == 'planned' or
+        is_planned_param in ('1', 'true', 'on', 'planned')
+    )
+
+    duplicate_warning = False
+    existing_same_day_visits = Visit.objects.none()
+    existing_same_day_plans = PlannedVisitItem.objects.none()
 
     if request.method == 'POST':
         form = VisitForm(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             contact = form.cleaned_data['contact']
             template = form.cleaned_data.get('template')
+            is_planned_visit = bool(form.cleaned_data.get('is_planned') or planned_item)
 
-            # Backend Eligibility Validation
-            if template and not template.is_contact_eligible(contact):
+            # Backend Eligibility Validation (Requirement 1 & Requirement 4)
+            if not template:
+                form.add_error('template', "اختيار قالب الزيارة إلزامي لإتمام العملية.")
+                messages.error(request, form.errors.as_text())
+            elif not template.is_user_eligible(request.user):
+                form.add_error('template', f"دورك الوظيفي غير مصرح له باستخدام قالب الزيارة '{template.display_name_ar}'.")
+                messages.error(request, form.errors.as_text())
+            elif not template.is_contact_eligible(contact, user=request.user):
                 allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
                 form.add_error('template', f"قالب الزيارة '{template.display_name_ar}' غير مصرح به لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}.")
                 messages.error(request, form.errors.as_text())
+            elif (planned_item.plan_day.date if planned_item else (form.cleaned_data.get('date') or timezone.now().date())) < timezone.now().date():
+                form.add_error('date', "لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.")
+                messages.error(request, form.errors.as_text())
             else:
-                # Representative Assignment Locking
-                if can_assign_other_representative(request.user):
-                    owner = form.cleaned_data.get('owner') or request.user
+                # Representative Assignment Locking (defaults to logged-in user)
+                if can_assign_other_representative(request.user) and form.cleaned_data.get('owner'):
+                    owner = form.cleaned_data.get('owner')
+                elif planned_item and can_assign_other_representative(request.user):
+                    owner = planned_item.plan_day.assignee
                 else:
                     owner = request.user
 
-                # Anti-duplicate check (within last 60 seconds)
-                recent_duplicate = Visit.objects.filter(
+                visit_date = planned_item.plan_day.date if planned_item else (form.cleaned_data.get('date') or timezone.now().date())
+
+                # Duplicate Visit Confirmation (Section 4.D):
+                # If a client already has a visit scheduled or recorded for the same date,
+                # display a clear warning and ask the user to confirm before creating.
+                existing_same_day_visits = Visit.objects.filter(
                     contact=contact,
-                    owner=owner,
-                    status__in=['planned', 'started'],
-                    created_at__gte=timezone.now() - datetime.timedelta(seconds=60)
-                ).first()
-                if recent_duplicate:
-                    messages.warning(request, f"يوجد زيارة تم إنشاؤها منذ لحظات لهذا العميل (زيارة #{recent_duplicate.serial_num}).")
-                    return redirect('visit_detail', pk=recent_duplicate.pk)
+                    date=visit_date
+                ).exclude(status='cancelled')
+                existing_same_day_plans = PlannedVisitItem.objects.filter(
+                    contact=contact,
+                    plan_day__date=visit_date,
+                    visit__isnull=True
+                )
+                if planned_item:
+                    existing_same_day_plans = existing_same_day_plans.exclude(pk=planned_item.pk)
 
-                with transaction.atomic():
-                    visit = form.save(commit=False)
-                    visit.created_by = request.user
-                    visit.owner = owner
-                    visit.is_planned = bool(planned_item)
-                    if planned_item:
-                        visit.date = planned_item.plan_day.date
-                    # Visit is created as 'planned'; the rep must explicitly start it after approval
-                    visit.status = 'planned'
-                    visit.started_at = None
+                has_same_day_duplicate = existing_same_day_visits.exists() or existing_same_day_plans.exists()
+                confirm_duplicate = request.POST.get('confirm_duplicate') in ('1', 'true', 'True', 'on', 'yes')
 
-                    from master_data.models import LocationSettings
-                    from accounts.permissions import is_manager_or_higher
-                    loc_settings = LocationSettings.get_settings()
-                    if not loc_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
-                        visit.approval_status = 'approved'
-                        visit.approved_by = request.user
-                        visit.approved_at = timezone.now()
-                    else:
-                        visit.approval_status = 'pending'
+                if has_same_day_duplicate and not confirm_duplicate:
+                    duplicate_warning = True
+                    dup_msg = (
+                        f"تنبيه تكرار الزيارة: يوجد بالفعل زيارة مسجلة أو مجدولة للعميل ({contact.name}) "
+                        f"في تاريخ {visit_date.strftime('%Y-%m-%d')}. يرجى تأكيد الرغبة في المتابعة لإنشاء زيارة إضافية في نفس اليوم."
+                    )
+                    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+                    if is_ajax:
+                        return JsonResponse({
+                            'success': False,
+                            'duplicate_warning': True,
+                            'message': dup_msg,
+                            'visits_count': existing_same_day_visits.count(),
+                            'planned_count': existing_same_day_plans.count(),
+                        }, status=409)
+                    messages.warning(request, dup_msg)
+                else:
+                    with transaction.atomic():
+                        visit = form.save(commit=False)
+                        visit.created_by = request.user
+                        visit.owner = owner
+                        visit.is_planned = is_planned_visit
+                        visit.date = visit_date
+                        visit.status = 'planned'
+                        visit.started_at = None
+                        visit.allowed_distance = location_settings.get_effective_tolerance(template)
 
-                    # Initial location verification if coordinates provided
-                    lat = request.POST.get('latitude') or request.POST.get('lat')
-                    lng = request.POST.get('longitude') or request.POST.get('lng')
-                    print('lat', lat)
-                    print('lng', lng)
-                    acc = request.POST.get('device_accuracy')
-                    photo_file = request.FILES.get('location_photo')
-                    force_bypass = bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps)
-                    bypass_reason = request.POST.get('bypass_reason', '')
-                    if loc_settings.verify_visits or lat or lng or photo_file or force_bypass:
-                        try:
-                            verify_visit_location(
-                                visit, request.user, contact,
-                                visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
+                        if not location_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
+                            visit.approval_status = 'approved'
+                            visit.approved_by = request.user
+                            visit.approved_at = timezone.now()
+                        else:
+                            visit.approval_status = 'pending'
+
+                        lat = request.POST.get('latitude') or request.POST.get('lat')
+                        lng = request.POST.get('longitude') or request.POST.get('lng')
+                        acc = request.POST.get('device_accuracy')
+                        photo_file = request.FILES.get('location_photo')
+                        force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
+                        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
+                        force_bypass = bool(force_bypass_raw and can_bypass_gps)
+                        request_distance_exception = bool((request_exception_raw or (force_bypass_raw and not can_bypass_gps)) and not can_bypass_gps)
+                        bypass_reason = (request.POST.get('bypass_reason') or '').strip()
+
+                        if not is_planned_visit:
+                            if location_settings.verify_visits and location_settings.verify_unplanned_visit_distance:
+                                verify_visit_location(
+                                    visit, request.user, contact,
+                                    visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                    photo_file=photo_file, force_bypass=force_bypass,
+                                    bypass_reason=bypass_reason, stage='create',
+                                    request_distance_exception=request_distance_exception,
+                                    strict_distance=True
+                                )
+                            elif lat or lng or photo_file or force_bypass:
+                                verify_visit_location(
+                                    visit, request.user, contact,
+                                    visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                    photo_file=photo_file, force_bypass=force_bypass,
+                                    bypass_reason=bypass_reason, stage='create',
+                                    request_distance_exception=request_distance_exception,
+                                    strict_distance=False
+                                )
+                        else:
+                            # Planned visits: distance validation is NOT required during creation (Section 3.B)
+                            if (lat or lng) and location_settings.verify_visits:
+                                try:
+                                    verify_visit_location(
+                                        visit, request.user, contact,
+                                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                        photo_file=photo_file, force_bypass=force_bypass,
+                                        bypass_reason=bypass_reason, stage='create',
+                                        request_distance_exception=request_distance_exception,
+                                        strict_distance=False
+                                    )
+                                except Exception:
+                                    pass
+
+                        visit.save()
+
+                        # Handle product detailing if submitted
+                        if template and template.is_product_detailing_supported():
+                            detailed_ids = request.POST.getlist('detailed_products')
+                            if detailed_ids:
+                                eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                                valid_ids = [int(pid) for pid in detailed_ids if str(pid).isdigit() and int(pid) in eligible_ids]
+                                visit.detailed_products.set(valid_ids)
+
+                        # Associate or create planned item if visit is planned
+                        if planned_item:
+                            planned_item.is_executed = False
+                            planned_item.visit = visit
+                            planned_item.save()
+                        elif is_planned_visit:
+                            pday, _ = PlannedVisitDay.objects.get_or_create(
+                                assignee=owner,
+                                date=visit_date,
+                                defaults={'created_by': request.user}
                             )
-                        except Exception:
-                            pass
+                            existing_pitem = PlannedVisitItem.objects.filter(plan_day=pday, contact=contact, visit__isnull=True).first()
+                            if existing_pitem:
+                                existing_pitem.visit = visit
+                                if template and not existing_pitem.template:
+                                    existing_pitem.template = template
+                                existing_pitem.save()
+                            else:
+                                max_ord = pday.items.count() + 1
+                                PlannedVisitItem.objects.create(
+                                    plan_day=pday,
+                                    order=max_ord,
+                                    contact=contact,
+                                    template=template,
+                                    visit=visit,
+                                    is_executed=False
+                                )
 
-                    visit.save()
+                        # Audit logs
+                        ApprovalAuditLog.objects.create(
+                            record_type='visit',
+                            visit=visit,
+                            action='created',
+                            actor=request.user,
+                            status_before='',
+                            status_after=visit.approval_status,
+                            reason=f"إنشاء {'زيارة مخططة' if visit.is_planned else 'زيارة خارج الخطة'} للعميل {contact.name}",
+                            ip_address=request.META.get('REMOTE_ADDR')
+                        )
+                        if visit.requires_approval_due_to_distance:
+                            ApprovalAuditLog.objects.create(
+                                record_type='visit',
+                                visit=visit,
+                                action='distance_exception_requested',
+                                actor=request.user,
+                                status_before='planned',
+                                status_after='pending',
+                                reason=f"طلب استثناء لتجاوز المسافة عند الإنشاء ({visit.distance}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason}",
+                                ip_address=request.META.get('REMOTE_ADDR')
+                            )
+                        elif visit.verification_status == 'force_bypassed':
+                            ApprovalAuditLog.objects.create(
+                                record_type='visit',
+                                visit=visit,
+                                action='distance_bypass',
+                                actor=request.user,
+                                status_before='planned',
+                                status_after=visit.approval_status,
+                                reason=f"تجاوز المسافة عند الإنشاء ({visit.distance or 0}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason or 'تجاوز مباشر بصلاحية المدير/المشرف'}",
+                                ip_address=request.META.get('REMOTE_ADDR')
+                            )
 
-                    # Handle product detailing if template supports it
-                    if template and template.is_product_detailing_supported():
-                        detailed_ids = request.POST.getlist('detailed_products')
-                        if detailed_ids:
-                            eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                            valid_ids = [int(pid) for pid in detailed_ids if str(pid).isdigit() and int(pid) in eligible_ids]
-                            visit.detailed_products.set(valid_ids)
+                        AuditLogService.log(
+                            action='create',
+                            action_type='VISIT_CREATED',
+                            module='visits',
+                            user=request.user,
+                            request=request,
+                            record_id=visit.pk,
+                            object_repr=f"Visit #{visit.serial_num}",
+                            new_values={
+                                'serial_num': visit.serial_num,
+                                'contact_id': contact.id,
+                                'contact_name': contact.name,
+                                'is_planned': visit.is_planned,
+                                'date': str(visit.date),
+                                'owner_id': owner.id,
+                                'template_id': template.id if template else None,
+                                'distance': float(visit.distance) if visit.distance is not None else None,
+                                'allowed_distance': visit.allowed_distance,
+                                'verification_status': visit.verification_status,
+                                'approval_status': visit.approval_status,
+                                'requires_approval_due_to_distance': visit.requires_approval_due_to_distance,
+                            }
+                        )
 
-                    # Associate planned item if execution came from planned visits
-                    if planned_item:
-                        planned_item.is_executed = False  # Not executed until visit is started & finished
-                        planned_item.visit = visit
-                        planned_item.save()
-
-                messages.success(request, f"تم إنشاء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. {'يمكنك بدء الزيارة الآن.' if visit.approval_status == 'approved' else 'الزيارة في انتظار الاعتماد.'}")
-                return redirect('visit_detail', pk=visit.pk)
+                    messages.success(
+                        request,
+                        f"تم إنشاء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح. "
+                        f"{'يمكنك بدء الزيارة الآن.' if visit.approval_status == 'approved' else 'الزيارة في انتظار اعتماد المدير.'}"
+                    )
+                    return redirect('visit_detail', pk=visit.pk)
         else:
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
             if is_ajax:
@@ -1324,13 +2031,27 @@ def visit_create(request):
     else:
         contact_id = request.GET.get('contact') or request.GET.get('contact_id')
         template_id = request.GET.get('template') or request.GET.get('template_id')
-        initial = {'date': timezone.now().date(), 'owner': request.user}
+        date_param = request.GET.get('date')
+        initial_date = timezone.now().date()
+        if date_param:
+            try:
+                parsed_d = datetime.datetime.strptime(date_param, '%Y-%m-%d').date()
+                initial_date = parsed_d
+            except ValueError:
+                pass
+
+        initial = {
+            'date': initial_date,
+            'owner': request.user,
+            'visit_type': 'planned' if is_planned_visit else 'unplanned',
+        }
         if planned_item:
             initial['contact'] = planned_item.contact.id
             if planned_item.template:
                 initial['template'] = planned_item.template.id
             initial['date'] = planned_item.plan_day.date
             initial['planned_item_id'] = planned_item.pk
+            initial['visit_type'] = 'planned'
         else:
             if contact_id:
                 initial['contact'] = contact_id
@@ -1345,96 +2066,194 @@ def visit_create(request):
         selected_contact = planned_item.contact
     else:
         contact_id = request.POST.get('contact') or request.GET.get('contact') or request.GET.get('contact_id')
-        if contact_id:
-            selected_contact = Contact.objects.filter(pk=contact_id).select_related('area').first()
+        if contact_id and str(contact_id).isdigit():
+            cand = Contact.objects.filter(pk=int(contact_id)).select_related('area', 'area__parent').first()
+            if cand and can_user_access_contact_for_visit(request.user, cand):
+                selected_contact = cand
 
-    from master_data.models import LocationSettings
-    location_settings = LocationSettings.get_settings()
-    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    selected_template = None
+    template_id_val = request.POST.get('template') or request.GET.get('template') or request.GET.get('template_id') or (planned_item.template_id if planned_item else None)
+    if template_id_val and str(template_id_val).isdigit():
+        selected_template = VisitTemplate.objects.filter(pk=int(template_id_val)).first()
 
+    effective_tolerance = location_settings.get_effective_tolerance(selected_template)
     products = Product.get_eligible_for_visits()
-    templates = VisitTemplate.objects.filter(active=True).order_by('name')
+    templates = [t for t in VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles').order_by('name') if t.is_user_eligible(request.user)]
+    today_date = timezone.now().date()
+    today_str = today_date.strftime('%Y-%m-%d')
+
     return render(request, 'activities/visit_form.html', {
         'form': form,
         'products': products,
         'templates': templates,
         'selected_contact': selected_contact,
+        'selected_template': selected_template,
         'planned_item': planned_item,
         'planned_item_id': planned_item.pk if planned_item else None,
-        'is_planned_visit': bool(planned_item),
+        'is_planned_visit': is_planned_visit,
+        'today': today_date,
+        'visit_type': 'planned' if is_planned_visit else 'unplanned',
         'can_bypass_gps': can_bypass_gps,
+        'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
+        'distance_bypass_requires_approval': location_settings.distance_bypass_requires_approval,
         'verify_visits_enabled': location_settings.verify_visits,
-        'gps_tolerance': location_settings.tolerance,
-        'title': 'تسجيل زيارة مخططة' if planned_item else 'تسجيل زيارة خارج الخطة'
+        'verify_unplanned_visit_distance': location_settings.verify_unplanned_visit_distance,
+        'allow_template_distance_override': location_settings.allow_template_distance_override,
+        'gps_tolerance': effective_tolerance,
+        'default_tolerance': location_settings.tolerance,
+        'today_str': today_str,
+        'duplicate_warning': duplicate_warning,
+        'existing_same_day_visits': existing_same_day_visits,
+        'existing_same_day_plans': existing_same_day_plans,
+        'title': 'تسجيل زيارة مخططة' if is_planned_visit else 'تسجيل زيارة خارج الخطة'
     })
-
 
 
 @require_permission('activities:visits/edit')
 def visit_edit(request, pk):
-    """Edit visit feedback, template answers, and detailed products."""
+    """
+    Edit visit feedback, template answers, and detailed products.
+    Enforces Post-Approval Editing Reapproval Rules (Section 5.A).
+    """
     visit = get_object_or_404(Visit, pk=pk)
     if not can_user_access_object(request.user, visit, 'edit'):
         return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
 
     if request.method == 'POST':
+        prev_approval_status = visit.approval_status
+        prev_values = {
+            'date': str(visit.date),
+            'feedback': visit.feedback or '',
+            'visit_outcome': visit.visit_outcome or '',
+            'is_successful': visit.is_successful,
+            'doubled': visit.doubled,
+            'questionnaire_answers': dict(visit.questionnaire_answers or {}),
+            'detailed_products': list(visit.detailed_products.values_list('id', flat=True)),
+            'approval_status': visit.approval_status,
+        }
+
         form = VisitForm(request.POST, request.FILES, instance=visit, user=request.user)
         if form.is_valid():
-            visit = form.save(commit=False)
-            template = visit.template
+            with transaction.atomic():
+                visit = form.save(commit=False)
+                template = visit.template
 
-            # Process Questionnaire Answers
-            answers = dict(visit.questionnaire_answers or {})
-            if template:
-                questions = template.get_active_questions()
-                parent_answers = {}
-                for q in questions:
-                    is_visible = True
-                    if q.is_conditional and q.conditional_parent_id:
-                        parent_val = parent_answers.get(q.conditional_parent_id, '')
-                        trigger_val = (q.conditional_trigger_value or '').strip().lower()
-                        if str(parent_val).strip().lower() != trigger_val:
-                            is_visible = False
+                # Process Questionnaire Answers
+                answers = dict(visit.questionnaire_answers or {})
+                if template:
+                    questions = template.get_active_questions()
+                    parent_answers = {}
+                    for q in questions:
+                        is_visible = True
+                        if q.is_conditional and q.conditional_parent_id:
+                            parent_val = parent_answers.get(q.conditional_parent_id, '')
+                            trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                            if str(parent_val).strip().lower() != trigger_val:
+                                is_visible = False
 
-                    if not is_visible:
-                        answers.pop(str(q.id), None)
-                        continue
+                        if not is_visible:
+                            answers.pop(str(q.id), None)
+                            continue
 
-                    field_name = f'question_{q.id}'
-                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
-                    if isinstance(val, list) and len(val) == 1:
-                        val = val[0]
-                    elif isinstance(val, list) and len(val) == 0:
-                        val = ''
-                    if q.question_type == 'multiple_choice':
-                        val = request.POST.getlist(field_name)
+                        field_name = f'question_{q.id}'
+                        val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                        if isinstance(val, list) and len(val) == 1:
+                            val = val[0]
+                        elif isinstance(val, list) and len(val) == 0:
+                            val = ''
+                        if q.question_type == 'multiple_choice':
+                            val = request.POST.getlist(field_name)
 
-                    if val is not None and val != '':
-                        answers[str(q.id)] = val
-                        parent_answers[q.id] = val
+                        if val is not None and val != '':
+                            answers[str(q.id)] = val
+                            parent_answers[q.id] = val
 
-            visit.questionnaire_answers = answers
-            visit_outcome = request.POST.get('visit_outcome', '').strip()
-            if visit_outcome:
-                visit.visit_outcome = visit_outcome
-                visit.is_successful = (visit_outcome == 'successful')
-            visit.save()
+                visit.questionnaire_answers = answers
+                visit_outcome = request.POST.get('visit_outcome', '').strip()
+                if visit_outcome:
+                    visit.visit_outcome = visit_outcome
+                    visit.is_successful = (visit_outcome == 'successful')
 
-            # Handle product detailing only if supported (Requirement 8)
-            if template and template.is_product_detailing_supported():
-                detailed_product_ids = request.POST.getlist('detailed_products')
-                if detailed_product_ids:
-                    eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                    historical_ids = set(visit.detailed_products.values_list('id', flat=True))
-                    allowed_ids = eligible_ids | historical_ids
-                    valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
-                    visit.detailed_products.set(valid_ids)
-                elif 'detailed_products_submitted' in request.POST:
+                # Post-Approval Editing Rule (Section 5.A):
+                # If a visit was already approved and a lower-level user (Representative) edits it,
+                # automatically invalidate the previous approval and require manager reapproval.
+                was_approved = (prev_approval_status == 'approved')
+                is_lower_user = not is_manager_or_higher(request.user)
+                reapproval_triggered = False
+
+                if was_approved and is_lower_user:
+                    visit.approval_status = 'pending'
+                    visit.waiting_for_reapproval = True
+                    reapproval_triggered = True
+
+                visit.save()
+
+                # Handle product detailing only if supported
+                if template and template.is_product_detailing_supported():
+                    detailed_product_ids = request.POST.getlist('detailed_products')
+                    if detailed_product_ids:
+                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+                        allowed_ids = eligible_ids | historical_ids
+                        valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
+                        visit.detailed_products.set(valid_ids)
+                    elif 'detailed_products_submitted' in request.POST:
+                        visit.detailed_products.clear()
+                else:
                     visit.detailed_products.clear()
-            else:
-                visit.detailed_products.clear()
 
-            messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num}.")
+                new_values = {
+                    'date': str(visit.date),
+                    'feedback': visit.feedback or '',
+                    'visit_outcome': visit.visit_outcome or '',
+                    'is_successful': visit.is_successful,
+                    'doubled': visit.doubled,
+                    'questionnaire_answers': dict(visit.questionnaire_answers or {}),
+                    'detailed_products': list(visit.detailed_products.values_list('id', flat=True)),
+                    'approval_status': visit.approval_status,
+                    'waiting_for_reapproval': visit.waiting_for_reapproval,
+                }
+
+                if reapproval_triggered:
+                    ApprovalAuditLog.objects.create(
+                        record_type='visit',
+                        visit=visit,
+                        action='edited_reapproval_required',
+                        actor=request.user,
+                        status_before='approved',
+                        status_after='pending',
+                        reason='تم تعديل الزيارة بعد الاعتماد بواسطة المندوب — تتطلب إعادة اعتماد المدير',
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
+                    AuditLogService.log(
+                        action='update',
+                        action_type='VISIT_EDITED_REAPPROVAL_REQUIRED',
+                        module='visits',
+                        user=request.user,
+                        request=request,
+                        record_id=visit.pk,
+                        object_repr=f"Visit #{visit.serial_num}",
+                        previous_values=prev_values,
+                        new_values=new_values
+                    )
+                    messages.warning(
+                        request,
+                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديل الزيارة بعد اعتمادها، تم تحويل حالتها إلى (بانتظار إعادة الاعتماد) من المدير."
+                    )
+                else:
+                    AuditLogService.log(
+                        action='update',
+                        action_type='VISIT_UPDATED',
+                        module='visits',
+                        user=request.user,
+                        request=request,
+                        record_id=visit.pk,
+                        object_repr=f"Visit #{visit.serial_num}",
+                        previous_values=prev_values,
+                        new_values=new_values
+                    )
+                    messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num}.")
+
             return redirect('visit_detail', pk=visit.pk)
     else:
         form = VisitForm(instance=visit, user=request.user)
@@ -1447,7 +2266,7 @@ def visit_edit(request, pk):
     selected_contact = visit.contact
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
-    can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='end')
 
     saved_detailed_products = list(visit.detailed_products.values_list('id', flat=True))
     saved_answers = visit.questionnaire_answers or {}
@@ -1461,8 +2280,9 @@ def visit_edit(request, pk):
         'saved_answers': saved_answers,
         'saved_detailed_products': saved_detailed_products,
         'can_bypass_gps': can_bypass_gps,
+        'is_lower_user': not is_manager_or_higher(request.user),
         'verify_visits_enabled': location_settings.verify_visits,
-        'gps_tolerance': location_settings.tolerance,
+        'gps_tolerance': visit.effective_allowed_distance,
         'title': f'تعديل الزيارة #{visit.serial_num}'
     })
 
@@ -1543,7 +2363,13 @@ def visit_action(request, pk, action):
         return get_redirect()
 
     elif action == 'end':
-        can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+        from master_data.models import LocationSettings
+        loc_settings = LocationSettings.get_settings()
+        can_bypass_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='end')
+        force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
+        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
+        force_bypass = bool(force_bypass_raw and can_bypass_gps)
+        request_distance_exception = bool((request_exception_raw or (force_bypass_raw and not can_bypass_gps)) and not can_bypass_gps)
         try:
             end_visit(
                 visit, request.user, request=request,
@@ -1551,14 +2377,23 @@ def visit_action(request, pk, action):
                 lng=request.POST.get('longitude'),
                 accuracy=request.POST.get('device_accuracy'),
                 photo_file=request.FILES.get('location_photo'),
-                force_bypass=bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps),
+                force_bypass=force_bypass,
+                request_distance_exception=request_distance_exception,
                 bypass_reason=request.POST.get('bypass_reason', ''),
                 feedback=request.POST.get('feedback', ''),
                 visit_outcome=request.POST.get('visit_outcome', '')
             )
             msg = f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}."
             if is_ajax:
-                return JsonResponse({'success': True, 'message': msg, 'status': 'finished', 'duration': visit.duration, 'duration_formatted': visit.duration_formatted})
+                return JsonResponse({
+                    'success': True,
+                    'message': msg,
+                    'status': 'finished',
+                    'approval_status': visit.approval_status,
+                    'requires_approval_due_to_distance': visit.requires_approval_due_to_distance,
+                    'duration': visit.duration,
+                    'duration_formatted': visit.duration_formatted
+                })
             messages.success(request, msg)
         except ValidationError as e:
             msg = e.message if hasattr(e, 'message') else str(e)
@@ -1586,13 +2421,20 @@ def visit_action(request, pk, action):
 
         if action == 'approve':
             status_before = visit.approval_status
+            was_reapproval = visit.waiting_for_reapproval
+            was_distance_exception = visit.requires_approval_due_to_distance
             visit.approval_status = 'approved'
+            visit.waiting_for_reapproval = False
+            visit.requires_approval_due_to_distance = False
             visit.approved_by = request.user
             visit.approved_at = timezone.now()
             if notes:
                 visit.approval_notes = notes
             visit.save()
 
+            default_reason = 'تم إعادة اعتماد الزيارة بعد التعديل من قبل المدير' if was_reapproval else (
+                'تم اعتماد استثناء المسافة والزيارة من قبل المدير' if was_distance_exception else 'تم اعتماد الزيارة من قبل المدير الإقليمي'
+            )
             ApprovalAuditLog.objects.create(
                 record_type='visit',
                 visit=visit,
@@ -1600,8 +2442,19 @@ def visit_action(request, pk, action):
                 actor=request.user,
                 status_before=status_before,
                 status_after='approved',
-                reason=notes or 'تم اعتماد الزيارة من قبل المدير الإقليمي',
+                reason=notes or default_reason,
                 ip_address=request.META.get('REMOTE_ADDR')
+            )
+            AuditLogService.log(
+                action='approve',
+                action_type='VISIT_APPROVED',
+                module='visits',
+                user=request.user,
+                request=request,
+                record_id=visit.pk,
+                object_repr=f"Visit #{visit.serial_num}",
+                previous_values={'approval_status': status_before, 'waiting_for_reapproval': was_reapproval, 'requires_approval_due_to_distance': was_distance_exception},
+                new_values={'approval_status': 'approved', 'waiting_for_reapproval': False, 'requires_approval_due_to_distance': False, 'reason': notes or default_reason}
             )
             msg = f"تم اعتماد الزيارة #{visit.serial_num} بنجاح."
             if is_ajax:
@@ -1618,6 +2471,7 @@ def visit_action(request, pk, action):
 
             status_before = visit.approval_status
             visit.approval_status = 'disapproved'
+            visit.waiting_for_reapproval = False
             visit.approved_by = request.user
             visit.approved_at = timezone.now()
             visit.approval_notes = notes
@@ -1632,6 +2486,17 @@ def visit_action(request, pk, action):
                 status_after='disapproved',
                 reason=notes,
                 ip_address=request.META.get('REMOTE_ADDR')
+            )
+            AuditLogService.log(
+                action='reject',
+                action_type='VISIT_REJECTED',
+                module='visits',
+                user=request.user,
+                request=request,
+                record_id=visit.pk,
+                object_repr=f"Visit #{visit.serial_num}",
+                previous_values={'approval_status': status_before},
+                new_values={'approval_status': 'disapproved', 'reason': notes}
             )
             msg = f"تم رفض الزيارة #{visit.serial_num} وإعادتها للمندوب للمراجعة والتصحيح."
             if is_ajax:
@@ -1669,6 +2534,17 @@ def visit_action(request, pk, action):
             reason=resubmit_notes,
             ip_address=request.META.get('REMOTE_ADDR')
         )
+        AuditLogService.log(
+            action='update',
+            action_type='VISIT_RESUBMITTED',
+            module='visits',
+            user=request.user,
+            request=request,
+            record_id=visit.pk,
+            object_repr=f"Visit #{visit.serial_num}",
+            previous_values={'approval_status': status_before},
+            new_values={'approval_status': 'pending', 'reason': resubmit_notes}
+        )
         msg = f"تمت إعادة تقديم الزيارة #{visit.serial_num} للمدير للاعتماد."
         if is_ajax:
             return JsonResponse({'success': True, 'message': msg, 'status': 'pending'})
@@ -1696,9 +2572,12 @@ def visit_action(request, pk, action):
                 if new_approval_status == 'approved':
                     visit.approved_by = request.user
                     visit.approved_at = timezone.now()
+                    visit.waiting_for_reapproval = False
+                    visit.requires_approval_due_to_distance = False
                 elif new_approval_status == 'disapproved':
                     visit.approved_by = request.user
                     visit.approved_at = timezone.now()
+                    visit.waiting_for_reapproval = False
                 elif new_approval_status == 'pending':
                     visit.approved_by = None
                     visit.approved_at = None

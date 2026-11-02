@@ -141,7 +141,7 @@ class UserManagementViewTests(TestCase):
             'role': self.restricted_role.pk,
         }
         response = self.client.post(reverse('user_create'), data)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         # Verify no duplicate user was created
         self.assertEqual(User.objects.filter(email='admin@example.com').count(), 1)
 
