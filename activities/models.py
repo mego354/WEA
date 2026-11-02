@@ -135,11 +135,17 @@ class VisitTemplate(models.Model):
             return False
         if getattr(user, 'is_super_admin', False) or user.is_superuser:
             return True
-        if not self.restricted_roles.exists():
+        roles = list(self.restricted_roles.all())
+        if not roles:
             return True
         if not getattr(user, 'role', None) or not user.role.is_active:
             return False
-        return self.restricted_roles.filter(id=user.role.id, is_active=True).exists()
+        user_role_id = user.role.id
+        user_role_name = (user.role.name or '').strip().lower()
+        return any(
+            r.is_active and (r.id == user_role_id or (r.name and r.name.strip().lower() == user_role_name))
+            for r in roles
+        )
 
     def is_contact_eligible(self, contact, user=None):
         """
@@ -191,7 +197,7 @@ class VisitTemplate(models.Model):
                 contact_type = 'hospital'
             elif any(s in name_l for s in ['مخزن', 'store']):
                 contact_type = 'store'
-            elif any(c in name_l for c in ['مركز', 'عيادة', clinic]):
+            elif any(c in name_l for c in ['مركز', 'عيادة', 'clinic']):
                 contact_type = 'clinic'
             else:
                 # If account type cannot be determined, allow the rep to proceed
@@ -416,6 +422,10 @@ class Visit(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط الطول المسجل")
     device_accuracy = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, verbose_name="دقة الجهاز (متر)")
     distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="المسافة المحسوبة (متر)")
+    allowed_distance = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="المسافة المسموح بها (متر)")
+    distance_discrepancy = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="فارق المسافة عن النطاق (متر)")
+    requires_approval_due_to_distance = models.BooleanField(default=False, verbose_name="يتطلب اعتماد المدير بسبب تجاوز المسافة")
+    waiting_for_reapproval = models.BooleanField(default=False, verbose_name="بانتظار إعادة الاعتماد بعد التعديل")
     location_verified = models.BooleanField(default=True, verbose_name="الموقع محقق")
     location_status = models.CharField(max_length=150, blank=True, default='', verbose_name="حالة الموقع")
     verification_status = models.CharField(max_length=50, default='verified', verbose_name="حالة الاستكمال")
@@ -526,6 +536,13 @@ class Visit(models.Model):
         return "غير محدد"
 
     @property
+    def effective_allowed_distance(self):
+        if self.allowed_distance is not None:
+            return float(self.allowed_distance)
+        from master_data.models import LocationSettings
+        return float(LocationSettings.get_settings().get_effective_tolerance(self.template))
+
+    @property
     def duration_formatted(self):
         """
         Calculates and formats visit duration nicely in Arabic.
@@ -618,12 +635,17 @@ class ApprovalAuditLog(models.Model):
         ('purchase_order', 'أمر شراء'),
     ]
     ACTION_CHOICES = [
+        ('created', 'إنشاء الزيارة'),
         ('submitted', 'تقديم للاعتماد'),
         ('approved', 'اعتماد'),
         ('rejected', 'رفض'),
         ('resubmitted', 'إعادة تقديم بعد التعديل'),
+        ('edited_reapproval_required', 'تعديل بعد الاعتماد (يتطلب إعادة اعتماد)'),
+        ('distance_bypass', 'تجاوز شرط المسافة'),
+        ('distance_exception_requested', 'طلب استثناء مسافة واعتماد المدير'),
         ('status_changed', 'تغيير الحالة'),
         ('sent_to_agenda', 'إرسال لجدول الأعمال'),
+        ('cancelled', 'إلغاء الزيارة'),
     ]
 
     record_type = models.CharField(max_length=20, choices=RECORD_TYPES, db_index=True, verbose_name="نوع السجل")

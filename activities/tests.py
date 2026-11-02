@@ -11,6 +11,8 @@ from .models import (
     PlannedVisitDay, PlannedVisitItem, Visit,
     VisitSampleItem
 )
+from .services import can_end_visit, end_visit, can_start_visit, start_visit
+from .forms import VisitTemplateForm
 
 User = get_user_model()
 
@@ -366,6 +368,7 @@ class VisitAndLocationParityTestCase(TestCase):
         # ~15 meters away from customer
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '31.2001000',
@@ -383,12 +386,13 @@ class VisitAndLocationParityTestCase(TestCase):
         self.assertIn('ضمن النطاق', visit.location_status)
 
     def test_location_verification_outside_geofence_without_bypass(self):
-        """Visit outside 300m for non-bypassed rep receives unverified status."""
+        """Visit outside 300m for non-bypassed rep requires exception request + reason and receives unverified status pending manager approval."""
         self.client.login(username='rep_user', password='RepPassword123!')
         today = timezone.now().date()
-        # Location in Cairo (approx 180 km away from Alexandria)
-        res = self.client.post(reverse('visit_create'), {
+        # 1. Without exception request -> blocked with validation error (status 200)
+        res_blocked = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '30.0444000',
@@ -397,19 +401,39 @@ class VisitAndLocationParityTestCase(TestCase):
             'is_successful': 'on',
             'feedback': 'زيارة بعيدة عن الموقع'
         })
+        self.assertEqual(res_blocked.status_code, 200)
+        self.assertEqual(Visit.objects.filter(contact=self.customer, owner=self.rep).count(), 0)
+
+        # 2. With exception request and mandatory reason -> created as pending manager approval
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer.id,
+            'template': self.template.id,
+            'owner': self.rep.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '30.0444000',
+            'longitude': '31.2357000',
+            'device_accuracy': '20.0',
+            'request_distance_exception': '1',
+            'bypass_reason': 'العميل انتقل إلى فرع مؤقت بالقاهرة',
+            'is_successful': 'on',
+            'feedback': 'زيارة بعيدة عن الموقع'
+        })
         self.assertEqual(res.status_code, 302)
         visit = Visit.objects.filter(contact=self.customer, owner=self.rep).first()
         self.assertIsNotNone(visit)
         self.assertFalse(visit.location_verified)
         self.assertEqual(visit.verification_status, 'unverified')
+        self.assertTrue(visit.requires_approval_due_to_distance)
+        self.assertEqual(visit.approval_status, 'pending')
         self.assertGreater(float(visit.distance), 300.0)
-        self.assertIn('بعيد جدا', visit.location_status)
+        self.assertIn('خارج النطاق', visit.location_status)
 
     def test_location_verification_outside_geofence_with_superuser_bypass(self):
         """Superuser visit outside 300m receives force_bypassed status."""
         today = timezone.now().date()
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '30.0444000',
@@ -433,6 +457,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             'contact': self.new_customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '31.2200000',
@@ -476,10 +501,11 @@ class VisitAndLocationParityTestCase(TestCase):
         self.assertTrue(self.rep.bypass_location_verification)
 
     def test_anti_duplicate_visit_prevention(self):
-        """Duplicate submission within 60s is caught and redirected."""
+        """Duplicate visit on the same date displays confirmation warning and does not silently create duplicates."""
         today = timezone.now().date()
         payload = {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'is_successful': 'on',
@@ -488,11 +514,12 @@ class VisitAndLocationParityTestCase(TestCase):
         res1 = self.client.post(reverse('visit_create'), payload)
         self.assertEqual(res1.status_code, 302)
         first_visit = Visit.objects.filter(contact=self.customer).first()
+        self.assertIsNotNone(first_visit)
 
-        # Immediate duplicate attempt
+        # Immediate duplicate attempt without confirmation -> displays warning (status 200) and does not create duplicate
         res2 = self.client.post(reverse('visit_create'), payload)
-        self.assertEqual(res2.status_code, 302)
-        self.assertEqual(res2.url, reverse('visit_detail', args=[first_visit.pk]))
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.context.get('duplicate_warning'))
 
         # Count should remain 1
         self.assertEqual(Visit.objects.filter(contact=self.customer).count(), 1)
@@ -507,6 +534,7 @@ class VisitAndLocationParityTestCase(TestCase):
         today = timezone.now().date()
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '31.2001000',
@@ -529,6 +557,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             # No latitude or longitude provided (permission denied in browser)
@@ -547,6 +576,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '',
@@ -566,6 +596,7 @@ class VisitAndLocationParityTestCase(TestCase):
         # Out-of-bounds latitude (999.0)
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '999.0000000',
@@ -585,6 +616,7 @@ class VisitAndLocationParityTestCase(TestCase):
             reverse('visit_create'),
             {
                 'contact': self.customer.id,
+                'template': self.template.id,
                 'owner': self.rep.id,
                 'date': today.strftime('%Y-%m-%d'),
                 'feedback': 'Scen 5: Direct API bypass attempt'
@@ -604,6 +636,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             # No coordinates
@@ -623,6 +656,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '',
@@ -643,6 +677,7 @@ class VisitAndLocationParityTestCase(TestCase):
 
         res = self.client.post(reverse('visit_create'), {
             # Missing contact!
+            'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
             'feedback': 'Scen 8: Missing contact'
@@ -660,6 +695,7 @@ class VisitAndLocationParityTestCase(TestCase):
         # Attacker tries to pass spoofed superuser params in POST body
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
+            'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
             'is_superuser': 'True',
@@ -697,6 +733,7 @@ class VisitAndLocationParityTestCase(TestCase):
                 'assignee_id': self.rep.id,
                 'date': date_str,
                 'contact_id': self.customer.id,
+                'template_id': self.template.id,
                 'notes': 'خطة من النموذج الموحد'
             },
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
@@ -717,6 +754,7 @@ class VisitAndLocationParityTestCase(TestCase):
                 'assignee_id': self.rep.id,
                 'date': date_str,
                 'contact_id': self.customer.id,
+                'template_id': self.template.id,
             },
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
@@ -1389,7 +1427,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertIsNotNone(visit.ended_at)
 
     def test_duplicate_submission_protection(self):
-        """Repeated rapid submission does not create duplicate in-progress visits."""
+        """Repeated submission on the same date prompts for duplicate confirmation and does not silently create duplicates."""
         self.client.login(username='field_rep_ahmed', password='Password123!')
         today = timezone.now().date()
 
@@ -1404,9 +1442,10 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertEqual(res1.status_code, 302)
         count_after_1 = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).count()
 
-        # Immediate repeat click
+        # Immediate repeat click without confirm_duplicate -> displays warning (status 200) and does not create duplicate
         res2 = self.client.post(reverse('visit_create'), post_data)
-        self.assertEqual(res2.status_code, 302)
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.context.get('duplicate_warning'))
         count_after_2 = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).count()
         self.assertEqual(count_after_1, count_after_2)
 
@@ -1895,6 +1934,997 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertEqual(found_item['name'], self.pharmacy_contact.name)
         # Database code preserved internally
         self.assertEqual(found_item['code'], self.pharmacy_contact.code)
+
+
+import datetime
+from master_data.models import Area
+from accounts.models import SecurityAuditLog
+from .models import ApprovalAuditLog
+from .services import calculate_haversine_distance, build_visit_timeline
+
+
+class VisitManagementImprovementsTestCase(TestCase):
+    """
+    Comprehensive test suite for Visit Planning, Distance Validation,
+    Approval Workflow, Geographical Hierarchy, Timeline, and Bulk Planning (Sections 3–13).
+    """
+
+    def setUp(self):
+        self.client = Client()
+
+        # Geographical Hierarchy:
+        # Cairo Main Area -> Nasr City Brick (B1), Maadi Brick (B2)
+        # Alex Main Area -> Smouha Brick (B3)
+        self.cairo_area = Area.objects.create(code='CAI', name='القاهرة', area_type='governorate')
+        self.nasr_brick = Area.objects.create(code='CAI-NC', name='مدينة نصر', area_type='subarea', parent=self.cairo_area)
+        self.maadi_brick = Area.objects.create(code='CAI-MD', name='المعادي', area_type='subarea', parent=self.cairo_area)
+
+        self.alex_area = Area.objects.create(code='ALX', name='الإسكندرية', area_type='governorate')
+        self.smouha_brick = Area.objects.create(code='ALX-SM', name='سموحة', area_type='subarea', parent=self.alex_area)
+
+        # Roles & Permissions
+        from django.contrib.auth.models import Permission
+        perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
+                'activities:visits/edit', 'activities:visits/approve', 'activities:visits/export',
+                'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
+                'module:activities', 'module:contacts', 'settings:location/manage', 'module:settings'
+            ]
+        )
+        self.manager_role = Role.objects.create(
+            name='area_mgr_imp', display_name='مدير منطقة', is_area_manager=True, is_rep=False
+        )
+        self.manager_role.permissions.set(perms)
+
+        self.rep_role = Role.objects.create(
+            name='med_rep_imp', display_name='مندوب دعاية', is_rep=True, is_area_manager=False
+        )
+        self.rep_role.permissions.set(perms.exclude(codename__in=['activities:visits/approve', 'settings:location/manage']))
+
+        # Users
+        self.superadmin = User.objects.create_superuser(
+            username='sa_imp', email='sa_imp@wea.com', password='Password123!',
+            first_name='Super', last_name='Admin'
+        )
+        self.cairo_manager = User.objects.create_user(
+            username='mgr_cairo', email='mgr_cairo@wea.com', password='Password123!',
+            first_name='Mahmoud', last_name='CairoMgr', role=self.manager_role
+        )
+        self.cairo_manager.assigned_areas.add(self.cairo_area)
+
+        self.alex_manager = User.objects.create_user(
+            username='mgr_alex', email='mgr_alex@wea.com', password='Password123!',
+            first_name='Tarek', last_name='AlexMgr', role=self.manager_role
+        )
+        self.alex_manager.assigned_areas.add(self.alex_area)
+
+        self.nasr_rep = User.objects.create_user(
+            username='rep_nasr', email='rep_nasr@wea.com', password='Password123!',
+            first_name='Karim', last_name='NasrRep', role=self.rep_role
+        )
+        self.nasr_rep.assigned_areas.add(self.nasr_brick)
+
+        self.maadi_rep = User.objects.create_user(
+            username='rep_maadi', email='rep_maadi@wea.com', password='Password123!',
+            first_name='Youssef', last_name='MaadiRep', role=self.rep_role
+        )
+        self.maadi_rep.assigned_areas.add(self.maadi_brick)
+
+        self.smouha_rep = User.objects.create_user(
+            username='rep_smouha', email='rep_smouha@wea.com', password='Password123!',
+            first_name='Hossam', last_name='SmouhaRep', role=self.rep_role
+        )
+        self.smouha_rep.assigned_areas.add(self.smouha_brick)
+
+        # Contacts with known GPS coordinates
+        # Nasr City Clinic: 30.0561, 31.3301
+        self.contact_nasr_1 = Contact.objects.create(
+            name='عيادة النصر التخصصية', code='NC001', account_type='Clinic',
+            customer_category='A+', specialty='Cardiology',
+            area=self.nasr_brick, latitude=Decimal('30.0561000'), longitude=Decimal('31.3301000'),
+            is_customer=True, status='customer'
+        )
+        self.contact_nasr_2 = Contact.objects.create(
+            name='صيدلية الشروق مدينة نصر', code='NC002', account_type='Pharmacy',
+            customer_category='A', specialty='General',
+            area=self.nasr_brick, latitude=Decimal('30.0565000'), longitude=Decimal('31.3305000'),
+            is_customer=True, status='customer'
+        )
+        # Maadi Clinic: 29.9602, 31.2569
+        self.contact_maadi = Contact.objects.create(
+            name='عيادة المعادي الحديثة', code='MD001', account_type='Clinic',
+            customer_category='B', specialty='Pediatrics',
+            area=self.maadi_brick, latitude=Decimal('29.9602000'), longitude=Decimal('31.2569000'),
+            is_customer=True, status='customer'
+        )
+        # Alex Smouha Pharmacy: 31.2156, 29.9553
+        self.contact_smouha = Contact.objects.create(
+            name='صيدلية سموحة المركزية', code='SM001', account_type='Pharmacy',
+            customer_category='A+', specialty='General',
+            area=self.smouha_brick, latitude=Decimal('31.2156000'), longitude=Decimal('29.9553000'),
+            is_customer=True, status='customer'
+        )
+
+        # Templates:
+        # 1. Default distance template
+        self.default_template = VisitTemplate.objects.create(
+            name='Default Dist Template', display_name_ar='قالب مسافة افتراضية',
+            allow_unplanned=True, has_special_location_settings=False, special_tolerance=300, active=True
+        )
+        self.q_note = VisitTemplateQuestion.objects.create(
+            template=self.default_template, text_ar='ما نتيجة المقابلة؟',
+            question_type='text', is_required=True, is_active=True, order=1
+        )
+        # 2. Custom distance template (800m)
+        self.custom_template = VisitTemplate.objects.create(
+            name='Custom 800m Template', display_name_ar='قالب مسافة مخصصة 800 متر',
+            allow_unplanned=True, has_special_location_settings=True, special_tolerance=800, active=True
+        )
+
+        # Configure LocationSettings
+        self.loc_settings = LocationSettings.get_settings()
+        self.loc_settings.tolerance = 300
+        self.loc_settings.verify_visits = True
+        self.loc_settings.allow_template_distance_override = True
+        self.loc_settings.verify_unplanned_visit_distance = True
+        self.loc_settings.verify_end_visit_distance = True
+        self.loc_settings.bypass_reason_mandatory = True
+        self.loc_settings.distance_bypass_requires_approval = True
+        self.loc_settings.require_manager_approval_for_visits = True
+        self.loc_settings.save()
+
+    def test_01_dynamic_allowed_distance_default_vs_custom_template(self):
+        """Section 3.A & 3.E: Allowed distance uses default tolerance or template custom distance when enabled."""
+        # Default template -> 300m
+        self.assertEqual(self.loc_settings.get_effective_tolerance(self.default_template), 300)
+        # Custom template with override enabled -> 800m
+        self.assertEqual(self.loc_settings.get_effective_tolerance(self.custom_template), 800)
+
+        # When allow_template_distance_override is disabled in settings -> falls back to 300m
+        self.loc_settings.allow_template_distance_override = False
+        self.loc_settings.save()
+        self.assertEqual(self.loc_settings.get_effective_tolerance(self.custom_template), 300)
+
+        # Verify templates API exposes effective_tolerance
+        self.loc_settings.allow_template_distance_override = True
+        self.loc_settings.save()
+        self.client.force_login(self.nasr_rep)
+        res = self.client.get(reverse('visit_templates_api'), {'contact_id': self.contact_nasr_1.id})
+        self.assertEqual(res.status_code, 200)
+        results = {r['id']: r for r in res.json()['results']}
+        self.assertEqual(results[self.default_template.id]['effective_tolerance'], 300)
+        self.assertEqual(results[self.custom_template.id]['effective_tolerance'], 800)
+
+    def test_02_unplanned_vs_planned_distance_validation_on_creation(self):
+        """
+        Section 3.B & 4:
+        - Planned visits do NOT require distance validation during creation.
+        - Unplanned visits DO require distance validation during creation.
+        - Custom template threshold (800m) allows creation at ~550m where default (300m) blocks it.
+        """
+        self.client.force_login(self.nasr_rep)
+        today = timezone.now().date().strftime('%Y-%m-%d')
+
+        # 1. Planned visit created without GPS coordinates -> succeeds!
+        res_planned = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': today,
+        })
+        self.assertEqual(res_planned.status_code, 302)
+        v_planned = Visit.objects.filter(contact=self.contact_nasr_1, is_planned=True).first()
+        self.assertIsNotNone(v_planned)
+        self.assertTrue(v_planned.is_planned)
+        self.assertEqual(v_planned.owner, self.nasr_rep)
+
+        # 2. Unplanned visit at ~550m (~0.005 deg lat away: 30.0611, 31.3301) with default 300m template -> blocked!
+        res_unplanned_blocked = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'is_planned': '0',
+            'contact': self.contact_nasr_2.id,
+            'template': self.default_template.id,
+            'date': today,
+            'latitude': '30.0615000',
+            'longitude': '31.3305000',
+        })
+        self.assertEqual(res_unplanned_blocked.status_code, 200)
+        self.assertFalse(Visit.objects.filter(contact=self.contact_nasr_2).exists())
+
+        # 3. Same ~550m distance with Custom 800m template -> succeeds within threshold!
+        res_unplanned_custom = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'is_planned': '0',
+            'contact': self.contact_nasr_2.id,
+            'template': self.custom_template.id,
+            'date': today,
+            'latitude': '30.0615000',
+            'longitude': '31.3305000',
+        })
+        self.assertEqual(res_unplanned_custom.status_code, 302)
+        v_custom = Visit.objects.filter(contact=self.contact_nasr_2).first()
+        self.assertIsNotNone(v_custom)
+        self.assertTrue(v_custom.location_verified)
+        self.assertEqual(float(v_custom.allowed_distance), 800.0)
+
+    def test_03_end_visit_distance_validation_rep_exception_vs_manager_bypass(self):
+        """
+        Section 3.C & 3.D:
+        - Ending a visit validates distance for both planned and unplanned visits.
+        - Representative outside threshold must request exception + provide mandatory reason -> marks visit pending approval & requires_approval_due_to_distance=True.
+        - Manager/Superadmin can bypass directly without extra approval -> records bypassed_by, actual distance, allowed threshold, and reason.
+        """
+        today = timezone.now().date()
+
+        # Create approved & started visit for nasr_rep
+        v_rep = Visit.objects.create(
+            contact=self.contact_nasr_1,
+            template=self.default_template,
+            owner=self.nasr_rep,
+            created_by=self.nasr_rep,
+            date=today,
+            is_planned=True,
+            status='started',
+            approval_status='approved',
+            approved_by=self.cairo_manager,
+            approved_at=timezone.now(),
+            started_at=timezone.now() - datetime.timedelta(minutes=20)
+        )
+
+        self.client.force_login(self.nasr_rep)
+        # 1. Rep tries to end visit from 2km away without requesting exception -> blocked (400 on AJAX)
+        res_block = self.client.post(
+            reverse('visit_detail', args=[v_rep.pk]),
+            {
+                'action': 'complete',
+                f'question_{self.q_note.id}': 'تمت الزيارة',
+                'visit_outcome': 'successful',
+                'latitude': '30.0750000',
+                'longitude': '31.3500000',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_block.status_code, 400)
+        v_rep.refresh_from_db()
+        self.assertEqual(v_rep.status, 'started')
+
+        # 2. Rep requests exception WITHOUT reason -> blocked
+        res_no_reason = self.client.post(
+            reverse('visit_detail', args=[v_rep.pk]),
+            {
+                'action': 'complete',
+                f'question_{self.q_note.id}': 'تمت الزيارة',
+                'visit_outcome': 'successful',
+                'latitude': '30.0750000',
+                'longitude': '31.3500000',
+                'request_distance_exception': '1',
+                'bypass_reason': '',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_no_reason.status_code, 400)
+
+        # 3. Rep requests exception WITH reason -> visit ends, preserves answers, marks requires_approval_due_to_distance=True & approval_status='pending'
+        res_exc = self.client.post(
+            reverse('visit_detail', args=[v_rep.pk]),
+            {
+                'action': 'complete',
+                f'question_{self.q_note.id}': 'تمت مقابلة الطبيب في العيادة البديلة',
+                'visit_outcome': 'successful',
+                'latitude': '30.0750000',
+                'longitude': '31.3500000',
+                'request_distance_exception': '1',
+                'bypass_reason': 'الطبيب تواجد في المستشفى المجاور',
+            }
+        )
+        self.assertEqual(res_exc.status_code, 302)
+        v_rep.refresh_from_db()
+        self.assertEqual(v_rep.status, 'finished')
+        self.assertEqual(v_rep.approval_status, 'pending')
+        self.assertTrue(v_rep.requires_approval_due_to_distance)
+        self.assertEqual(v_rep.bypass_reason, 'الطبيب تواجد في المستشفى المجاور')
+        self.assertEqual(v_rep.questionnaire_answers.get(str(self.q_note.id)), 'تمت مقابلة الطبيب في العيادة البديلة')
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=v_rep, action='distance_exception_requested').exists())
+
+        # 4. Manager bypasses distance directly on their own visit -> remains approved and records force_bypassed
+        v_mgr = Visit.objects.create(
+            contact=self.contact_nasr_1,
+            template=self.default_template,
+            owner=self.cairo_manager,
+            created_by=self.cairo_manager,
+            date=today,
+            is_planned=False,
+            status='started',
+            approval_status='approved',
+            started_at=timezone.now() - datetime.timedelta(minutes=15)
+        )
+        self.client.force_login(self.cairo_manager)
+        res_mgr_bypass = self.client.post(
+            reverse('visit_detail', args=[v_mgr.pk]),
+            {
+                'action': 'complete',
+                f'question_{self.q_note.id}': 'متابعة إشرافية',
+                'visit_outcome': 'successful',
+                'latitude': '30.0800000',
+                'longitude': '31.3600000',
+                'force_bypass_location': '1',
+                'bypass_reason': 'اجتماع مع الطبيب في مؤتمر طبي',
+            }
+        )
+        self.assertEqual(res_mgr_bypass.status_code, 302)
+        v_mgr.refresh_from_db()
+        self.assertEqual(v_mgr.status, 'finished')
+        self.assertEqual(v_mgr.approval_status, 'approved')
+        self.assertFalse(v_mgr.requires_approval_due_to_distance)
+        self.assertEqual(v_mgr.verification_status, 'force_bypassed')
+        self.assertEqual(v_mgr.bypassed_by, self.cairo_manager)
+        self.assertGreater(float(v_mgr.distance), 300.0)
+        self.assertEqual(float(v_mgr.allowed_distance), 300.0)
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=v_mgr, action='distance_bypass').exists())
+
+    def test_04_simplified_creation_past_date_prevention_and_duplicate_confirmation(self):
+        """
+        Section 4.A, 4.B, 4.C, 4.D:
+        - Creation form hides owner and defaults to logged-in user.
+        - Does not require questions or creation comment during creation.
+        - Unplanned visit prevents selecting past dates.
+        - Duplicate visit on same date warns first and requires confirm_duplicate=1 to proceed.
+        """
+        self.client.force_login(self.nasr_rep)
+        today = timezone.now().date()
+        yesterday = today - datetime.timedelta(days=1)
+
+        # 1. Unplanned visit with past date -> rejected!
+        res_past = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': yesterday.strftime('%Y-%m-%d'),
+            'latitude': '30.0561000',
+            'longitude': '31.3301000',
+        })
+        self.assertEqual(res_past.status_code, 200)
+        self.assertContains(res_past, 'لا يمكن اختيار تاريخ في الماضي')
+        self.assertEqual(Visit.objects.count(), 0)
+
+        # 2. Create first visit on today -> succeeds without questions or feedback
+        res_first = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '30.0561000',
+            'longitude': '31.3301000',
+        })
+        self.assertEqual(res_first.status_code, 302)
+        self.assertEqual(Visit.objects.filter(contact=self.contact_nasr_1, date=today).count(), 1)
+
+        # 3. Check duplicate API returns has_duplicate=True
+        dup_api_res = self.client.get(reverse('visit_check_duplicate_api'), {
+            'contact_id': self.contact_nasr_1.id,
+            'date': today.strftime('%Y-%m-%d'),
+        })
+        self.assertEqual(dup_api_res.status_code, 200)
+        self.assertTrue(dup_api_res.json()['has_duplicate'])
+
+        # 4. Second visit on same date WITHOUT confirm_duplicate -> warns and does NOT create
+        res_dup_warn = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '30.0561000',
+            'longitude': '31.3301000',
+        })
+        self.assertEqual(res_dup_warn.status_code, 200)
+        self.assertTrue(res_dup_warn.context['duplicate_warning'])
+        self.assertEqual(Visit.objects.filter(contact=self.contact_nasr_1, date=today).count(), 1)
+
+        # 5. Second visit on same date WITH confirm_duplicate='1' -> creates second visit!
+        res_dup_confirmed = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '30.0561000',
+            'longitude': '31.3301000',
+            'confirm_duplicate': '1',
+        })
+        self.assertEqual(res_dup_confirmed.status_code, 302)
+        self.assertEqual(Visit.objects.filter(contact=self.contact_nasr_1, date=today).count(), 2)
+
+    def test_05_post_approval_editing_invalidates_approval_and_preserves_history_and_timeline(self):
+        """
+        Section 5 & Section 6:
+        - When a Representative edits an already-approved visit, approval_status resets to 'pending'
+          and waiting_for_reapproval becomes True.
+        - Previous approval records are preserved in ApprovalAuditLog.
+        - Complete visit timeline shows creation, approval, edit with previous/new values, and reapproval.
+        """
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.contact_nasr_1,
+            template=self.default_template,
+            owner=self.nasr_rep,
+            created_by=self.nasr_rep,
+            date=today,
+            status='finished',
+            approval_status='pending',
+            feedback='الملاحظة الأصلية قبل التعديل',
+            questionnaire_answers={str(self.q_note.id): 'إجابة أولية'},
+            distance=Decimal('45.00'),
+            allowed_distance=Decimal('300.00'),
+            location_verified=True,
+            verification_status='verified'
+        )
+        # Manager approves first
+        self.client.force_login(self.cairo_manager)
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
+            'approval_notes': 'اعتماد أولي من مدير القاهرة'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertFalse(visit.waiting_for_reapproval)
+
+        # Representative edits the approved visit
+        self.client.force_login(self.nasr_rep)
+        edit_res = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.contact_nasr_1.id,
+            'template': self.default_template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+            'feedback': 'الملاحظة المعدلة بعد الاعتماد',
+            f'question_{self.q_note.id}': 'إجابة محدثة بعد التعديل',
+        })
+        self.assertEqual(edit_res.status_code, 302)
+        visit.refresh_from_db()
+
+        # Approval is invalidated and waiting_for_reapproval is True
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertTrue(visit.waiting_for_reapproval)
+        self.assertEqual(visit.feedback, 'الملاحظة المعدلة بعد الاعتماد')
+
+        # Previous approval record is preserved AND edited_reapproval_required is logged
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='approved').exists())
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='edited_reapproval_required').exists())
+        self.assertTrue(SecurityAuditLog.objects.filter(
+            module='visits', record_id=str(visit.pk), action_type='VISIT_EDITED_REAPPROVAL_REQUIRED'
+        ).exists())
+
+        # Manager reapproves -> clears waiting_for_reapproval
+        self.client.force_login(self.cairo_manager)
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
+            'approval_notes': 'إعادة اعتماد بعد مراجعة التعديلات'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertFalse(visit.waiting_for_reapproval)
+
+        # Timeline contains full lifecycle events and renders on visit_detail
+        timeline = build_visit_timeline(visit)
+        self.assertGreaterEqual(len(timeline), 4)
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertContains(detail_res, 'الخط الزمني الكامل للزيارة')
+        self.assertContains(detail_res, 'تعديل بعد الاعتماد')
+        self.assertContains(detail_res, 'اعتماد أولي من مدير القاهرة')
+        self.assertContains(detail_res, 'إعادة اعتماد بعد مراجعة التعديلات')
+
+    def test_06_geographical_hierarchy_enforcement_superadmin_manager_representative(self):
+        """
+        Section 7:
+        - Representative (Nasr Brick): can only access/create visits in Nasr Brick; blocked from Maadi Brick (same governorate) and Smouha Brick (Alex).
+        - Manager (Cairo Main Area): can access/create visits in both Nasr Brick and Maadi Brick; blocked from Smouha Brick (Alex).
+        - Superadmin: full access across all areas and bricks.
+        """
+        today_str = timezone.now().date().strftime('%Y-%m-%d')
+
+        # 1. Nasr Rep attempts to create visit for Maadi contact (sibling brick) -> blocked!
+        self.client.force_login(self.nasr_rep)
+        res_sibling = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_maadi.id,
+            'template': self.default_template.id,
+            'date': today_str,
+        })
+        self.assertEqual(res_sibling.status_code, 200)
+        self.assertFalse(Visit.objects.filter(contact=self.contact_maadi).exists())
+
+        # Customer search API for Nasr Rep returns only Nasr Brick contacts
+        search_rep = self.client.get('/contacts/api/search/')
+        rep_contact_ids = [c['id'] for c in search_rep.json()['results']]
+        self.assertIn(self.contact_nasr_1.id, rep_contact_ids)
+        self.assertNotIn(self.contact_maadi.id, rep_contact_ids)
+        self.assertNotIn(self.contact_smouha.id, rep_contact_ids)
+
+        # 2. Cairo Manager can create planned visits in both Nasr Brick and Maadi Brick, but NOT Alex Smouha Brick
+        self.client.force_login(self.cairo_manager)
+        res_mgr_maadi = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_maadi.id,
+            'template': self.default_template.id,
+            'date': today_str,
+        })
+        self.assertEqual(res_mgr_maadi.status_code, 302)
+        self.assertTrue(Visit.objects.filter(contact=self.contact_maadi).exists())
+
+        res_mgr_alex = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_smouha.id,
+            'template': self.default_template.id,
+            'date': today_str,
+        })
+        self.assertEqual(res_mgr_alex.status_code, 200)
+        self.assertFalse(Visit.objects.filter(contact=self.contact_smouha).exists())
+
+        # 3. Superadmin can create in Alex Smouha Brick
+        self.client.force_login(self.superadmin)
+        res_sa_alex = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_smouha.id,
+            'template': self.default_template.id,
+            'date': today_str,
+        })
+        self.assertEqual(res_sa_alex.status_code, 302)
+        self.assertTrue(Visit.objects.filter(contact=self.contact_smouha).exists())
+
+    def test_07_bulk_daily_planned_visit_scheduling_and_duplicate_prevention(self):
+        """
+        Section 8:
+        - Bulk planned visit creation creates multiple PlannedVisitItem records for a selected date.
+        - Prevents duplicate planned visits on the same date.
+        - Enforces geographical restrictions (rejects out-of-brick contacts for representatives with 403).
+        - Logs BULK_PLANNED_VISITS_CREATED in SecurityAuditLog.
+        """
+        self.client.force_login(self.nasr_rep)
+        target_date = (timezone.now().date() + datetime.timedelta(days=2)).strftime('%Y-%m-%d')
+
+        # 1. Attempting to include an unauthorized Maadi contact in bulk request -> rejected with 403!
+        res_unauth = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'date': target_date,
+                'template_id': self.default_template.id,
+                'contact_ids': [self.contact_nasr_1.id, self.contact_maadi.id],
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_unauth.status_code, 403)
+        self.assertEqual(PlannedVisitItem.objects.filter(plan_day__assignee=self.nasr_rep, plan_day__date=target_date).count(), 0)
+
+        # 2. Bulk add 2 authorized Nasr City contacts -> succeeds!
+        res_bulk = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'date': target_date,
+                'template_id': self.default_template.id,
+                'contact_ids': [self.contact_nasr_1.id, self.contact_nasr_2.id],
+                'notes': 'خطة عمل مجمعة لمدينة نصر',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bulk.status_code, 200)
+        data = res_bulk.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['created_count'], 2)
+
+        # Verify DB records
+        items = PlannedVisitItem.objects.filter(plan_day__assignee=self.nasr_rep, plan_day__date=target_date)
+        self.assertEqual(items.count(), 2)
+
+        # Verify AuditLogService recorded BULK_PLANNED_VISITS_CREATED
+        self.assertTrue(SecurityAuditLog.objects.filter(
+            module='activities', action_type='BULK_PLANNED_VISITS_CREATED'
+        ).exists())
+
+        # 3. Repeat same bulk request -> prevents duplicates (0 created, 2 skipped_duplicates)
+        res_dup = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'date': target_date,
+                'template_id': self.default_template.id,
+                'contact_ids': [self.contact_nasr_1.id, self.contact_nasr_2.id],
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_dup.status_code, 400)
+        dup_data = res_dup.json()
+        self.assertEqual(dup_data['created_count'], 0)
+        self.assertEqual(dup_data['skipped_duplicates_count'], 2)
+        self.assertEqual(items.count(), 2)
+
+
+class RefinedVisitRequirementsTestCase(TestCase):
+    """
+    Comprehensive tests for the 5 refined visit requirements:
+    1. Visit Templates: Role Restrictions and Client-Based Filtering
+    2. Bulk Daily Planning: Reuse the Existing Client Filters & Incremental 10-batch loading
+    3. Individual Planned Visit: Connect Planning to Visit Creation
+    4. Visit Date Validation: No Past Dates (all visit types)
+    5. Visit Completion: Enforce Required Questions
+    """
+    def setUp(self):
+        self.client = Client()
+        today = timezone.now().date()
+        self.today = today
+        self.today_str = today.strftime('%Y-%m-%d')
+        self.yesterday_str = (today - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        self.tomorrow_str = (today + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+
+        # Roles
+        self.role_rep = Role.objects.create(
+            name='medical_rep_refined',
+            display_name='مندوب دعاية متخصص',
+            is_rep=True,
+            is_area_manager=False
+        )
+        self.role_mgr = Role.objects.create(
+            name='area_manager_refined',
+            display_name='مدير منطقة متخصص',
+            is_rep=False,
+            is_area_manager=True
+        )
+
+        from django.contrib.auth.models import Permission
+        all_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit',
+                'activities:planned/list', 'activities:planned/manage',
+                'settings:visitsTemplates/manage',
+                'module:activities', 'module:contacts'
+            ]
+        )
+        self.role_rep.permissions.set(all_perms)
+        self.role_mgr.permissions.set(all_perms)
+
+        # Users
+        self.rep_user = User.objects.create_user(
+            username='rep_refined',
+            email='rep_refined@wea.com',
+            password='Password123!',
+            role=self.role_rep,
+            bypass_location_verification=True
+        )
+        self.mgr_user = User.objects.create_user(
+            username='mgr_refined',
+            email='mgr_refined@wea.com',
+            password='Password123!',
+            role=self.role_mgr,
+            bypass_location_verification=True
+        )
+        self.super_user = User.objects.create_user(
+            username='super_refined',
+            email='super_refined@wea.com',
+            password='Password123!',
+            is_superuser=True,
+            is_staff=True,
+            bypass_location_verification=True
+        )
+
+        # Clients with different account types
+        self.pharmacy_contact = Contact.objects.create(
+            name='صيدلية الشفاء الكبرى',
+            code='PHARM_01',
+            account_type='Pharmacy',
+            customer_category='A',
+            is_customer=True,
+            status='customer'
+        )
+        self.clinic_contact = Contact.objects.create(
+            name='عيادة النور التخصصية',
+            code='CLINIC_01',
+            account_type='Clinic',
+            customer_category='B',
+            is_customer=True,
+            status='customer'
+        )
+
+        # Visit Templates
+        # Template 1: General (no restrictions)
+        self.tmpl_general = VisitTemplate.objects.create(
+            name='General Template',
+            display_name_ar='قالب زيارة عام',
+            active=True
+        )
+
+        # Template 2: Role-restricted to manager only
+        self.tmpl_manager_only = VisitTemplate.objects.create(
+            name='Manager Audit Template',
+            display_name_ar='قالب زيارة إشرافية للمدير فقط',
+            active=True
+        )
+        self.tmpl_manager_only.restricted_roles.add(self.role_mgr)
+
+        # Template 3: Account-type restricted to Pharmacy only
+        self.tmpl_pharmacy_only = VisitTemplate.objects.create(
+            name='Pharmacy Sales Template',
+            display_name_ar='قالب زيارة صيدليات فقط',
+            restrict_account_types=['Pharmacy'],
+            active=True
+        )
+
+    def test_01_visit_template_role_restrictions(self):
+        """Requirement 1: Templates restricted to specific roles appear only to authorized roles."""
+        # 1. Check is_user_eligible logic
+        self.assertTrue(self.tmpl_manager_only.is_user_eligible(self.mgr_user))
+        self.assertTrue(self.tmpl_manager_only.is_user_eligible(self.super_user))
+        self.assertFalse(self.tmpl_manager_only.is_user_eligible(self.rep_user))
+
+        # 2. General template is eligible for rep, manager, and superuser
+        self.assertTrue(self.tmpl_general.is_user_eligible(self.rep_user))
+        self.assertTrue(self.tmpl_general.is_user_eligible(self.mgr_user))
+
+        # 3. Test API endpoint filters out role-restricted templates
+        self.client.force_login(self.rep_user)
+        res_rep = self.client.get(reverse('visit_templates_api'))
+        self.assertEqual(res_rep.status_code, 200)
+        data_rep = res_rep.json()
+        rep_tmpl_ids = [t['id'] for t in data_rep['templates']]
+        self.assertIn(self.tmpl_general.id, rep_tmpl_ids)
+        self.assertNotIn(self.tmpl_manager_only.id, rep_tmpl_ids)
+
+        # Manager sees the restricted template
+        self.client.force_login(self.mgr_user)
+        res_mgr = self.client.get(reverse('visit_templates_api'))
+        self.assertEqual(res_mgr.status_code, 200)
+        data_mgr = res_mgr.json()
+        mgr_tmpl_ids = [t['id'] for t in data_mgr['templates']]
+        self.assertIn(self.tmpl_manager_only.id, mgr_tmpl_ids)
+
+        # 4. VisitTemplateForm renders restricted_roles checkboxes and saves them properly
+        self.client.force_login(self.super_user)
+        form_data = {
+            'name': 'New Restricted Form Template',
+            'display_name_ar': 'قالب تجريبي للتحقق من النموذج',
+            'active': 'on',
+            'special_tolerance': '300',
+            'restricted_roles': [self.role_rep.id],
+            'restrict_account_types': ['Clinic'],
+        }
+        form = VisitTemplateForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+        saved_tmpl = form.save()
+        self.assertIn(self.role_rep, saved_tmpl.restricted_roles.all())
+        self.assertTrue(saved_tmpl.is_user_eligible(self.rep_user))
+        self.assertFalse(saved_tmpl.is_user_eligible(self.mgr_user))
+
+    def test_02_visit_template_client_filtering_and_common_intersection(self):
+        """Requirement 1: Available templates depend on selected clients and calculate common eligible templates."""
+        self.client.force_login(self.rep_user)
+
+        # Single contact: pharmacy -> gets general AND pharmacy template
+        res_pharm = self.client.get(f"{reverse('visit_templates_api')}?contact_id={self.pharmacy_contact.id}")
+        self.assertEqual(res_pharm.status_code, 200)
+        pharm_ids = [t['id'] for t in res_pharm.json()['templates']]
+        self.assertIn(self.tmpl_general.id, pharm_ids)
+        self.assertIn(self.tmpl_pharmacy_only.id, pharm_ids)
+
+        # Single contact: clinic -> gets general, but NOT pharmacy template
+        res_clinic = self.client.get(f"{reverse('visit_templates_api')}?contact_id={self.clinic_contact.id}")
+        self.assertEqual(res_clinic.status_code, 200)
+        clinic_ids = [t['id'] for t in res_clinic.json()['templates']]
+        self.assertIn(self.tmpl_general.id, clinic_ids)
+        self.assertNotIn(self.tmpl_pharmacy_only.id, clinic_ids)
+
+        # Bulk group: both pharmacy AND clinic -> common templates is only general!
+        res_both = self.client.get(f"{reverse('visit_templates_api')}?contact_ids={self.pharmacy_contact.id},{self.clinic_contact.id}")
+        self.assertEqual(res_both.status_code, 200)
+        both_ids = [t['id'] for t in res_both.json()['templates']]
+        self.assertIn(self.tmpl_general.id, both_ids)
+        self.assertNotIn(self.tmpl_pharmacy_only.id, both_ids)
+
+    def test_03_mandatory_template_selection_enforcement(self):
+        """Requirement 1: Selecting a visit template is REQUIRED for all creation methods."""
+        self.client.force_login(self.rep_user)
+
+        # 1. Planned visit add item without template -> rejected (400)
+        res_plan = self.client.post(
+            reverse('planned_visit_add_item'),
+            {
+                'assignee_id': self.rep_user.id,
+                'date': self.tomorrow_str,
+                'contact_id': self.pharmacy_contact.id,
+                # No template_id!
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_plan.status_code, 400)
+        self.assertIn('قالب الزيارة إلزامي', res_plan.json().get('message', ''))
+
+        # 2. Bulk planned visits without template -> rejected (400)
+        res_bulk = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'assignee_id': self.rep_user.id,
+                'date': self.tomorrow_str,
+                'contact_ids': [self.pharmacy_contact.id],
+                # No template_id!
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bulk.status_code, 400)
+        self.assertIn('قالب الزيارة إلزامي', res_bulk.json().get('message', ''))
+
+        # 3. Unplanned visit creation without template -> form validation error (status 200)
+        res_unplanned = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.pharmacy_contact.id,
+            'date': self.today_str,
+            # No template!
+        })
+        self.assertEqual(res_unplanned.status_code, 200)
+        self.assertContains(res_unplanned, 'اختيار قالب الزيارة إلزامي')
+        self.assertEqual(Visit.objects.count(), 0)
+
+    def test_04_visit_date_validation_no_past_dates(self):
+        """Requirement 4: Under no circumstances should any visit be created with a past date."""
+        self.client.force_login(self.rep_user)
+
+        # 1. Planned visit add item with yesterday date -> rejected
+        res_plan_past = self.client.post(
+            reverse('planned_visit_add_item'),
+            {
+                'assignee_id': self.rep_user.id,
+                'date': self.yesterday_str,
+                'contact_id': self.pharmacy_contact.id,
+                'template_id': self.tmpl_general.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_plan_past.status_code, 400)
+        self.assertIn('تاريخ سابق', res_plan_past.json().get('message', ''))
+
+        # 2. Bulk planning with past date -> rejected
+        res_bulk_past = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'assignee_id': self.rep_user.id,
+                'date': self.yesterday_str,
+                'contact_ids': [self.pharmacy_contact.id],
+                'template_id': self.tmpl_general.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bulk_past.status_code, 400)
+        self.assertIn('تاريخ سابق', res_bulk_past.json().get('message', ''))
+
+        # 3. Unplanned visit with past date -> rejected
+        res_visit_past = self.client.post(reverse('visit_create'), {
+            'visit_type': 'unplanned',
+            'contact': self.pharmacy_contact.id,
+            'template': self.tmpl_general.id,
+            'date': self.yesterday_str,
+        })
+        self.assertEqual(res_visit_past.status_code, 200)
+        self.assertContains(res_visit_past, 'لا يمكن اختيار تاريخ في الماضي')
+        self.assertEqual(Visit.objects.count(), 0)
+
+        # 4. Valid future date succeeds for bulk planning
+        res_bulk_ok = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'assignee_id': self.rep_user.id,
+                'date': self.tomorrow_str,
+                'contact_ids': [self.pharmacy_contact.id],
+                'template_id': self.tmpl_general.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bulk_ok.status_code, 200)
+        self.assertTrue(res_bulk_ok.json().get('success'))
+        self.assertEqual(PlannedVisitItem.objects.filter(contact=self.pharmacy_contact, plan_day__date=self.tomorrow_str).count(), 1)
+
+    def test_05_visit_completion_enforces_required_questions(self):
+        """Requirement 5: Ending a visit requires all active required questions to be answered."""
+        # Setup questions on general template
+        q_req = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_general,
+            text_ar='سؤال إلزامي: هل تم الترويج للمنتج بنجاح؟',
+            question_type='single_select',
+            options=['نعم', 'لا'],
+            is_required=True,
+            order=1
+        )
+        q_opt = VisitTemplateQuestion.objects.create(
+            template=self.tmpl_general,
+            text_ar='سؤال اختياري: أي ملاحظات إضافية؟',
+            question_type='text',
+            is_required=False,
+            order=2
+        )
+
+        # Create active visit
+        self.client.force_login(self.rep_user)
+        visit = Visit.objects.create(
+            contact=self.pharmacy_contact,
+            template=self.tmpl_general,
+            owner=self.rep_user,
+            created_by=self.rep_user,
+            date=self.today,
+            status='started',
+            approval_status='approved',
+            location_verified=True,
+            verification_status='verified'
+        )
+
+        # 1. can_end_visit check with no answers -> False
+        can_end, reason = can_end_visit(visit, self.rep_user)
+        self.assertFalse(can_end)
+        self.assertIn('إلزامي', reason)
+
+        # 2. Attempt to end visit via HTTP POST -> blocked
+        res_end_blocked = self.client.post(reverse('visit_action', args=[visit.pk, 'end']))
+        self.assertEqual(res_end_blocked.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')  # Still started!
+
+        # 3. Save whitespace-only answer -> still invalid
+        visit.questionnaire_answers = {str(q_req.id): '   '}
+        visit.save(update_fields=['questionnaire_answers'])
+        can_end, _ = can_end_visit(visit, self.rep_user)
+        self.assertFalse(can_end)
+
+        # 4. Save valid answer for required question (optional question left empty) -> allowed!
+        visit.questionnaire_answers = {str(q_req.id): 'نعم'}
+        visit.save(update_fields=['questionnaire_answers'])
+        can_end, reason = can_end_visit(visit, self.rep_user)
+        self.assertTrue(can_end)
+        self.assertEqual(reason, "")
+
+        # 5. Successfully end visit via HTTP POST
+        res_end_ok = self.client.post(reverse('visit_action', args=[visit.pk, 'end']))
+        self.assertEqual(res_end_ok.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+
+    def test_06_incremental_client_loading_and_filtering(self):
+        """Requirement 2: Incremental client loader returns 10-batch results with total count and has_more."""
+        # Create 15 dummy contacts to test pagination
+        for i in range(15):
+            Contact.objects.create(
+                name=f'عميل تجريبي {i+1:02d}',
+                code=f'BATCH_{i+1:02d}',
+                account_type='Clinic',
+                is_customer=True,
+                status='customer'
+            )
+
+        self.client.force_login(self.super_user)
+
+        # Batch 1: offset=0, limit=10
+        res1 = self.client.get(
+            f"{reverse('planned_visits_list')}?action=load_contacts&offset=0&limit=10",
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res1.status_code, 200)
+        data1 = res1.json()
+        self.assertTrue(data1['success'])
+        self.assertEqual(len(data1['contacts']), 10)
+        self.assertTrue(data1['has_more'])
+        self.assertGreaterEqual(data1['total_count'], 17)  # 15 dummy + 2 setup contacts
+
+        # Batch 2: offset=10, limit=10
+        res2 = self.client.get(
+            f"{reverse('planned_visits_list')}?action=load_contacts&offset=10&limit=10",
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res2.status_code, 200)
+        data2 = res2.json()
+        self.assertTrue(data2['success'])
+        self.assertGreaterEqual(len(data2['contacts']), 7)
+
+        # Verify no overlap between batch 1 and batch 2
+        batch1_ids = {c['id'] for c in data1['contacts']}
+        batch2_ids = {c['id'] for c in data2['contacts']}
+        self.assertEqual(len(batch1_ids.intersection(batch2_ids)), 0)
+
+
 
 
 

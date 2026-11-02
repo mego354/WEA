@@ -28,11 +28,10 @@ class SalesExcelExportTestCase(TestCase):
             is_customer=True,
             phone='01234567890'
         )
-        self.customer_account = CustomerAccount.objects.create(
-            customer=self.contact,
-            credit_limit=Decimal('100000.00'),
-            current_balance=Decimal('25000.00')
-        )
+        self.customer_account, _ = CustomerAccount.objects.get_or_create(customer=self.contact)
+        self.customer_account.credit_limit = Decimal('100000.00')
+        self.customer_account.current_balance = Decimal('25000.00')
+        self.customer_account.save()
         from inventory.models import Warehouse
         from treasury.models import Vault
 

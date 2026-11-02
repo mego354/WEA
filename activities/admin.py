@@ -72,8 +72,11 @@ class VisitTemplateQuestionInline(admin.TabularInline):
 
 @admin.register(VisitTemplate)
 class VisitTemplateAdmin(admin.ModelAdmin):
-    list_display = ('name', 'display_name_ar', 'questions_count', 'allow_unplanned', 'active_badge')
-    list_filter = ('active', 'allow_unplanned', 'enable_product_detailing')
+    list_display = (
+        'name', 'display_name_ar', 'questions_count', 'allow_unplanned',
+        'has_special_location_settings', 'special_tolerance', 'active_badge'
+    )
+    list_filter = ('active', 'allow_unplanned', 'has_special_location_settings', 'enable_product_detailing')
     search_fields = ('name', 'display_name_ar', 'display_name_en')
     filter_horizontal = ('restricted_roles', 'suggested_products')
     inlines = [VisitTemplateQuestionInline]
@@ -160,11 +163,13 @@ class VisitAdmin(admin.ModelAdmin):
     list_display = (
         'serial_num', 'contact', 'owner', 'template', 'date',
         'status_badge', 'approval_badge', 'location_status_badge',
-        'is_successful', 'doubled'
+        'distance', 'allowed_distance', 'requires_approval_due_to_distance',
+        'waiting_for_reapproval', 'is_successful', 'doubled'
     )
     list_filter = (
         'status', 'approval_status', 'is_planned', 'doubled',
-        'is_successful', 'location_verified', 'template', 'date'
+        'is_successful', 'location_verified', 'requires_approval_due_to_distance',
+        'waiting_for_reapproval', 'template', 'date'
     )
     search_fields = (
         'serial_num', 'contact__name', 'contact__code',
@@ -186,6 +191,7 @@ class VisitAdmin(admin.ModelAdmin):
                 ('serial_num', 'date', 'visit_time'),
                 ('contact', 'template', 'owner'),
                 ('status', 'approval_status', 'is_planned'),
+                ('requires_approval_due_to_distance', 'waiting_for_reapproval'),
             )
         }),
         ('النتائج والاستبيان', {
@@ -200,7 +206,7 @@ class VisitAdmin(admin.ModelAdmin):
         ('التحقق والموقع الجغرافي', {
             'fields': (
                 ('latitude', 'longitude'),
-                ('device_accuracy', 'distance'),
+                ('device_accuracy', 'distance', 'allowed_distance', 'distance_discrepancy'),
                 ('location_verified', 'location_status', 'verification_status'),
                 ('customer_latitude_snapshot', 'customer_longitude_snapshot'),
                 ('location_photo', 'photo_preview', 'photo_captured_at'),
@@ -316,10 +322,15 @@ class ApprovalAuditLogAdmin(admin.ModelAdmin):
 
     def action_badge(self, obj):
         colors = {
+            'created': ('#2563eb', '#dbeafe', 'إنشاء'),
             'approved': ('#059669', '#d1fae5', 'اعتماد'),
             'rejected': ('#dc2626', '#fee2e2', 'رفض'),
             'submitted': ('#0284c7', '#e0f2fe', 'تقديم'),
             'resubmitted': ('#d97706', '#fef3c7', 'إعادة تقديم'),
+            'edited_reapproval_required': ('#b45309', '#fef3c7', 'تعديل يتطلب إعادة اعتماد'),
+            'distance_bypass': ('#7c3aed', '#ede9fe', 'تجاوز مسافة'),
+            'distance_exception_requested': ('#d97706', '#ffedd5', 'طلب استثناء مسافة'),
+            'cancelled': ('#dc2626', '#fee2e2', 'إلغاء'),
             'status_changed': ('#475569', '#f1f5f9', 'تغيير حالة'),
             'sent_to_agenda': ('#0891b2', '#cffafe', 'إرسال للأجندة'),
         }

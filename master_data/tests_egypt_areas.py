@@ -1,3 +1,4 @@
+from io import StringIO
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -25,7 +26,8 @@ class EgyptAreasTests(TestCase):
         )
 
         # Run command to ensure 27 governorates exist
-        call_command('setup_egypt_areas')
+        out = StringIO()
+        call_command('setup_egypt_areas', stdout=out)
 
     def test_27_egyptian_governorates_exist(self):
         """Verify exactly 27 geographic Egyptian governorates exist with is_company_area=False."""

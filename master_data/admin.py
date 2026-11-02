@@ -41,10 +41,16 @@ class CompanyProfileAdmin(admin.ModelAdmin):
 class LocationSettingsAdmin(admin.ModelAdmin):
     list_display = (
         'tolerance_display', 'max_verified_accuracy', 'verify_visits_badge',
-        'require_manager_approval_for_visits', 'allow_all_users_to_create_visits',
-        'enable_product_suggestions', 'suggested_products_count'
+        'allow_template_distance_override', 'verify_unplanned_visit_distance',
+        'verify_end_visit_distance', 'bypass_reason_mandatory',
+        'distance_bypass_requires_approval', 'require_manager_approval_for_visits',
+        'allow_all_users_to_create_visits', 'enable_product_suggestions', 'suggested_products_count'
     )
-    filter_horizontal = ('suggested_products',)
+    filter_horizontal = (
+        'suggested_products',
+        'roles_can_bypass_distance_creation',
+        'roles_can_bypass_distance_ending',
+    )
 
     def tolerance_display(self, obj):
         return f"{obj.tolerance} متر"

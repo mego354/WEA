@@ -169,6 +169,102 @@
                     <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
             </div>
+        </div>
+
+        <!-- Card 4: حوكمة وصلاحيات التحقق من المسافة وتجاوز النطاق الجغرافي -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 md:p-8 space-y-5">
+            <input type="hidden" name="distance_governance_submitted" value="1">
+            <h2 class="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe] text-lg">social_distance</span>
+                <span>حوكمة المسافة وصلاحيات تجاوز النطاق الجغرافي</span>
+            </h2>
+            <p class="text-xs text-slate-500">التحكم في قواعد المسافة المسموح بها عند إنشاء أو إنهاء الزيارات، وتخصيص سماحية القوالب، وتحديد الأدوار المصرح لها بالتجاوز المباشر.</p>
+
+            <div class="pt-2 space-y-4">
+                <!-- السماح لقوالب الزيارات بتجاوز سماحية المسافة الافتراضية -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5 border-b border-slate-50">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">تفعيل سماحية المسافة المخصصة لقوالب الزيارات</span>
+                        <span class="text-[11px] text-slate-400">استخدام المسافة المخصصة في قالب الزيارة بدلاً من المسافة الافتراضية عند تفعيلها بالقالب</span>
+                    </div>
+                    <input type="checkbox" name="allow_template_distance_override" {% if settings.allow_template_distance_override %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- التحقق من مسافة الزيارات غير المخططة عند الإنشاء -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5 border-b border-slate-50">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">التحقق من المسافة عند إنشاء الزيارات غير المخططة</span>
+                        <span class="text-[11px] text-slate-400">الزيارات المخططة لا تتطلب تحقق المسافة عند الإنشاء، بينما تلتزم الزيارات الحرة بالمسافة المسموحة</span>
+                    </div>
+                    <input type="checkbox" name="verify_unplanned_visit_distance" {% if settings.verify_unplanned_visit_distance %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- التحقق من المسافة عند إنهاء الزيارة -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5 border-b border-slate-50">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">التحقق من المسافة عند إنهاء الزيارة (مخططة أو غير مخططة)</span>
+                        <span class="text-[11px] text-slate-400">مطابقة موقع المندوب الحالي مع موقع العميل عند استكمال وإنهاء الزيارة</span>
+                    </div>
+                    <input type="checkbox" name="verify_end_visit_distance" {% if settings.verify_end_visit_distance %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- إلزامية ذكر السبب عند تجاوز المسافة للمصرح لهم -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5 border-b border-slate-50">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">إلزامية كتابة سبب التجاوز للمصرح لهم (المدير / المشرف)</span>
+                        <span class="text-[11px] text-slate-400">اشتراط إدخال سبب واضح حتى عند التجاوز المباشر من قبل المدراء أو الأدوار المصرح لها</span>
+                    </div>
+                    <input type="checkbox" name="bypass_reason_mandatory" {% if settings.bypass_reason_mandatory %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                <!-- تجاوز المسافة لغير المصرح لهم يتطلب اعتماد المدير -->
+                <label class="flex items-center justify-between cursor-pointer py-1.5 border-b border-slate-50">
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 block">تجاوز المسافة لغير المصرح لهم يتطلب سبب استثناء واعتماد المدير</span>
+                        <span class="text-[11px] text-slate-400">عند تجاوز المندوب للمسافة المسموحة، يُلزم بكتابة السبب وتتحول الزيارة لحالة قيد اعتماد المدير</span>
+                    </div>
+                    <input type="checkbox" name="distance_bypass_requires_approval" {% if settings.distance_bypass_requires_approval %}checked{% endif %} class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                </label>
+
+                {% if all_roles %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <label class="block text-xs font-bold text-slate-800">الأدوار المصرح لها بتجاوز المسافة عند الإنشاء بدون اعتماد</label>
+                        <p class="text-[11px] text-slate-500">المدراء ومديرو النظام مصرح لهم تلقائياً بالإضافة للأدوار المحددة هنا:</p>
+                        <div class="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+                            {% for role in all_roles %}
+                            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                                <input type="checkbox" name="roles_can_bypass_distance_creation" value="{{ role.id }}"
+                                       {% if role.id in selected_creation_bypass_roles %}checked{% endif %}
+                                       class="rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]">
+                                <span>{{ role.display_name|default:role.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                        <label class="block text-xs font-bold text-slate-800">الأدوار المصرح لها بتجاوز المسافة عند الإنهاء بدون اعتماد</label>
+                        <p class="text-[11px] text-slate-500">المدراء ومديرو النظام مصرح لهم تلقائياً بالإضافة للأدوار المحددة هنا:</p>
+                        <div class="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+                            {% for role in all_roles %}
+                            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                                <input type="checkbox" name="roles_can_bypass_distance_ending" value="{{ role.id }}"
+                                       {% if role.id in selected_ending_bypass_roles %}checked{% endif %}
+                                       class="rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]">
+                                <span>{{ role.display_name|default:role.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
 
             <!-- Save Button -->
             <div class="pt-4 flex items-center justify-end border-t border-slate-100">

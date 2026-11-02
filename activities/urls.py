@@ -24,6 +24,7 @@ urlpatterns = [
     # Planned Visits
     path('planned-visits/', views.planned_visits_list, name='planned_visits_list'),
     path('planned-visits/add-item/', views.planned_visit_add_item, name='planned_visit_add_item'),
+    path('planned-visits/bulk-add/', views.planned_visits_bulk_add, name='planned_visits_bulk_add'),
     path('planned-visits/export/', views.planned_visits_export, name='planned_visits_export'),
     path('planned-visits/item/<int:pk>/delete/', views.planned_visit_item_delete, name='planned_visit_item_delete'),
     path('planned-visits/item/<int:pk>/execute/', views.planned_visit_item_execute, name='planned_visit_item_execute'),
@@ -31,6 +32,7 @@ urlpatterns = [
     # Visits
     path('visits/', views.visits_list, name='visits_list'),
     path('visits/create/', views.visit_create, name='visit_create'),
+    path('visits/api/check-duplicate/', views.visit_check_duplicate_api, name='visit_check_duplicate_api'),
     path('visits/export/', views.visits_export, name='visits_export'),
     path('visits/<int:pk>/', views.visit_detail, name='visit_detail'),
     path('visits/<int:pk>/edit/', views.visit_edit, name='visit_edit'),

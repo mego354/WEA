@@ -1,18 +1,22 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}خطة الزيارات - Bricks Rep{% endblock %}
+{% block title %}خطة الزيارات - WEA Pharma ERP{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)] space-y-6">
 
     <!-- Top Action Bar -->
     <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
             <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">خطة الزيارات</h1>
             <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
                 {{ days_list|length }} يوم في الخطة
             </span>
+            <button type="button" onclick="activateBulkPlanningForDate('{% if start_date >= today_str %}{{ start_date }}{% else %}{{ today_str }}{% endif %}')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-base">playlist_add_check</span>
+                <span>تخطيط يومي مجمع لعدة عملاء</span>
+            </button>
         </div>
 
         <!-- Rep & Date Controls Form -->
@@ -98,6 +102,9 @@
                                 <div>
                                     <div class="flex items-center gap-2">
                                         <span class="font-bold text-slate-900 text-xs">{{ it.contact.name }}</span>
+                                        {% if it.contact.customer_category %}
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">{{ it.contact.customer_category }}</span>
+                                        {% endif %}
                                     </div>
                                     <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
                                         <span>{{ it.contact.specialty|default:it.contact.account_type }}</span>
@@ -120,10 +127,17 @@
                                 </a>
                                 {% endif %}
                                 {% else %}
+                                {% if it.visit %}
+                                <a href="{% url 'visit_detail' it.visit.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                                    <span>عرض الزيارة #{{ it.visit.serial_num }}</span>
+                                </a>
+                                {% else %}
                                 <a href="{% url 'planned_visit_item_execute' it.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
                                     <span class="material-symbols-outlined text-sm">directions_walk</span>
                                     <span>بدء الزيارة</span>
                                 </a>
+                                {% endif %}
                                 <a href="{% url 'planned_visit_item_delete' it.pk %}" onclick="return confirm('حذف الزيارة المخططة؟');" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
                                     <span class="material-symbols-outlined text-base">delete</span>
                                 </a>
@@ -136,67 +150,198 @@
                     <p class="text-xs text-slate-400 text-center py-3">لا توجد زيارات مجدولة في هذا اليوم حتى الآن.</p>
                     {% endif %}
 
-                    <!-- Quick Add Button to Day -->
-                    <div class="pt-2">
-                        <button type="button" onclick="openAddModal('{{ day.date|date:'Y-m-d' }}')" class="w-full py-2 border-2 border-dashed border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                    <!-- Quick Add & Bulk Plan Buttons for Day -->
+                    {% if day.date >= today %}
+                    <div class="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <a href="{% url 'visit_create' %}?date={{ day.date|date:'Y-m-d' }}&visit_type=planned&is_planned=1" class="py-2 border-2 border-dashed border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
                             <span class="material-symbols-outlined text-base">add_circle</span>
-                            <span>إضافة عميل لخطة هذا اليوم</span>
+                            <span>إضافة عميل فردي</span>
+                        </a>
+                        <button type="button" onclick="activateBulkPlanningForDate('{{ day.date|date:'Y-m-d' }}')" class="py-2 border-2 border-dashed border-teal-200 bg-teal-50/40 hover:bg-teal-50 hover:border-[#27bebe] text-[#1a8b8b] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                            <span class="material-symbols-outlined text-base">playlist_add_check</span>
+                            <span>تخطيط مجمع لعدة عملاء في هذا اليوم</span>
                         </button>
                     </div>
+                    {% else %}
+                    <div class="pt-2 text-center text-[11px] text-slate-400 font-medium py-1.5 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        لا يمكن جدولة زيارات جديدة في تواريخ ماضية
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
 
-        <!-- Customer Filtering Drawer (Right / Side in 4th col) -->
-        <div id="customer-drawer" class="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+        <!-- Customer Filtering & Bulk Planning Drawer (Right / Side in 4th col) -->
+        <div id="customer-drawer" class="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+            <!-- Header -->
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[#27bebe] text-base">filter_alt</span>
-                    <span>تنقية العملاء</span>
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">tune</span>
+                    <span>تنقية وتخطيط العملاء</span>
                 </h3>
+                <span class="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                    <span id="drawer-total-count">{{ total_clients_count }}</span> متاح
+                </span>
             </div>
 
-            <form method="GET" class="space-y-3">
+            <!-- Bulk Daily Planning Action Box (Requirements 1 & 2) -->
+            <div id="drawer-bulk-section" class="bg-teal-50/50 border border-teal-200/80 rounded-xl p-3.5 space-y-3 transition-all">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-black text-slate-900 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-teal-600 text-sm">playlist_add_check</span>
+                        <span>خطة الزيارات المجمعة</span>
+                    </span>
+                    <span class="text-[10px] font-bold text-teal-800 bg-white px-2 py-0.5 rounded-full border border-teal-200 shadow-2xs">
+                        المحدد: <strong id="drawer-selected-count" class="text-teal-600">0</strong>
+                    </span>
+                </div>
+
+                <!-- Target Date -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 mb-1">تاريخ الخطة *</label>
+                    <input type="date" id="drawer-bulk-date" name="date" min="{{ today_str }}" value="{% if start_date >= today_str %}{{ start_date }}{% else %}{{ today_str }}{% endif %}" onchange="onBulkDateChange()"
+                           class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <!-- Mandatory Template Selection (Requirement 1) -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[11px] font-bold text-slate-700">قالب الزيارة الموحد *</label>
+                        <span id="drawer-template-count-badge" class="text-[10px] text-teal-600 font-mono hidden">0 متاح</span>
+                    </div>
+                    <select id="drawer-bulk-template" name="template_id" required disabled onchange="onBulkTemplateChange()"
+                            class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">-- اختر العملاء أولاً لتحديد القوالب المتاحة --</option>
+                    </select>
+                    <p id="drawer-bulk-template-msg" class="text-[10px] text-slate-500 mt-1">اختر عميل أو أكثر لإظهار القوالب المتاحة المشتركة وفق دورك الوظيفي ونوع حساب العملاء.</p>
+                </div>
+
+                <!-- Optional Notes -->
+                <div>
+                    <input type="text" id="drawer-bulk-notes" placeholder="ملاحظات عامة لخطة هذا اليوم (اختياري)..."
+                           class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                </div>
+
+                <!-- Submit Button -->
+                <button type="button" id="drawer-bulk-submit-btn" onclick="submitBulkPlanFromDrawer()" disabled
+                        class="w-full py-2 bg-[#27bebe] hover:bg-[#1fa8a8] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">done_all</span>
+                    <span>حفظ خطة الزيارات المجمعة</span>
+                </button>
+            </div>
+
+            <!-- Existing Left-side Client Filters (Requirement 2) -->
+            <form method="GET" class="space-y-2.5 border-t border-slate-100 pt-3">
                 <input type="hidden" name="assignee" value="{{ selected_rep.id }}">
                 <input type="hidden" name="date_from" value="{{ start_date }}">
                 <input type="hidden" name="date_to" value="{{ end_date }}">
 
                 <div>
-                    <input type="text" name="contact_search" value="{{ selected_contact_search|default:'' }}" placeholder="بحث بالاسم أو الكود..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    <input type="text" name="contact_search" value="{{ selected_contact_search|default:'' }}" placeholder="بحث بالاسم أو الكود..."
+                           class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-bold text-slate-600 mb-1">المنطقة</label>
-                    <select name="area" class="w-full rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-medium">
-                        <option value="">جميع المناطق</option>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">نوع العميل (Account Type)</label>
+                    <select name="account_type" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                        <option value="">جميع الأنواع</option>
+                        {% for acc in account_types %}
+                        <option value="{{ acc }}" {% if selected_account_type == acc %}selected{% endif %}>{{ acc }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">المنطقة الرئيسية (المحافظة)</label>
+                    <select name="main_area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                        <option value="">جميع المناطق الرئيسية</option>
+                        {% for ma in main_areas %}
+                        <option value="{{ ma.id }}" {% if selected_main_area == ma.id|stringformat:"s" %}selected{% endif %}>{{ ma.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">الخط الجغرافي / المنطقة الفرعية (Brick)</label>
+                    <select name="area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                        <option value="">جميع الخطوط (Bricks)</option>
                         {% for a in areas %}
                         <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
-                <button type="submit" class="w-full py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
-                    فلترة العملاء
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">تصنيف العميل (Classification)</label>
+                    <select name="customer_category" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                        <option value="">الكل (A+, A, B, C)</option>
+                        {% for cat in customer_categories %}
+                        <option value="{{ cat }}" {% if selected_customer_category == cat %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                    تطبيق الفلتر
                 </button>
             </form>
 
-            <!-- Filtered Contacts List -->
-            <div class="border-t border-slate-100 pt-3 space-y-2 max-h-96 overflow-y-auto">
-                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">العملاء المتاحون ({{ drawer_contacts|length }})</p>
-                {% for c in drawer_contacts %}
-                <div class="p-2.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200/80 transition-colors text-xs flex items-center justify-between gap-2">
-                    <div class="min-w-0">
-                        <p class="font-bold text-slate-800 truncate">{{ c.name }}</p>
-                        <p class="text-[10px] text-slate-400 font-mono">{{ c.specialty|default:c.account_type|default:'' }}</p>
+            <!-- Clients Checklist & Incremental Loader (Requirement 2) -->
+            <div class="border-t border-slate-100 pt-3 space-y-2">
+                <!-- Select All / Deselect All Controls -->
+                <div class="flex items-center justify-between pb-1 text-xs">
+                    <span class="text-[11px] font-bold text-slate-500">العملاء المتاحون</span>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="selectAllVisibleClients(true)" class="text-[11px] text-[#27bebe] hover:underline font-bold">
+                            تحديد المعروض
+                        </button>
+                        <span class="text-slate-300">|</span>
+                        <button type="button" onclick="selectAllVisibleClients(false)" class="text-[11px] text-slate-500 hover:underline">
+                            إلغاء التحديد
+                        </button>
                     </div>
-                    <button type="button" onclick="quickSelectContact('{{ c.id }}', '{{ c.name|escapejs }}')" class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-600 shrink-0" title="إضافة للخطة">
-                        <span class="material-symbols-outlined text-base">add</span>
+                </div>
+
+                <!-- Client Cards List -->
+                <div id="drawer-clients-list" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                    {% for c in drawer_contacts %}
+                    <div class="drawer-client-card p-2.5 bg-slate-50 hover:bg-teal-50/40 rounded-xl border border-slate-200/80 transition-all flex items-start gap-2.5 text-xs"
+                         data-contact-id="{{ c.id }}" data-account-type="{{ c.account_type|default:'' }}">
+                        <input type="checkbox" value="{{ c.id }}" onchange="handleClientCheckboxToggle(this)"
+                               class="drawer-client-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1">
+                                <p class="font-bold text-slate-800 truncate" title="{{ c.name }}">{{ c.name }}</p>
+                                {% if c.customer_category %}
+                                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة {{ c.customer_category }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
+                                <span>{{ c.account_type|default:"عميل" }}</span>
+                                {% if c.area %}<span>• {{ c.area.name }}</span>{% endif %}
+                            </div>
+                        </div>
+                        <!-- Direct individual visit creation (Requirement 3 link) -->
+                        <a href="{% url 'visit_create' %}?contact_id={{ c.id }}&date={% if start_date >= today_str %}{{ start_date }}{% else %}{{ today_str }}{% endif %}&visit_type=planned&is_planned=1"
+                           class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 shrink-0 transition-colors"
+                           title="إنشاء زيارة فردية لهذا العميل">
+                            <span class="material-symbols-outlined text-base">add</span>
+                        </a>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-4">لا يوجد عملاء مطابقين للفلتر ضمن نطاقك الجغرافي.</p>
+                    {% endfor %}
+                </div>
+
+                <!-- "See More" (عرض المزيد) button (Requirement 2: Incremental 10-batch loading) -->
+                <div id="drawer-load-more-wrapper" class="pt-2 {% if not has_more_clients %}hidden{% endif %}">
+                    <button type="button" id="drawer-load-more-btn" onclick="loadMoreClients()"
+                            class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">expand_more</span>
+                        <span>عرض المزيد (تحميل 10 عملاء إضافيين)</span>
                     </button>
                 </div>
-                {% empty %}
-                <p class="text-xs text-slate-400 text-center py-4">لا يوجد عملاء مطابقين للفلتر.</p>
-                {% endfor %}
             </div>
         </div>
 
@@ -205,12 +350,20 @@
 </div>
 
 <script>
+// State management for bulk planning & client selection
+const todayStr = '{{ today_str }}';
+let currentOffset = {{ drawer_contacts|length }};
+const selectedContactIds = new Set();
+const loadedContactIds = new Set([{% for c in drawer_contacts %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}]);
+let templateDebounceTimer = null;
+
 function toggleDayAccordion(bodyId) {
     const el = document.getElementById(bodyId);
     if (el) {
         el.classList.toggle('hidden');
     }
 }
+
 function toggleDrawer() {
     const drawer = document.getElementById('customer-drawer');
     const container = document.getElementById('timeline-container');
@@ -225,21 +378,308 @@ function toggleDrawer() {
         }
     }
 }
-function openAddModal(dateStr) {
-    openCustomerSelectionModal('add_to_plan', {
-        date: dateStr,
-        assigneeId: '{{ selected_rep.id }}'
-    });
+
+// Requirement 2: Activate bulk planning directly using existing left-side drawer
+function activateBulkPlanningForDate(dateStr) {
+    if (dateStr < todayStr) {
+        alert('لا يمكن جدولة خطة زيارات في تاريخ سابق.');
+        return;
+    }
+
+    const drawer = document.getElementById('customer-drawer');
+    const container = document.getElementById('timeline-container');
+    if (drawer && drawer.classList.contains('hidden')) {
+        drawer.classList.remove('hidden');
+        if (container) {
+            container.classList.remove('lg:col-span-4');
+            container.classList.add('lg:col-span-3');
+        }
+    }
+
+    const dateInput = document.getElementById('drawer-bulk-date');
+    if (dateInput) {
+        dateInput.value = dateStr;
+    }
+
+    const bulkSec = document.getElementById('drawer-bulk-section');
+    if (bulkSec) {
+        bulkSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        bulkSec.classList.add('ring-2', 'ring-[#27bebe]', 'bg-teal-50');
+        setTimeout(() => {
+            bulkSec.classList.remove('ring-2', 'ring-[#27bebe]');
+        }, 1500);
+    }
+    validateDrawerBulkSubmit();
 }
-function closeAddModal() {
-    closeCustomerSelectionModal();
+
+function onBulkDateChange() {
+    const dateInput = document.getElementById('drawer-bulk-date');
+    if (dateInput && dateInput.value < todayStr) {
+        alert('لا يمكن اختيار تاريخ سابق. تم ضبط التاريخ على تاريخ اليوم.');
+        dateInput.value = todayStr;
+    }
+    validateDrawerBulkSubmit();
 }
-function quickSelectContact(contactId, contactName) {
-    openCustomerSelectionModal('add_to_plan', {
-        date: '{{ start_date }}',
-        assigneeId: '{{ selected_rep.id }}',
-        contactId: contactId
+
+function onBulkTemplateChange() {
+    validateDrawerBulkSubmit();
+}
+
+function handleClientCheckboxToggle(checkbox) {
+    const id = String(checkbox.value);
+    if (checkbox.checked) {
+        selectedContactIds.add(id);
+    } else {
+        selectedContactIds.delete(id);
+    }
+    updateDrawerSelectionState();
+}
+
+function selectAllVisibleClients(selectState) {
+    document.querySelectorAll('.drawer-client-checkbox').forEach(chk => {
+        const id = String(chk.value);
+        chk.checked = selectState;
+        if (selectState) {
+            selectedContactIds.add(id);
+        } else {
+            selectedContactIds.delete(id);
+        }
     });
+    updateDrawerSelectionState();
+}
+
+// Requirement 1: Recalculate available templates when selected clients change
+async function updateDrawerSelectionState() {
+    const count = selectedContactIds.size;
+    const countEl = document.getElementById('drawer-selected-count');
+    if (countEl) countEl.textContent = count;
+
+    // Visual card highlighting
+    document.querySelectorAll('.drawer-client-card').forEach(card => {
+        const id = card.getAttribute('data-contact-id');
+        const chk = card.querySelector('.drawer-client-checkbox');
+        if (selectedContactIds.has(id)) {
+            if (chk) chk.checked = true;
+            card.classList.add('border-[#27bebe]', 'bg-teal-50/40');
+        } else {
+            if (chk) chk.checked = false;
+            card.classList.remove('border-[#27bebe]', 'bg-teal-50/40');
+        }
+    });
+
+    const tmplSelect = document.getElementById('drawer-bulk-template');
+    const tmplMsg = document.getElementById('drawer-bulk-template-msg');
+    const badge = document.getElementById('drawer-template-count-badge');
+    const submitBtn = document.getElementById('drawer-bulk-submit-btn');
+
+    if (count === 0) {
+        tmplSelect.disabled = true;
+        tmplSelect.innerHTML = '<option value="">-- اختر العملاء أولاً لتحديد القوالب المتاحة --</option>';
+        if (tmplMsg) {
+            tmplMsg.textContent = 'اختر عميل أو أكثر لإظهار القوالب المتاحة المشتركة وفق دورك الوظيفي ونوع حساب العملاء.';
+            tmplMsg.className = 'text-[10px] text-slate-500 mt-1';
+        }
+        if (badge) badge.classList.add('hidden');
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+    }
+
+    // Debounce template query
+    clearTimeout(templateDebounceTimer);
+    templateDebounceTimer = setTimeout(async () => {
+        const previousVal = tmplSelect.value;
+        tmplSelect.disabled = true;
+        tmplSelect.innerHTML = '<option value="">جاري فحص القوالب المؤهلة المشتركة...</option>';
+
+        const idsArray = Array.from(selectedContactIds);
+        try {
+            const resp = await fetch(`/api/templates/?contact_ids=${idsArray.join(',')}`);
+            const data = await resp.json();
+            const templates = data.templates || [];
+
+            tmplSelect.innerHTML = '';
+            if (templates.length === 0) {
+                tmplSelect.innerHTML = '<option value="">-- لا يوجد قوالب زيارة مشتركة مؤهلة لهؤلاء العملاء --</option>';
+                tmplSelect.disabled = true;
+                if (tmplMsg) {
+                    tmplMsg.textContent = '⚠️ لا توجد قوالب زيارة مشتركة مسموح بها لدورك الوظيفي ولجميع العملاء المحددين.';
+                    tmplMsg.className = 'text-[10px] text-rose-600 font-bold mt-1';
+                }
+                if (badge) badge.classList.add('hidden');
+                if (submitBtn) submitBtn.disabled = true;
+            } else {
+                tmplSelect.disabled = false;
+                tmplSelect.innerHTML = '<option value="">-- اختر قالب الزيارة المشترك (إلزامي) * --</option>';
+                let stillValid = false;
+                templates.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.display_name_ar || t.name;
+                    if (String(t.id) === String(previousVal)) {
+                        opt.selected = true;
+                        stillValid = true;
+                    }
+                    tmplSelect.appendChild(opt);
+                });
+
+                if (badge) {
+                    badge.textContent = `${templates.length} متاح`;
+                    badge.classList.remove('hidden');
+                }
+                if (tmplMsg) {
+                    tmplMsg.textContent = `تم العثور على ${templates.length} قوالب مشتركة مؤهلة لكافة العملاء المحددين (${count}).`;
+                    tmplMsg.className = 'text-[10px] text-emerald-700 font-medium mt-1';
+                }
+
+                // If previous selection was invalidated, clear it
+                if (!stillValid && previousVal) {
+                    tmplSelect.value = '';
+                }
+
+                validateDrawerBulkSubmit();
+            }
+        } catch (e) {
+            console.error('Error fetching templates for bulk planning:', e);
+            tmplSelect.innerHTML = '<option value="">خطأ أثناء تحميل القوالب</option>';
+        }
+    }, 250);
+}
+
+function validateDrawerBulkSubmit() {
+    const submitBtn = document.getElementById('drawer-bulk-submit-btn');
+    const dateInput = document.getElementById('drawer-bulk-date');
+    const tmplSelect = document.getElementById('drawer-bulk-template');
+
+    const hasClients = selectedContactIds.size > 0;
+    const hasTemplate = tmplSelect && tmplSelect.value && tmplSelect.value.trim() !== '';
+    const hasValidDate = dateInput && dateInput.value && dateInput.value >= todayStr;
+
+    if (submitBtn) {
+        submitBtn.disabled = !(hasClients && hasTemplate && hasValidDate);
+    }
+}
+
+// Requirement 2: Incremental Client Loader (10-batch, no duplicates, maintains selection)
+async function loadMoreClients() {
+    const btn = document.getElementById('drawer-load-more-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري التحميل...</span>`;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('action', 'load_contacts');
+    url.searchParams.set('offset', currentOffset);
+    url.searchParams.set('limit', '10');
+
+    try {
+        const resp = await fetch(url.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await resp.json();
+        if (data.success && data.contacts) {
+            const listEl = document.getElementById('drawer-clients-list');
+            const targetDate = document.getElementById('drawer-bulk-date')?.value || todayStr;
+
+            data.contacts.forEach(c => {
+                if (loadedContactIds.has(c.id)) return; // Prevent duplicates
+                loadedContactIds.add(c.id);
+
+                const isChecked = selectedContactIds.has(String(c.id));
+                const card = document.createElement('div');
+                card.className = `drawer-client-card p-2.5 bg-slate-50 hover:bg-teal-50/40 rounded-xl border border-slate-200/80 transition-all flex items-start gap-2.5 text-xs ${isChecked ? 'border-[#27bebe] bg-teal-50/40' : ''}`;
+                card.setAttribute('data-contact-id', c.id);
+                card.setAttribute('data-account-type', c.account_type || '');
+                card.innerHTML = `
+                    <input type="checkbox" value="${c.id}" ${isChecked ? 'checked' : ''} onchange="handleClientCheckboxToggle(this)"
+                           class="drawer-client-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-1">
+                            <p class="font-bold text-slate-800 truncate" title="${c.name}">${c.name}</p>
+                            ${c.customer_category ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة ${c.customer_category}</span>` : ''}
+                        </div>
+                        <div class="text-[10px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
+                            <span>${c.account_type || 'عميل'}</span>
+                            ${c.area_name ? `<span>• ${c.area_name}</span>` : ''}
+                        </div>
+                    </div>
+                    <a href="{% url 'visit_create' %}?contact_id=${c.id}&date=${targetDate}&visit_type=planned&is_planned=1"
+                       class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 shrink-0 transition-colors"
+                       title="إنشاء زيارة فردية لهذا العميل">
+                        <span class="material-symbols-outlined text-base">add</span>
+                    </a>
+                `;
+                listEl.appendChild(card);
+            });
+
+            currentOffset += data.contacts.length;
+            if (!data.has_more) {
+                document.getElementById('drawer-load-more-wrapper')?.classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        console.error('Error loading more clients:', e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span class="material-symbols-outlined text-sm">expand_more</span> <span>عرض المزيد (تحميل 10 عملاء إضافيين)</span>`;
+    }
+}
+
+// Requirement 2: Submit Bulk Plan from Drawer
+async function submitBulkPlanFromDrawer() {
+    const dateInput = document.getElementById('drawer-bulk-date');
+    const tmplSelect = document.getElementById('drawer-bulk-template');
+    const notesInput = document.getElementById('drawer-bulk-notes');
+    const submitBtn = document.getElementById('drawer-bulk-submit-btn');
+
+    const dateVal = dateInput ? dateInput.value : '';
+
+    if (!dateVal || dateVal < todayStr) {
+        alert('لا يمكن جدولة زيارات في تاريخ سابق. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+        return;
+    }
+
+    if (!tmplSelect || !tmplSelect.value) {
+        alert('اختيار قالب الزيارة إلزامي لإتمام الخطة.');
+        return;
+    }
+
+    if (selectedContactIds.size === 0) {
+        alert('يرجى اختيار عميل واحد على الأقل.');
+        return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري إنشاء الخطة...</span>`;
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    formData.append('assignee_id', '{{ selected_rep.id }}');
+    formData.append('date', dateVal);
+    formData.append('template_id', tmplSelect.value);
+    formData.append('notes', notesInput ? notesInput.value : '');
+    selectedContactIds.forEach(id => {
+        formData.append('contact_ids', id);
+    });
+
+    try {
+        const resp = await fetch("{% url 'planned_visits_bulk_add' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await resp.json();
+        if (data.success) {
+            window.location.hash = `day-${dateVal}`;
+            window.location.reload();
+        } else {
+            alert(data.message || 'حدث خطأ أثناء حفظ الخطة المجمعة.');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<span class="material-symbols-outlined text-base">done_all</span> <span>حفظ خطة الزيارات المجمعة</span>`;
+        }
+    } catch (e) {
+        console.error('Error submitting bulk plan:', e);
+        window.location.reload();
+    }
 }
 </script>
 {% endblock %}

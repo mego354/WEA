@@ -1,4 +1,5 @@
 from django import forms
+from django.utils import timezone
 from .models import Agreement, Visit, PlannedVisitItem, VisitSampleItem, VisitTemplate, VisitTemplateQuestion
 from contacts.models import Contact
 
@@ -37,10 +38,17 @@ class PlannedVisitItemForm(forms.ModelForm):
             'notes': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'ملاحظات التخطيط'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['template'].required = True
+        self.fields['template'].empty_label = "-- اختر قالب الزيارة (إلزامي) --"
+
     def clean(self):
         cleaned_data = super().clean()
         contact = cleaned_data.get('contact')
         template = cleaned_data.get('template')
+        if not template:
+            raise forms.ValidationError("اختيار قالب الزيارة إلزامي لإتمام التخطيط.")
         if contact and template:
             if not template.is_contact_eligible(contact):
                 allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
@@ -108,60 +116,104 @@ class VisitForm(forms.ModelForm):
         UserModel = get_user_model()
 
         if user:
-            from accounts.permissions import is_manager_or_higher, get_scoped_queryset
+            from accounts.permissions import (
+                is_manager_or_higher,
+                get_visit_eligible_contacts_queryset,
+                get_user_managed_representatives,
+            )
             is_manager = is_manager_or_higher(user)
             self.is_manager = is_manager
 
-            # Territorial and regional scoping matching user's assigned area.
-            # For representatives, always show all active customers so they can create visits.
-            # Area/region restrictions are enforced at the data access level, not at selection time.
-            if is_manager:
-                scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
-                self.fields['contact'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
-            else:
-                # Reps see all active customers — scoping is enforced on the resulting visit/record
-                self.fields['contact'].queryset = base_qs.order_by('name')
+            # Strictly scope available contacts to user's permitted geographical scope (Superadmin -> all, Manager -> Main Area, Rep -> Brick)
+            scoped_qs = get_visit_eligible_contacts_queryset(base_qs, user)
+            if self.instance and self.instance.pk and self.instance.contact_id:
+                scoped_ids = list(scoped_qs.values_list('pk', flat=True))
+                scoped_qs = Contact.objects.filter(pk__in=scoped_ids + [self.instance.contact_id])
+            self.fields['contact'].queryset = scoped_qs.order_by('name')
 
+            self.fields['owner'].required = False
             if not is_manager:
                 # Lock representative assignment to current user
                 self.fields['owner'].queryset = UserModel.objects.filter(pk=user.pk)
                 self.fields['owner'].initial = user
                 self.fields['owner'].disabled = True
             else:
-                self.fields['owner'].queryset = UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
+                managed_reps = get_user_managed_representatives(user)
+                managed_rep_ids = list(managed_reps.values_list('pk', flat=True))
+                self.fields['owner'].queryset = UserModel.objects.filter(pk__in=managed_rep_ids + [user.pk]).order_by('first_name', 'username')
                 self.fields['owner'].initial = user
-                self.fields['owner'].required = False
         else:
             self.is_manager = False
             self.fields['contact'].queryset = base_qs.order_by('name')
+            self.fields['owner'].required = False
+
+        # Scope templates to active templates eligible for user's role
+        templates_qs = VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles')
+        eligible_template_ids = [t.id for t in templates_qs if t.is_user_eligible(user)]
+        if self.instance and self.instance.pk and self.instance.template_id:
+            eligible_template_ids.append(self.instance.template_id)
+        self.fields['template'].queryset = VisitTemplate.objects.filter(id__in=eligible_template_ids).order_by('name')
+        self.fields['template'].required = True
+        self.fields['template'].empty_label = "-- اختر قالب الزيارة (إلزامي) --"
 
     def clean(self):
         cleaned_data = super().clean()
         user = self.user
+        is_editing = bool(self.instance and self.instance.pk)
 
-        # Business Rule (Requirement 6): Non-superusers cannot change assigned representative
+        # Business Rule (Requirement 4.B & 6): Non-managers are locked to themselves; default to current user
         is_manager = getattr(self, 'is_manager', False)
         if not is_manager and user and user.is_authenticated:
             cleaned_data['owner'] = user
         elif not cleaned_data.get('owner') and user and user.is_authenticated:
             cleaned_data['owner'] = user
 
-        # Business Rule (Requirement 1 & 2): Centralized Account-Type & Role Eligibility Validation
+        # Determine Visit Type: Planned vs Unplanned
+        planned_item_id = self.data.get('planned_item_id') or cleaned_data.get('planned_item_id')
+        visit_type_raw = (self.data.get('visit_type') or '').strip().lower()
+        is_planned_raw = str(self.data.get('is_planned', '')).strip().lower()
+        if is_editing:
+            is_planned_visit = self.instance.is_planned
+        else:
+            is_planned_visit = bool(
+                planned_item_id or
+                visit_type_raw == 'planned' or
+                is_planned_raw in ('1', 'true', 'on', 'yes')
+            )
+        cleaned_data['is_planned'] = is_planned_visit
+
+        # Geographical Scope Validation (Requirement 7)
         contact = cleaned_data.get('contact')
-        template = cleaned_data.get('template')
-        if template:
-            if user and not template.is_user_eligible(user):
+        if contact and user and user.is_authenticated and not is_editing:
+            from accounts.permissions import can_user_access_contact_for_visit
+            if not can_user_access_contact_for_visit(user, contact):
                 raise forms.ValidationError(
-                    f"دورك الوظيفي غير مصرح له باستخدام قالب الزيارة '{template.display_name_ar}'."
-                )
-            if contact and not template.is_contact_eligible(contact, user=user):
-                allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
-                raise forms.ValidationError(
-                    f"قالب الزيارة '{template.display_name_ar}' غير مخصص لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
+                    "غير مصرح لك بإنشاء أو الوصول إلى زيارة لهذا العميل لأنه يقع خارج نطاق منطقتك الجغرافية المخصصة."
                 )
 
+        # Mandatory template validation & eligibility (Requirement 1)
+        template = cleaned_data.get('template')
+        if not template:
+            raise forms.ValidationError("اختيار قالب الزيارة إلزامي لإتمام العملية.")
+        if user and not template.is_user_eligible(user):
+            raise forms.ValidationError(
+                f"دورك الوظيفي غير مصرح له باستخدام قالب الزيارة '{template.display_name_ar}'."
+            )
+        if contact and not template.is_contact_eligible(contact, user=user):
+            allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
+            raise forms.ValidationError(
+                f"قالب الزيارة '{template.display_name_ar}' غير مخصص لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
+            )
+
+        # Date Validation (Requirement 4): All visit dates must be today or a future date
+        visit_date = cleaned_data.get('date')
+        if visit_date:
+            today = timezone.now().date()
+            is_date_changed = is_editing and (self.instance.date != visit_date)
+            if (not is_editing or is_date_changed) and visit_date < today:
+                raise forms.ValidationError("لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.")
+
         # Planned Visit Item Backend Validation (Requirement 3)
-        planned_item_id = self.data.get('planned_item_id') or cleaned_data.get('planned_item_id')
         if planned_item_id:
             try:
                 item = PlannedVisitItem.objects.select_related('plan_day', 'contact').get(pk=planned_item_id)
@@ -175,27 +227,20 @@ class VisitForm(forms.ModelForm):
             except PlannedVisitItem.DoesNotExist:
                 raise forms.ValidationError("عنصر الخطة المحدد غير موجود أو غير صالح.")
 
-        # Enforce server-side GPS requirement for representative users when verify_visits is active
+        # Distance & Location Validation during Visit Creation (Requirement 3.B):
+        # - Planned visits: Distance validation is NOT required during creation.
+        # - Unplanned visits: Distance validation IS mandatory during creation.
         from master_data.models import LocationSettings
+        from activities.services import calculate_haversine_distance
         settings = LocationSettings.get_settings()
-        can_bypass = False
-        if user and user.is_authenticated:
-            can_bypass = bool(
-                user.is_superuser or
-                getattr(user, 'is_super_admin', False) or
-                getattr(user, 'can_bypass_location', False)
-            )
 
-        lat = cleaned_data.get('latitude') or self.data.get('latitude')
-        lng = cleaned_data.get('longitude') or self.data.get('longitude')
+        lat = cleaned_data.get('latitude') if cleaned_data.get('latitude') is not None else self.data.get('latitude')
+        lng = cleaned_data.get('longitude') if cleaned_data.get('longitude') is not None else self.data.get('longitude')
+        has_coords = not (lat is None or lng is None or str(lat).strip() == '' or str(lng).strip() == '')
 
-        if settings.verify_visits and not can_bypass:
-            if lat is None or lng is None or str(lat).strip() == '' or str(lng).strip() == '':
-                raise forms.ValidationError(
-                    "تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والمحاولة مجدداً."
-                )
-
-        if lat and lng:
+        lat_float = None
+        lng_float = None
+        if has_coords:
             try:
                 lat_float = float(lat)
                 lng_float = float(lng)
@@ -205,6 +250,46 @@ class VisitForm(forms.ModelForm):
                     raise forms.ValidationError("إحداثيات الموقع الجغرافي غير صالحة (0, 0).")
             except (ValueError, TypeError):
                 raise forms.ValidationError("صيغة إحداثيات الموقع غير صالحة.")
+
+        if not is_editing and not is_planned_visit and settings.verify_visits and settings.verify_unplanned_visit_distance:
+            can_bypass_directly = settings.can_user_bypass_without_approval(user, stage='create')
+            force_bypass = str(self.data.get('force_bypass_location', '')).strip().lower() in ('1', 'true', 'on')
+            request_exception = str(self.data.get('request_distance_exception', '')).strip().lower() in ('1', 'true', 'on')
+            bypass_reason = (self.data.get('bypass_reason') or '').strip()
+
+            if not has_coords:
+                if not can_bypass_directly and not (force_bypass or request_exception):
+                    raise forms.ValidationError(
+                        "تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والمحاولة مجدداً."
+                    )
+                if not can_bypass_directly and (force_bypass or request_exception) and not bypass_reason:
+                    raise forms.ValidationError(
+                        "يرجى توضيح سبب عدم توفر الموقع أو التواجد خارج المسافة المسموح بها لطلب استثناء واعتماد المدير."
+                    )
+                if can_bypass_directly and force_bypass and settings.bypass_reason_mandatory and not bypass_reason:
+                    raise forms.ValidationError(
+                        "يرجى إدخال سبب تجاوز التحقق من المسافة (ذكر السبب إلزامي حسب إعدادات النظام)."
+                    )
+            elif contact and contact.latitude is not None and contact.longitude is not None:
+                allowed_dist = settings.get_effective_tolerance(template)
+                dist = calculate_haversine_distance(lat_float, lng_float, float(contact.latitude), float(contact.longitude))
+                if dist is not None and dist > allowed_dist:
+                    if can_bypass_directly:
+                        is_super = bool(user and (user.is_superuser or getattr(user, 'is_super_admin', False)))
+                        if settings.bypass_reason_mandatory and (force_bypass or not is_super) and not bypass_reason:
+                            raise forms.ValidationError(
+                                f"المسافة الحالية ({dist:.0f} متر) تتجاوز المسافة المسموح بها ({allowed_dist} متر). يرجى إدخال سبب التجاوز للمتابعة."
+                            )
+                    else:
+                        if not (force_bypass or request_exception):
+                            raise forms.ValidationError(
+                                f"أنت خارج النطاق الجغرافي المسموح به للعميل (المسافة الفعلية: {dist:.0f} متر، المسافة المسموح بها: {allowed_dist} متر). "
+                                "يرجى التواجد ضمن النطاق المسموح أو طلب استثناء مع كتابة السبب لاعتماد المدير."
+                            )
+                        if not bypass_reason:
+                            raise forms.ValidationError(
+                                "يرجى كتابة سبب واضح للتواجد خارج المسافة المسموح بها لتقديم طلب استثناء لاعتماد المدير."
+                            )
 
         return cleaned_data
 
@@ -257,7 +342,7 @@ class VisitTemplateForm(forms.ModelForm):
             'display_name_en': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'اسم القالب بالإنجليزية...'}),
             'name': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'المعرف الفريد (e.g. single_visit_dr)'}),
             'special_tolerance': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'min': 10}),
-            'restricted_roles': forms.SelectMultiple(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'restricted_roles': forms.CheckboxSelectMultiple(attrs={'class': 'rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'suggested_products': forms.CheckboxSelectMultiple(attrs={'class': 'rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'active': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),
             'allow_unplanned': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'}),

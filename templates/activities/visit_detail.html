@@ -59,6 +59,23 @@
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border {{ visit.approval_badge_class }}">
                         {{ visit.approval_display_ar }}
                     </span>
+                    {% if visit.waiting_for_reapproval %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300">
+                        <span class="material-symbols-outlined text-xs">published_with_changes</span>
+                        <span>بانتظار إعادة الاعتماد بعد التعديل</span>
+                    </span>
+                    {% endif %}
+                    {% if visit.requires_approval_due_to_distance %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
+                        <span class="material-symbols-outlined text-xs">wrong_location</span>
+                        <span>تتطلب اعتماد تجاوز المسافة</span>
+                    </span>
+                    {% elif visit.verification_status == 'force_bypassed' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                        <span class="material-symbols-outlined text-xs">verified_user</span>
+                        <span>تم تجاوز المسافة إدارياً</span>
+                    </span>
+                    {% endif %}
                 </div>
                 <p class="text-xs text-slate-500 font-medium mt-1">
                     {{ visit.contact.name }} • {{ visit.date|date:"d/m/Y" }} • المسؤول: {{ visit.owner.get_full_name|default:visit.owner.username }}
@@ -165,6 +182,66 @@
             <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">replay</span>
                 <span>إعادة التقديم الآن</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Reapproval Required After Edit Banner (Section 5.A & 5.B) -->
+    {% if visit.waiting_for_reapproval %}
+    <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 text-amber-950 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-2xl">published_with_changes</span>
+            </div>
+            <div>
+                <h3 class="text-sm font-black text-amber-900">الزيارة بانتظار إعادة الاعتماد بعد التعديل</h3>
+                <p class="text-xs text-amber-800 mt-1">
+                    تم تعديل بيانات هذه الزيارة بعد اعتمادها مسبقاً، مما أدى إلى إلغاء الاعتماد السابق تلقائياً وتحويلها إلى المدير المختص للمراجعة وإعادة الاعتماد.
+                </p>
+            </div>
+        </div>
+        {% if can_approve %}
+        <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">check_circle</span>
+                <span>إعادة اعتماد الزيارة</span>
+            </button>
+        </form>
+        {% else %}
+        <span class="px-3 py-1 rounded-full text-xs font-black bg-amber-200 text-amber-900 shrink-0">بانتظار إعادة الاعتماد</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Distance Exception Approval Required Banner (Section 3.C & 5.B) -->
+    {% if visit.requires_approval_due_to_distance %}
+    <div class="bg-rose-50/90 border-2 border-rose-300 rounded-2xl p-4 sm:p-5 text-rose-950 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-2xl">wrong_location</span>
+            </div>
+            <div class="space-y-1">
+                <h3 class="text-sm font-black text-rose-900">تتطلب اعتماد المدير بسبب تجاوز المسافة المسموح بها</h3>
+                <p class="text-xs text-rose-800">
+                    المسافة الفعلية المسجلة: <strong>{{ visit.distance|floatformat:0 }} متر</strong> | المسافة المسموح بها: <strong>{{ allowed_distance }} متر</strong>
+                    {% if visit.distance_discrepancy %}(مقدار التجاوز: <strong>+{{ visit.distance_discrepancy|floatformat:0 }} متر</strong>){% endif %}
+                </p>
+                {% if visit.bypass_reason %}
+                <p class="text-xs text-rose-900 bg-white/80 px-3 py-1.5 rounded-lg border border-rose-200 font-bold">
+                    سبب طلب الاستثناء من المندوب: {{ visit.bypass_reason }}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% if can_approve %}
+        <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">check_circle</span>
+                <span>اعتماد استثناء المسافة</span>
             </button>
         </form>
         {% endif %}
@@ -352,6 +429,8 @@
                         <div class="question-block p-4 rounded-xl border border-slate-200/90 bg-slate-50/50 space-y-2.5 transition-all"
                              id="question-block-{{ q.id }}"
                              data-question-id="{{ q.id }}"
+                             data-required="{{ q.is_required|yesno:'1,0' }}"
+                             data-question-title="{{ q.text_ar|escape }}"
                              data-conditional="{{ q.is_conditional|yesno:'1,0' }}"
                              data-parent-id="{{ q.conditional_parent_id|default:'' }}"
                              data-trigger-val="{{ q.conditional_trigger_value|default:'' }}">
@@ -551,71 +630,153 @@
                         </div>
                     </div>
 
-                    <!-- GPS Coordinates Section -->
-                    <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                    <!-- DISTANCE VALIDATION & GPS SECTION (Section 3.A, 3.C, 3.D) -->
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-4">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
-                                <span class="material-symbols-outlined text-teal-600 text-base">my_location</span>
-                                <span class="text-xs font-bold text-slate-800">إحداثيات الموقع (GPS)</span>
+                                <span class="material-symbols-outlined text-[#27bebe] text-lg">near_me</span>
+                                <div>
+                                    <span class="text-xs font-black text-slate-900 block">التحقق من المسافة والموقع عند إنهاء الزيارة (GPS)</span>
+                                    <span class="text-[11px] text-slate-500">مقارنة موقعك الحالي بموقع العميل المسجل وفق الحد المسموح به</span>
+                                </div>
                             </div>
-                            <button type="button" onclick="captureLiveCoordinates()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg shadow-xs">
-                                <span class="material-symbols-outlined text-sm">refresh</span>
+                            <button type="button" onclick="captureLiveCoordinates()" class="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs">
+                                <span class="material-symbols-outlined text-sm text-[#27bebe]">refresh</span>
                                 <span>تحديث الموقع</span>
                             </button>
                         </div>
 
-                        <div class="flex items-center justify-between text-xs pt-1">
-                            <span class="text-slate-500">حالة GPS:</span>
-                            <span id="gps-status-badge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
-                                {% if visit.latitude and visit.longitude %}تم التقاط الموقع{% else %}في انتظار التحديد...{% endif %}
-                            </span>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <!-- 1. User Current GPS Location -->
+                            <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
+                                <div class="flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>موقعك الحالي (GPS):</span>
+                                    <span id="gps-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                        {% if visit.latitude and visit.longitude %}تم الالتقاط{% else %}بانتظار التحديد...{% endif %}
+                                    </span>
+                                </div>
+                                <div id="gps-coords-text" class="text-xs font-bold font-mono text-slate-800 dir-ltr text-right">
+                                    {% if visit.latitude and visit.longitude %}
+                                    {{ visit.latitude|floatformat:5 }}, {{ visit.longitude|floatformat:5 }} (±{{ visit.device_accuracy|default:'-' }}m)
+                                    {% else %}
+                                    جاري التقاط موقعك...
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 2. Client Registered Location -->
+                            <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
+                                <div class="flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>موقع العميل المسجل:</span>
+                                    <span class="material-symbols-outlined text-xs text-slate-400">pin_drop</span>
+                                </div>
+                                <div id="end-client-gps-display" class="text-xs font-bold font-mono text-slate-800 dir-ltr text-right">
+                                    {% if visit.contact.has_saved_location %}
+                                    {{ visit.contact.latitude|floatformat:5 }}, {{ visit.contact.longitude|floatformat:5 }}
+                                    {% else %}
+                                    غير مسجل مسبقاً (سيتم تثبيت الموقع الحالي)
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 3. Calculated Distance -->
+                            <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
+                                <div class="flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>المسافة الفعلية المحسوبة:</span>
+                                    <span class="material-symbols-outlined text-xs text-slate-400">straighten</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span id="end-actual-distance-display" class="text-sm font-black text-slate-900">
+                                        {% if visit.distance is not None %}{{ visit.distance|floatformat:0 }} متر{% else %}—{% endif %}
+                                    </span>
+                                    <span id="end-distance-status-pill" class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600">
+                                        بانتظار الحساب
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 4. Allowed Distance Threshold -->
+                            <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
+                                <div class="flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>المسافة المسموح بها (الحد الأقصى):</span>
+                                    <span class="material-symbols-outlined text-xs text-[#27bebe]">radar</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span id="end-allowed-distance-display" class="text-sm font-black text-[#1a8b8b]">{{ allowed_distance|default:300 }} متر</span>
+                                    <span class="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-teal-50 text-teal-700 border border-teal-200">
+                                        {% if visit.template and visit.template.has_special_location_settings %}مخصص للقالب{% else %}الإعداد الافتراضي{% endif %}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
 
-                        <div id="gps-coords-text" class="text-[11px] font-mono text-slate-500 dir-ltr text-left">
-                            {% if visit.latitude and visit.longitude %}
-                            Lat: {{ visit.latitude|floatformat:4 }}, Lng: {{ visit.longitude|floatformat:4 }} (±{{ visit.device_accuracy|default:'-' }}m)
-                            {% else %}
-                            Lat: -, Lng: -
-                            {% endif %}
+                        <!-- Distance Bypass / Exception Request Section (Section 3.C & 3.D) -->
+                        {% if can_bypass_gps %}
+                        <div id="end-distance-bypass-container" class="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-3">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-indigo-600 text-lg">admin_panel_settings</span>
+                                <span class="text-xs font-black text-indigo-950">تجاوز المسافة الجغرافية (صلاحية مدير / مشرف عام)</span>
+                            </div>
+                            <label class="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                                <input type="checkbox" name="force_bypass_location" value="1" id="force-bypass-chk" class="text-indigo-600 rounded focus:ring-indigo-500" onchange="toggleBypassReason()">
+                                <span>تجاهل قيد المسافة وإنهاء الزيارة مباشرة مع توثيق التجاوز في السجل الزمني</span>
+                            </label>
+                            <div id="bypass-reason-box" class="hidden">
+                                <label class="block text-[11px] font-bold text-indigo-900 mb-1">
+                                    سبب التجاوز {% if bypass_reason_mandatory %}(إلزامي *){% else %}(اختياري){% endif %}
+                                </label>
+                                <input type="text" name="bypass_reason" id="bypass-reason-input" placeholder="مثال: ضعف إشارة GPS داخل المستشفى، تم التحقق هاتفياً..." class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-medium">
+                            </div>
                         </div>
+                        {% else %}
+                        <div id="end-distance-bypass-container" class="p-4 bg-amber-50/80 border-2 border-amber-300 rounded-xl space-y-3">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-amber-600 text-lg">wrong_location</span>
+                                <span class="text-xs font-black text-amber-950">في حال التواجد خارج المسافة المسموح بها ({{ allowed_distance|default:300 }} متر)</span>
+                            </div>
+                            <label class="flex items-start gap-2.5 text-xs font-bold text-amber-950 cursor-pointer">
+                                <input type="checkbox" name="request_distance_exception" value="1" id="request-exception-chk" class="mt-0.5 text-amber-600 rounded focus:ring-amber-500" onchange="toggleExceptionReason()">
+                                <div>
+                                    <span class="block font-black">طلب استثناء لتجاوز المسافة وإرسال الزيارة لاعتماد المدير</span>
+                                    <span class="text-[11px] font-medium text-amber-800">سيتم حفظ إجاباتك وإنهاء الزيارة مع تحويل حالتها إلى (بانتظار اعتماد المدير) لمراجعة سبب التواجد خارج النطاق.</span>
+                                </div>
+                            </label>
+                            <div id="exception-reason-box" class="hidden">
+                                <label class="block text-[11px] font-bold text-amber-900 mb-1">سبب التواجد خارج المسافة المسموح بها (إلزامي *) :</label>
+                                <input type="text" name="bypass_reason" id="exception-reason-input" placeholder="اشرح سبب إنهاء الزيارة خارج المسافة المسموح بها لإرساله للمدير..." class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium">
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
-
-                    <!-- Superuser Location & Photo Bypass (Requirement 7) -->
-                    {% if can_bypass_gps %}
-                    <div class="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-amber-600 text-lg">admin_panel_settings</span>
-                            <span class="text-xs font-bold text-amber-900">صلاحية المدير / تجاوز التحقق الجغرافي والصورة</span>
-                        </div>
-                        <label class="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                            <input type="checkbox" name="force_bypass_location" value="1" id="force-bypass-chk" class="text-amber-600 rounded focus:ring-amber-500" onchange="toggleBypassReason()">
-                            <span>تجاوز شرط الموقع والصورة لهذه الزيارة بموافقة إدارية</span>
-                        </label>
-                        <div id="bypass-reason-box" class="hidden">
-                            <label class="block text-[11px] font-bold text-slate-700 mb-1">سبب التجاوز الإداري * (سيتم تسجيله في سجل التدقيق)</label>
-                            <input type="text" name="bypass_reason" id="bypass-reason-input" placeholder="مثال: ضعف إشارة GPS داخل المستشفى، تم التحقق هاتفياً..." class="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-medium">
-                        </div>
-                    </div>
-                    {% endif %}
                 </div>
 
                 <!-- FORM ACTIONS (Create First, Answer Later) -->
-                <div class="sticky bottom-4 z-20 bg-white/95 backdrop-blur-md border border-slate-200 p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div class="flex items-center gap-2 w-full sm:w-auto">
-                        <!-- Complete Visit -->
-                        <button type="submit" name="action" value="complete"
-                                class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
-                            <span class="material-symbols-outlined text-base">check_circle</span>
-                            <span>إنهاء وتوثيق الزيارة</span>
-                        </button>
-
-                        <!-- Save Draft (Resumable) -->
-                        <button type="submit" name="action" value="save_draft"
-                                class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors min-h-[44px]">
-                            <span class="material-symbols-outlined text-base">save</span>
-                            <span>حفظ كمسودة والعودة لاحقاً</span>
-                        </button>
+                <div class="sticky bottom-4 z-20 bg-white/95 backdrop-blur-md border border-slate-200 p-4 rounded-2xl shadow-lg flex flex-col gap-3">
+                    <!-- Unanswered Required Questions Notice (Requirement 5) -->
+                    <div id="unanswered-required-notice" class="hidden w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                        <div class="flex items-center gap-1.5 text-amber-900 font-bold">
+                            <span class="material-symbols-outlined text-sm text-amber-700">warning</span>
+                            <span>يرجى الإجابة على الأسئلة الإلزامية التالية لتفعيل زر إنهاء الزيارة:</span>
+                        </div>
+                        <ul id="unanswered-questions-list" class="list-disc list-inside text-amber-800 space-y-0.5 text-[11px] font-medium pr-1"></ul>
                     </div>
+
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                            <!-- Complete Visit -->
+                            <button type="submit" name="action" value="complete" id="complete-visit-btn"
+                                    class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                                <span class="material-symbols-outlined text-base">check_circle</span>
+                                <span>إنهاء وتوثيق الزيارة</span>
+                            </button>
+
+                            <!-- Save Draft (Resumable) -->
+                            <button type="submit" name="action" value="save_draft"
+                                    class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors min-h-[44px]">
+                                <span class="material-symbols-outlined text-base">save</span>
+                                <span>حفظ كمسودة والعودة لاحقاً</span>
+                            </button>
+                        </div>
 
                     <!-- Cancel Visit -->
                     <button type="submit" name="action" value="cancel" onclick="return confirm('هل أنت متأكد من إلغاء هذه الزيارة نهائياً؟')"
@@ -736,12 +897,12 @@
         <!-- Column 3: Location Evidence, Metrics, Audit Details -->
         <div class="space-y-6">
 
-            <!-- Location Verification Card -->
+            <!-- Location Verification Card (Section 3.A, 3.D, 5.B) -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
                     <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span class="material-symbols-outlined text-sm text-[#27bebe]">gps_fixed</span>
-                        <span>التحقق من الموقع</span>
+                        <span>التحقق من الموقع والمسافة</span>
                     </h3>
                     {% if visit.verification_status == 'verified' %}
                     <span class="material-symbols-outlined text-2xl text-emerald-500" title="تم التحقق بنجاح">gpp_good</span>
@@ -755,21 +916,39 @@
                 </div>
 
                 <div class="space-y-3 text-xs">
-                    <!-- Distance -->
+                    <!-- Actual Distance -->
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span class="text-slate-400">المسافة:</span>
-                        <span class="font-mono font-bold {% if visit.distance is not None and visit.distance <= 300 %}text-emerald-700{% elif visit.distance is not None %}text-amber-700{% else %}text-slate-500{% endif %}">
+                        <span class="text-slate-400">المسافة الفعلية:</span>
+                        <span class="font-mono font-bold {% if visit.distance is not None and visit.distance <= allowed_distance %}text-emerald-700{% elif visit.distance is not None %}text-rose-700{% else %}text-slate-500{% endif %}">
                             {% if visit.distance is not None %}
-                            {{ visit.distance|floatformat:2 }} m
+                            {{ visit.distance|floatformat:1 }} متر ({{ visit.distance|floatformat:2 }} m)
                             {% else %}
                             غير محسوبة
                             {% endif %}
                         </span>
                     </div>
 
+                    <!-- Allowed Distance Threshold -->
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">المسافة المسموح بها:</span>
+                        <span class="font-mono font-bold text-[#1a8b8b]">
+                            {{ allowed_distance }} متر
+                        </span>
+                    </div>
+
+                    {% if visit.distance_discrepancy and visit.distance_discrepancy > 0 %}
+                    <!-- Discrepancy -->
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">مقدار التجاوز:</span>
+                        <span class="font-mono font-bold text-rose-600">
+                            +{{ visit.distance_discrepancy|floatformat:1 }} متر
+                        </span>
+                    </div>
+                    {% endif %}
+
                     <!-- Completion Status -->
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span class="text-slate-400">حالة الاستكمال:</span>
+                        <span class="text-slate-400">حالة التحقق:</span>
                         <span class="font-bold {% if visit.verification_status == 'verified' %}text-emerald-600{% elif visit.verification_status == 'force_bypassed' %}text-amber-600{% else %}text-slate-600{% endif %}">
                             {{ visit.verification_status_display_ar }}
                         </span>
@@ -777,8 +956,8 @@
 
                     <!-- Location Status -->
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span class="text-slate-400">حالة الموقع:</span>
-                        <span class="font-bold {% if 'ضمن' in visit.location_status or visit.location_status == 'within_geofence' %}text-emerald-600{% elif 'بعيد' in visit.location_status or visit.location_status == 'outside_geofence' %}text-rose-600{% else %}text-slate-600{% endif %}">
+                        <span class="text-slate-400">حالة النطاق:</span>
+                        <span class="font-bold {% if 'ضمن' in visit.location_status or visit.location_status == 'within_geofence' %}text-emerald-600{% elif 'بعيد' in visit.location_status or visit.location_status == 'outside_geofence' or 'خارج' in visit.location_status %}text-rose-600{% else %}text-slate-600{% endif %}">
                             {{ visit.location_status|default:visit.verification_status_display_ar }}
                         </span>
                     </div>
@@ -794,20 +973,20 @@
                     <div class="pt-2 space-y-1.5 text-[11px] font-mono text-slate-500">
                         {% if visit.latitude and visit.longitude %}
                         <div class="flex items-center justify-between">
-                            <span>تسجيل الزيارة:</span>
-                            <span class="text-slate-800 font-bold">{{ visit.latitude|floatformat:4 }}, {{ visit.longitude|floatformat:4 }}</span>
+                            <span>موقع تسجيل الزيارة:</span>
+                            <span class="text-slate-800 font-bold dir-ltr">{{ visit.latitude|floatformat:5 }}, {{ visit.longitude|floatformat:5 }}</span>
                         </div>
                         {% endif %}
 
                         {% if visit.customer_latitude_snapshot and visit.customer_longitude_snapshot %}
                         <div class="flex items-center justify-between">
-                            <span>موقع العميل:</span>
-                            <span class="text-slate-800 font-bold">{{ visit.customer_latitude_snapshot|floatformat:4 }}, {{ visit.customer_longitude_snapshot|floatformat:4 }}</span>
+                            <span>موقع العميل المسجل:</span>
+                            <span class="text-slate-800 font-bold dir-ltr">{{ visit.customer_latitude_snapshot|floatformat:5 }}, {{ visit.customer_longitude_snapshot|floatformat:5 }}</span>
                         </div>
                         {% elif visit.contact.has_saved_location %}
                         <div class="flex items-center justify-between">
-                            <span>موقع العميل:</span>
-                            <span class="text-slate-800 font-bold">{{ visit.contact.latitude|floatformat:4 }}, {{ visit.contact.longitude|floatformat:4 }}</span>
+                            <span>موقع العميل المسجل:</span>
+                            <span class="text-slate-800 font-bold dir-ltr">{{ visit.contact.latitude|floatformat:5 }}, {{ visit.contact.longitude|floatformat:5 }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -859,16 +1038,30 @@
                 <p class="text-xs text-slate-400 py-3 text-center">لا توجد صورة إثبات مسجلة لهذه الزيارة.</p>
                 {% endif %}
 
-                <!-- Superuser Bypass Audit Notification (Requirement 7) -->
+                <!-- Bypass / Exception Audit Notification (Section 3.D & 5.B) -->
                 {% if visit.verification_status == 'force_bypassed' or visit.bypassed_by %}
                 <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs">
                     <div class="flex items-center gap-1.5 text-amber-800 font-bold">
                         <span class="material-symbols-outlined text-sm">verified_user</span>
-                        <span>تم التجاوز بموافقة إدارية:</span>
+                        <span>تم تجاوز المسافة بموافقة إدارية:</span>
                     </div>
                     <p class="text-slate-700 font-medium">بواسطة: {% if visit.bypassed_by %}{{ visit.bypassed_by.get_full_name|default:visit.bypassed_by.username }}{% else %}إدارة النظام{% endif %}</p>
+                    {% if visit.distance is not None %}
+                    <p class="text-[11px] text-slate-600">المسافة الفعلية: {{ visit.distance|floatformat:0 }}م | المسموح بها: {{ allowed_distance }}م</p>
+                    {% endif %}
                     {% if visit.bypassed_at %}<p class="text-[11px] text-slate-500 font-mono">التاريخ: {{ visit.bypassed_at|date:"d/m/Y - H:i" }}</p>{% endif %}
                     {% if visit.bypass_reason %}<p class="text-[11px] text-amber-900 bg-white/70 p-1.5 rounded border border-amber-200 mt-1">السبب: {{ visit.bypass_reason }}</p>{% endif %}
+                </div>
+                {% elif visit.requires_approval_due_to_distance or visit.bypass_reason %}
+                <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1 text-xs">
+                    <div class="flex items-center gap-1.5 text-rose-800 font-bold">
+                        <span class="material-symbols-outlined text-sm">wrong_location</span>
+                        <span>طلب استثناء تجاوز المسافة:</span>
+                    </div>
+                    {% if visit.distance is not None %}
+                    <p class="text-[11px] text-rose-700">المسافة الفعلية: {{ visit.distance|floatformat:0 }}م | المسموح بها: {{ allowed_distance }}م</p>
+                    {% endif %}
+                    {% if visit.bypass_reason %}<p class="text-[11px] text-rose-900 bg-white/80 p-1.5 rounded border border-rose-200 mt-1">السبب: {{ visit.bypass_reason }}</p>{% endif %}
                 </div>
                 {% endif %}
             </div>
@@ -915,9 +1108,23 @@
                 </div>
             </div>
 
-            <!-- Audit Card -->
+            <!-- Approval & Audit Transparency Card (Section 5.B) -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3 text-xs">
-                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">سجل التدقيق والمنشئ</h3>
+                <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">شفافية الاعتماد وسجل التدقيق</h3>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">حالة الاعتماد الحالية:</span>
+                    <span class="px-2 py-0.5 rounded-full font-bold text-[10px] border {{ visit.approval_badge_class }}">{{ visit.approval_display_ar }}</span>
+                </div>
+                {% if visit.waiting_for_reapproval %}
+                <div class="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[11px]">
+                    بانتظار إعادة الاعتماد (تم تعديل الزيارة بعد الاعتماد السابق)
+                </div>
+                {% endif %}
+                {% if visit.requires_approval_due_to_distance %}
+                <div class="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 font-bold text-[11px]">
+                    تتطلب اعتماد المدير بسبب تجاوز المسافة المسموح بها
+                </div>
+                {% endif %}
                 <div>
                     <span class="text-slate-400 block">أنشئت بواسطة</span>
                     <span class="font-bold text-slate-700">{% if visit.created_by %}{{ visit.created_by.get_full_name|default:visit.created_by.username }}{% else %}-{% endif %}</span>
@@ -928,17 +1135,95 @@
                 </div>
                 {% if visit.approved_by %}
                 <div>
-                    <span class="text-slate-400 block">تم الاعتماد بواسطة</span>
-                    <span class="font-bold text-emerald-700">{{ visit.approved_by.get_full_name|default:visit.approved_by.username }}</span>
+                    <span class="text-slate-400 block">{% if visit.approval_status == 'disapproved' %}تم الرفض بواسطة{% else %}تم الاعتماد بواسطة{% endif %}</span>
+                    <span class="font-bold {% if visit.approval_status == 'disapproved' %}text-rose-700{% else %}text-emerald-700{% endif %}">
+                        {{ visit.approved_by.get_full_name|default:visit.approved_by.username }}
+                        {% if visit.approved_at %}<span class="text-[11px] font-mono text-slate-400 block">{{ visit.approved_at|date:"d/m/Y - H:i" }}</span>{% endif %}
+                    </span>
                 </div>
                 {% endif %}
                 {% if visit.approval_notes %}
                 <div>
-                    <span class="text-slate-400 block">ملاحظات الاعتماد</span>
-                    <p class="text-slate-600 p-2 bg-slate-50 rounded-lg mt-1 font-medium">{{ visit.approval_notes }}</p>
+                    <span class="text-slate-400 block">ملاحظات القرار الإداري</span>
+                    <p class="text-slate-700 p-2 bg-slate-50 rounded-lg mt-1 font-medium">{{ visit.approval_notes }}</p>
                 </div>
                 {% endif %}
             </div>
+        </div>
+    </div>
+
+    <!-- COMPLETE VISIT TIMELINE (Section 6) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center border border-teal-100">
+                    <span class="material-symbols-outlined text-lg">timeline</span>
+                </div>
+                <div>
+                    <h3 class="text-sm font-black text-slate-900">الخط الزمني الكامل للزيارة (Complete Visit Timeline)</h3>
+                    <p class="text-[11px] text-slate-500">سجل زمني موحد لجميع مراحل الزيارة: الإنشاء، البدء، التحقق من المسافة، التجاوزات، الإجابات، التعديلات، والاعتمادات</p>
+                </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-teal-50 text-[#1a8b8b] border border-teal-200 text-xs font-bold font-mono">
+                {{ timeline_events|length }} حدث
+            </span>
+        </div>
+
+        {% if timeline_events %}
+        <div class="p-5 sm:p-6">
+            <div class="relative border-r-2 border-slate-200 mr-4 space-y-6">
+                {% for ev in timeline_events %}
+                <div class="relative pr-6">
+                    <div class="absolute -right-[13px] top-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-xs
+                        {% if ev.color == 'emerald' %}bg-emerald-500 text-white
+                        {% elif ev.color == 'rose' %}bg-rose-500 text-white
+                        {% elif ev.color == 'amber' %}bg-amber-500 text-white
+                        {% elif ev.color == 'purple' %}bg-purple-500 text-white
+                        {% elif ev.color == 'blue' or ev.color == 'sky' %}bg-blue-500 text-white
+                        {% elif ev.color == 'teal' %}bg-[#27bebe] text-white
+                        {% else %}bg-slate-500 text-white{% endif %}">
+                        <span class="material-symbols-outlined text-[13px]">{{ ev.icon|default:"circle" }}</span>
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-1.5 text-xs">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <span class="font-black text-slate-900">{{ ev.title }}</span>
+                            <div class="flex items-center gap-2 text-[11px] text-slate-500">
+                                <span class="inline-flex items-center gap-1 font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <span class="material-symbols-outlined text-xs text-[#27bebe]">person</span>
+                                    <span>{{ ev.actor }}</span>
+                                </span>
+                                {% if ev.timestamp %}
+                                <span class="font-mono text-slate-400">{{ ev.timestamp|date:"Y-m-d H:i:s" }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if ev.details %}
+                        <p class="text-slate-700 font-medium leading-relaxed">{{ ev.details }}</p>
+                        {% endif %}
+                        {% if ev.changes %}
+                        <div class="mt-2 pt-2 border-t border-slate-200/80 space-y-1">
+                            <span class="text-[10px] font-bold text-slate-500 block">التغييرات المسجلة (قبل ➔ بعد):</span>
+                            {% for ch in ev.changes %}
+                            <div class="flex flex-wrap items-center gap-1.5 text-[11px] bg-white px-2.5 py-1 rounded border border-slate-200">
+                                <span class="font-bold text-slate-800">{{ ch.field }}:</span>
+                                <span class="text-rose-600 line-through">{{ ch.old|default:"-" }}</span>
+                                <span class="text-slate-400">➔</span>
+                                <span class="text-emerald-700 font-bold">{{ ch.new|default:"-" }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-xs text-slate-400">
+            لا توجد أحداث زمنية مسجلة لهذه الزيارة حتى الآن.
+        </div>
+        {% endif %}
+    </div>
 
     <!-- Approval Audit History Log (Requirement 3 & 5) -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -993,42 +1278,49 @@
 
 </div>
 
-<!-- Disapprove Modal -->
-<div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" role="dialog" aria-modal="true">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDisapproveModal()"></div>
-        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
-                <h3 class="text-base font-bold">رفض الزيارة #{{ visit.serial_num }}</h3>
-                <button type="button" onclick="closeDisapproveModal()" class="text-white/80 hover:text-white">
-                    <span class="material-symbols-outlined text-xl">close</span>
-                </button>
-            </div>
-            <form method="POST" action="{% url 'visit_action' visit.pk 'disapprove' %}" class="p-6 space-y-4">
-                {% csrf_token %}
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">سبب الرفض والملاحظات</label>
-                    <textarea name="approval_notes" rows="3" required placeholder="يرجى توضيح سبب رفض هذه الزيارة للمندوب..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
-                </div>
-                <div class="flex gap-2">
-                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors">
-                        تأكيد الرفض
-                    </button>
-                    <button type="button" onclick="closeDisapproveModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                        إلغاء
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script>
-function openDisapproveModal() {
-    document.getElementById('disapprove-modal').classList.remove('hidden');
+const clientRegisteredLat = {% if visit.contact.latitude %}Number("{{ visit.contact.latitude|stringformat:'s' }}"){% else %}null{% endif %};
+const clientRegisteredLng = {% if visit.contact.longitude %}Number("{{ visit.contact.longitude|stringformat:'s' }}"){% else %}null{% endif %};
+const visitAllowedDistance = Number("{{ allowed_distance|default:300 }}");
+
+function computeHaversineDistance(lat1, lon1, lat2, lon2) {
+    if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+    const R = 6371000;
+    const phi1 = lat1 * Math.PI / 180;
+    const phi2 = lat2 * Math.PI / 180;
+    const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+    const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+              Math.cos(phi1) * Math.cos(phi2) *
+              Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 100) / 100;
 }
-function closeDisapproveModal() {
-    document.getElementById('disapprove-modal').classList.add('hidden');
+
+function updateEndVisitDistanceDisplay(lat, lng) {
+    const actualEl = document.getElementById('end-actual-distance-display');
+    const pillEl = document.getElementById('end-distance-status-pill');
+    if (!actualEl || !pillEl) return;
+
+    if (clientRegisteredLat === null || clientRegisteredLng === null) {
+        actualEl.textContent = "0 متر (تثبيت أول مرة)";
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
+        pillEl.textContent = "سيتم تثبيت موقع العميل تلقائياً ✓";
+        return;
+    }
+
+    const dist = computeHaversineDistance(lat, lng, clientRegisteredLat, clientRegisteredLng);
+    if (dist === null) return;
+    actualEl.textContent = `${Math.round(dist)} متر`;
+
+    if (dist <= visitAllowedDistance) {
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
+        pillEl.textContent = `ضمن النطاق المسموح (${visitAllowedDistance}م) ✓`;
+    } else {
+        const diff = Math.round(dist - visitAllowedDistance);
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200";
+        pillEl.textContent = `خارج النطاق بـ ${diff} متر ⚠️`;
+    }
 }
 
 function triggerCameraInput() {
@@ -1039,7 +1331,6 @@ function triggerCameraInput() {
 function previewCapturedPhoto(event) {
     const file = event.target.files[0];
     if (file) {
-        // Validate size (max 10MB)
         if (file.size > 10 * 1024 * 1024) {
             alert('حجم الصورة كبير جداً. الحد الأقصى المسموح به هو 10 ميجابايت.');
             event.target.value = '';
@@ -1088,16 +1379,17 @@ function captureLiveCoordinates() {
 
             if (statusBadge) {
                 statusBadge.innerText = 'تم التقاط الموقع بنجاح ✓';
-                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800';
             }
             if (coordsText) {
-                coordsText.innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)} (±${Math.round(acc)}m)`;
+                coordsText.innerText = `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(acc)}m)`;
             }
+            updateEndVisitDistanceDisplay(lat, lng);
         },
         function(error) {
             if (statusBadge) {
                 statusBadge.innerText = 'تعذر التقاط الموقع (يرجى السماح بالوصول للـ GPS)';
-                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800';
             }
         },
         { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
@@ -1116,9 +1408,78 @@ function toggleBypassReason() {
     }
 }
 
+function toggleExceptionReason() {
+    const chk = document.getElementById('request-exception-chk');
+    const reasonBox = document.getElementById('exception-reason-box');
+    if (chk && reasonBox) {
+        if (chk.checked) {
+            reasonBox.classList.remove('hidden');
+        } else {
+            reasonBox.classList.add('hidden');
+        }
+    }
+}
+
 // Client-side conditional questions visibility evaluation
 function handleQuestionChange(questionId) {
     evaluateConditionalQuestions();
+    evaluateRequiredQuestions();
+}
+
+function evaluateRequiredQuestions() {
+    const completeBtn = document.getElementById('complete-visit-btn');
+    const noticeBox = document.getElementById('unanswered-required-notice');
+    const noticeList = document.getElementById('unanswered-questions-list');
+    if (!completeBtn) return;
+
+    const blocks = document.querySelectorAll('.question-block');
+    const unanswered = [];
+
+    blocks.forEach(block => {
+        // If block is hidden due to conditional logic, ignore it!
+        if (block.classList.contains('hidden') || block.offsetParent === null) {
+            return;
+        }
+        const isReq = block.getAttribute('data-required') === '1';
+        if (!isReq) return;
+
+        const qId = block.getAttribute('data-question-id');
+        const qTitle = block.getAttribute('data-question-title') || `سؤال #${qId}`;
+        const inputs = block.querySelectorAll(`[name="question_${qId}"]`);
+
+        let hasAnswer = false;
+        inputs.forEach(input => {
+            if (input.type === 'radio' || input.type === 'checkbox') {
+                if (input.checked && input.value) hasAnswer = true;
+            } else if (input.tagName === 'SELECT') {
+                if (input.value && input.value.trim() !== '') hasAnswer = true;
+            } else {
+                if (input.value && input.value.trim() !== '') hasAnswer = true;
+            }
+        });
+
+        if (!hasAnswer) {
+            unanswered.push(qTitle);
+            block.classList.add('border-amber-400', 'bg-amber-50/20');
+        } else {
+            block.classList.remove('border-amber-400', 'bg-amber-50/20');
+        }
+    });
+
+    if (unanswered.length > 0) {
+        completeBtn.disabled = true;
+        completeBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        completeBtn.title = `يجب الإجابة على (${unanswered.length}) سؤال إلزامي قبل الإنهاء`;
+        if (noticeBox && noticeList) {
+            noticeList.innerHTML = unanswered.map(title => `<li class="font-bold">${title}</li>`).join('');
+            noticeBox.classList.remove('hidden');
+        }
+    } else {
+        completeBtn.disabled = false;
+        completeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        completeBtn.title = '';
+        if (noticeBox) noticeBox.classList.add('hidden');
+    }
 }
 
 function evaluateConditionalQuestions() {
@@ -1146,7 +1507,6 @@ function evaluateConditionalQuestions() {
     });
 }
 
-// Disapprove Modal handlers
 function openDisapproveModal() {
     const m = document.getElementById('disapprove-modal');
     if (m) m.classList.remove('hidden');
@@ -1156,7 +1516,6 @@ function closeDisapproveModal() {
     if (m) m.classList.add('hidden');
 }
 
-// Change Status Modal handlers
 function openChangeStatusModal() {
     const m = document.getElementById('change-status-modal');
     if (m) m.classList.remove('hidden');
@@ -1166,17 +1525,24 @@ function closeChangeStatusModal() {
     if (m) m.classList.add('hidden');
 }
 
-// Alert for unapproved visit send attempt
 function showUnapprovedAlert() {
     alert('عذراً، يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال.');
 }
 
-// Auto-run on page load
 document.addEventListener('DOMContentLoaded', function() {
     evaluateConditionalQuestions();
-    // Auto-acquire GPS when starting to answer if not already acquired
+    evaluateRequiredQuestions();
+
+    document.querySelectorAll('.question-input').forEach(inp => {
+        inp.addEventListener('input', evaluateRequiredQuestions);
+        inp.addEventListener('change', evaluateRequiredQuestions);
+    });
+
     const latInput = document.getElementById('form-latitude');
-    if (latInput && !latInput.value) {
+    const lngInput = document.getElementById('form-longitude');
+    if (latInput && lngInput && latInput.value && lngInput.value) {
+        updateEndVisitDistanceDisplay(Number(latInput.value), Number(lngInput.value));
+    } else if (latInput) {
         captureLiveCoordinates();
     }
 });

@@ -105,6 +105,10 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         )
         self.contact_clinic_a = Contact.objects.create(
             name='عيادة النور', code='CL001', account_type='Clinic',
+            area=self.subregion_a1, is_customer=True, status='customer'
+        )
+        self.contact_clinic_a2 = Contact.objects.create(
+            name='عيادة الملز', code='CL002', account_type='Clinic',
             area=self.subregion_a2, is_customer=True, status='customer'
         )
         self.contact_pharmacy_b = Contact.objects.create(
