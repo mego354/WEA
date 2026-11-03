@@ -342,6 +342,10 @@ def user_create(request):
         if cleaned_area_ids:
             user.assigned_areas.set(cleaned_area_ids)
 
+        from accounts.services import is_representative, ensure_representative_resources
+        if is_representative(user):
+            ensure_representative_resources(user)
+
         # Record Security Audit Log
         AuditLogService.log(
             action_type='USER_CREATED',
@@ -521,6 +525,10 @@ def user_edit(request, pk):
                 'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
             })
         target_user.assigned_areas.set(cleaned_ids)
+
+        from accounts.services import is_representative, ensure_representative_resources
+        if is_representative(target_user):
+            ensure_representative_resources(target_user)
 
         new_values = {
             'name': target_user.name,

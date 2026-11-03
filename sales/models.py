@@ -91,7 +91,13 @@ class SalesOrder(models.Model):
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
     memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_order", verbose_name="إذن صرف المخزن")
     
-    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="إجمالي القيمة (ج.م)")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الأصناف قبل الخصم (ج.م)")
+    items_discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي خصومات الأصناف (ج.م)")
+    custom_discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), verbose_name="خصم إضافي %")
+    custom_discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="خصم إضافي (ج.م)")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الضريبة (ج.م)")
+    shipping_fees = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="مصاريف الشحن / التوصيل (ج.م)")
+    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي القيمة (ج.م)")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     rejection_reason = models.TextField(blank=True, default='', verbose_name="سبب الرفض")
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_sales_orders", verbose_name="معتمد بواسطة")
@@ -152,6 +158,34 @@ class SalesOrder(models.Model):
             return False
         return self.due_date < timezone.now().date() and self.outstanding_balance > Decimal('0.00')
 
+    def recalculate_totals(self):
+        """Calculates accurate financial breakdown from line items and discounts matching Purchases."""
+        items = self.items.all()
+        raw_subtotal = sum((item.subtotal for item in items), Decimal('0.00'))
+        items_disc = sum((item.discount_amount for item in items), Decimal('0.00'))
+        items_tax = sum((item.tax_amount for item in items), Decimal('0.00'))
+
+        self.subtotal = raw_subtotal
+        self.items_discount_total = items_disc
+        
+        after_items_disc = max(Decimal('0.00'), raw_subtotal - items_disc)
+        
+        custom_disc_pct = Decimal(str(self.custom_discount_percentage or '0'))
+        custom_disc_amt = Decimal(str(self.custom_discount_amount or '0'))
+        shipping = Decimal(str(self.shipping_fees or '0'))
+
+        if custom_disc_pct > 0:
+            custom_disc_amt = (after_items_disc * (custom_disc_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+        
+        self.custom_discount_amount = custom_disc_amt
+        after_all_disc = max(Decimal('0.00'), after_items_disc - custom_disc_amt)
+        self.tax_amount = items_tax
+        self.grand_total = after_all_disc + self.tax_amount + shipping
+        self.save(update_fields=[
+            'subtotal', 'items_discount_total', 'custom_discount_amount',
+            'tax_amount', 'shipping_fees', 'grand_total'
+        ])
+
     def save(self, *args, **kwargs):
         if not self.serial_num:
             max_s = SalesOrder.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 500
@@ -165,11 +199,39 @@ class SalesOrderItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.PROTECT, verbose_name="المنتج")
     quantity = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="الكمية")
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="سعر البيع للوحدة")
-    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="المجموع")
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), verbose_name="خصم الصنف %")
+    discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="قيمة خصم الصنف")
+    tax_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), verbose_name="الضريبة %")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="قيمة الضريبة")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="المجموع قبل الخصم")
 
     class Meta:
         verbose_name = "بند أمر بيع"
         verbose_name_plural = "بنود أمر البيع"
+
+    def save(self, *args, **kwargs):
+        self.subtotal = (Decimal(str(self.quantity)) * Decimal(str(self.unit_price))).quantize(Decimal('0.01'))
+        disc_pct = Decimal(str(self.discount_percentage or '0'))
+        disc_amt = Decimal(str(self.discount_amount or '0'))
+        tax_pct = Decimal(str(self.tax_percentage or '0'))
+
+        if disc_pct > 0 and disc_amt == Decimal('0.00'):
+            disc_amt = (self.subtotal * (disc_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+
+        self.discount_amount = disc_amt
+        after_disc = max(Decimal('0.00'), self.subtotal - disc_amt)
+
+        if tax_pct > 0:
+            self.tax_amount = (after_disc * (tax_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+        else:
+            self.tax_amount = Decimal('0.00')
+
+        super().save(*args, **kwargs)
+
+    @property
+    def net_total(self):
+        after_disc = max(Decimal('0.00'), self.subtotal - self.discount_amount)
+        return after_disc + self.tax_amount
 
 
 class Collection(models.Model):

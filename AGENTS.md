@@ -70,6 +70,7 @@ Enforced in `accounts/permissions.py` and `accounts.User.has_permission`. Detail
 - Validate on the server. Use the ORM. Wrap multi-table writes in `transaction.atomic`.
 - No unused imports, duplicate URL **names**, hardcoded production secrets, or swallowed exceptions without logging.
 - Preserve Arabic RTL, teal brand (`#27bebe`), and mobile patterns in [`docs/ui-ux-guidelines.md`](docs/ui-ux-guidelines.md).
+- **Product Owner UI Preference**: Strict preference for simple, clean, compact UI without verbose notes, paragraphs, or oversized components. Present data concisely using icons and simple text. Avoid full-page refreshes on drawer/filter operations.
 - Coding detail: [`docs/coding-standards.md`](docs/coding-standards.md).
 
 ## E. Mandatory completion checklist

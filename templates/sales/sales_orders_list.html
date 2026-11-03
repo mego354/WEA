@@ -30,7 +30,7 @@
             </h1>
             <p class="text-sm text-slate-500 mt-0.5">متابعة طلبات العملاء، اعتمادات الإدارة، التجهيز بالمستودع والتسليم والفوترة</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
             <a href="{% url 'sales_orders_export' %}?status={{ current_status }}&customer={{ selected_customer|default:'' }}&search={{ search_query }}"
                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]"
                title="تصدير إلى Excel (.xlsx)">

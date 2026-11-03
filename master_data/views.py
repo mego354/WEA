@@ -989,7 +989,11 @@ def purchase_settings_view(request):
 @login_required
 @require_permission('settings:inventory/manage')
 def inventory_settings_view(request):
+    from accounts.models import Role
+    from accounts.services import AuditLogService
     profile = CompanyProfile.get_settings()
+    roles = Role.objects.filter(is_active=True).order_by('name')
+
     if request.method == 'POST':
         profile.use_expiry_date = request.POST.get('use_expiry_date') == 'on'
         profile.is_expiry_mandatory = request.POST.get('is_expiry_mandatory') == 'on'
@@ -997,10 +1001,44 @@ def inventory_settings_view(request):
         profile.is_batch_mandatory = request.POST.get('is_batch_mandatory') == 'on'
         profile.save()
 
-        messages.success(request, "تم حفظ إعدادات المخازن بنجاح.")
+        roles_stock_in = request.POST.getlist('roles_can_stock_in')
+        roles_stock_out = request.POST.getlist('roles_can_stock_out')
+        roles_transfer = request.POST.getlist('roles_can_transfer')
+
+        profile.roles_can_stock_in.set(roles_stock_in)
+        profile.roles_can_stock_out.set(roles_stock_out)
+        profile.roles_can_transfer.set(roles_transfer)
+
+        AuditLogService.log(
+            user=request.user,
+            action='UPDATE',
+            resource_type='InventorySettings',
+            resource_id=str(profile.id),
+            resource_name=profile.company_name,
+            details={
+                'use_expiry_date': profile.use_expiry_date,
+                'use_batch_number': profile.use_batch_number,
+                'roles_can_stock_in': list(roles_stock_in),
+                'roles_can_stock_out': list(roles_stock_out),
+                'roles_can_transfer': list(roles_transfer),
+            },
+            request=request
+        )
+
+        messages.success(request, "تم حفظ إعدادات وصلاحيات المخازن بنجاح.")
         return redirect('inventory_settings')
 
-    return render(request, 'settings/inventory_settings.html', {'profile': profile})
+    selected_stock_in = set(profile.roles_can_stock_in.values_list('id', flat=True))
+    selected_stock_out = set(profile.roles_can_stock_out.values_list('id', flat=True))
+    selected_transfer = set(profile.roles_can_transfer.values_list('id', flat=True))
+
+    return render(request, 'settings/inventory_settings.html', {
+        'profile': profile,
+        'roles': roles,
+        'selected_stock_in': selected_stock_in,
+        'selected_stock_out': selected_stock_out,
+        'selected_transfer': selected_transfer,
+    })
 
 
 

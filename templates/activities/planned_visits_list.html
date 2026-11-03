@@ -42,9 +42,13 @@
             </div>
 
             <!-- Customer Filter Drawer Toggle -->
-            <button type="button" onclick="toggleDrawer()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                <span class="material-symbols-outlined text-base">filter_list</span>
+            <button type="button" onclick="toggleDrawer()" id="drawer-toggle-btn" class="inline-flex items-center gap-1.5 px-3 py-2 {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %} text-xs font-bold rounded-xl transition-all shadow-xs relative">
+                <span id="drawer-toggle-icon" class="material-symbols-outlined text-base {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}text-[#27bebe]{% endif %}">filter_list</span>
                 <span>تنقية العملاء</span>
+                <span id="drawer-active-filter-badge" class="{% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}{% else %}hidden{% endif %} flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-[#27bebe] animate-pulse"></span>
+                    <span id="drawer-active-filter-text" class="text-[10px] bg-[#27bebe] text-white px-1.5 py-0.5 rounded-full font-bold">نشط</span>
+                </span>
             </button>
 
             <!-- Export -->
@@ -172,17 +176,25 @@
             {% endfor %}
         </div>
 
-        <!-- Customer Filtering & Bulk Planning Drawer (Right / Side in 4th col) -->
-        <div id="customer-drawer" class="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+        <!-- Customer Drawer Mobile Backdrop -->
+        <div id="customer-drawer-backdrop" onclick="toggleDrawer()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden transition-opacity duration-300 lg:hidden"></div>
+
+        <!-- Customer Filtering & Bulk Planning Drawer (Slide-over on mobile, static col on desktop) -->
+        <div id="customer-drawer" class="fixed inset-y-0 right-0 z-50 w-full sm:max-w-md bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:w-auto lg:shadow-xs lg:border lg:border-slate-200 lg:rounded-2xl lg:p-4 lg:sm:p-5 lg:col-span-1 p-4 sm:p-5 space-y-4">
             <!-- Header -->
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                     <span class="material-symbols-outlined text-[#27bebe] text-base">tune</span>
                     <span>تنقية وتخطيط العملاء</span>
                 </h3>
-                <span class="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                    <span id="drawer-total-count">{{ total_clients_count }}</span> متاح
-                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                        <span id="drawer-total-count">{{ total_clients_count }}</span> متاح
+                    </span>
+                    <button type="button" onclick="toggleDrawer()" class="lg:hidden min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="إغلاق اللوحة">
+                        <span class="material-symbols-outlined text-xl">close</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Bulk Daily Planning Action Box (Requirements 1 & 2) -->
@@ -231,20 +243,20 @@
                 </button>
             </div>
 
-            <!-- Existing Left-side Client Filters (Requirement 2) -->
-            <form method="GET" class="space-y-2.5 border-t border-slate-100 pt-3">
+            <!-- Existing Left-side Client Filters (Requirement 2: AJAX Filtering without Page Refresh) -->
+            <form id="drawer-filter-form" onsubmit="applyDrawerFilterAjax(event)" class="space-y-2.5 border-t border-slate-100 pt-3">
                 <input type="hidden" name="assignee" value="{{ selected_rep.id }}">
                 <input type="hidden" name="date_from" value="{{ start_date }}">
                 <input type="hidden" name="date_to" value="{{ end_date }}">
 
                 <div>
-                    <input type="text" name="contact_search" value="{{ selected_contact_search|default:'' }}" placeholder="بحث بالاسم أو الكود..."
+                    <input type="text" name="contact_search" id="filter_contact_search" value="{{ selected_contact_search|default:'' }}" placeholder="بحث بالاسم أو الكود..."
                            class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                 </div>
 
                 <div>
                     <label class="block text-[10px] font-bold text-slate-500 mb-0.5">نوع العميل (Account Type)</label>
-                    <select name="account_type" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                    <select name="account_type" id="filter_account_type" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">جميع الأنواع</option>
                         {% for acc in account_types %}
                         <option value="{{ acc }}" {% if selected_account_type == acc %}selected{% endif %}>{{ acc }}</option>
@@ -254,7 +266,7 @@
 
                 <div>
                     <label class="block text-[10px] font-bold text-slate-500 mb-0.5">المنطقة الرئيسية (المحافظة)</label>
-                    <select name="main_area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                    <select name="main_area" id="filter_main_area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">جميع المناطق الرئيسية</option>
                         {% for ma in main_areas %}
                         <option value="{{ ma.id }}" {% if selected_main_area == ma.id|stringformat:"s" %}selected{% endif %}>{{ ma.name }}</option>
@@ -264,7 +276,7 @@
 
                 <div>
                     <label class="block text-[10px] font-bold text-slate-500 mb-0.5">الخط الجغرافي / المنطقة الفرعية (Brick)</label>
-                    <select name="area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                    <select name="area" id="filter_area" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">جميع الخطوط (Bricks)</option>
                         {% for a in areas %}
                         <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
@@ -274,7 +286,7 @@
 
                 <div>
                     <label class="block text-[10px] font-bold text-slate-500 mb-0.5">تصنيف العميل (Classification)</label>
-                    <select name="customer_category" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                    <select name="customer_category" id="filter_customer_category" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">الكل (A+, A, B, C)</option>
                         {% for cat in customer_categories %}
                         <option value="{{ cat }}" {% if selected_customer_category == cat %}selected{% endif %}>{{ cat }}</option>
@@ -282,9 +294,16 @@
                     </select>
                 </div>
 
-                <button type="submit" class="w-full py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
-                    تطبيق الفلتر
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="submit" id="drawer-filter-submit-btn" class="flex-1 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">filter_alt</span>
+                        <span>تطبيق الفلتر</span>
+                    </button>
+                    <button type="button" onclick="resetDrawerFilters()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1" title="إعادة ضبط الفلاتر">
+                        <span class="material-symbols-outlined text-sm">restart_alt</span>
+                        <span>إلغاء</span>
+                    </button>
+                </div>
             </form>
 
             <!-- Clients Checklist & Incremental Loader (Requirement 2) -->
@@ -367,14 +386,31 @@ function toggleDayAccordion(bodyId) {
 function toggleDrawer() {
     const drawer = document.getElementById('customer-drawer');
     const container = document.getElementById('timeline-container');
-    if (drawer && container) {
-        drawer.classList.toggle('hidden');
-        if (drawer.classList.contains('hidden')) {
-            container.classList.remove('lg:col-span-3');
-            container.classList.add('lg:col-span-4');
+    const backdrop = document.getElementById('customer-drawer-backdrop');
+    if (!drawer) return;
+
+    const isMobile = window.innerWidth < 1024;
+    if (isMobile) {
+        const isClosed = drawer.classList.contains('translate-x-full');
+        if (isClosed) {
+            drawer.classList.remove('translate-x-full');
+            if (backdrop) backdrop.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
         } else {
-            container.classList.remove('lg:col-span-4');
-            container.classList.add('lg:col-span-3');
+            drawer.classList.add('translate-x-full');
+            if (backdrop) backdrop.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+    } else {
+        if (drawer && container) {
+            drawer.classList.toggle('hidden');
+            if (drawer.classList.contains('hidden')) {
+                container.classList.remove('lg:col-span-3');
+                container.classList.add('lg:col-span-4');
+            } else {
+                container.classList.remove('lg:col-span-4');
+                container.classList.add('lg:col-span-3');
+            }
         }
     }
 }
@@ -388,11 +424,25 @@ function activateBulkPlanningForDate(dateStr) {
 
     const drawer = document.getElementById('customer-drawer');
     const container = document.getElementById('timeline-container');
-    if (drawer && drawer.classList.contains('hidden')) {
-        drawer.classList.remove('hidden');
-        if (container) {
-            container.classList.remove('lg:col-span-4');
-            container.classList.add('lg:col-span-3');
+    const backdrop = document.getElementById('customer-drawer-backdrop');
+    const isMobile = window.innerWidth < 1024;
+
+    if (isMobile) {
+        if (drawer) {
+            drawer.classList.remove('translate-x-full');
+            if (backdrop) backdrop.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+    } else {
+        if (drawer && drawer.classList.contains('hidden')) {
+            drawer.classList.remove('hidden');
+            if (container) {
+                container.classList.remove('lg:col-span-4');
+                container.classList.add('lg:col-span-3');
+            }
+        }
+        if (drawer) {
+            drawer.scrollIntoView({ behavior: 'smooth' });
         }
     }
 
@@ -559,58 +609,195 @@ function validateDrawerBulkSubmit() {
     }
 }
 
-// Requirement 2: Incremental Client Loader (10-batch, no duplicates, maintains selection)
+// AJAX Filter Helpers for Drawer (No page refresh, preserves state and mobile drawer)
+function getActiveFilterParams() {
+    const form = document.getElementById('drawer-filter-form');
+    const params = new URLSearchParams();
+    if (form) {
+        const formData = new FormData(form);
+        for (const [key, value] of formData.entries()) {
+            if (value && String(value).trim() !== '') {
+                params.set(key, String(value).trim());
+            }
+        }
+    }
+    return params;
+}
+
+function updateActiveFilterBadge() {
+    const toggleBtn = document.getElementById('drawer-toggle-btn');
+    const toggleIcon = document.getElementById('drawer-toggle-icon');
+    const badge = document.getElementById('drawer-active-filter-badge');
+    const badgeText = document.getElementById('drawer-active-filter-text');
+
+    const search = document.getElementById('filter_contact_search')?.value?.trim();
+    const accType = document.getElementById('filter_account_type')?.value?.trim();
+    const mainArea = document.getElementById('filter_main_area')?.value?.trim();
+    const area = document.getElementById('filter_area')?.value?.trim();
+    const cat = document.getElementById('filter_customer_category')?.value?.trim();
+
+    let activeCount = 0;
+    if (search) activeCount++;
+    if (accType) activeCount++;
+    if (mainArea) activeCount++;
+    if (area) activeCount++;
+    if (cat) activeCount++;
+
+    if (activeCount > 0) {
+        if (toggleBtn) {
+            toggleBtn.className = "inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30 text-xs font-bold rounded-xl transition-all shadow-xs relative";
+        }
+        if (toggleIcon) toggleIcon.classList.add('text-[#27bebe]');
+        if (badge) badge.classList.remove('hidden');
+        if (badgeText) badgeText.textContent = `نشط (${activeCount})`;
+    } else {
+        if (toggleBtn) {
+            toggleBtn.className = "inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-xs relative";
+        }
+        if (toggleIcon) toggleIcon.classList.remove('text-[#27bebe]');
+        if (badge) badge.classList.add('hidden');
+    }
+}
+
+async function applyDrawerFilterAjax(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const submitBtn = document.getElementById('drawer-filter-submit-btn');
+    const originalContent = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري البحث...</span>`;
+    }
+
+    currentOffset = 0;
+    loadedContactIds.clear();
+
+    const params = getActiveFilterParams();
+    params.set('action', 'load_contacts');
+    params.set('offset', '0');
+    params.set('limit', '10');
+
+    // Update browser URL without reload so browser history stays up-to-date
+    const historyParams = getActiveFilterParams();
+    historyParams.delete('action');
+    historyParams.delete('offset');
+    historyParams.delete('limit');
+    const newUrl = `${window.location.pathname}?${historyParams.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+
+    updateActiveFilterBadge();
+
+    try {
+        const resp = await fetch(`${window.location.pathname}?${params.toString()}`, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await resp.json();
+        if (data.success && data.contacts) {
+            renderDrawerClientsList(data.contacts, true);
+            const totalCountEl = document.getElementById('drawer-total-count');
+            if (totalCountEl) totalCountEl.textContent = data.total_count;
+
+            currentOffset = data.contacts.length;
+            const loadMoreWrapper = document.getElementById('drawer-load-more-wrapper');
+            if (loadMoreWrapper) {
+                if (data.has_more) {
+                    loadMoreWrapper.classList.remove('hidden');
+                } else {
+                    loadMoreWrapper.classList.add('hidden');
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error applying client filter via AJAX:', err);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalContent;
+        }
+    }
+}
+
+function resetDrawerFilters() {
+    const form = document.getElementById('drawer-filter-form');
+    if (form) {
+        form.querySelectorAll('input[type="text"]').forEach(i => i.value = '');
+        form.querySelectorAll('select').forEach(s => s.value = '');
+    }
+    applyDrawerFilterAjax();
+}
+
+function renderDrawerClientsList(contacts, replace = false) {
+    const listEl = document.getElementById('drawer-clients-list');
+    if (!listEl) return;
+    if (replace) {
+        listEl.innerHTML = '';
+    }
+
+    if (contacts.length === 0 && replace) {
+        listEl.innerHTML = `
+            <div class="p-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                <span class="material-symbols-outlined text-2xl text-slate-300 block mb-1">search_off</span>
+                <span>لا يوجد عملاء يطابقون خيارات الفلتر المحددة.</span>
+            </div>
+        `;
+        return;
+    }
+
+    const targetDate = document.getElementById('drawer-bulk-date')?.value || todayStr;
+
+    contacts.forEach(c => {
+        if (loadedContactIds.has(c.id)) return;
+        loadedContactIds.add(c.id);
+
+        const isChecked = selectedContactIds.has(String(c.id));
+        const card = document.createElement('div');
+        card.className = `drawer-client-card p-2.5 bg-slate-50 hover:bg-teal-50/40 rounded-xl border border-slate-200/80 transition-all flex items-start gap-2.5 text-xs ${isChecked ? 'border-[#27bebe] bg-teal-50/40' : ''}`;
+        card.setAttribute('data-contact-id', c.id);
+        card.setAttribute('data-account-type', c.account_type || '');
+        card.innerHTML = `
+            <input type="checkbox" value="${c.id}" ${isChecked ? 'checked' : ''} onchange="handleClientCheckboxToggle(this)"
+                   class="drawer-client-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-1">
+                    <p class="font-bold text-slate-800 truncate" title="${c.name}">${c.name}</p>
+                    ${c.customer_category ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة ${c.customer_category}</span>` : ''}
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
+                    <span>${c.account_type || 'عميل'}</span>
+                    ${c.area_name ? `<span>• ${c.area_name}</span>` : ''}
+                </div>
+            </div>
+            <a href="/visits/create/?contact_id=${c.id}&date=${targetDate}&visit_type=planned&is_planned=1"
+               class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 shrink-0 transition-colors"
+               title="إنشاء زيارة فردية لهذا العميل">
+                <span class="material-symbols-outlined text-base">add</span>
+            </a>
+        `;
+        listEl.appendChild(card);
+    });
+
+    updateDrawerSelectionState();
+}
+
+// Requirement 2: Incremental Client Loader (10-batch, no duplicates, maintains selection & filter state)
 async function loadMoreClients() {
     const btn = document.getElementById('drawer-load-more-btn');
     if (!btn) return;
     btn.disabled = true;
     btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري التحميل...</span>`;
 
-    const url = new URL(window.location.href);
-    url.searchParams.set('action', 'load_contacts');
-    url.searchParams.set('offset', currentOffset);
-    url.searchParams.set('limit', '10');
+    const params = getActiveFilterParams();
+    params.set('action', 'load_contacts');
+    params.set('offset', currentOffset);
+    params.set('limit', '10');
 
     try {
-        const resp = await fetch(url.toString(), {
+        const resp = await fetch(`${window.location.pathname}?${params.toString()}`, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
         });
         const data = await resp.json();
         if (data.success && data.contacts) {
-            const listEl = document.getElementById('drawer-clients-list');
-            const targetDate = document.getElementById('drawer-bulk-date')?.value || todayStr;
-
-            data.contacts.forEach(c => {
-                if (loadedContactIds.has(c.id)) return; // Prevent duplicates
-                loadedContactIds.add(c.id);
-
-                const isChecked = selectedContactIds.has(String(c.id));
-                const card = document.createElement('div');
-                card.className = `drawer-client-card p-2.5 bg-slate-50 hover:bg-teal-50/40 rounded-xl border border-slate-200/80 transition-all flex items-start gap-2.5 text-xs ${isChecked ? 'border-[#27bebe] bg-teal-50/40' : ''}`;
-                card.setAttribute('data-contact-id', c.id);
-                card.setAttribute('data-account-type', c.account_type || '');
-                card.innerHTML = `
-                    <input type="checkbox" value="${c.id}" ${isChecked ? 'checked' : ''} onchange="handleClientCheckboxToggle(this)"
-                           class="drawer-client-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center justify-between gap-1">
-                            <p class="font-bold text-slate-800 truncate" title="${c.name}">${c.name}</p>
-                            ${c.customer_category ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة ${c.customer_category}</span>` : ''}
-                        </div>
-                        <div class="text-[10px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
-                            <span>${c.account_type || 'عميل'}</span>
-                            ${c.area_name ? `<span>• ${c.area_name}</span>` : ''}
-                        </div>
-                    </div>
-                    <a href="{% url 'visit_create' %}?contact_id=${c.id}&date=${targetDate}&visit_type=planned&is_planned=1"
-                       class="p-1 rounded-lg bg-white border border-slate-200 hover:border-[#27bebe] hover:text-[#27bebe] text-slate-500 shrink-0 transition-colors"
-                       title="إنشاء زيارة فردية لهذا العميل">
-                        <span class="material-symbols-outlined text-base">add</span>
-                    </a>
-                `;
-                listEl.appendChild(card);
-            });
-
+            renderDrawerClientsList(data.contacts, false);
             currentOffset += data.contacts.length;
             if (!data.has_more) {
                 document.getElementById('drawer-load-more-wrapper')?.classList.add('hidden');

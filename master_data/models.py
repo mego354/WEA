@@ -42,6 +42,26 @@ class CompanyProfile(models.Model):
     is_batch_mandatory = models.BooleanField(default=False, verbose_name="رقم التشغيل إلزامي")
     is_expiry_mandatory = models.BooleanField(default=False, verbose_name="تاريخ الصلاحية إلزامي")
 
+    # Configurable Role Permissions for Warehouse Operations
+    roles_can_stock_in = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='roles_stock_in',
+        verbose_name="الأدوار المصرح لها بإذن إضافة مخزني"
+    )
+    roles_can_stock_out = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='roles_stock_out',
+        verbose_name="الأدوار المصرح لها بإذن صرف مخزني"
+    )
+    roles_can_transfer = models.ManyToManyField(
+        'accounts.Role',
+        blank=True,
+        related_name='roles_transfer',
+        verbose_name="الأدوار المصرح لها بالتحويل بين المخازن"
+    )
+
     class Meta:
         verbose_name = "بيانات وإعدادات الشركة"
         verbose_name_plural = "بيانات وإعدادات الشركة"

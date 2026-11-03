@@ -52,7 +52,9 @@ This is **not** a substitute for `SecurityAuditLog`. Dual-write when a workflow 
 | Sales order lifecycle + collections | `sales/services.py` |
 | Purchase order/return lifecycle | `purchases/services.py` |
 | Vault deposit/withdraw/transfer, vendor payments | `treasury/services.py` |
-| Inter-warehouse transfer create/approve/reject/execute | `inventory/services.py` `ProductTransferService` |
+| Inter-warehouse transfer create/approve/reject/execute | `inventory/services.py` `ProductTransferService` (`TRANSFER_REQUEST_CREATED`, `TRANSFER_REQUEST_APPROVED`, `TRANSFER_REQUEST_REJECTED`, `TRANSFER_REQUEST_CANCELLED`, `TRANSFER_EXECUTED`) |
+| Stock In / Stock Out inventory memos | `inventory/services.py` `InventoryMemoService` (`STOCK_IN`, `STOCK_OUT`) |
+| Inventory & warehouse role settings | `master_data/views.py` `inventory_settings_view` (`INVENTORY_SETTINGS_UPDATED`) |
 | Catalog product create/update/delete | `catalog/views.py` |
 | Visit create / edit / post-approval re-approval / distance bypass / distance exception / start / end / approve / reject | `activities/views.py` & `activities/services.py` write **both** `ApprovalAuditLog` and `AuditLogService` (`VISIT_CREATED`, `VISIT_UPDATED`, `VISIT_EDITED_REAPPROVAL_REQUIRED`, `VISIT_DISTANCE_BYPASSED`, `VISIT_DISTANCE_EXCEPTION_REQUESTED`, `VISIT_APPROVED`, `VISIT_REJECTED`) |
 | Bulk daily planned visit scheduling | `activities/views.py` (`planned_visits_bulk_add`) writes `BULK_PLANNED_VISITS_CREATED` to `AuditLogService` |

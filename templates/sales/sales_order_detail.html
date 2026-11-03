@@ -171,14 +171,36 @@
         </div>
 
         <!-- Financial Summary -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1">
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1.5">
             <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base text-brand-600">payments</span>
                 <span>الحسابات والموقف المالي</span>
             </h3>
             <div class="flex justify-between items-center text-xs">
-                <span class="text-slate-500">الإجمالي:</span>
-                <span class="font-bold font-mono text-slate-900">{{ order.grand_total|floatformat:2 }} ج.م</span>
+                <span class="text-slate-500">إجمالي البنود:</span>
+                <span class="font-bold font-mono text-slate-900">{{ order.subtotal|floatformat:2 }} ج.م</span>
+            </div>
+            {% if order.items_discount_total > 0 %}
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">خصم البنود:</span>
+                <span class="font-bold font-mono text-rose-600">- {{ order.items_discount_total|floatformat:2 }} ج.م</span>
+            </div>
+            {% endif %}
+            {% if order.custom_discount_percentage > 0 %}
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">خصم إضافي ({{ order.custom_discount_percentage|floatformat:2 }}%):</span>
+                <span class="font-bold font-mono text-rose-600">- {{ order.custom_discount_amount|floatformat:2 }} ج.م</span>
+            </div>
+            {% endif %}
+            {% if order.shipping_fees > 0 %}
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">مصاريف الشحن:</span>
+                <span class="font-bold font-mono text-slate-900">+ {{ order.shipping_fees|floatformat:2 }} ج.م</span>
+            </div>
+            {% endif %}
+            <div class="flex justify-between items-center text-xs pt-1.5 border-t border-slate-100">
+                <span class="text-slate-900 font-black">الإجمالي النهائي:</span>
+                <span class="font-black font-mono text-brand-700 text-sm">{{ order.grand_total|floatformat:2 }} ج.م</span>
             </div>
             <div class="flex justify-between items-center text-xs">
                 <span class="text-slate-500">المحصل:</span>
@@ -197,12 +219,12 @@
         </div>
     </div>
 
-    <!-- Items Table -->
+    <!-- Items Table (بنود أمر البيع) -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="p-5 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">format_list_bulleted</span>
-                <span>قائمة الأصناف المحجوزة</span>
+                <span>بنود أمر البيع</span>
             </h3>
             <span class="text-xs font-bold text-slate-500">{{ order.items.count }} صنف</span>
         </div>
@@ -211,12 +233,13 @@
             <table class="w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase">
-                        <th class="py-3 px-4 w-12">#</th>
+                        <th class="py-3 px-4 w-12 text-center">#</th>
                         <th class="py-3 px-4">كود الصنف</th>
                         <th class="py-3 px-4">اسم المنتج</th>
                         <th class="py-3 px-4 text-center">الكمية</th>
                         <th class="py-3 px-4 text-center">سعر البيع</th>
-                        <th class="py-3 px-4 text-left">المجموع</th>
+                        <th class="py-3 px-4 text-center">الخصم %</th>
+                        <th class="py-3 px-4 text-left">المجموع بعد الخصم</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -227,6 +250,7 @@
                         <td class="py-3.5 px-4 font-bold text-slate-900">{{ item.product.name }}</td>
                         <td class="py-3.5 px-4 text-center font-bold text-slate-900">{{ item.quantity|floatformat:0 }}</td>
                         <td class="py-3.5 px-4 text-center font-mono text-xs">{{ item.unit_price|floatformat:2 }} ج.م</td>
+                        <td class="py-3.5 px-4 text-center font-mono text-xs">{% if item.discount_percentage %}{{ item.discount_percentage|floatformat:2 }}%{% else %}0%{% endif %}</td>
                         <td class="py-3.5 px-4 text-left font-mono font-bold text-slate-900">{{ item.subtotal|floatformat:2 }} ج.م</td>
                     </tr>
                     {% endfor %}

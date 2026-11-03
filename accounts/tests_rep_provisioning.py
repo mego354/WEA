@@ -180,3 +180,19 @@ class RepresentativeProvisioningTests(TestCase):
         call_command('backfill_representative_resources', stdout=out2)
         output_str = out2.getvalue()
         self.assertIn("Created 0 warehouses, 0 treasuries", output_str)
+
+    def test_delayed_role_assignment_triggers_provisioning(self):
+        """User created without a role, then updated to representative gets WH and Treasury."""
+        user = User.objects.create_user(username='delayed_rep', first_name='سعيد', last_name='خالد')
+        self.assertIsNone(get_representative_warehouse(user))
+        self.assertIsNone(get_representative_treasury(user))
+
+        user.role = self.rep_role
+        user.save()
+
+        wh = get_representative_warehouse(user)
+        vault = get_representative_treasury(user)
+        self.assertIsNotNone(wh)
+        self.assertIsNotNone(vault)
+        self.assertEqual(wh.assigned_user, user)
+        self.assertEqual(vault.assigned_user, user)

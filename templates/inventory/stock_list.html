@@ -20,7 +20,7 @@
             <h1 class="text-2xl font-black text-slate-900 tracking-tight">أرصدة المخزون والتشغيلات</h1>
             <p class="text-sm text-slate-500 mt-0.5">متابعة الكميات الفعلية والمحجوزة ومتوسط تكلفة المنتجات بالمخازن</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
             <a href="{% url 'inventory_stock_export' %}?warehouse={{ selected_warehouse_id|default:'' }}&search={{ search_query }}"
                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
                title="تصدير إلى Excel (.xlsx)">

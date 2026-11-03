@@ -10,7 +10,7 @@ from .models import (
 class SalesOrderItemInline(admin.TabularInline):
     model = SalesOrderItem
     extra = 1
-    fields = ('product', 'quantity', 'unit_price', 'subtotal')
+    fields = ('product', 'quantity', 'unit_price', 'discount_percentage', 'subtotal')
     readonly_fields = ('subtotal',)
 
 
@@ -32,7 +32,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
     search_fields = ('order_number', 'customer__name', 'notes')
     date_hierarchy = 'order_date'
     inlines = [SalesOrderItemInline]
-    readonly_fields = ('serial_num', 'order_number', 'created_at', 'updated_at')
+    readonly_fields = ('serial_num', 'order_number', 'subtotal', 'items_discount_total', 'custom_discount_amount', 'grand_total', 'created_at', 'updated_at')
     actions = ['approve_selected_orders']
 
     fieldsets = (
@@ -40,7 +40,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
             'fields': ('serial_num', 'order_number', 'customer', 'delivery_address', 'source_warehouse', 'order_date', 'delivery_date', 'status')
         }),
         ('الربط المخزني والمالي', {
-            'fields': ('memo', 'grand_total')
+            'fields': ('memo', 'subtotal', 'items_discount_total', 'custom_discount_percentage', 'custom_discount_amount', 'shipping_fees', 'grand_total')
         }),
         ('الاعتماد والملاحظات', {
             'fields': ('approved_by', 'approved_at', 'rejection_reason', 'notes', 'created_by', 'created_at', 'updated_at')

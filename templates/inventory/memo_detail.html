@@ -1,0 +1,128 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}{{ memo.memo_number }} - أذونات المخازن - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'inventory_memos_list' %}" class="hover:text-brand-600 transition-colors">أذونات المخازن</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{{ memo.memo_number }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6 pb-16">
+
+    <!-- Header Actions & Status -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight font-mono">{{ memo.memo_number }}</h1>
+                {% if memo.memo_type == 'inward' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    إذن إضافة مخزنية
+                </span>
+                {% else %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    إذن صرف / خصم مخزني
+                </span>
+                {% endif %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                    {{ memo.get_status_display }}
+                </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1 font-mono">
+                تاريخ الإنشاء: {{ memo.created_at|date:"Y-m-d H:i" }} | بواسطة: {{ memo.created_by.get_full_name|default:memo.created_by.username|default:"النظام" }}
+            </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <a href="{% url 'inventory_memos_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[44px] inline-flex items-center justify-center">
+                رجوع للأذونات
+            </a>
+        </div>
+    </div>
+
+    <!-- Master Info Dossier -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">warehouse</span>
+                <span>المخزن المنفذ</span>
+            </h3>
+            <p class="font-bold text-slate-900 text-sm">{{ memo.warehouse.name }}</p>
+            <p class="text-xs text-slate-500 mt-1 font-mono">الكود: {{ memo.warehouse.code }}</p>
+            <p class="text-xs text-slate-500 mt-0.5">المنطقة: {{ memo.warehouse.area.name|default:"عام" }}</p>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">description</span>
+                <span>البيان والسبب</span>
+            </h3>
+            <p class="font-bold text-slate-900 text-xs">{{ memo.statement }}</p>
+            {% if memo.notes %}
+            <p class="text-xs text-slate-500 mt-1">ملاحظات: {{ memo.notes }}</p>
+            {% endif %}
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">schedule</span>
+                <span>التنفيذ والتاريخ</span>
+            </h3>
+            <p class="font-bold text-slate-900 text-xs font-mono">تاريخ التنفيذ: {{ memo.applied_at|date:"Y-m-d H:i"|default:memo.created_at|date:"Y-m-d H:i" }}</p>
+            <p class="text-xs text-slate-500 mt-1">عدد البنود: {{ items.count }} صنف</p>
+        </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">format_list_bulleted</span>
+                <span>بنود الأصناف المنفذة بموجب الإذن</span>
+            </h3>
+            <span class="text-xs font-bold text-slate-500">{{ items.count }} صنف</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead>
+                    <tr class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <th class="py-3 px-3 text-center">#</th>
+                        <th class="py-3 px-3">كود الصنف</th>
+                        <th class="py-3 px-4">اسم المنتج</th>
+                        <th class="py-3 px-3 text-center">الكمية</th>
+                        {% if memo.memo_type == 'inward' %}
+                        <th class="py-3 px-3 text-center">تكلفة الوحدة</th>
+                        {% endif %}
+                        <th class="py-3 px-3 text-center">رقم التشغيل</th>
+                        <th class="py-3 px-3 text-center">تاريخ الصلاحية</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for item in items %}
+                    <tr class="hover:bg-slate-50/60">
+                        <td class="py-3 px-3 text-center text-slate-400 font-mono">{{ forloop.counter }}</td>
+                        <td class="py-3 px-3 font-mono font-bold text-brand-700">{{ item.product.sku_code }}</td>
+                        <td class="py-3 px-4 font-bold text-slate-900">{{ item.product.name }}</td>
+                        <td class="py-3 px-3 text-center font-mono font-bold text-slate-900">{{ item.quantity|floatformat:2 }}</td>
+                        {% if memo.memo_type == 'inward' %}
+                        <td class="py-3 px-3 text-center font-mono text-slate-800">{{ item.unit_cost|floatformat:2 }} ج.م</td>
+                        {% endif %}
+                        <td class="py-3 px-3 text-center font-mono text-slate-600">{{ item.batch_number|default:"—" }}</td>
+                        <td class="py-3 px-3 text-center font-mono text-slate-600">{{ item.expiry_date|date:"Y-m-d"|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-slate-400">لا توجد بنود مضافة</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
