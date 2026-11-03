@@ -46,9 +46,10 @@ flowchart TB
 - **Area:** `area_type` `governorate` (root, `parent=None`) or `subarea` (brick). Users may be assigned either; authorization walks to the root via `get_main_area` for managers, while representatives are scoped strictly to their assigned Brick(s) (`get_visit_eligible_contacts_queryset`, `can_user_access_contact_for_visit`).
 - **Role:** five canonical keys: `superadmin`, `manager`, `accountant`, `rep`, `medical_rep`. Extra flags (`is_super`, `is_area_manager`, `is_rep`, …) still exist for compatibility.
 - **Visit:** lifecycle `planned → started → finished` plus separate `approval_status` (`pending` / `approved` / `disapproved`), `requires_approval_due_to_distance`, and `waiting_for_reapproval` (triggered when a representative edits an already-approved visit). Tracks `distance`, `allowed_distance` (from `LocationSettings.tolerance` or `VisitTemplate.special_tolerance` when `allow_template_distance_override=True`), and `distance_discrepancy`.
-- **SalesOrder:** `pending → manager_approval → preparing → delivered → invoiced` (also `rejected`, `cancelled`).
-- **PurchaseOrder:** `pending → approved → picked → settled` (also `rejected`, `split`, `cancelled`).
-- **ProductTransferRequest:** `pending → approved → transferred` (also `rejected`, `cancelled`). Approval/execute is SuperAdmin/accountant, not area managers.
+- **SalesOrder:** `pending → manager_approval → preparing → delivered → invoiced` (also `rejected`, `cancelled`). Includes financial breakdown fields (`subtotal`, `items_discount_total`, `custom_discount_percentage`, `custom_discount_amount`, `tax_amount`, `shipping_fees`) and item-level discounts/taxes. Stock availability is strictly validated on creation and execution.
+- **PurchaseOrder:** `pending → approved → picked → settled` (also `rejected`, `split`, `cancelled`). Includes discounts, item pricing validation, and automatic stock addition upon picking.
+- **ProductTransferRequest:** `pending → approved → transferred` (also `rejected`, `cancelled`). Approval/execute is SuperAdmin/accountant, not area managers. Strictly validates that source and destination warehouses differ, belong to the same canonical main area, and source available stock (`qty_on_hand - qty_reserved`) satisfies transfer quantity.
+- **InventoryMemo:** tracks stock in (`memo_type='in'`) and stock out (`memo_type='out'`) across accessible warehouses, validating available stock for deductions and recalculating weighted average cost for additions.
 
 Singleton settings rows (`get_or_create(id=1)`): `CompanyProfile`, `LocationSettings`, `SalesSettings`, `PurchaseSettings`, `UserSettings`.
 
@@ -104,6 +105,7 @@ Template visibility uses `{% load erp_tags %}` filters `has_permission`, `can_ac
 | Purchase order lifecycle | `purchases/services.py` |
 | Vault deposit/withdraw/transfer, vendor pay | `treasury/services.py` |
 | Inter-warehouse transfer | `inventory/services.py` (`ProductTransferService`) |
+| Stock in / Stock out memos | `inventory/services.py` (`InventoryMemoService`) |
 | Rep warehouse/vault provisioning | `accounts/services.py` (`ensure_representative_resources`) |
 | Excel helpers | `master_data/excel_utils.py`, `master_data/pagination_utils.py` |
 | Forms | `activities/forms.py` (other apps often read `request.POST` in views) |
@@ -144,13 +146,15 @@ See [`audit-logging.md`](audit-logging.md).
 
 **Visit:** unified creation at `/visits/create/` for both planned and unplanned visits (distance validation mandatory on creation for unplanned visits, not required on creation for planned visits; duplicate same-day visit confirmation via `visit_check_duplicate_api` / `confirm_duplicate=1`) → manager approval (`visit_action`) → `start_visit` → questionnaire & completion at `/visits/<pk>/` (`end_visit`, enforcing distance validation with direct manager/superadmin bypass or representative exception request + mandatory `bypass_reason`). Editing an approved visit as a representative invalidates approval (`approval_status='pending'`, `waiting_for_reapproval=True`). Bulk daily planned visit scheduling is supported at `/planned-visits/bulk-add/` (`planned_visits_bulk_add`). Full lifecycle events are rendered via `build_visit_timeline(visit)`.
 
-**Sales:** create order (rep warehouse) → manager approval (`SalesSettings.require_manager_approval`) → warehouse prepare/deliver → invoice → `CustomerAccount` / `CustomerTransaction` → `Collection` into a vault.
+**Sales:** create order (rep warehouse) with item and order discounts + backend available stock validation → manager approval (`SalesSettings.require_manager_approval`) → warehouse prepare/deliver (row locking via `select_for_update()`) → invoice → `CustomerAccount` / `CustomerTransaction` → `Collection` into a vault.
 
-**Purchases:** create → approve → pick (inward memo + stock) → settle (vendor ledger) → optional vendor payment from vault.
+**Purchases:** create (item pricing, discounts, and non-negative shipping validated) → approve → pick (inward memo + stock with weighted average cost recalculation) → settle (vendor ledger) → optional vendor payment from vault.
 
-**Transfer:** rep requests same **main area** warehouses → SuperAdmin/accountant approve → atomic stock move + paired memos.
+**Transfer:** rep requests same **main area** warehouses → SuperAdmin/accountant approve → atomic stock move + paired memos, strictly verifying that source warehouse available stock (`qty_on_hand - qty_reserved`) is sufficient.
 
-**Rep onboarding:** creating a `rep`/`medical_rep` user can auto-create warehouse + cash vault (`UserSettings`).
+**Warehouse Memos (Stock In / Stock Out):** SuperAdmin, Accountant, or roles configured via `CompanyProfile.roles_can_stock_in` and `roles_can_stock_out` create manual inventory memos with batch/lot numbers and cost recalculation / stock deduction validation.
+
+**Rep onboarding:** creating or updating a user to a `rep`/`medical_rep` role automatically provisions a warehouse and cash vault (`UserSettings.auto_create_rep_warehouse_vault`) across all workflows: Django admin, user creation/edit forms, signals, and delayed role assignment.
 
 ## 12. Constraints and caution
 

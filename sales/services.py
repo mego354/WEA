@@ -14,9 +14,9 @@ class SalesOrderService:
 
     @classmethod
     @transaction.atomic
-    def create_order(cls, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, notes=''):
+    def create_order(cls, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'), notes='', validate_stock=False):
         """
-        Creates a new SalesOrder with line items and subtotal/grand_total computation.
+        Creates a new SalesOrder with line items, stock validation, and discount/grand_total computation.
         """
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر البيع.")
@@ -33,6 +33,40 @@ class SalesOrderService:
             if source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
                 raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
             source_warehouse = rep_wh
+
+        if not source_warehouse.is_active:
+            raise ValidationError(f"مخزن الصرف المحدد ({source_warehouse.name}) غير نشط حالياً.")
+
+        custom_disc_pct = Decimal(str(custom_discount_percentage or '0.00'))
+        if custom_disc_pct < Decimal('0.00') or custom_disc_pct > Decimal('100.00'):
+            raise ValidationError("نسبة الخصم الإضافي على أمر البيع يجب أن تكون بين 0% و 100%.")
+
+        shipping = Decimal(str(shipping_fees or '0.00'))
+        if shipping < Decimal('0.00'):
+            raise ValidationError("مصاريف الشحن / التوصيل يجب أن تكون قيمة موجبة أو صفر.")
+
+        # Pre-validate line items values and stock availability
+        for item in items_data:
+            product = item['product']
+            qty = Decimal(str(item.get('quantity', 0)))
+            price = Decimal(str(item.get('unit_price', 0)))
+            disc = Decimal(str(item.get('discount_percentage', 0)))
+
+            if qty <= Decimal('0.00'):
+                raise ValidationError(f"الكمية غير صالحة للصنف '{product.name}'. يجب أن تكون أكبر من الصفر.")
+            if price < Decimal('0.00'):
+                raise ValidationError(f"سعر البيع للصنف '{product.name}' لا يمكن أن يكون سالباً.")
+            if disc < Decimal('0.00') or disc > Decimal('100.00'):
+                raise ValidationError(f"نسبة الخصم للصنف '{product.name}' يجب أن تكون بين 0% و 100%.")
+
+            if validate_stock:
+                # Check stock in source warehouse (accounting for reservations)
+                stock = InventoryStock.objects.filter(warehouse=source_warehouse, product=product).first()
+                qty_avail = stock.qty_available if stock else Decimal('0.00')
+                if qty_avail < qty:
+                    raise ValidationError(
+                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.2f}) غير كافٍ للكمية المطلوبة ({qty:,.2f})."
+                    )
 
         from master_data.models import SalesSettings
         from accounts.permissions import is_manager_or_higher
@@ -53,6 +87,8 @@ class SalesOrderService:
             order_date=order_date or timezone.now().date(),
             delivery_date=delivery_date,
             due_date=due_date,
+            custom_discount_percentage=custom_disc_pct,
+            shipping_fees=shipping,
             status=initial_status,
             approved_by=approved_by,
             approved_at=approved_at,
@@ -61,29 +97,21 @@ class SalesOrderService:
         )
         order.save()
 
-        running_total = Decimal('0.00')
-
         for item in items_data:
             product = item['product']
             qty = Decimal(str(item['quantity']))
             price = Decimal(str(item['unit_price']))
-
-            if qty <= 0:
-                raise ValidationError(f"الكمية غير صالحة للصنف {product.name}.")
-
-            subtotal = (qty * price).quantize(Decimal('0.01'))
-            running_total += subtotal
+            disc = Decimal(str(item.get('discount_percentage', 0)))
 
             SalesOrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
                 unit_price=price,
-                subtotal=subtotal
+                discount_percentage=disc
             )
 
-        order.grand_total = running_total
-        order.save(update_fields=['grand_total'])
+        order.recalculate_totals()
 
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
@@ -107,6 +135,10 @@ class SalesOrderService:
             new_values={
                 'order_number': order.order_number,
                 'customer': customer.name,
+                'subtotal': str(order.subtotal),
+                'items_discount_total': str(order.items_discount_total),
+                'custom_discount_percentage': str(order.custom_discount_percentage),
+                'shipping_fees': str(order.shipping_fees),
                 'grand_total': str(order.grand_total),
                 'status': order.status,
                 'items_count': len(items_data),
@@ -118,10 +150,10 @@ class SalesOrderService:
 
     @classmethod
     @transaction.atomic
-    def update_order(cls, order, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, notes=''):
+    def update_order(cls, order, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'), notes='', validate_stock=False):
         """
         Updates an editable sales order (pending/rejected/manager_approval before preparation),
-        replaces line items, recalculates totals, and logs audit record.
+        revalidates stock availability, replaces line items, recalculates totals, and logs audit record.
         """
         if order.status in ['preparing', 'delivered', 'invoiced', 'cancelled']:
             raise ValidationError(f"لا يمكن تعديل أمر البيع في حالته الحالية: {order.get_status_display()}.")
@@ -139,9 +171,47 @@ class SalesOrderService:
                 raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
             source_warehouse = rep_wh
 
+        if not source_warehouse.is_active:
+            raise ValidationError(f"مخزن الصرف المحدد ({source_warehouse.name}) غير نشط حالياً.")
+
+        custom_disc_pct = Decimal(str(custom_discount_percentage or '0.00'))
+        if custom_disc_pct < Decimal('0.00') or custom_disc_pct > Decimal('100.00'):
+            raise ValidationError("نسبة الخصم الإضافي على أمر البيع يجب أن تكون بين 0% و 100%.")
+
+        shipping = Decimal(str(shipping_fees or '0.00'))
+        if shipping < Decimal('0.00'):
+            raise ValidationError("مصاريف الشحن / التوصيل يجب أن تكون قيمة موجبة أو صفر.")
+
+        # Validate line items and stock availability
+        for item in items_data:
+            product = item['product']
+            qty = Decimal(str(item.get('quantity', 0)))
+            price = Decimal(str(item.get('unit_price', 0)))
+            disc = Decimal(str(item.get('discount_percentage', 0)))
+
+            if qty <= Decimal('0.00'):
+                raise ValidationError(f"الكمية غير صالحة للصنف '{product.name}'. يجب أن تكون أكبر من الصفر.")
+            if price < Decimal('0.00'):
+                raise ValidationError(f"سعر البيع للصنف '{product.name}' لا يمكن أن يكون سالباً.")
+            if disc < Decimal('0.00') or disc > Decimal('100.00'):
+                raise ValidationError(f"نسبة الخصم للصنف '{product.name}' يجب أن تكون بين 0% و 100%.")
+
+            if validate_stock:
+                # Check stock in source warehouse (accounting for reservations)
+                stock = InventoryStock.objects.filter(warehouse=source_warehouse, product=product).first()
+                qty_avail = stock.qty_available if stock else Decimal('0.00')
+                if qty_avail < qty:
+                    raise ValidationError(
+                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.2f}) غير كافٍ للكمية المطلوبة ({qty:,.2f})."
+                    )
+
         previous_values = {
             'customer': order.customer.name if order.customer else '',
             'source_warehouse': order.source_warehouse.name if order.source_warehouse else '',
+            'subtotal': str(order.subtotal),
+            'items_discount_total': str(order.items_discount_total),
+            'custom_discount_percentage': str(order.custom_discount_percentage),
+            'shipping_fees': str(order.shipping_fees),
             'grand_total': str(order.grand_total),
             'due_date': str(order.due_date) if order.due_date else None,
             'notes': order.notes,
@@ -154,33 +224,28 @@ class SalesOrderService:
         order.delivery_date = delivery_date
         order.due_date = due_date
         order.delivery_address = delivery_address
+        order.custom_discount_percentage = custom_disc_pct
+        order.shipping_fees = shipping
         order.notes = notes
 
         # Replace line items
         order.items.all().delete()
-        running_total = Decimal('0.00')
 
         for item in items_data:
             product = item['product']
             qty = Decimal(str(item['quantity']))
             price = Decimal(str(item['unit_price']))
-
-            if qty <= 0:
-                raise ValidationError(f"الكمية غير صالحة للصنف {product.name}.")
-
-            subtotal = (qty * price).quantize(Decimal('0.01'))
-            running_total += subtotal
+            disc = Decimal(str(item.get('discount_percentage', 0)))
 
             SalesOrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
                 unit_price=price,
-                subtotal=subtotal
+                discount_percentage=disc
             )
 
-        order.grand_total = running_total
-        order.save()
+        order.recalculate_totals()
 
         from accounts.services import AuditLogService
         AuditLogService.log(
@@ -194,6 +259,10 @@ class SalesOrderService:
             new_values={
                 'customer': customer.name,
                 'source_warehouse': source_warehouse.name if source_warehouse else '',
+                'subtotal': str(order.subtotal),
+                'items_discount_total': str(order.items_discount_total),
+                'custom_discount_percentage': str(order.custom_discount_percentage),
+                'shipping_fees': str(order.shipping_fees),
                 'grand_total': str(order.grand_total),
                 'due_date': str(order.due_date) if order.due_date else None,
                 'notes': order.notes,
@@ -359,7 +428,7 @@ class SalesOrderService:
 
         # Check and reserve stock
         for item in order.items.select_related('product'):
-            stock, _ = InventoryStock.objects.get_or_create(
+            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                 warehouse=order.source_warehouse,
                 product=item.product,
                 defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
@@ -404,7 +473,7 @@ class SalesOrderService:
                 unit_cost=item.product.default_purchase_cost
             )
 
-            stock = InventoryStock.objects.get(
+            stock = InventoryStock.objects.select_for_update().get(
                 warehouse=order.source_warehouse,
                 product=item.product
             )

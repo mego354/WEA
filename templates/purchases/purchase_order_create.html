@@ -6,21 +6,9 @@
 <div class="max-w-5xl mx-auto pb-16">
 
     <!-- Header -->
-    <div class="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
-        <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">أمر مشتريات جديد</h1>
-            <p class="text-xs text-slate-500 mt-1">إنشاء أمر شراء وتوريد بضاعة من المورد للمخزن</p>
-        </div>
-
-        <div class="flex items-center gap-3">
-            <a href="{% url 'purchase_orders_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                إلغاء
-            </a>
-            <button type="submit" form="po-form" class="px-6 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">check</span>
-                <span>حفظ أمر الشراء</span>
-            </button>
-        </div>
+    <div class="mb-8 pb-4 border-b border-slate-200">
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">أمر مشتريات جديد</h1>
+        <p class="text-xs text-slate-500 mt-1">إنشاء أمر شراء وتوريد بضاعة من المورد للمخزن</p>
     </div>
 
     <form id="po-form" method="POST" class="space-y-6">
@@ -114,50 +102,61 @@
 
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs" id="items-table">
-                    <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <thead class="hidden md:table-header-group bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                         <tr>
-                            <th class="py-2.5 px-3">المنتج</th>
-                            <th class="py-2.5 px-2 w-24">الكمية</th>
-                            <th class="py-2.5 px-2 w-28">سعر الوحدة</th>
-                            <th class="py-2.5 px-2 w-28">رقم التشغيل</th>
-                            <th class="py-2.5 px-2 w-28">الصلاحية</th>
-                            <th class="py-2.5 px-2 w-20">الخصم %</th>
+                            <th class="py-2.5 px-3 min-w-[220px]">المنتج</th>
+                            <th class="py-2.5 px-2 w-24 text-center">الكمية</th>
+                            <th class="py-2.5 px-2 w-28 text-center">سعر الوحدة</th>
+                            <th class="py-2.5 px-2 w-28 text-center">رقم التشغيل</th>
+                            <th class="py-2.5 px-2 w-28 text-center">الصلاحية</th>
+                            <th class="py-2.5 px-2 w-20 text-center">الخصم %</th>
                             <th class="py-2.5 px-2 w-12 text-center">حذف</th>
                         </tr>
                     </thead>
-                    <tbody id="items-tbody" class="divide-y divide-slate-100">
+                    <tbody id="items-tbody" class="block md:table-row-group space-y-3 md:space-y-0 md:divide-y md:divide-slate-100">
                         <!-- Default First Item Row -->
-                        <tr class="item-row">
-                            <td class="py-2 px-2">
+                        <tr class="item-row block md:table-row bg-slate-50/60 md:bg-transparent p-4 md:p-0 rounded-xl md:rounded-none border border-slate-200 md:border-none shadow-xs md:shadow-none mb-3 md:mb-0 space-y-2 md:space-y-0">
+                            <td class="block md:table-cell py-1.5 md:py-2 px-2">
+                                <div class="flex items-center justify-between md:hidden mb-1">
+                                    <span class="text-[11px] font-bold text-slate-600">المنتج / الصنف <span class="text-rose-500">*</span></span>
+                                    <button type="button" onclick="removeItemRow(this)" class="p-1 text-slate-400 hover:text-red-500">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                    </button>
+                                </div>
                                 <select name="product_id[]" required onchange="updatePrice(this)"
-                                        class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs">
+                                        class="w-full px-2.5 py-2 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#27bebe] transition-colors">
                                     <option value="">-- اختر الصنف --</option>
                                     {% for p in products %}
                                     <option value="{{ p.id }}" data-price="{{ p.default_purchase_cost|default:p.retail_price }}">{{ p.name }} ({{ p.sku_code }})</option>
                                     {% endfor %}
                                 </select>
                             </td>
-                            <td class="py-2 px-2">
-                                <input type="number" step="0.01" name="quantity[]" value="1" required
-                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            <td class="block md:table-cell py-1 md:py-2 px-2">
+                                <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">الكمية</label>
+                                <input type="number" step="0.01" min="0.01" name="quantity[]" value="1" required
+                                       class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-center focus:outline-none focus:border-[#27bebe]">
                             </td>
-                            <td class="py-2 px-2">
-                                <input type="number" step="0.01" name="unit_price[]" value="0.00" required
-                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                            <td class="block md:table-cell py-1 md:py-2 px-2">
+                                <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">سعر الوحدة</label>
+                                <input type="number" step="0.01" min="0" name="unit_price[]" value="0.00" required
+                                       class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-center focus:outline-none focus:border-[#27bebe]">
                             </td>
-                            <td class="py-2 px-2">
+                            <td class="block md:table-cell py-1 md:py-2 px-2">
+                                <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">رقم التشغيل (Batch No)</label>
                                 <input type="text" name="batch_number[]" placeholder="Batch No"
-                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                                       class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                             </td>
-                            <td class="py-2 px-2">
+                            <td class="block md:table-cell py-1 md:py-2 px-2">
+                                <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">تاريخ الصلاحية</label>
                                 <input type="date" name="expiry_date[]"
-                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+                                       class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                             </td>
-                            <td class="py-2 px-2">
-                                <input type="number" step="0.01" name="discount_percentage[]" value="0"
-                                       class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono text-center">
+                            <td class="block md:table-cell py-1 md:py-2 px-2">
+                                <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">الخصم %</label>
+                                <input type="number" step="0.01" min="0" max="100" name="discount_percentage[]" value="0"
+                                       class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-center focus:outline-none focus:border-[#27bebe]">
                             </td>
-                            <td class="py-2 px-2 text-center">
+                            <td class="hidden md:table-cell py-2 px-2 text-center">
                                 <button type="button" onclick="removeItemRow(this)" class="p-1 text-slate-400 hover:text-red-500">
                                     <span class="material-symbols-outlined text-base">close</span>
                                 </button>

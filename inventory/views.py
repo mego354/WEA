@@ -10,7 +10,8 @@ from master_data.excel_utils import export_to_excel_response
 from master_data.pagination_utils import paginate_queryset
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
-    get_scoped_queryset, can_user_access_object, is_accountant, is_manager_or_higher
+    get_scoped_queryset, can_user_access_object, is_accountant, is_manager_or_higher,
+    can_user_perform_stock_in, can_user_perform_stock_out, can_user_perform_transfer
 )
 from accounts.services import is_representative, get_representative_warehouse
 from catalog.models import Product
@@ -18,7 +19,7 @@ from .models import (
     Warehouse, InventoryStock, InventoryLot, InventoryMemo,
     ProductTransferRequest, ProductTransferRequestItem
 )
-from .services import ProductTransferService
+from .services import ProductTransferService, InventoryMemoService
 
 
 @require_permission('inventory:stocks/view')
@@ -221,6 +222,10 @@ def inventory_memos_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    can_stock_in = can_user_perform_stock_in(request.user)
+    can_stock_out = can_user_perform_stock_out(request.user)
+    can_transfer = can_user_perform_transfer(request.user)
+
     context = {
         'memos': page_obj.object_list,
         'page_obj': page_obj,
@@ -231,8 +236,123 @@ def inventory_memos_list(request):
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
+        'can_stock_in': can_stock_in,
+        'can_stock_out': can_stock_out,
+        'can_transfer': can_transfer,
     }
     return render(request, 'inventory/memos_list.html', context)
+
+
+@login_required
+def inventory_memo_create(request):
+    memo_type = request.GET.get('memo_type', 'inward')
+    if memo_type not in ['inward', 'outward']:
+        memo_type = 'inward'
+
+    if memo_type == 'inward':
+        if not can_user_perform_stock_in(request.user):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء إذن إضافة مخزني.")
+    else:
+        if not can_user_perform_stock_out(request.user):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء إذن صرف مخزني.")
+
+    if request.method == 'POST':
+        warehouse_id = request.POST.get('warehouse')
+        statement = request.POST.get('statement', '').strip()
+        notes = request.POST.get('notes', '').strip()
+        memo_type = request.POST.get('memo_type', memo_type)
+
+        if not warehouse_id:
+            messages.error(request, "يرجى اختيار المخزن.")
+            return redirect(f"{request.path}?memo_type={memo_type}")
+
+        warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+
+        if not can_user_access_object(request.user, warehouse, 'operate'):
+            return render_forbidden_response(request, "غير مصرح لك بإجراء حركة على هذا المخزن.")
+
+        product_ids = request.POST.getlist('product_id[]')
+        quantities = request.POST.getlist('quantity[]')
+        unit_costs = request.POST.getlist('unit_cost[]')
+        batches = request.POST.getlist('batch_number[]')
+        expiries = request.POST.getlist('expiry_date[]')
+
+        items_data = []
+        for i, p_id in enumerate(product_ids):
+            if not p_id:
+                continue
+            qty_val = quantities[i] if i < len(quantities) else '0'
+            cost_val = unit_costs[i] if i < len(unit_costs) else '0'
+            batch_val = batches[i] if i < len(batches) else ''
+            expiry_val = expiries[i] if i < len(expiries) else None
+
+            try:
+                qty_dec = Decimal(str(qty_val))
+            except Exception:
+                qty_dec = Decimal('0.00')
+
+            try:
+                cost_dec = Decimal(str(cost_val)) if cost_val else Decimal('0.00')
+            except Exception:
+                cost_dec = Decimal('0.00')
+
+            items_data.append({
+                'product': int(p_id),
+                'quantity': qty_dec,
+                'unit_cost': cost_dec,
+                'batch_number': batch_val,
+                'expiry_date': expiry_val or None,
+            })
+
+        if not items_data:
+            messages.error(request, "يرجى إضافة صنف واحد على الأقل.")
+            return redirect(f"{request.path}?memo_type={memo_type}")
+
+        try:
+            memo = InventoryMemoService.create_memo(
+                warehouse=warehouse,
+                memo_type=memo_type,
+                statement=statement,
+                items_data=items_data,
+                user=request.user,
+                notes=notes
+            )
+            type_label = "إذن الإضافة" if memo_type == 'inward' else "إذن الصرف"
+            messages.success(request, f"تم إنشاء وتنفيذ {type_label} بنجاح برقم {memo.memo_number}.")
+            return redirect('inventory_memo_detail', pk=memo.pk)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+            return redirect(f"{request.path}?memo_type={memo_type}")
+
+    scoped_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
+    products = Product.objects.filter(is_active=True).order_by('name')
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+
+    context = {
+        'memo_type': memo_type,
+        'warehouses': scoped_warehouses,
+        'products': products,
+        'profile': profile,
+    }
+    return render(request, 'inventory/memo_create.html', context)
+
+
+@login_required
+def inventory_memo_detail(request, pk):
+    memo = get_object_or_404(
+        InventoryMemo.objects.select_related('warehouse', 'created_by').prefetch_related('items__product'),
+        pk=pk
+    )
+    if not can_user_access_object(request.user, memo, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض هذا الإذن المخزني خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+
+    context = {
+        'memo': memo,
+        'items': memo.items.all(),
+    }
+    return render(request, 'inventory/memo_detail.html', context)
 
 
 # ==============================================================================

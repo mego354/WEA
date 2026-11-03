@@ -96,3 +96,43 @@ class InventoryMemoItemAdmin(admin.ModelAdmin):
     list_display = ('memo', 'product', 'quantity', 'unit_cost', 'batch_number', 'expiry_date')
     list_filter = ('memo__memo_type', 'memo__warehouse')
     search_fields = ('product__name', 'memo__memo_number', 'batch_number')
+
+from .models import ProductTransferRequest, ProductTransferRequestItem
+
+
+class ProductTransferRequestItemInline(admin.TabularInline):
+    model = ProductTransferRequestItem
+    extra = 0
+    fields = ('product', 'requested_quantity', 'approved_quantity', 'transferred_quantity', 'batch_number', 'expiry_date')
+
+
+@admin.register(ProductTransferRequest)
+class ProductTransferRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        'reference_number', 'requesting_user', 'source_warehouse',
+        'destination_warehouse', 'status_badge', 'created_at', 'approved_by', 'executed_by'
+    )
+    list_filter = ('status', 'source_warehouse', 'destination_warehouse')
+    search_fields = ('reference_number', 'requesting_user__username', 'notes')
+    date_hierarchy = 'created_at'
+    inlines = [ProductTransferRequestItemInline]
+    readonly_fields = ('reference_number', 'outward_memo', 'inward_memo', 'created_at', 'updated_at')
+
+    def status_badge(self, obj):
+        mapping = {
+            'transferred': 'admin-pill-success',
+            'approved': 'admin-pill-info',
+            'pending': 'admin-pill-warning',
+            'rejected': 'admin-pill-danger',
+            'cancelled': 'admin-pill-neutral',
+        }
+        cls = mapping.get(obj.status, 'admin-pill-neutral')
+        return format_html('<span class="admin-pill {}">{}</span>', cls, obj.get_status_display())
+    status_badge.short_description = "الحالة"
+
+
+@admin.register(ProductTransferRequestItem)
+class ProductTransferRequestItemAdmin(admin.ModelAdmin):
+    list_display = ('request', 'product', 'requested_quantity', 'approved_quantity', 'transferred_quantity')
+    list_filter = ('request__status',)
+    search_fields = ('product__name', 'request__reference_number')

@@ -22,6 +22,31 @@ class PurchaseOrderService:
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر الشراء.")
 
+        if not target_warehouse or not target_warehouse.is_active:
+            raise ValidationError("مخزن الاستلام المحدد غير صالح أو معطل.")
+
+        if not supplier:
+            raise ValidationError("يجب تحديد المورد.")
+
+        custom_discount_percentage = Decimal(str(custom_discount_percentage or 0))
+        if custom_discount_percentage < 0 or custom_discount_percentage > 100:
+            raise ValidationError("نسبة الخصم الإضافي على أمر الشراء يجب أن تكون بين 0% و 100%.")
+
+        shipping_fees = Decimal(str(shipping_fees or 0))
+        if shipping_fees < 0:
+            raise ValidationError("مصاريف الشحن لا يمكن أن تكون سالبة.")
+
+        for idx, itm in enumerate(items_data, start=1):
+            qty = Decimal(str(itm.get('quantity', 0)))
+            if qty <= 0:
+                raise ValidationError(f"الكمية في البند #{idx} يجب أن تكون أكبر من الصفر.")
+            price = Decimal(str(itm.get('unit_price', 0)))
+            if price < 0:
+                raise ValidationError(f"سعر الوحدة في البند #{idx} لا يمكن أن يكون سالباً.")
+            disc = Decimal(str(itm.get('discount_percentage', 0)))
+            if disc < 0 or disc > 100:
+                raise ValidationError(f"نسبة الخصم في البند #{idx} يجب أن تكون بين 0% و 100%.")
+
         from master_data.models import PurchaseSettings
         from accounts.permissions import is_manager_or_higher
         purchase_settings = PurchaseSettings.get_settings()
@@ -99,6 +124,34 @@ class PurchaseOrderService:
         """
         if order.status in ['picked', 'settled', 'cancelled']:
             raise ValidationError(f"لا يمكن تعديل أمر مشتريات بحالة: {order.status_label_ar}")
+
+        if not items_data:
+            raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر الشراء.")
+
+        if not target_warehouse or not target_warehouse.is_active:
+            raise ValidationError("مخزن الاستلام المحدد غير صالح أو معطل.")
+
+        if not supplier:
+            raise ValidationError("يجب تحديد المورد.")
+
+        custom_discount_percentage = Decimal(str(custom_discount_percentage or 0))
+        if custom_discount_percentage < 0 or custom_discount_percentage > 100:
+            raise ValidationError("نسبة الخصم الإضافي على أمر الشراء يجب أن تكون بين 0% و 100%.")
+
+        shipping_fees = Decimal(str(shipping_fees or 0))
+        if shipping_fees < 0:
+            raise ValidationError("مصاريف الشحن لا يمكن أن تكون سالبة.")
+
+        for idx, itm in enumerate(items_data, start=1):
+            qty = Decimal(str(itm.get('quantity', 0)))
+            if qty <= 0:
+                raise ValidationError(f"الكمية في البند #{idx} يجب أن تكون أكبر من الصفر.")
+            price = Decimal(str(itm.get('unit_price', 0)))
+            if price < 0:
+                raise ValidationError(f"سعر الوحدة في البند #{idx} لا يمكن أن يكون سالباً.")
+            disc = Decimal(str(itm.get('discount_percentage', 0)))
+            if disc < 0 or disc > 100:
+                raise ValidationError(f"نسبة الخصم في البند #{idx} يجب أن تكون بين 0% و 100%.")
 
         prev_values = {
             'supplier': order.supplier.name,
@@ -324,8 +377,8 @@ class PurchaseOrderService:
                 expiry_date=item.product_expiry_date
             )
 
-            # Update warehouse stock
-            stock, _ = InventoryStock.objects.get_or_create(
+            # Update warehouse stock with row lock
+            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                 warehouse=order.target_warehouse,
                 product=item.product,
                 defaults={'product_cost': item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
@@ -690,13 +743,13 @@ class PurchaseReturnOrderService:
         if return_order.status not in ['approved', 'pending']:
             raise ValidationError(f"لا يمكن صرف بضاعة لمرتجع بحالة: {return_order.get_status_display()}")
 
-        # Verify sufficient stock
+        # Verify sufficient stock (accounting for reserved quantities)
         for item in return_order.items.select_related('product'):
-            stock = InventoryStock.objects.filter(warehouse=return_order.warehouse, product=item.product).first()
-            available = stock.qty_on_hand if stock else Decimal('0.00')
+            stock = InventoryStock.objects.select_for_update().filter(warehouse=return_order.warehouse, product=item.product).first()
+            available = stock.qty_available if stock else Decimal('0.00')
             if available < item.quantity:
                 raise ValidationError(
-                    f"الرصيد المتاح من الصنف '{item.product.name}' في مخزن '{return_order.warehouse.name}' غير كافٍ للإرجاع ({available:,.2f} متوفر / {item.quantity:,.2f} مطلوب)."
+                    f"الرصيد المتاح من الصنف '{item.product.name}' في مخزن '{return_order.warehouse.name}' غير كافٍ للإرجاع ({available:,.2f} متاح / {item.quantity:,.2f} مطلوب). (الكميات المحجوزة مستثناة من الرصيد المتاح)"
                 )
 
         memo_number = f"MEMO-OUT-RO-{return_order.serial_num}"

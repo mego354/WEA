@@ -11,136 +11,193 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" id="salesOrderForm" class="space-y-6">
-    {% csrf_token %}
+<div class="max-w-5xl mx-auto pb-16">
 
-    <!-- Header Actions -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">إنشاء أمر بيع جديد (Sales Order)</h1>
-            <p class="text-sm text-slate-500 mt-0.5">تسجيل طلبية عميل جديدة وحجز البضاعة من المخزن</p>
+    <!-- Header (No duplicate action buttons at top) -->
+    <div class="mb-8 pb-4 border-b border-slate-200">
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">إنشاء أمر بيع جديد (Sales Order)</h1>
+        <p class="text-xs text-slate-500 mt-1">تسجيل طلبية عميل جديدة وحجز البضاعة ومتابعة الخصومات والتسليم</p>
+    </div>
+
+    <form method="POST" id="salesOrderForm" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Master Details Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">storefront</span>
+                <span>البيانات الأساسية للطلبية</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs">
+                <!-- Customer -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        جهة الاتصال (العميل) <span class="text-rose-500">*</span>
+                    </label>
+                    <select name="customer" required
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختر العميل --</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}">{{ c.name }} ({{ c.area.name|default:"عام" }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Warehouse -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        مخزن الصرف <span class="text-rose-500">*</span>
+                    </label>
+                    {% if user_rep_wh %}
+                    <div class="px-3.5 py-2.5 bg-teal-50 border border-teal-200 rounded-lg text-xs font-bold text-teal-900 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[#27bebe] text-base">inventory_2</span>
+                            <span>{{ user_rep_wh.name }}</span>
+                        </div>
+                        <span class="text-[10px] bg-teal-200 text-teal-900 px-2 py-0.5 rounded-full font-bold">مخزن العهدة</span>
+                    </div>
+                    <input type="hidden" name="warehouse" value="{{ user_rep_wh.id }}">
+                    {% else %}
+                    <select name="warehouse" required
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختر المخزن --</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </div>
+
+                <!-- Order Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ الطلب <span class="text-rose-500">*</span></label>
+                    <input type="date" name="order_date" value="{% now 'Y-m-d' %}" required
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Expected Delivery Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ التسليم المتوقع</label>
+                    <input type="date" name="delivery_date"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Due Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ استحقاق السداد (Due Date)</label>
+                    <input type="date" name="due_date"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+            </div>
         </div>
-        <div class="flex items-center gap-2">
-            <a href="{% url 'sales_orders_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+
+        <!-- Line Items Card (بنود أمر البيع) -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">format_list_bulleted</span>
+                    <span>بنود أمر البيع</span>
+                </h2>
+                <button type="button" onclick="addRow()"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 text-[#27bebe] hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>إضافة صنف</span>
+                </button>
+            </div>
+
+            <!-- Responsive Items Container: Table on Desktop, Cards on Mobile -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs" id="itemsTable">
+                    <thead class="hidden md:table-header-group bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 px-2 w-10 text-center">#</th>
+                            <th class="py-2.5 px-3 min-w-[220px]">المنتج</th>
+                            <th class="py-2.5 px-2 w-24 text-center">الكمية</th>
+                            <th class="py-2.5 px-2 w-28 text-center">سعر الوحدة</th>
+                            <th class="py-2.5 px-2 w-20 text-center">الخصم %</th>
+                            <th class="py-2.5 px-3 w-32 text-left">المجموع</th>
+                            <th class="py-2.5 px-2 w-12 text-center">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsTableBody" class="block md:table-row-group space-y-3 md:space-y-0 md:divide-y md:divide-slate-100">
+                        <!-- Dynamic rows populated via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Adjustments & Shipping Card (الخصم الإضافي ومصاريف الشحن) -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">local_shipping</span>
+                <span>الخصم الإضافي ومصاريف الشحن</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">خصم إضافي على الأمر %</label>
+                    <input type="number" step="0.01" min="0" max="100" name="custom_discount_percentage" id="customDiscountInput" value="0.00" oninput="calculateGrandTotal()"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">مصاريف الشحن / التوصيل (ج.م)</label>
+                    <input type="number" step="0.01" min="0" name="shipping_fees" id="shippingFeesInput" value="0.00" oninput="calculateGrandTotal()"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+                <div class="col-span-full">
+                    <label class="block font-bold text-slate-700 mb-1.5">ملاحظات وتعليمات الشحن</label>
+                    <textarea name="notes" rows="2" placeholder="أي ملاحظات إضافية بخصوص الطلب أو عنوان التوصيل..."
+                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Totals Breakdown Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3 text-xs">
+            <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">receipt</span>
+                <span>ملخص الإجماليات</span>
+            </h3>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>إجمالي الأصناف قبل الخصم:</span>
+                <span id="grossSubtotalDisplay" class="font-bold text-slate-800 font-mono">0.00 ج.م</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>إجمالي خصم البنود:</span>
+                <span id="itemsDiscountDisplay" class="font-bold text-rose-600 font-mono">- 0.00 ج.م</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>صافي البنود بعد خصم الأصناف:</span>
+                <span id="netItemsDisplay" class="font-bold text-slate-800 font-mono">0.00 ج.م</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>خصم إضافي على الأمر (<span id="customDiscountPctDisplay">0.00</span>%):</span>
+                <span id="customDiscountAmountDisplay" class="font-bold text-rose-600 font-mono">- 0.00 ج.م</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>مصاريف الشحن:</span>
+                <span id="shippingFeesDisplay" class="font-bold text-slate-800 font-mono">+ 0.00 ج.م</span>
+            </div>
+            <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
+                <span class="font-black text-slate-900">الإجمالي النهائي للطلب:</span>
+                <span id="grandTotalDisplay" class="font-black text-[#27bebe] text-xl font-mono">0.00 ج.م</span>
+            </div>
+        </div>
+
+        <!-- Bottom Submit Actions Bar (Consistent with Purchases) -->
+        <div class="flex items-center justify-end gap-3 pt-4">
+            <a href="{% url 'sales_orders_list' %}" class="px-5 py-2.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                 إلغاء
             </a>
-            <button type="submit" class="inline-flex items-center gap-1.5 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all">
-                <span class="material-symbols-outlined text-base">save</span>
+            <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">check</span>
                 <span>حفظ أمر البيع</span>
             </button>
         </div>
-    </div>
+    </form>
+</div>
 
-    <!-- Master Details Card -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-6">
-        <h2 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-            <span class="material-symbols-outlined text-brand-600">storefront</span>
-            <span>البيانات الأساسية للطلبية</span>
-        </h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">العميل <span class="text-rose-500">*</span></label>
-                <select name="customer" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
-                    <option value="">-- اختر العميل --</option>
-                    {% for c in customers %}
-                    <option value="{{ c.id }}">{{ c.name }} ({{ c.area.name|default:"عام" }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">مخزن الصرف <span class="text-rose-500">*</span></label>
-                {% if user_rep_wh %}
-                <div class="px-3.5 py-2.5 bg-brand-50/80 border border-brand-200 rounded-xl text-sm font-bold text-brand-900 flex items-center justify-between">
-                    <div class="flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-brand-600 text-base">inventory_2</span>
-                        <span>{{ user_rep_wh.name }}</span>
-                    </div>
-                    <span class="text-[10px] bg-brand-200 text-brand-900 px-2 py-0.5 rounded-full font-bold">مخزن العهدة المخصص</span>
-                </div>
-                <input type="hidden" name="warehouse" value="{{ user_rep_wh.id }}">
-                {% else %}
-                <select name="warehouse" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
-                    <option value="">-- اختر المخزن --</option>
-                    {% for wh in warehouses %}
-                    <option value="{{ wh.id }}">{{ wh.name }}</option>
-                    {% endfor %}
-                </select>
-                {% endif %}
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ الطلب</label>
-                <input type="date" name="order_date" value="{% now 'Y-m-d' %}" required
-                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ التسليم المتوقع</label>
-                <input type="date" name="delivery_date"
-                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ استحقاق السداد (Due Date)</label>
-                <input type="date" name="due_date"
-                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات وتعليمات الشحن</label>
-                <input type="text" name="notes" placeholder="أي ملاحظات إضافية بخصوص الطلب أو عنوان التوصيل..."
-                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-            </div>
-        </div>
-    </div>
-
-    <!-- Items Grid Card -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600">inventory_2</span>
-                <span>بنود المنتجات والأصناف المطلوبة</span>
-            </h2>
-            <button type="button" onclick="addRow()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">add</span>
-                <span>إضافة صنف</span>
-            </button>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-right text-sm" id="itemsTable">
-                <thead>
-                    <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase">
-                        <th class="py-3 px-4 w-12">#</th>
-                        <th class="py-3 px-4 w-72">المنتج</th>
-                        <th class="py-3 px-4 w-28 text-center">الكمية</th>
-                        <th class="py-3 px-4 w-36 text-center">سعر البيع للوحدة</th>
-                        <th class="py-3 px-4 w-36 text-left">المجموع</th>
-                        <th class="py-3 px-4 w-12 text-center">حذف</th>
-                    </tr>
-                </thead>
-                <tbody id="itemsTableBody" class="divide-y divide-slate-100">
-                    <!-- Dynamic rows will be inserted here -->
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Totals Footer -->
-        <div class="p-6 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="text-xs text-slate-500">
-                يتم احتساب إجمالي الفاتورة تلقائياً عند تغيير الكميات والأسعار.
-            </div>
-            <div class="flex items-center gap-4">
-                <span class="text-sm font-bold text-slate-700">إجمالي أمر البيع:</span>
-                <span id="grandTotalDisplay" class="text-2xl font-black font-mono text-brand-700">0.00 ج.م</span>
-            </div>
-        </div>
-    </div>
-</form>
-
-<!-- Available products as JSON template -->
 <script>
     const availableProducts = [
         {% for p in products %}
@@ -153,6 +210,8 @@
         {% endfor %}
     ];
 
+    let rowCount = 0;
+
     function createRow(index) {
         let options = '<option value="">-- اختر الصنف --</option>';
         availableProducts.forEach(p => {
@@ -160,34 +219,80 @@
         });
 
         return `
-            <tr id="row-${index}" class="hover:bg-slate-50/50">
-                <td class="py-3 px-4 text-xs font-mono text-slate-400 text-center">${index + 1}</td>
-                <td class="py-3 px-4">
-                    <select name="product_id[]" required onchange="onProductSelect(${index}, this)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500">
+            <tr id="row-${index}" class="item-row block md:table-row bg-slate-50/60 md:bg-transparent p-4 md:p-0 rounded-xl md:rounded-none border border-slate-200 md:border-none shadow-xs md:shadow-none mb-3 md:mb-0 space-y-2 md:space-y-0">
+                <!-- Mobile card top row: counter and remove button -->
+                <td class="block md:table-cell py-1 md:py-2.5 px-2 text-center">
+                    <div class="flex items-center justify-between md:justify-center">
+                        <span class="md:hidden text-[11px] font-bold text-slate-500">البند #${index + 1}</span>
+                        <span class="hidden md:inline font-mono text-slate-400 text-xs">${index + 1}</span>
+                        <button type="button" onclick="removeRow(${index})" class="md:hidden p-1 text-slate-400 hover:text-red-500">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                </td>
+
+                <!-- Product Select -->
+                <td class="block md:table-cell py-1.5 md:py-2 px-2">
+                    <label class="block md:hidden text-[11px] font-bold text-slate-600 mb-1">المنتج / الصنف <span class="text-rose-500">*</span></label>
+                    <select name="product_id[]" required onchange="onProductSelect(${index}, this)"
+                            class="w-full px-2.5 py-2 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#27bebe] transition-colors">
                         ${options}
                     </select>
                 </td>
-                <td class="py-3 px-4">
-                    <input type="number" step="1" min="1" name="quantity[]" value="1" required oninput="calculateRow(${index})"
-                           class="w-full text-center px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-brand-500">
+
+                <!-- Inputs Grid on Mobile -->
+                <td class="block md:table-cell py-1.5 md:py-2 px-2">
+                    <div class="grid grid-cols-3 md:grid-cols-1 gap-2">
+                        <!-- Qty -->
+                        <div>
+                            <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-1">الكمية</label>
+                            <input type="number" step="1" min="1" name="quantity[]" value="1" required oninput="calculateRow(${index})"
+                                   class="w-full text-center px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold font-mono focus:outline-none focus:border-[#27bebe]">
+                        </div>
+                        <!-- Price on Mobile -->
+                        <div class="md:hidden">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-1">سعر الوحدة</label>
+                            <input type="number" step="0.01" min="0" name="unit_price_mobile_${index}" value="0.00" oninput="syncMobilePrice(${index}, this)"
+                                   class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+                        </div>
+                        <!-- Discount on Mobile -->
+                        <div class="md:hidden">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-1">الخصم %</label>
+                            <input type="number" step="0.01" min="0" max="100" name="discount_percentage_mobile_${index}" value="0" oninput="syncMobileDiscount(${index}, this)"
+                                   class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
+                        </div>
+                    </div>
                 </td>
-                <td class="py-3 px-4">
+
+                <!-- Unit Price (Desktop) -->
+                <td class="hidden md:table-cell py-2 px-2">
                     <input type="number" step="0.01" min="0" name="unit_price[]" value="0.00" required oninput="calculateRow(${index})"
-                           class="w-full text-center px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-brand-500">
+                           class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
                 </td>
-                <td class="py-3 px-4 text-left font-mono font-bold text-slate-800" id="subtotal-${index}">
-                    0.00 ج.م
+
+                <!-- Discount Percentage (Desktop) -->
+                <td class="hidden md:table-cell py-2 px-2">
+                    <input type="number" step="0.01" min="0" max="100" name="discount_percentage[]" value="0" oninput="calculateRow(${index})"
+                           class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                 </td>
-                <td class="py-3 px-4 text-center">
-                    <button type="button" onclick="removeRow(${index})" class="text-slate-400 hover:text-rose-600 transition-colors">
-                        <span class="material-symbols-outlined text-base">delete</span>
+
+                <!-- Row Subtotal -->
+                <td class="block md:table-cell py-1.5 md:py-2 px-2">
+                    <div class="flex items-center justify-between md:justify-start">
+                        <span class="md:hidden text-[11px] font-bold text-slate-600">المجموع بعد الخصم:</span>
+                        <span class="font-mono font-bold text-slate-900 text-xs" id="subtotal-${index}">0.00 ج.م</span>
+                    </div>
+                </td>
+
+                <!-- Delete (Desktop) -->
+                <td class="hidden md:table-cell py-2 px-2 text-center">
+                    <button type="button" onclick="removeRow(${index})" class="p-1 text-slate-400 hover:text-red-500">
+                        <span class="material-symbols-outlined text-base">close</span>
                     </button>
                 </td>
             </tr>
         `;
     }
-
-    let rowCount = 0;
 
     function addRow() {
         const tbody = document.getElementById('itemsTableBody');
@@ -197,9 +302,12 @@
 
     function removeRow(index) {
         const row = document.getElementById(`row-${index}`);
-        if (row) {
-            row.remove();
+        const allRows = document.querySelectorAll('#itemsTableBody .item-row');
+        if (allRows.length > 1) {
+            if (row) row.remove();
             calculateGrandTotal();
+        } else {
+            alert('يجب وجود صنف واحد على الأقل في أمر البيع.');
         }
     }
 
@@ -208,8 +316,28 @@
         const price = selected.getAttribute('data-price') || '0.00';
         const row = document.getElementById(`row-${index}`);
         if (row) {
-            const priceInput = row.querySelector('input[name="unit_price[]"]');
-            if (priceInput) priceInput.value = price;
+            const priceDesktop = row.querySelector('input[name="unit_price[]"]');
+            const priceMobile = row.querySelector(`input[name="unit_price_mobile_${index}"]`);
+            if (priceDesktop) priceDesktop.value = price;
+            if (priceMobile) priceMobile.value = price;
+            calculateRow(index);
+        }
+    }
+
+    function syncMobilePrice(index, input) {
+        const row = document.getElementById(`row-${index}`);
+        if (row) {
+            const priceDesktop = row.querySelector('input[name="unit_price[]"]');
+            if (priceDesktop) priceDesktop.value = input.value;
+            calculateRow(index);
+        }
+    }
+
+    function syncMobileDiscount(index, input) {
+        const row = document.getElementById(`row-${index}`);
+        if (row) {
+            const discDesktop = row.querySelector('input[name="discount_percentage[]"]');
+            if (discDesktop) discDesktop.value = input.value;
             calculateRow(index);
         }
     }
@@ -218,31 +346,85 @@
         const row = document.getElementById(`row-${index}`);
         if (!row) return;
 
-        const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
-        const price = parseFloat(row.querySelector('input[name="unit_price[]"]').value) || 0;
-        const subtotal = qty * price;
+        const qtyInput = row.querySelector('input[name="quantity[]"]');
+        const priceInput = row.querySelector('input[name="unit_price[]"]');
+        const discInput = row.querySelector('input[name="discount_percentage[]"]');
+
+        const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+        const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
+        let discPct = parseFloat(discInput ? discInput.value : 0) || 0;
+        if (discPct < 0) discPct = 0;
+        if (discPct > 100) discPct = 100;
+
+        const gross = qty * price;
+        const discAmt = gross * (discPct / 100);
+        const subtotal = gross - discAmt;
 
         const subtotalEl = document.getElementById(`subtotal-${index}`);
         if (subtotalEl) {
             subtotalEl.innerText = subtotal.toFixed(2) + ' ج.م';
         }
 
+        // Also sync mobile inputs if changed from desktop
+        const mobilePrice = row.querySelector(`input[name="unit_price_mobile_${index}"]`);
+        if (mobilePrice && priceInput && mobilePrice.value !== priceInput.value) {
+            mobilePrice.value = priceInput.value;
+        }
+        const mobileDisc = row.querySelector(`input[name="discount_percentage_mobile_${index}"]`);
+        if (mobileDisc && discInput && mobileDisc.value !== discInput.value) {
+            mobileDisc.value = discInput.value;
+        }
+
         calculateGrandTotal();
     }
 
     function calculateGrandTotal() {
-        let total = 0;
-        const rows = document.querySelectorAll('#itemsTableBody tr');
+        let grossSubtotal = 0;
+        let itemsDiscountTotal = 0;
+
+        const rows = document.querySelectorAll('#itemsTableBody .item-row');
         rows.forEach(r => {
-            const qty = parseFloat(r.querySelector('input[name="quantity[]"]').value) || 0;
-            const price = parseFloat(r.querySelector('input[name="unit_price[]"]').value) || 0;
-            total += qty * price;
+            const qtyInput = r.querySelector('input[name="quantity[]"]');
+            const priceInput = r.querySelector('input[name="unit_price[]"]');
+            const discInput = r.querySelector('input[name="discount_percentage[]"]');
+
+            const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+            const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
+            let discPct = parseFloat(discInput ? discInput.value : 0) || 0;
+            if (discPct < 0) discPct = 0;
+            if (discPct > 100) discPct = 100;
+
+            const gross = qty * price;
+            const discAmt = gross * (discPct / 100);
+
+            grossSubtotal += gross;
+            itemsDiscountTotal += discAmt;
         });
 
-        document.getElementById('grandTotalDisplay').innerText = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        const netItems = grossSubtotal - itemsDiscountTotal;
+
+        const customDiscInput = document.getElementById('customDiscountInput');
+        let customDiscPct = parseFloat(customDiscInput ? customDiscInput.value : 0) || 0;
+        if (customDiscPct < 0) customDiscPct = 0;
+        if (customDiscPct > 100) customDiscPct = 100;
+
+        const customDiscAmt = netItems * (customDiscPct / 100);
+
+        const shippingInput = document.getElementById('shippingFeesInput');
+        let shippingFees = parseFloat(shippingInput ? shippingInput.value : 0) || 0;
+        if (shippingFees < 0) shippingFees = 0;
+
+        const grandTotal = Math.max(0, netItems - customDiscAmt + shippingFees);
+
+        document.getElementById('grossSubtotalDisplay').innerText = grossSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        document.getElementById('itemsDiscountDisplay').innerText = '- ' + itemsDiscountTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        document.getElementById('netItemsDisplay').innerText = netItems.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        document.getElementById('customDiscountPctDisplay').innerText = customDiscPct.toFixed(2);
+        document.getElementById('customDiscountAmountDisplay').innerText = '- ' + customDiscAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        document.getElementById('shippingFeesDisplay').innerText = '+ ' + shippingFees.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        document.getElementById('grandTotalDisplay').innerText = grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
     }
 
-    // Initialize with 1 empty row
     document.addEventListener('DOMContentLoaded', () => {
         addRow();
     });

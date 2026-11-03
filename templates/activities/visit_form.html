@@ -302,121 +302,92 @@
                 </label>
             </div>
 
-            <!-- FIELD 6: DISTANCE VALIDATION SECTION (Section 3.A, 3.B, 3.D, 4.B) -->
-            <div id="distance-validation-section" class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-4">
+            <!-- FIELD 6: COMPACT GPS & DISTANCE VALIDATION SECTION -->
+            <div id="distance-validation-section" class="p-3 sm:p-4 rounded-xl border border-slate-200 bg-white shadow-xs space-y-3">
                 <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-9 h-9 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center font-bold border border-teal-100">
-                            <span class="material-symbols-outlined text-lg">near_me</span>
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h4 class="text-xs font-black text-slate-900">التحقق من المسافة والموقع الجغرافي (GPS)</h4>
-                                <span id="distance-requirement-pill" class="px-2 py-0.5 rounded text-[10px] font-bold {% if is_planned_visit or planned_item %}bg-blue-100 text-blue-700{% else %}bg-purple-100 text-purple-700{% endif %}">
-                                    {% if is_planned_visit or planned_item %}غير مطلوب عند إنشاء زيارة مخططة{% else %}إلزامي للزيارة خارج الخطة{% endif %}
-                                </span>
-                            </div>
-                            <p class="text-[11px] text-slate-500 mt-0.5">يعرض موقعك الحالي، وموقع العميل المسجل، والمسافة الفعلية مقارنة بالمسافة المسموح بها</p>
-                        </div>
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">near_me</span>
+                        <h4 class="text-xs font-bold text-slate-800">بيانات الموقع والمسافة (GPS)</h4>
+                        <span id="distance-requirement-pill" class="hidden"></span>
                     </div>
-                    <button type="button" onclick="acquireDeviceLocation()" class="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 text-xs font-bold transition-colors shadow-xs">
+                    <button type="button" onclick="acquireDeviceLocation()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-xs font-medium transition-colors">
                         <span class="material-symbols-outlined text-sm text-[#27bebe]">my_location</span>
-                        <span>تحديث الموقع</span>
+                        <span>تحديث</span>
                     </button>
                 </div>
 
-                <!-- 4-Metric Distance Information Grid (Section 3.A) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <!-- 1. User Current GPS Location -->
-                    <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
-                        <div class="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>موقعك الحالي (GPS):</span>
-                            <span id="gps-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <!-- Simple 4-Item Grid with Icons and Compact Text Only -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                    <!-- 1. Current Location -->
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
+                        <span id="gps-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[10px] text-slate-400 block">موقعك الحالي</span>
+                            <span id="user-gps-display" class="font-bold text-slate-800 font-mono text-xs truncate block dir-ltr text-right">جاري الالتقاط...</span>
                         </div>
-                        <div id="user-gps-display" class="text-xs font-bold text-slate-800 font-mono dir-ltr text-right">
-                            جاري التقاط إحداثيات موقعك...
-                        </div>
-                        <div id="gps-status-label" class="text-[10px] text-slate-500">يرجى السماح للمتصفح بالوصول إلى الموقع</div>
+                        <span id="gps-status-label" class="hidden"></span>
                     </div>
 
-                    <!-- 2. Client Registered Location -->
-                    <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
-                        <div class="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>موقع العميل المسجل:</span>
-                            <span class="material-symbols-outlined text-xs text-slate-400">pin_drop</span>
+                    <!-- 2. Client Location -->
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
+                        <span class="material-symbols-outlined text-base text-slate-400 shrink-0">pin_drop</span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[10px] text-slate-400 block">موقع العميل</span>
+                            <span id="client-gps-display" class="font-bold text-slate-800 font-mono text-xs truncate block dir-ltr text-right">
+                                {% if selected_contact and selected_contact.has_saved_location %}
+                                {{ selected_contact.latitude|floatformat:4 }}, {{ selected_contact.longitude|floatformat:4 }}
+                                {% elif selected_contact %}غير مسجل{% else %}اختر العميل{% endif %}
+                            </span>
                         </div>
-                        <div id="client-gps-display" class="text-xs font-bold text-slate-800 font-mono dir-ltr text-right">
-                            {% if selected_contact and selected_contact.has_saved_location %}
-                            {{ selected_contact.latitude|floatformat:5 }}, {{ selected_contact.longitude|floatformat:5 }}
-                            {% elif selected_contact %}
-                            غير مسجل مسبقاً
-                            {% else %}
-                            اختر العميل أولاً
-                            {% endif %}
-                        </div>
-                        <div id="client-gps-subtext" class="text-[10px] text-slate-500">
-                            {% if selected_contact and selected_contact.has_saved_location %}إحداثيات العميل المعتمدة{% else %}يتم تثبيت أول موقع تلقائياً{% endif %}
-                        </div>
+                        <span id="client-gps-subtext" class="hidden"></span>
                     </div>
 
                     <!-- 3. Calculated Actual Distance -->
-                    <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
-                        <div class="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>المسافة الفعلية المحسوبة:</span>
-                            <span class="material-symbols-outlined text-xs text-slate-400">straighten</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span id="actual-distance-display" class="text-sm font-black text-slate-900">—</span>
-                            <span id="distance-feedback-badge" class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600">بانتظار الحساب</span>
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
+                        <span class="material-symbols-outlined text-base text-[#27bebe] shrink-0">straighten</span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[10px] text-slate-400 block">المسافة الفعلية</span>
+                            <div class="flex items-center gap-1.5">
+                                <span id="actual-distance-display" class="text-xs font-black text-slate-900">—</span>
+                                <span id="distance-feedback-badge" class="px-1.5 py-0.2 rounded font-bold text-[9px] bg-slate-200/60 text-slate-600 truncate">بانتظار الحساب</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- 4. Allowed Distance Threshold -->
-                    <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
-                        <div class="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>المسافة المسموح بها (الحد الأقصى):</span>
-                            <span class="material-symbols-outlined text-xs text-[#27bebe]">radar</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span id="allowed-distance-display" class="text-sm font-black text-[#1a8b8b]">{{ gps_tolerance|default:300 }} متر</span>
-                            <span id="allowed-distance-source" class="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-teal-50 text-teal-700 border border-teal-200">
-                                {% if selected_template and selected_template.has_special_location_settings and allow_template_distance_override %}مخصص للقالب{% else %}الإعداد الافتراضي{% endif %}
-                            </span>
+                    <!-- 4. Allowed Distance -->
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
+                        <span class="material-symbols-outlined text-base text-teal-600 shrink-0">radar</span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[10px] text-slate-400 block">الحد المسموح</span>
+                            <div class="flex items-center gap-1">
+                                <span id="allowed-distance-display" class="text-xs font-black text-[#1a8b8b]">{{ gps_tolerance|default:300 }} م</span>
+                                <span id="allowed-distance-source" class="hidden">{% if selected_template and selected_template.has_special_location_settings and allow_template_distance_override %}مخصص للقالب{% else %}الافتراضي{% endif %}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Conditional Bypass / Exception Request Box (Section 3.C & 3.D) -->
-                <div id="distance-bypass-container" class="hidden p-4 rounded-xl border-2 {% if can_bypass_gps %}border-indigo-200 bg-indigo-50/70{% else %}border-amber-300 bg-amber-50/80{% endif %} space-y-3">
+                <!-- Conditional Bypass / Exception Request Box (Simple & Compact) -->
+                <div id="distance-bypass-container" class="hidden p-3 rounded-xl border {% if can_bypass_gps %}border-indigo-200 bg-indigo-50/50{% else %}border-amber-200 bg-amber-50/50{% endif %} space-y-2">
                     {% if can_bypass_gps %}
-                    <div class="flex items-start gap-2.5">
-                        <input type="checkbox" name="force_bypass_location" id="id_force_bypass_location" value="1" class="mt-0.5 rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500">
-                        <label for="id_force_bypass_location" class="text-xs cursor-pointer">
-                            <span class="font-black text-indigo-950 block">تجاوز قيد المسافة الجغرافية (صلاحية مدير / مشرف عام)</span>
-                            <span class="text-[11px] text-indigo-800">سيتم تسجيل التجاوز مع حفظ المسافة الفعلية والمسافة المسموح بها واسم المسؤول في السجل الزمني للزيارة دون الحاجة لاعتماد إضافي.</span>
-                        </label>
-                    </div>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-indigo-950">
+                        <input type="checkbox" name="force_bypass_location" id="id_force_bypass_location" value="1" class="rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500">
+                        <span>تجاوز قيد المسافة (صلاحية مدير / مشرف)</span>
+                    </label>
                     <div>
-                        <label class="block text-[11px] font-bold text-indigo-900 mb-1">
-                            سبب تجاوز المسافة {% if bypass_reason_mandatory %}(إلزامي *){% else %}(اختياري){% endif %}
-                        </label>
                         <input type="text" name="bypass_reason" id="id_bypass_reason" value="{{ request.POST.bypass_reason|default:'' }}"
-                               placeholder="اذكر سبب تجاوز المسافة المسموح بها..."
-                               class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none">
+                               placeholder="سبب التجاوز {% if bypass_reason_mandatory %}(إلزامي *){% else %}(اختياري){% endif %}..."
+                               class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none">
                     </div>
                     {% else %}
-                    <div class="flex items-start gap-2.5">
-                        <input type="checkbox" name="request_distance_exception" id="id_request_distance_exception" value="1" class="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500">
-                        <label for="id_request_distance_exception" class="text-xs cursor-pointer">
-                            <span class="font-black text-amber-950 block">طلب استثناء لتجاوز المسافة وإرسال الزيارة لاعتماد المدير</span>
-                            <span class="text-[11px] text-amber-800">المسافة الحالية تتجاوز الحد المسموح به. يمكنك طلب استثناء مع توضيح السبب الإلزامي ليتم تحويل الزيارة إلى المدير للمراجعة والاعتماد.</span>
-                        </label>
-                    </div>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-amber-950">
+                        <input type="checkbox" name="request_distance_exception" id="id_request_distance_exception" value="1" class="rounded border-amber-400 text-amber-600 focus:ring-amber-500">
+                        <span>طلب استثناء لتجاوز المسافة وتحويل الزيارة لاعتماد المدير</span>
+                    </label>
                     <div>
-                        <label class="block text-[11px] font-bold text-amber-900 mb-1">سبب التواجد خارج المسافة المسموح بها (إلزامي *) :</label>
                         <input type="text" name="bypass_reason" id="id_bypass_reason" value="{{ request.POST.bypass_reason|default:'' }}"
-                               placeholder="اشرح سبب تسجيل الزيارة خارج النطاق المسموح به لإرساله للمدير..."
-                               class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs focus:border-amber-500 focus:outline-none">
+                               placeholder="سبب التواجد خارج النطاق المسموح (إلزامي *)..."
+                               class="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none">
                     </div>
                     {% endif %}
                 </div>

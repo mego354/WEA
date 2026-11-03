@@ -91,14 +91,36 @@ Unknown model names: queryset is **not** filtered. Always pass the lowercase Dja
   - **Completion (End Visit):** Mandatory for both planned and unplanned visits (`verify_end_visit_distance=True`).
   - **Bypass & exceptions:** Managers and SuperAdmins (and roles configured in `roles_can_bypass_distance_creation` / `roles_can_bypass_distance_ending`) can bypass distance restrictions directly without additional approval (`verification_status='force_bypassed'`). Representatives outside the threshold can request an exception (`request_distance_exception=1`) with a mandatory `bypass_reason`, which submits the visit for manager approval (`approval_status='pending'`, `requires_approval_due_to_distance=True`).
 - Sales/purchases: `require_manager_approval` on their settings models.
-- Inter-warehouse transfer: SuperAdmin, accountant, or `inventory:transfers/approve`. Same main area required unless SuperAdmin.
+- **Warehouse Operations (Stock In / Stock Out / Transfers):**
+  - Controlled by role and configurable settings via `CompanyProfile`:
+    - `roles_can_stock_in`: User roles permitted to create Stock In memos (`can_user_perform_stock_in`). SuperAdmin and Accountant have full operational access.
+    - `roles_can_stock_out`: User roles permitted to create Stock Out memos (`can_user_perform_stock_out`). SuperAdmin and Accountant have full operational access.
+    - `roles_can_transfer`: User roles permitted to request warehouse transfers (`can_user_perform_transfer`). SuperAdmin and Accountant have full operational access.
+  - Warehouse scoping: Users can only operate on warehouses they have authorized access to (`can_user_access_object(user, warehouse, 'operate')` or `'view'`). Superadmin can operate on all warehouses.
+  - Transfer requests require:
+    1. Source and destination warehouses must be different.
+    2. Both warehouses must be accessible to the user.
+    3. Both warehouses must belong to the same canonical root Main Area (`governorate`), unless the requester is SuperAdmin.
+    4. Source warehouse available stock (`qty_on_hand - qty_reserved`) must be strictly greater than or equal to the transferred quantity.
+    5. Transferred quantities must be strictly positive.
+    6. Transfer execution is atomic and creates balanced inward and outward inventory memos.
 - Main warehouses: reps/managers may **view** (`is_main`); edit/delete reserved for SuperAdmin/admin paths.
 - Vault: viewing a rep vault ≠ deposit/withdraw; those need `treasury:vaults/transfer` and eligibility.
 
 ## Financial and inventory integrity
 
 - Prefer status transitions (`cancelled`, `rejected`) over deleting posted orders.
-- Stock and vault balances change only inside service transactions with row locks where implemented.
+- Stock and vault balances change only inside service transactions with row locks where implemented (`select_for_update()`).
+- **Sales Stock Validation:**
+  - On sales order creation and preparation/delivery, available stock (`qty_on_hand - qty_reserved`) is strictly verified in the selected warehouse.
+  - Concurrency safety: `prepare_order` and `deliver_order` acquire row locks with `select_for_update()`.
+  - Negative or zero quantities, discounts outside allowed bounds (0-100% or exceeding order subtotal), and negative shipping fees are rejected.
+- **Purchases Validation:**
+  - Supplier must be active and valid.
+  - Positive quantities and non-negative unit prices enforced.
+  - Discount percentages bounded 0-100%, non-negative shipping.
+  - Stock addition happens during `stock_order` / `pick_order` with row-level locks and weighted average cost recalculation.
+  - Return orders validate available stock deducting reservations before debiting stock.
 - Collections post to vault + customer ledger via `sales`/`treasury` services.
 - Purchase `picked` creates inventory memo; `settled` posts vendor ledger.
 
@@ -117,6 +139,9 @@ Unknown model names: queryset is **not** filtered. Always pass the lowercase Dja
 | Visit approve | Yes | Eligible reps, not self | No* | No |
 | Sales order approve | Yes | Eligible, not self | View | Own create |
 | Purchase approve | Yes | Eligible | View | Own create |
+| Warehouse Stock In | Yes | If role in settings | Yes | If role in settings |
+| Warehouse Stock Out | Yes | If role in settings | Yes | If role in settings |
+| Transfer request | Yes | If role in settings | Yes | If role in settings |
 | Transfer approve/execute | Yes | No | Yes | No |
 | Vault deposit/withdraw | Yes | Eligible + perm | Yes | Own vault |
 | Catalog products | Yes | If module perm | If module perm | If module perm |

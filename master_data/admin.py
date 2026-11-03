@@ -32,6 +32,7 @@ class AreaAdmin(admin.ModelAdmin):
 @admin.register(CompanyProfile)
 class CompanyProfileAdmin(admin.ModelAdmin):
     list_display = ('company_name', 'phone', 'email', 'commercial_registry', 'tax_id', 'currency', 'use_batch_number', 'use_expiry_date')
+    filter_horizontal = ('roles_can_stock_in', 'roles_can_stock_out', 'roles_can_transfer')
 
     def has_add_permission(self, request):
         return not CompanyProfile.objects.exists()

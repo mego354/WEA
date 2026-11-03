@@ -165,6 +165,40 @@ Session cookie + CSRF for POST. `require_permission` treats the request as API i
 **Auth:** purchase edit/approve per view.  
 **Purpose:** AJAX status update; must remain consistent with `PurchaseOrderService` transitions and audit.
 
+---
+
+### `GET|POST /inventory/memos/create/`
+
+**Name:** `inventory_memo_create`.  
+**Auth:** SuperAdmin, Accountant, or role permitted in `CompanyProfile.roles_can_stock_in` (for `memo_type='in'`) or `roles_can_stock_out` (for `memo_type='out'`).  
+**Purpose:** Create manual stock additions (Stock In) or deductions (Stock Out) with batch/lot tracking.  
+**Payload (POST):**
+- `warehouse`: Warehouse ID (must be accessible to user)
+- `memo_type`: `'in'` (إضافة) or `'out'` (صرف)
+- `date`: YYYY-MM-DD
+- `reference_document`: text reference
+- `notes`: explanatory notes
+- `items`: array / repetitive form fields with `product`, `quantity`, `unit_cost`, `lot_number`, `expiry_date`
+**Validations:** Available stock checked for deductions; unit costs and positive quantities enforced.  
+**Audit:** Writes `STOCK_IN` or `STOCK_OUT` via `AuditLogService.log`.
+
+---
+
+### `GET /inventory/memos/<pk>/`
+
+**Name:** `inventory_memo_detail`.  
+**Auth:** login required; user must have access to the warehouse associated with the memo.  
+**Purpose:** View details, line items, batch lots, and balance impacts of a specific inventory memo.
+
+---
+
+### `GET|POST /settings/inventory/`
+
+**Name:** `inventory_settings_view`.  
+**Auth:** SuperAdmin only.  
+**Purpose:** Configure enterprise role permissions for warehouse operations (`roles_can_stock_in`, `roles_can_stock_out`, `roles_can_transfer`).  
+**Audit:** Writes `INVENTORY_SETTINGS_UPDATED` via `AuditLogService.log`.
+
 Other HTML-only POST endpoints (visit action, sales action, transfer action, vault reverse) are not public APIs; they return redirects or HTML. If you add JSON for them, document request/response here and update the caller together.
 
 ## Pagination / filtering

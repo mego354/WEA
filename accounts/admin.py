@@ -229,6 +229,9 @@ class UserAdmin(BaseUserAdmin):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
         super().save_model(request, obj, form, change)
+        from .services import is_representative, ensure_representative_resources
+        if is_representative(obj):
+            ensure_representative_resources(obj)
 
     def user_change_password(self, request, id, form_url=""):
         response = super().user_change_password(request, id, form_url)

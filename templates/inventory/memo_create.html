@@ -1,0 +1,259 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}{% if memo_type == 'inward' %}إذن إضافة مخزنية جديد{% else %}إذن صرف مخزني جديد{% endif %} - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'inventory_memos_list' %}" class="hover:text-brand-600 transition-colors">أذونات المخازن</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{% if memo_type == 'inward' %}إذن إضافة جديد{% else %}إذن صرف جديد{% endif %}</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto pb-16 space-y-6">
+
+    <!-- Header -->
+    <div class="pb-4 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+            <span class="p-2 rounded-xl {% if memo_type == 'inward' %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %}">
+                <span class="material-symbols-outlined text-2xl">{% if memo_type == 'inward' %}arrow_downward{% else %}arrow_upward{% endif %}</span>
+            </span>
+            <div>
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight">
+                    {% if memo_type == 'inward' %}إذن إضافة مخزنية جديد (Stock In){% else %}إذن صرف مخزني جديد (Stock Out){% endif %}
+                </h1>
+                <p class="text-xs text-slate-500 mt-1">
+                    {% if memo_type == 'inward' %}إضافة كميات واردة وتحديث متوسط التكلفة والتشغيلات للمخزن{% else %}خصم وصرف كميات من المخزن مع التحقق التام من الأرصدة المتاحة{% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" id="memoForm" class="space-y-6">
+        {% csrf_token %}
+        <input type="hidden" name="memo_type" value="{{ memo_type }}">
+
+        <!-- Master Details Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">warehouse</span>
+                <span>بيانات الحركة والمخزن</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                <!-- Warehouse -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        المخزن المنفذ عليه الحركة <span class="text-rose-500">*</span>
+                    </label>
+                    <select name="warehouse" required
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختر المخزن --</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }} ({{ wh.code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Statement / Reason -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        البيان / سبب الإذن <span class="text-rose-500">*</span>
+                    </label>
+                    <input type="text" name="statement" required placeholder="مثال: تسوية بضاعة واردة، تالف، تسوية جردية..."
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Notes -->
+                <div class="col-span-full">
+                    <label class="block font-bold text-slate-700 mb-1.5">ملاحظات إضافية</label>
+                    <textarea name="notes" rows="2" placeholder="أي تفاصيل أو مستندات مؤيدة للحركة..."
+                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Items Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">format_list_bulleted</span>
+                    <span>بنود الأصناف والكميات</span>
+                </h2>
+                <button type="button" onclick="addRow()"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 text-[#27bebe] hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>إضافة صنف</span>
+                </button>
+            </div>
+
+            <!-- Responsive Table & Cards -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs" id="itemsTable">
+                    <thead class="hidden md:table-header-group bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 px-3 min-w-[220px]">المنتج</th>
+                            <th class="py-2.5 px-2 w-28 text-center">الكمية</th>
+                            {% if memo_type == 'inward' %}
+                            <th class="py-2.5 px-2 w-28 text-center">تكلفة الوحدة</th>
+                            {% endif %}
+                            <th class="py-2.5 px-2 w-32 text-center">رقم التشغيل {% if profile.is_batch_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
+                            <th class="py-2.5 px-2 w-32 text-center">تاريخ الصلاحية {% if profile.is_expiry_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
+                            <th class="py-2.5 px-2 w-12 text-center">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsTableBody" class="block md:table-row-group space-y-3 md:space-y-0 md:divide-y md:divide-slate-100">
+                        <!-- Populated via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Bottom Actions Bar -->
+        <div class="flex items-center justify-end gap-3 pt-4">
+            <a href="{% url 'inventory_memos_list' %}" class="px-5 py-2.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                إلغاء
+            </a>
+            <button type="submit" class="px-8 py-2.5 {% if memo_type == 'inward' %}bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20{% else %}bg-amber-600 hover:bg-amber-700 shadow-amber-600/20{% endif %} text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">check</span>
+                <span>حفظ وتنفيذ الإذن المخزني</span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const availableProducts = [
+        {% for p in products %}
+        {
+            id: "{{ p.id }}",
+            name: "{{ p.name|escapejs }}",
+            sku: "{{ p.sku_code }}",
+            cost: {{ p.default_purchase_cost|default:"0.00"|stringformat:".2f" }}
+        },
+        {% endfor %}
+    ];
+
+    const isBatchMandatory = {% if profile.is_batch_mandatory %}true{% else %}false{% endif %};
+    const isExpiryMandatory = {% if profile.is_expiry_mandatory %}true{% else %}false{% endif %};
+    const isMemoInward = {% if memo_type == 'inward' %}true{% else %}false{% endif %};
+
+    let rowCount = 0;
+
+    function createRow(index) {
+        let options = '<option value="">-- اختر الصنف --</option>';
+        availableProducts.forEach(p => {
+            options += `<option value="${p.id}" data-cost="${p.cost}">[${p.sku}] ${p.name}</option>`;
+        });
+
+        const costFieldDesktop = isMemoInward ? `
+            <td class="hidden md:table-cell py-2 px-2">
+                <input type="number" step="0.01" min="0" name="unit_cost[]" value="0.00" required
+                       class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+            </td>
+        ` : '';
+
+        const costFieldMobile = isMemoInward ? `
+            <div>
+                <label class="block text-[10px] font-bold text-slate-600 mb-0.5">تكلفة الوحدة</label>
+                <input type="number" step="0.01" min="0" name="unit_cost_mobile_${index}" value="0.00" oninput="syncMobileCost(${index}, this)"
+                       class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+            </div>
+        ` : '';
+
+        return `
+            <tr id="row-${index}" class="item-row block md:table-row bg-slate-50/60 md:bg-transparent p-4 md:p-0 rounded-xl md:rounded-none border border-slate-200 md:border-none shadow-xs md:shadow-none mb-3 md:mb-0 space-y-2 md:space-y-0">
+                <!-- Product Select -->
+                <td class="block md:table-cell py-1.5 md:py-2 px-2">
+                    <div class="flex items-center justify-between md:hidden mb-1">
+                        <span class="text-[11px] font-bold text-slate-600">البند #${index + 1} - الصنف <span class="text-rose-500">*</span></span>
+                        <button type="button" onclick="removeRow(${index})" class="p-1 text-slate-400 hover:text-red-500">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                    <select name="product_id[]" required onchange="onProductSelect(${index}, this)"
+                            class="w-full px-2.5 py-2 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#27bebe] transition-colors">
+                        ${options}
+                    </select>
+                </td>
+
+                <!-- Inputs on Mobile Grid -->
+                <td class="block md:table-cell py-1 md:py-2 px-2">
+                    <div class="grid grid-cols-2 md:grid-cols-1 gap-2">
+                        <div>
+                            <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">الكمية</label>
+                            <input type="number" step="0.01" min="0.01" name="quantity[]" value="1" required
+                                   class="w-full text-center px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+                        </div>
+                        ${costFieldMobile}
+                    </div>
+                </td>
+
+                ${costFieldDesktop}
+
+                <!-- Batch Number -->
+                <td class="block md:table-cell py-1 md:py-2 px-2">
+                    <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">رقم التشغيل (Batch No)</label>
+                    <input type="text" name="batch_number[]" placeholder="Batch No" ${isBatchMandatory ? 'required' : ''}
+                           class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
+                </td>
+
+                <!-- Expiry Date -->
+                <td class="block md:table-cell py-1 md:py-2 px-2">
+                    <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">تاريخ الصلاحية</label>
+                    <input type="date" name="expiry_date[]" ${isExpiryMandatory ? 'required' : ''}
+                           class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
+                </td>
+
+                <!-- Delete (Desktop) -->
+                <td class="hidden md:table-cell py-2 px-2 text-center">
+                    <button type="button" onclick="removeRow(${index})" class="p-1 text-slate-400 hover:text-red-500">
+                        <span class="material-symbols-outlined text-base">close</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }
+
+    function addRow() {
+        const tbody = document.getElementById('itemsTableBody');
+        tbody.insertAdjacentHTML('beforeend', createRow(rowCount));
+        rowCount++;
+    }
+
+    function removeRow(index) {
+        const row = document.getElementById(`row-${index}`);
+        const allRows = document.querySelectorAll('#itemsTableBody .item-row');
+        if (allRows.length > 1) {
+            if (row) row.remove();
+        } else {
+            alert('يجب وجود بند واحد على الأقل في الإذن المخزني.');
+        }
+    }
+
+    function onProductSelect(index, selectEl) {
+        const selected = selectEl.options[selectEl.selectedIndex];
+        const cost = selected.getAttribute('data-cost') || '0.00';
+        const row = document.getElementById(`row-${index}`);
+        if (row && isMemoInward) {
+            const costDesktop = row.querySelector('input[name="unit_cost[]"]');
+            const costMobile = row.querySelector(`input[name="unit_cost_mobile_${index}"]`);
+            if (costDesktop) costDesktop.value = cost;
+            if (costMobile) costMobile.value = cost;
+        }
+    }
+
+    function syncMobileCost(index, input) {
+        const row = document.getElementById(`row-${index}`);
+        if (row) {
+            const costDesktop = row.querySelector('input[name="unit_cost[]"]');
+            if (costDesktop) costDesktop.value = input.value;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+    });
+</script>
+{% endblock %}

@@ -900,19 +900,24 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
         if is_accountant(user):
             return True
         if obj.is_main:
-            return action == 'view'
+            return action in ['view', 'operate']
         if obj.assigned_user_id == user.id:
             return True
         if not is_manager_or_higher(user):
             return False
-        # Manager can view warehouses of reps in their main area or warehouses in their managed areas
+        # Manager can view/operate warehouses of reps in their main area or warehouses in their managed areas
         wh_rep = obj.assigned_user
         rep_auth = is_manager_eligible_for_user(user, wh_rep) if wh_rep else False
         area_auth = is_manager_eligible_for_area(user, obj.area) if obj.area else False
-        if action == 'view':
+        if action in ['view', 'operate']:
             return rep_auth or area_auth
         # Editing/deleting warehouses is reserved for SuperAdmin / Admin
         return False
+
+    elif model_name == 'inventorymemo':
+        if is_accountant(user):
+            return True
+        return can_user_access_object(user, obj.warehouse, action)
 
     elif model_name == 'vault':
         if is_accountant(user):
@@ -992,4 +997,95 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
 
     return True
 
+def can_user_perform_stock_in(user, warehouse=None) -> bool:
+    """Checks if user has permission to create a Stock In memo for the given warehouse."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return True
+    role = getattr(user, 'role', None)
+    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
+        return True
+    if is_accountant(user):
+        if warehouse:
+            return can_user_access_object(user, warehouse, 'operate')
+        return True
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+    configured_roles = profile.roles_can_stock_in.all()
+
+    if configured_roles.exists():
+        if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
+            return False
+    else:
+        if not has_perm_or_admin(user, 'inventory:memos/manage') and not is_manager_or_higher(user):
+            return False
+
+    if warehouse:
+        return can_user_access_object(user, warehouse, 'operate')
+    return True
+
+
+def can_user_perform_stock_out(user, warehouse=None) -> bool:
+    """Checks if user has permission to create a Stock Out memo from the given warehouse."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return True
+    role = getattr(user, 'role', None)
+    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
+        return True
+    if is_accountant(user):
+        if warehouse:
+            return can_user_access_object(user, warehouse, 'operate')
+        return True
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+    configured_roles = profile.roles_can_stock_out.all()
+
+    if configured_roles.exists():
+        if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
+            return False
+    else:
+        if not has_perm_or_admin(user, 'inventory:memos/manage') and not is_manager_or_higher(user):
+            return False
+
+    if warehouse:
+        return can_user_access_object(user, warehouse, 'operate')
+    return True
+
+
+def can_user_perform_transfer(user, source_warehouse=None, dest_warehouse=None) -> bool:
+    """Checks if user has permission to request/execute warehouse transfers."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return True
+    role = getattr(user, 'role', None)
+    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
+        return True
+    if is_accountant(user):
+        return True
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+    configured_roles = profile.roles_can_transfer.all()
+
+    if configured_roles.exists():
+        if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
+            return False
+
+    if dest_warehouse:
+        if dest_warehouse.assigned_user_id == user.id:
+            pass  # Rep requesting into own warehouse
+        elif is_manager_or_higher(user):
+            rep = dest_warehouse.assigned_user
+            if rep and not is_manager_eligible_for_user(user, rep):
+                return False
+        elif not has_perm_or_admin(user, ['inventory:transfers/approve', 'inventory:transfers/manage']):
+            return False
+
+    return True
 

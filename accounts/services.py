@@ -117,6 +117,17 @@ def ensure_representative_resources(user, create_warehouse=None, create_treasury
             )
             created_wh = True
 
+            AuditLogService.log(
+                action_type='WAREHOUSE_CREATED',
+                module='inventory',
+                actor=None,
+                target_user=user,
+                record_id=wh.id,
+                record_name=wh.name,
+                description=f"إنشاء مخزن عهدة تلقائي للمندوب {user.name or user.username}: {wh.name} ({wh.code})",
+                new_values={'name': wh.name, 'code': wh.code, 'assigned_user': user.username, 'is_rep_warehouse': True}
+            )
+
     # 2. Ensure Treasury (Vault)
     if create_treasury:
         vault = user.get_default_treasury()
@@ -139,15 +150,23 @@ def ensure_representative_resources(user, create_warehouse=None, create_treasury
             )
             created_vault = True
 
+            AuditLogService.log(
+                action_type='VAULT_CREATED',
+                module='treasury',
+                actor=None,
+                target_user=user,
+                record_id=vault.id,
+                record_name=vault.name,
+                description=f"إنشاء خزنة عهدة نقدية تلقائية للمندوب {user.name or user.username}: {vault.name}",
+                new_values={'name': vault.name, 'vault_type': vault.vault_type, 'assigned_user': user.username, 'is_rep_vault': True}
+            )
+
     return wh, vault, created_wh, created_vault
 
 
 import logging
 from accounts.models import SecurityAuditLog
 
-logger = logging.getLogger(__name__)
-
-import logging
 logger = logging.getLogger(__name__)
 
 REDACTED_KEYS = {
