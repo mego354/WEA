@@ -168,7 +168,7 @@
                             <div class="font-bold text-slate-900">{{ v.assigned_user.get_full_name|default:v.assigned_user.username }}</div>
                             <span class="text-[10px] text-brand-700 font-bold">
                                 {% for a in v.assigned_user.get_main_areas %}
-                                {{ a.name }}{% if not forloop.last %}، {% endif %}
+                                <!-- {{ a.name }}{% if not forloop.last %}، {% endif %} -->
                                 {% empty %}
                                 عهدة مندوب
                                 {% endfor %}
