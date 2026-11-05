@@ -173,50 +173,50 @@
     <!-- Dedicated Statistics Cards Section -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Contacts -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
-            <div class="flex items-center justify-between">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي جهات الاتصال</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">contacts</span>
             </div>
-            <div class="mt-2 sm:mt-3">
-                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono">{{ stats.total_contacts }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 mr-1 sm:mr-1.5">جهة مسجلة</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_contacts }}">{{ stats.total_contacts }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">جهة مسجلة</span>
             </div>
         </div>
 
         <!-- Card 2: Active Customers -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
-            <div class="flex items-center justify-between">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">العملاء النشطون</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">store</span>
             </div>
-            <div class="mt-2 sm:mt-3">
-                <span class="text-xl sm:text-2xl font-black text-[#27bebe] font-mono">{{ stats.total_customers }}</span>
-                <span class="text-[10px] sm:text-xs text-teal-600 mr-1 font-semibold">صيدلية / عيادة</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-[#27bebe] font-mono tracking-tight truncate block" title="{{ stats.total_customers }}">{{ stats.total_customers }}</span>
+                <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block truncate">صيدلية / عيادة</span>
             </div>
         </div>
 
         <!-- Card 3: Potential Leads -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
-            <div class="flex items-center justify-between">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء محتملون</span>
                 <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">person_search</span>
             </div>
-            <div class="mt-2 sm:mt-3">
-                <span class="text-xl sm:text-2xl font-black text-amber-700 font-mono">{{ stats.total_leads }}</span>
-                <span class="text-[10px] sm:text-xs text-amber-600 mr-1 sm:mr-1.5">قيد التأهيل</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight truncate block" title="{{ stats.total_leads }}">{{ stats.total_leads }}</span>
+                <span class="text-[10px] sm:text-xs text-amber-600 block truncate">قيد التأهيل</span>
             </div>
         </div>
 
         <!-- Card 4: Suppliers -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
-            <div class="flex items-center justify-between">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">الموردون والشركات</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">domain</span>
             </div>
-            <div class="mt-2 sm:mt-3">
-                <span class="text-xl sm:text-2xl font-black text-blue-700 font-mono">{{ stats.total_suppliers }}</span>
-                <span class="text-[10px] sm:text-xs text-blue-600 mr-1 sm:mr-1.5">مورد معتمد</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.total_suppliers }}">{{ stats.total_suppliers }}</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 block truncate">مورد معتمد</span>
             </div>
         </div>
     </div>

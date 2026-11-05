@@ -55,3 +55,53 @@ class TreasuryExcelExportTestCase(TestCase):
         self.assertTrue(ws.sheet_view.rightToLeft)
         found = any('شركة فارما للتوزيع' in str(cell.value) for row in ws.iter_rows() for cell in row)
         self.assertTrue(found)
+
+
+class VaultDetailViewTestCase(TestCase):
+    def setUp(self):
+        self.super_user = User.objects.create_superuser(
+            email='vaultsuper@weapharma.com',
+            username='vaultsuper@weapharma.com',
+            password='Password123!',
+            first_name='Super',
+            last_name='User'
+        )
+        self.regular_user = User.objects.create_user(
+            email='regular@weapharma.com',
+            username='regular@weapharma.com',
+            password='Password123!',
+            first_name='Regular',
+            last_name='User'
+        )
+        self.client = Client()
+        self.vault = Vault.objects.create(
+            name='خزينة فرع القاهرة الرئيسية',
+            vault_type='cash',
+            current_balance=Decimal('1250000.00'),
+            is_active=True
+        )
+
+    def test_vault_detail_view_success(self):
+        self.client.login(username='vaultsuper@weapharma.com', password='Password123!')
+        url = reverse('vault_detail', kwargs={'pk': self.vault.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'خزينة فرع القاهرة الرئيسية')
+        self.assertContains(response, str(self.vault.serial_num))
+        self.assertContains(response, '1,250,000')
+
+    def test_vault_detail_permission_denied_for_unauthorized_user(self):
+        self.client.login(username='regular@weapharma.com', password='Password123!')
+        url = reverse('vault_detail', kwargs={'pk': self.vault.pk})
+        response = self.client.get(url)
+        # Should be forbidden 403 or redirect
+        self.assertIn(response.status_code, [302, 403])
+
+    def test_vaults_list_has_clickable_links_and_detail_button(self):
+        self.client.login(username='vaultsuper@weapharma.com', password='Password123!')
+        response = self.client.get(reverse('vaults_list'))
+        self.assertEqual(response.status_code, 200)
+        detail_url = reverse('vault_detail', kwargs={'pk': self.vault.pk})
+        self.assertContains(response, detail_url)
+        self.assertContains(response, 'تفاصيل')
+

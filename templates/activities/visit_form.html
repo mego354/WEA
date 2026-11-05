@@ -316,7 +316,7 @@
                     </button>
                 </div>
 
-                <!-- Simple 4-Item Grid with Icons and Compact Text Only -->
+                <!-- 4-Item Grid with Icons and Compact Text Only -->
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                     <!-- 1. Current Location -->
                     <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
@@ -364,6 +364,25 @@
                                 <span id="allowed-distance-source" class="hidden">{% if selected_template and selected_template.has_special_location_settings and allow_template_distance_override %}مخصص للقالب{% else %}الافتراضي{% endif %}</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- GPS Permission Recovery Alert (Hidden until permission denied or error) -->
+                <div id="gps-permission-alert" class="hidden p-3 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 space-y-2">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-start gap-2">
+                            <span class="material-symbols-outlined text-rose-600 text-lg shrink-0 mt-0.5">location_disabled</span>
+                            <div class="space-y-0.5">
+                                <strong id="gps-alert-title" class="font-bold block text-rose-900 text-xs">تعذر تحديد الموقع الجغرافي</strong>
+                                <p id="gps-alert-desc" class="text-[11px] text-rose-700 leading-relaxed">
+                                    يرجى السماح للمتصفح بالوصول إلى موقعك الجغرافي بالنقر على أيقونة القفل 🔒 بجوار عنوان الصفحة، ثم الضغط على "إعادة المحاولة".
+                                </p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="acquireDeviceLocation(true)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shrink-0 transition-colors shadow-xs">
+                            <span class="material-symbols-outlined text-sm">refresh</span>
+                            <span>إعادة المحاولة</span>
+                        </button>
                     </div>
                 </div>
 
@@ -634,67 +653,132 @@
         return Math.round(R * c * 100) / 100;
     }
 
-    function acquireDeviceLocation() {
+    async function acquireDeviceLocation(isRetry = false) {
         const dot = document.getElementById('gps-status-dot');
         const label = document.getElementById('gps-status-label');
         const userGpsEl = document.getElementById('user-gps-display');
         const quickText = document.getElementById('gps-quick-text');
+        const alertBox = document.getElementById('gps-permission-alert');
+        const alertTitle = document.getElementById('gps-alert-title');
+        const alertDesc = document.getElementById('gps-alert-desc');
+
+        // Reset previous state on fresh attempt / retry
+        currentDeviceCoords = null;
+        const latInput = document.getElementById('id_latitude') || document.querySelector('input[name="latitude"]');
+        const lngInput = document.getElementById('id_longitude') || document.querySelector('input[name="longitude"]');
+        const accInput = document.getElementById('id_device_accuracy') || document.querySelector('input[name="device_accuracy"]');
+        if (latInput) latInput.value = '';
+        if (lngInput) lngInput.value = '';
+        if (accInput) accInput.value = '';
+
+        if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+        if (userGpsEl) userGpsEl.textContent = "جاري الالتقاط...";
+        if (label) label.textContent = "جاري الاتصال بخدمة تحديد الموقع...";
+        if (quickText) quickText.textContent = "جاري الالتقاط...";
 
         if (!navigator.geolocation) {
-            if (dot) dot.className = "w-2 h-2 rounded-full bg-rose-500";
-            if (userGpsEl) userGpsEl.textContent = "غير مدعوم في المتصفح";
+            if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            if (userGpsEl) userGpsEl.textContent = "غير مدعوم";
             if (label) label.textContent = "متصفحك لا يدعم تحديد الموقع الجغرافي (Geolocation).";
             if (quickText) quickText.textContent = "GPS غير مدعوم";
+            if (alertBox) {
+                alertBox.classList.remove('hidden');
+                if (alertTitle) alertTitle.textContent = "المتصفح لا يدعم Geolocation";
+                if (alertDesc) alertDesc.textContent = "يرجى استخدام متصفح حديث يدعم تحديد الموقع الجغرافي (مثل Chrome أو Safari أو Edge).";
+            }
             updateGeofenceCheck();
             return;
         }
 
-        if (dot) dot.className = "w-2 h-2 rounded-full bg-amber-400 animate-ping";
-        if (userGpsEl) userGpsEl.textContent = "جاري التقاط الإحداثيات...";
-        if (label) label.textContent = "جاري الاتصال بخدمة تحديد الموقع...";
-        if (quickText) quickText.textContent = "جاري الالتقاط...";
+        // Query permissions API if available to monitor permission status transitions
+        if (navigator.permissions && navigator.permissions.query) {
+            try {
+                const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+                permissionStatus.onchange = function() {
+                    if (this.state === 'granted') {
+                        acquireDeviceLocation(true);
+                    }
+                };
+            } catch (permErr) {
+                // Ignore permissions query error on unsupported browsers
+            }
+        }
 
         navigator.geolocation.getCurrentPosition(
             function(position) {
-                const lat = Number(position.coords.latitude.toFixed(6));
-                const lng = Number(position.coords.longitude.toFixed(6));
-                const acc = Math.round(position.coords.accuracy || 0);
+                const rawLat = position.coords.latitude;
+                const rawLng = position.coords.longitude;
+                const rawAcc = position.coords.accuracy || 0;
+
+                // Validate coordinate ranges
+                if (isNaN(rawLat) || isNaN(rawLng) || rawLat < -90 || rawLat > 90 || rawLng < -180 || rawLng > 180 || (rawLat === 0 && rawLng === 0)) {
+                    if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                    if (userGpsEl) userGpsEl.textContent = "إحداثيات غير صالحة";
+                    if (label) label.textContent = "تم استلام إحداثيات جغرافية غير صالحة من جهازك.";
+                    if (alertBox) {
+                        alertBox.classList.remove('hidden');
+                        if (alertTitle) alertTitle.textContent = "خطأ في إحداثيات الموقع";
+                        if (alertDesc) alertDesc.textContent = "يرجى التأكد من تشغيل خدمات الموقع (GPS) في إعدادات جهازك وإعادة المحاولة.";
+                    }
+                    updateGeofenceCheck();
+                    return;
+                }
+
+                const lat = Number(rawLat.toFixed(6));
+                const lng = Number(rawLng.toFixed(6));
+                const acc = Math.round(rawAcc);
 
                 currentDeviceCoords = { lat: lat, lng: lng, accuracy: acc };
 
-                const latInput = document.getElementById('id_latitude') || document.querySelector('input[name="latitude"]');
-                const lngInput = document.getElementById('id_longitude') || document.querySelector('input[name="longitude"]');
-                const accInput = document.getElementById('id_device_accuracy') || document.querySelector('input[name="device_accuracy"]');
                 if (latInput) latInput.value = lat;
                 if (lngInput) lngInput.value = lng;
                 if (accInput) accInput.value = acc;
 
-                if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500";
-                if (userGpsEl) userGpsEl.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+                if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                if (userGpsEl) userGpsEl.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
                 if (label) label.textContent = `تم الالتقاط بنجاح (دقة ±${acc} متر)`;
                 if (quickText) quickText.textContent = `دقة ±${acc}م`;
+
+                // Hide error alert on success
+                if (alertBox) alertBox.classList.add('hidden');
 
                 updateGeofenceCheck();
             },
             function(error) {
-                let errorMsg = "تعذر تحديد الموقع الجغرافي.";
+                let errorTitle = "تعذر تحديد الموقع الجغرافي";
+                let errorDesc = "يرجى التحقق من تفعيل الـ GPS وإعادة المحاولة.";
+                let shortError = "غير متوفر";
+
                 if (error.code === error.PERMISSION_DENIED) {
-                    errorMsg = "تم رفض إذن الوصول إلى الموقع (Permission Denied).";
+                    errorTitle = "تم رفض إذن الوصول إلى الموقع";
+                    errorDesc = "لقد قمت بحظر الوصول إلى الموقع. يرجى الضغط على أيقونة القفل 🔒 في شريط عنوان المتصفح، وتغيير إذن الموقع إلى 'سماح' (Allow)، ثم الضغط على زر إعادة المحاولة أدناه دون الحاجة لإعادة تحميل الصفحة.";
+                    shortError = "تم رفض الإذن";
                 } else if (error.code === error.POSITION_UNAVAILABLE) {
-                    errorMsg = "إشارة الموقع غير متوفرة حالياً.";
+                    errorTitle = "إشارة GPS غير متوفرة";
+                    errorDesc = "تعذر الحصول على إشارة الموقع من الجهاز. يرجى التأكد من تشغيل الـ GPS وفتح نافذة أو الاقتراب من إشارة أفضل.";
+                    shortError = "لا توجد إشارة";
                 } else if (error.code === error.TIMEOUT) {
-                    errorMsg = "انتهت مهلة التقاط الموقع.";
+                    errorTitle = "انتهت مهلة البحث عن الموقع";
+                    errorDesc = "استغرق تحديد الموقع وقتاً أطول من المعتاد. يرجى الضغط على زر إعادة المحاولة.";
+                    shortError = "انتهت المهلة";
                 }
 
-                if (dot) dot.className = "w-2 h-2 rounded-full bg-rose-500";
-                if (userGpsEl) userGpsEl.textContent = "غير متوفر";
-                if (label) label.textContent = errorMsg;
-                if (quickText) quickText.textContent = "تعذر الالتقاط";
+                if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                if (userGpsEl) userGpsEl.textContent = shortError;
+                if (label) label.textContent = errorTitle;
+                if (quickText) quickText.textContent = shortError;
+
+                if (alertBox) {
+                    alertBox.classList.remove('hidden');
+                    if (alertTitle) alertTitle.textContent = errorTitle;
+                    if (alertDesc) alertDesc.textContent = errorDesc;
+                }
 
                 const bypassBox = document.getElementById('distance-bypass-container');
                 if (bypassBox && currentVisitType === 'unplanned') {
                     bypassBox.classList.remove('hidden');
                 }
+                updateGeofenceCheck();
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
@@ -1070,6 +1154,58 @@
             confirmChk.focus();
             if (e) e.preventDefault();
             return false;
+        }
+
+        // Validate GPS and Distance constraints for unplanned visits
+        if (!isEditMode && currentVisitType === 'unplanned') {
+            const bypassChk = document.getElementById('id_force_bypass_location') || document.getElementById('id_request_distance_exception');
+            const isBypassed = bypassChk && bypassChk.checked;
+            const bypassReasonInput = document.getElementById('id_bypass_reason');
+            const bypassContainer = document.getElementById('distance-bypass-container');
+
+            if (currentCustomer && currentCustomer.lat && currentCustomer.lng) {
+                if (!currentDeviceCoords) {
+                    if (!isBypassed) {
+                        alert('التحقق من إحداثيات الـ GPS إلزامي للزيارات الميدانية المباشرة. يرجى تفعيل الموقع أو طلب استثناء لتجاوز المسافة.');
+                        if (bypassContainer) bypassContainer.classList.remove('hidden');
+                        if (e) e.preventDefault();
+                        return false;
+                    }
+                } else {
+                    const dist = computeHaversineDistance(
+                        currentDeviceCoords.lat, currentDeviceCoords.lng,
+                        currentCustomer.lat, currentCustomer.lng
+                    );
+                    if (dist > currentAllowedDistance) {
+                        if (!isBypassed) {
+                            const diff = Math.round(dist - currentAllowedDistance);
+                            alert(`أنت خارج النطاق الجغرافي المسموح به بـ ${diff} متر. يرجى تفعيل خيار تجاوز/طلب استثناء المسافة لإتمام الحفظ.`);
+                            if (bypassContainer) bypassContainer.classList.remove('hidden');
+                            if (bypassChk) bypassChk.focus();
+                            if (e) e.preventDefault();
+                            return false;
+                        }
+                    }
+                }
+            } else {
+                // Initial location capture: if no device coords and not bypassed
+                if (!currentDeviceCoords && !isBypassed) {
+                    alert('العميل ليس لديه موقع مسجل مسبقاً. يرجى تفعيل الـ GPS لحفظ موقع العميل لأول مرة، أو تفعيل خيار تجاوز المسافة.');
+                    if (bypassContainer) bypassContainer.classList.remove('hidden');
+                    if (e) e.preventDefault();
+                    return false;
+                }
+            }
+
+            // If bypass or exception is checked, verify reason when mandatory
+            if (isBypassed && bypassReasonMandatory) {
+                if (!bypassReasonInput || !bypassReasonInput.value.trim()) {
+                    alert('يرجى ذكر سبب التجاوز أو طلب الاستثناء.');
+                    if (bypassReasonInput) bypassReasonInput.focus();
+                    if (e) e.preventDefault();
+                    return false;
+                }
+            }
         }
 
         const btn = document.getElementById('submit-visit-btn');

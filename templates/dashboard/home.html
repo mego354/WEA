@@ -121,20 +121,20 @@
     {% endif %}
 
     <!-- ROLE-APPROPRIATE KPI METRIC CARDS -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         {% for card in kpi_cards %}
             {% if forloop.counter <= 12 %}
-                <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 flex flex-col justify-between text-center min-h-[135px] hover:shadow-md transition-shadow">
-                    <span class="text-xs sm:text-sm text-slate-500 font-normal leading-tight">{{ card.title }}</span>
-                    <div class="my-auto py-1">
+                <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between text-center min-h-[110px] sm:min-h-[135px] hover:shadow-md transition-shadow min-w-0 overflow-hidden">
+                    <span class="text-[11px] sm:text-xs md:text-sm text-slate-500 font-bold leading-tight truncate block" title="{{ card.title }}">{{ card.title }}</span>
+                    <div class="my-auto py-1 min-w-0">
                         {% if card.amount %}
-                            <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.amount }}</span>
+                            <span class="text-base sm:text-lg lg:text-xl xl:text-2xl font-black text-slate-800 block tracking-tight font-mono truncate" title="{{ card.amount }}">{{ card.amount }}</span>
                             {% if card.subtitle %}
-                                <span class="text-xs text-slate-500 font-normal block mt-1 {% if 'واجب السداد' in card.subtitle %}text-amber-700 font-medium{% endif %}">{{ card.subtitle }}</span>
+                                <span class="text-[10px] sm:text-xs text-slate-500 font-normal block mt-1 truncate {% if 'واجب السداد' in card.subtitle %}text-amber-700 font-medium{% endif %}" title="{{ card.subtitle }}">{{ card.subtitle }}</span>
                             {% endif %}
                         {% else %}
                             {% if card.subtitle %}
-                                <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.subtitle }}</span>
+                                <span class="text-base sm:text-lg lg:text-xl xl:text-2xl font-black text-slate-800 block tracking-tight font-mono truncate" title="{{ card.subtitle }}">{{ card.subtitle }}</span>
                             {% endif %}
                         {% endif %}
                     </div>
@@ -145,20 +145,20 @@
 
     <!-- Row 4: Additional Metric Cards (When Total Cards > 12) -->
     {% if kpi_cards|length > 12 %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Spacer for desktop RTL 2 right columns -->
         <div class="hidden lg:block lg:col-span-2"></div>
         
         {% for card in kpi_cards %}
             {% if forloop.counter > 12 %}
-                <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 flex flex-col justify-between text-center min-h-[135px] hover:shadow-md transition-shadow">
-                    <span class="text-xs sm:text-sm text-slate-500 font-normal leading-tight">{{ card.title }}</span>
-                    <div class="my-auto py-1">
+                <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between text-center min-h-[110px] sm:min-h-[135px] hover:shadow-md transition-shadow min-w-0 overflow-hidden">
+                    <span class="text-[11px] sm:text-xs md:text-sm text-slate-500 font-bold leading-tight truncate block" title="{{ card.title }}">{{ card.title }}</span>
+                    <div class="my-auto py-1 min-w-0">
                         {% if card.amount %}
-                            <span class="text-2xl sm:text-3xl font-semibold text-slate-800 block tracking-tight">{{ card.amount }}</span>
+                            <span class="text-base sm:text-lg lg:text-xl xl:text-2xl font-black text-slate-800 block tracking-tight font-mono truncate" title="{{ card.amount }}">{{ card.amount }}</span>
                         {% endif %}
                         {% if card.subtitle %}
-                            <span class="text-xs text-slate-500 font-normal block mt-1">{{ card.subtitle }}</span>
+                            <span class="text-[10px] sm:text-xs text-slate-500 font-normal block mt-1 truncate" title="{{ card.subtitle }}">{{ card.subtitle }}</span>
                         {% endif %}
                     </div>
                 </div>

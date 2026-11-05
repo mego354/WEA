@@ -2925,6 +2925,58 @@ class RefinedVisitRequirementsTestCase(TestCase):
         self.assertEqual(len(batch1_ids.intersection(batch2_ids)), 0)
 
 
+class GPSValidationAndToleranceTestCase(TestCase):
+    def setUp(self):
+        from master_data.models import LocationSettings
+        self.loc_settings = LocationSettings.get_settings()
+        self.loc_settings.tolerance = 250
+        self.loc_settings.allow_template_distance_override = True
+        self.loc_settings.save()
+
+    def test_calculate_haversine_distance_accuracy(self):
+        from activities.services import calculate_haversine_distance
+        # Identical points -> 0
+        dist_same = calculate_haversine_distance(30.0444, 31.2357, 30.0444, 31.2357)
+        self.assertEqual(dist_same, 0.0)
+
+        # Cairo Tahrir (30.0444, 31.2357) to Cairo Tower (30.0459, 31.2243) is ~1.1km (1000m - 1250m)
+        dist_tower = calculate_haversine_distance(30.0444, 31.2357, 30.0459, 31.2243)
+        self.assertGreater(dist_tower, 1000)
+        self.assertLess(dist_tower, 1250)
+
+    def test_tolerance_hierarchy(self):
+        from master_data.models import LocationSettings
+        from activities.models import VisitTemplate
+
+        loc = LocationSettings.get_settings()
+        loc.tolerance = 200
+        loc.allow_template_distance_override = True
+        loc.save()
+
+        # No template -> default tolerance
+        self.assertEqual(loc.get_effective_tolerance(None), 200)
+
+        # Template without special settings -> default tolerance
+        template = VisitTemplate.objects.create(
+            name='Regular Visit Template',
+            display_name_ar='قالب زيارة عادي',
+            has_special_location_settings=False
+        )
+        self.assertEqual(loc.get_effective_tolerance(template), 200)
+
+        # Template with special tolerance of 500m
+        template.has_special_location_settings = True
+        template.special_tolerance = 500
+        template.save()
+        self.assertEqual(loc.get_effective_tolerance(template), 500)
+
+        # If admin disables template override globally -> fallback to default tolerance
+        loc.allow_template_distance_override = False
+        loc.save()
+        self.assertEqual(loc.get_effective_tolerance(template), 200)
+
+
+
 
 
 

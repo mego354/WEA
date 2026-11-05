@@ -49,32 +49,29 @@
     </div>
 
     <!-- Overview Metrics Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Retail Price -->
-        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
-            <span class="text-xs font-bold text-slate-400 block mb-1">سعر البيع للجمهور</span>
-            <span class="text-2xl font-black text-slate-900">{{ product.retail_price|intcomma }}</span>
-            <span class="text-xs text-slate-500 mr-1 font-bold">جنيه</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[11px] sm:text-xs font-bold text-slate-400 block mb-1 truncate">سعر البيع للجمهور</span>
+            <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ product.retail_price|intcomma }} جنيه">{{ product.retail_price|intcomma }} <span class="text-[10px] sm:text-xs text-slate-500 font-bold">جنيه</span></span>
         </div>
 
         <!-- Purchase Cost -->
-        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
-            <span class="text-xs font-bold text-slate-400 block mb-1">تكلفة الشراء الافتراضية</span>
-            <span class="text-2xl font-black text-slate-700">{{ product.default_purchase_cost|intcomma }}</span>
-            <span class="text-xs text-slate-500 mr-1 font-bold">جنيه</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[11px] sm:text-xs font-bold text-slate-400 block mb-1 truncate">تكلفة الشراء الافتراضية</span>
+            <span class="text-base sm:text-lg lg:text-xl font-black text-slate-700 font-mono tracking-tight truncate block" title="{{ product.default_purchase_cost|intcomma }} جنيه">{{ product.default_purchase_cost|intcomma }} <span class="text-[10px] sm:text-xs text-slate-500 font-bold">جنيه</span></span>
         </div>
 
         <!-- Tax Rate -->
-        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
-            <span class="text-xs font-bold text-slate-400 block mb-1">نسبة الضريبة</span>
-            <span class="text-2xl font-black text-[#27bebe] font-mono">{{ product.tax_percentage }}%</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[11px] sm:text-xs font-bold text-slate-400 block mb-1 truncate">نسبة الضريبة</span>
+            <span class="text-base sm:text-lg lg:text-xl font-black text-[#27bebe] font-mono tracking-tight truncate block" title="{{ product.tax_percentage }}%">{{ product.tax_percentage }}%</span>
         </div>
 
         <!-- Total Stock -->
-        <div class="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm">
-            <span class="text-xs font-bold text-slate-400 block mb-1">إجمالي المخزون الحالي</span>
-            <span class="text-2xl font-black text-slate-900 font-mono">{{ total_stock|intcomma }}</span>
-            <span class="text-xs text-slate-500 mr-1 font-bold">{{ product.unit }}</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[11px] sm:text-xs font-bold text-slate-400 block mb-1 truncate">إجمالي المخزون الحالي</span>
+            <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ total_stock|intcomma }} {{ product.unit }}">{{ total_stock|intcomma }} <span class="text-[10px] sm:text-xs text-slate-500 font-bold">{{ product.unit }}</span></span>
         </div>
     </div>
 
