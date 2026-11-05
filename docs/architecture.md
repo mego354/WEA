@@ -156,6 +156,8 @@ See [`audit-logging.md`](audit-logging.md).
 
 **Rep onboarding:** creating or updating a user to a `rep`/`medical_rep` role automatically provisions a warehouse and cash vault (`UserSettings.auto_create_rep_warehouse_vault`) across all workflows: Django admin, user creation/edit forms, signals, and delayed role assignment.
 
+**Treasury Operations:** Vault management (`/treasury/vaults/`, detail view at `/treasury/vaults/<pk>/`), deposits, withdrawals, internal transfers, vendor payments, and customer collections with row locking and audit logging.
+
 ## 12. Constraints and caution
 
 - URL alias duplication (prefix includes).

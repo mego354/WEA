@@ -32,44 +32,44 @@
     </div>
 
     <!-- 2. Dedicated Statistics Cards Section -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
-                <span class="material-symbols-outlined text-xl">handshake</span>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
+                <span class="material-symbols-outlined text-lg sm:text-xl">handshake</span>
             </div>
-            <div>
-                <p class="text-xs font-bold text-slate-500">إجمالي الاتفاقيات</p>
-                <p class="text-lg font-black text-slate-900 font-mono">{{ stats.total_count|default:0 }}</p>
-            </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                <span class="material-symbols-outlined text-xl">payments</span>
-            </div>
-            <div>
-                <p class="text-xs font-bold text-slate-500">إجمالي القيمة المالية</p>
-                <p class="text-lg font-black text-emerald-700 font-mono">{{ stats.total_amount|floatformat:2|intcomma }} <span class="text-xs font-normal">ج.م</span></p>
+            <div class="min-w-0">
+                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الاتفاقيات</p>
+                <p class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_count|default:0 }}">{{ stats.total_count|default:0 }}</p>
             </div>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                <span class="material-symbols-outlined text-xl">verified</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <span class="material-symbols-outlined text-lg sm:text-xl">payments</span>
             </div>
-            <div>
-                <p class="text-xs font-bold text-slate-500">اتفاقيات معتمدة</p>
-                <p class="text-lg font-black text-blue-700 font-mono">{{ stats.approved_count|default:0 }}</p>
+            <div class="min-w-0">
+                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي القيمة المالية</p>
+                <p class="text-base sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight truncate block" title="{{ stats.total_amount|floatformat:2|intcomma }} ج.م">{{ stats.total_amount|floatformat:2|intcomma }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></p>
             </div>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                <span class="material-symbols-outlined text-xl">pending_actions</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <span class="material-symbols-outlined text-lg sm:text-xl">verified</span>
             </div>
-            <div>
-                <p class="text-xs font-bold text-slate-500">بانتظار الاعتماد</p>
-                <p class="text-lg font-black text-amber-700 font-mono">{{ stats.pending_count|default:0 }}</p>
+            <div class="min-w-0">
+                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">اتفاقيات معتمدة</p>
+                <p class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.approved_count|default:0 }}">{{ stats.approved_count|default:0 }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <span class="material-symbols-outlined text-lg sm:text-xl">pending_actions</span>
+            </div>
+            <div class="min-w-0">
+                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">بانتظار الاعتماد</p>
+                <p class="text-base sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight truncate block" title="{{ stats.pending_count|default:0 }}">{{ stats.pending_count|default:0 }}</p>
             </div>
         </div>
     </div>

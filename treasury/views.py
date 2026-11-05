@@ -334,6 +334,45 @@ def vaults_list(request):
     return render(request, 'treasury/vaults_list.html', context)
 
 
+@require_permission(['treasury:vaults/view', 'treasury:vaults/manage'])
+def vault_detail(request, pk):
+    """
+    Detailed dossier for a specific vault or bank account:
+    Financial metrics, custodian details, and recent transactions.
+    """
+    vault = get_object_or_404(Vault.objects.select_related('assigned_user'), pk=pk)
+    if not can_user_access_object(request.user, vault, 'view'):
+        return render_forbidden_response(request, "ليس لديك صلاحية للوصول إلى بيانات هذه الخزنة.")
+
+    tx_qs = VaultTransaction.objects.filter(vault=vault).select_related('created_by', 'reversal_transaction').order_by('-created_at')
+
+    total_inflows = tx_qs.filter(transaction_type='inflow', is_reversed=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    total_outflows = tx_qs.filter(transaction_type='outflow', is_reversed=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    tx_count = tx_qs.count()
+
+    stats = {
+        'current_balance': vault.current_balance,
+        'total_inflows': total_inflows,
+        'total_outflows': total_outflows,
+        'net_flow': total_inflows - total_outflows,
+        'tx_count': tx_count,
+    }
+
+    can_transfer = has_perm_or_admin(request.user, 'treasury:vaults/transfer')
+    can_create_tx = has_perm_or_admin(request.user, 'treasury:transactions/create')
+
+    recent_transactions = tx_qs[:20]
+
+    context = {
+        'vault': vault,
+        'stats': stats,
+        'recent_transactions': recent_transactions,
+        'can_transfer': can_transfer,
+        'can_create_tx': can_create_tx,
+    }
+    return render(request, 'treasury/vault_detail.html', context)
+
+
 @require_permission(['treasury:transactions/list', 'treasury:vaults/view'])
 def vault_transactions_list(request):
     """

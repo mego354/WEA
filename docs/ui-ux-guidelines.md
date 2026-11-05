@@ -142,3 +142,61 @@ The Contacts module supports 3 view modes: `table`, `cards`, and `kanban` (`cont
    - Cards support HTML5 drag-and-drop as well as accessible quick-select stage dropdowns.
    - Stage changes issue an AJAX POST to `/contacts/<id>/status/`, saving the new state, logging to `SecurityAuditLog` via `AuditLogService`, and recording a `ContactActivity` entry.
 
+## H. Global Statistics Cards Section Standards
+
+All dedicated statistics and metrics sections across the application must adhere to uniform responsive classes defined in `templates/layouts/base.html`:
+
+1. **Responsive Grid Layout (`.erp-stat-grid`)**:
+   - Small screens (`< 1024px`): 2-column grid (`grid-cols-2 gap-2.5 sm:gap-4`) to fit compact mobile viewports without vertical inflation or horizontal card clipping.
+   - Large screens (`>= 1024px`): 4-column grid (`lg:grid-cols-4`).
+   - Cards must maintain strict container containment (`w-full min-w-0 max-w-full`).
+2. **Card Structure (`.erp-stat-card`)**:
+   - Compact padding (`p-3 sm:p-5`), rounded corners (`rounded-xl sm:rounded-2xl`), subtle borders (`border border-slate-200/80`), and light shadows.
+   - Internal elements must never cause horizontal scrolling (`scrollWidth <= clientWidth`).
+3. **Large Number Handling & Scalable Typography (`.erp-stat-value`)**:
+   - Font scale: `text-base sm:text-lg lg:text-xl font-black font-mono tracking-tight text-slate-800 truncate block`.
+   - Overflow prevention: `truncate` and `min-w-0` prevent large numerical values (e.g., 125,000,000 EGP) from expanding beyond card bounds or breaking grid columns.
+   - Full-value accessibility: When values are truncated or compactly formatted, the full unclipped numerical string must be exposed via the HTML `title` attribute tooltip (`title="{{ value|floatformat:2|intcomma }} EGP"`).
+4. **Labels (`.erp-stat-label`)**:
+   - Text styling: `text-[11px] sm:text-xs font-semibold text-slate-500 truncate block`.
+
+## I. GPS Validation & Permission Recovery Standards (`visits/create/`)
+
+1. **Simplified 4-Item Indicator Grid**:
+   - Replaced verbose descriptive cards and lengthy helper paragraphs with a clean, compact 4-item grid displaying:
+     - إحداثيات العميل المسجلة (Client Registered Coordinates) with `pin_drop` icon.
+     - موقع جهازك الحالي (Current Device Location) with `my_location` icon.
+     - المسافة الحالية (Current Calculated Distance) with `straighten` icon.
+     - نطاق السماح (Tolerance & Compliance Status) with `verified` icon.
+2. **In-Place Permission Recovery Alert (`#gps-permission-alert`)**:
+   - Displays clear, non-intrusive actionable instructions when browser geolocation permissions are denied or unavailable (e.g., clicking the browser address bar lock/settings icon to enable location).
+   - Features an immediate "إعادة المحاولة" (Retry) action button that recovers state in-place without page reloads.
+3. **Zero-Reload Retry Lifecycle**:
+   - Resets UI error states and clears stale coordinates (`currentDeviceCoords = null`).
+   - Inspects `navigator.permissions.query({ name: 'geolocation' })` to detect state transitions.
+   - Initiates fresh position acquisition via `navigator.geolocation.getCurrentPosition` with `maximumAge: 0`.
+   - Validates coordinates (latitude [-90, 90], longitude [-180, 180], non-zero), re-computes Haversine distance, and immediately updates tolerance badges and submit restrictions without reloading the page.
+
+## J. Bulk Planned Visits Drawer Sequence (`planned-visits/`)
+
+Within the client drawer (`#customer-drawer`), elements strictly follow ergonomic user workflow ordering:
+
+1. **Header & Date/Filters Form (`#drawer-filter-form`)**:
+   - Positioned at the top of the drawer with date picker, area, sub-area, customer type, and active search filters.
+2. **Client Selection Checklist (`#drawer-clients-list`)**:
+   - Positioned in the middle section, supporting live search, multi-selection counters, select-all toggles, and incremental 10-batch loading (`action=load_contacts`).
+3. **Bulk Daily Planning Action Box (`#drawer-bulk-section`)**:
+   - Positioned **directly after** the client selection list, allowing users to select or adjust the visit template, notes, and submit bulk creation immediately after selecting their targets.
+
+## K. Treasury Vault Details & Table Usability (`treasury/vaults/`)
+
+1. **Direct Navigation Links**:
+   - In `vaults_list.html`, both the vault serial number (`#{{ v.serial_num }}`) and vault name (`{{ v.name }}`) are styled as primary links navigating directly to the dedicated vault details view (`{% url 'vault_detail' v.id %}`).
+   - An explicit "تفاصيل" (Details) link button with `visibility` icon is included in table row action buttons for unambiguous accessibility.
+2. **Mobile Column Width & Text Wrapping**:
+   - The `نوع الخزنة` (Vault Type) column headers (`<th>`) and cells (`<td>`) enforce `min-w-[130px] sm:min-w-[150px] whitespace-nowrap` to prevent clipping, unnatural word breaking, or layout squeezing on small mobile screens.
+3. **Dedicated Vault Detail View (`vault_detail`)**:
+   - Scoped authorization via `@require_permission(['treasury:vaults/view', 'treasury:vaults/manage'])` and `can_user_access_object(user, vault, 'view')`.
+   - Comprehensive detail page (`templates/treasury/vault_detail.html`) featuring breadcrumbs, hero header, responsive 4-metric statistics grid (current balance, total collections, total payments, total transfers), custodian card, and paginated recent vault transactions.
+
+

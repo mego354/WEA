@@ -127,22 +127,22 @@
     {% endif %}
 
     <!-- Master Info Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Customer Info -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base text-brand-600">person</span>
-                <span>بيانات العميل</span>
+        <div class="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 truncate">
+                <span class="material-symbols-outlined text-base text-brand-600 shrink-0">person</span>
+                <span class="truncate">بيانات العميل</span>
             </h3>
-            <p class="font-bold text-slate-900 text-sm">{{ order.customer.name }}</p>
-            <p class="text-xs text-slate-500 mt-1">المنطقة: {{ order.customer.area.name|default:"غير محدد" }}</p>
-            <p class="text-xs text-slate-500 mt-0.5">الهاتف: {{ order.customer.mobile|default:"—" }}</p>
+            <p class="font-bold text-slate-900 text-sm truncate" title="{{ order.customer.name }}">{{ order.customer.name }}</p>
+            <p class="text-xs text-slate-500 mt-1 truncate">المنطقة: {{ order.customer.area.name|default:"غير محدد" }}</p>
+            <p class="text-xs text-slate-500 mt-0.5 truncate">الهاتف: {{ order.customer.mobile|default:"—" }}</p>
         </div>
 
         <!-- Warehouse & Delivery -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base text-brand-600">warehouse</span>
+        <div class="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 truncate">
+                <span class="material-symbols-outlined text-base text-brand-600 shrink-0">warehouse</span>
                 <span>المخزن والتسليم</span>
             </h3>
             <p class="font-bold text-slate-900 text-xs">مخزن الصرف: {{ order.source_warehouse.name }}</p>

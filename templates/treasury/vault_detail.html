@@ -1,0 +1,253 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}تفاصيل الخزنة #{{ vault.serial_num }} - {{ vault.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- 1. Breadcrumbs & Header / Hero Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+                <span class="text-slate-300">/</span>
+                <a href="{% url 'vaults_list' %}" class="hover:text-brand-600 transition-colors">الخزائن والحسابات النقدية</a>
+                <span class="text-slate-300">/</span>
+                <span class="text-slate-700 font-bold">#{{ vault.serial_num }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5">
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600 text-2xl">account_balance_wallet</span>
+                    <span>{{ vault.name }}</span>
+                </h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                    #{{ vault.serial_num }}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold {% if vault.vault_type == 'cash' %}bg-teal-50 text-teal-700 border border-teal-200{% else %}bg-blue-50 text-blue-700 border border-blue-200{% endif %}">
+                    {{ vault.get_vault_type_display }}
+                </span>
+                {% if vault.is_active %}
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مفعلة</span>
+                {% else %}
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">معطلة</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions Toolbar -->
+        <div class="flex flex-wrap items-center gap-2">
+            {% if can_create_tx and vault.is_active %}
+            <a href="{% url 'vault_deposit' %}?vault={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">arrow_downward</span>
+                <span>إيداع نقدي</span>
+            </a>
+            <a href="{% url 'vault_withdraw' %}?vault={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">arrow_upward</span>
+                <span>صرف نقدي</span>
+            </a>
+            {% endif %}
+            {% if can_transfer and vault.is_active %}
+            <a href="{% url 'vault_transfer' %}?source_vault={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">swap_horiz</span>
+                <span>تحويل أموال</span>
+            </a>
+            {% endif %}
+            <a href="{% url 'vault_transactions_list' %}?vault_id={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
+                <span>سجل الحركات التفصيلي</span>
+            </a>
+            <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px]" title="العودة لقائمة الخزن">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span class="hidden sm:inline">العودة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 2. Dedicated Statistics Cards Section (Responsive & Large Number Handling) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
+        <!-- Current Balance -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">الرصيد الفعلي الحالي</span>
+                <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">payments</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight truncate block" title="{{ stats.current_balance|floatformat:2|intcomma }} ج.م">
+                    {{ stats.current_balance|floatformat:2|intcomma }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span>
+                </span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">السيولة المتاحة</span>
+            </div>
+        </div>
+
+        <!-- Total Inflows -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المقبوضات والإيداعات</span>
+                <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">arrow_downward</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-brand-600 font-mono tracking-tight truncate block" title="{{ stats.total_inflows|floatformat:2|intcomma }} ج.م">
+                    {{ stats.total_inflows|floatformat:2|intcomma }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span>
+                </span>
+                <span class="text-[10px] sm:text-xs text-brand-600 font-semibold block truncate">وارد نقدي (+)</span>
+            </div>
+        </div>
+
+        <!-- Total Outflows -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المدفوعات والمنصرف</span>
+                <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">arrow_upward</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-rose-600 font-mono tracking-tight truncate block" title="{{ stats.total_outflows|floatformat:2|intcomma }} ج.م">
+                    {{ stats.total_outflows|floatformat:2|intcomma }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span>
+                </span>
+                <span class="text-[10px] sm:text-xs text-rose-600 font-semibold block truncate">منصرف نقدي (-)</span>
+            </div>
+        </div>
+
+        <!-- Total Transactions -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الحركات المسجلة</span>
+                <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">receipt_long</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.tx_count }}">
+                    {{ stats.tx_count }}
+                </span>
+                <span class="text-[10px] sm:text-xs text-blue-600 block truncate">حركة نقدية</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Custodian & Vault Dossier Info -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
+        <h2 class="text-xs font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-base text-brand-600">badge</span>
+            <span>بيانات الخزنة والحائز للعهدة</span>
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                <span class="text-[11px] text-slate-400 block mb-0.5">المسئول / الحائز للعهدة</span>
+                {% if vault.assigned_user %}
+                <span class="font-bold text-slate-900 text-sm block truncate" title="{{ vault.assigned_user.get_full_name|default:vault.assigned_user.username }}">
+                    {{ vault.assigned_user.get_full_name|default:vault.assigned_user.username }}
+                </span>
+                <span class="text-[10px] text-brand-700 font-semibold block mt-0.5 truncate">
+                    {{ vault.assigned_user.get_role_display|default:"مندوب مبيعات" }}
+                </span>
+                {% else %}
+                <span class="font-bold text-slate-500 text-sm block">خزينة مركزية عامة</span>
+                <span class="text-[10px] text-slate-400 block mt-0.5">تحت إشراف الإدارة المالية</span>
+                {% endif %}
+            </div>
+
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                <span class="text-[11px] text-slate-400 block mb-0.5">نوع الحساب / التصنيف</span>
+                <span class="font-bold text-slate-900 text-sm block truncate">{{ vault.get_vault_type_display }}</span>
+                <span class="text-[10px] text-slate-500 block mt-0.5">
+                    {% if vault.is_rep_vault %}عهدة نقدية ميدانية (Rep Safe){% else %}خزينة رسمية للمؤسسة{% endif %}
+                </span>
+            </div>
+
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                <span class="text-[11px] text-slate-400 block mb-0.5">تاريخ التأسيس والإنشاء</span>
+                <span class="font-bold text-slate-900 text-sm font-mono block">{{ vault.created_at|date:"Y-m-d" }}</span>
+                <span class="text-[10px] text-slate-400 font-mono block mt-0.5">{{ vault.created_at|time:"H:i" }} بتوقيت القاهرة</span>
+            </div>
+
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                <span class="text-[11px] text-slate-400 block mb-0.5">صافي التدفق المالي</span>
+                <span class="font-bold {% if stats.net_flow >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %} text-sm font-mono block truncate" title="{{ stats.net_flow|floatformat:2|intcomma }} ج.م">
+                    {{ stats.net_flow|floatformat:2|intcomma }} ج.م
+                </span>
+                <span class="text-[10px] text-slate-500 block mt-0.5 truncate">إجمالي الوارد مطروحاً منه المنصرف</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Recent Transactions Ledger -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600">history</span>
+                <span>آخر العمليات والحركات النقدية المسجلة</span>
+                <span class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 font-bold rounded-full">
+                    {{ recent_transactions|length }} حركة
+                </span>
+            </h2>
+            <a href="{% url 'vault_transactions_list' %}?vault_id={{ vault.id }}" class="text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1">
+                <span>عرض الدفتر الكامل</span>
+                <span class="material-symbols-outlined text-sm">arrow_back</span>
+            </a>
+        </div>
+
+        <div class="overflow-x-auto scrollbar-thin">
+            <table class="min-w-[700px] w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 select-none">
+                    <tr>
+                        <th class="py-3 px-4">رقم الحركة</th>
+                        <th class="py-3 px-4">نوع الحركة</th>
+                        <th class="py-3 px-4">المبلغ</th>
+                        <th class="py-3 px-4">الرصيد بعد الحركة</th>
+                        <th class="py-3 px-4">البيان / التوصيف</th>
+                        <th class="py-3 px-4">المسئول</th>
+                        <th class="py-3 px-4">التاريخ والوقت</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    {% for tx in recent_transactions %}
+                    <tr class="hover:bg-slate-50/70 {% if tx.is_reversed %}opacity-60 bg-slate-50/40{% endif %}">
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900">
+                            #{{ tx.id }}
+                            {% if tx.is_reversed %}
+                            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 mr-1">معكوسة</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4">
+                            {% if tx.transaction_type == 'inflow' %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="material-symbols-outlined text-xs">arrow_downward</span>
+                                <span>إيداع (Inflow)</span>
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <span class="material-symbols-outlined text-xs">arrow_upward</span>
+                                <span>صرف (Outflow)</span>
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 font-bold font-mono text-sm {% if tx.transaction_type == 'inflow' %}text-emerald-700{% else %}text-rose-600{% endif %}">
+                            {% if tx.transaction_type == 'inflow' %}+{% else %}-{% endif %}{{ tx.amount|floatformat:2|intcomma }} ج.م
+                        </td>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900 text-xs">
+                            {{ tx.running_balance|floatformat:2|intcomma }} ج.م
+                        </td>
+                        <td class="py-3 px-4 max-w-xs truncate" title="{{ tx.description }}">
+                            {{ tx.description }}
+                        </td>
+                        <td class="py-3 px-4 text-slate-600">
+                            {{ tx.created_by.get_full_name|default:tx.created_by.username|default:"نظام" }}
+                        </td>
+                        <td class="py-3 px-4 font-mono text-slate-500 text-[11px]">
+                            {{ tx.created_at|date:"Y-m-d H:i" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-slate-400">
+                            لا توجد حركات مسجلة لهذه الخزنة حتى الآن.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
