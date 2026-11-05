@@ -16,14 +16,14 @@
 <div class="max-w-5xl mx-auto space-y-6">
 
     <!-- Header matching Reference ERP -->
-    <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div>
-            <h1 class="text-2xl font-bold text-[#27bebe]">
+            <h1 class="text-xl sm:text-2xl font-bold text-[#27bebe]">
                 {% if is_create %}إنشاء دور وصلاحيات جديد{% else %}تعديل دور: {{ role.display_name }}{% endif %}
             </h1>
             <p class="text-xs text-slate-500 mt-1">تحديد المسمى الوظيفي، سمات الدور، والعلامات الوظيفية، ومصفوفة الصلاحيات الهرمية.</p>
         </div>
-        <a href="{% url 'roles_list' %}" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
+        <a href="{% url 'roles_list' %}" class="self-start sm:self-auto px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
             <span class="material-symbols-outlined text-base">arrow_forward</span>
             <span>العودة للأدوار</span>
         </a>

@@ -224,3 +224,24 @@ class ContactsModuleTestCase(TestCase):
         self.assertEqual(response.status_code, 302)
         self.contact.refresh_from_db()
         self.assertEqual(self.contact.name, 'صيدلية النجاح والشفاء')
+
+    def test_contacts_kanban_view_case_insensitive(self):
+        # Case insensitive query param: ?view=Kanban
+        res_capital = self.client.get(reverse('contacts_list') + '?view=Kanban')
+        self.assertEqual(res_capital.status_code, 200)
+        self.assertEqual(res_capital.context['view_mode'], 'kanban')
+        self.assertContains(res_capital, 'id="kanban-container"')
+        self.assertIn('kanban_columns', res_capital.context)
+        self.assertIn('kanban_data', res_capital.context)
+
+        # Lowercase: ?view=kanban
+        res_lower = self.client.get(reverse('contacts_list') + '?view=kanban')
+        self.assertEqual(res_lower.status_code, 200)
+        self.assertEqual(res_lower.context['view_mode'], 'kanban')
+        self.assertContains(res_lower, 'id="kanban-container"')
+
+        # Verify filters preserved in filter_querystring
+        res_filter = self.client.get(reverse('contacts_list') + '?view=Kanban&relation=customer&search=النجاح')
+        self.assertEqual(res_filter.status_code, 200)
+        self.assertIn('relation=customer', res_filter.context['filter_querystring'])
+        self.assertIn('search=', res_filter.context['filter_querystring'])

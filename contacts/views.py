@@ -32,7 +32,9 @@ def contacts_list(request):
     category = request.GET.get('category', 'all').strip()
     specialty = request.GET.get('specialty', 'all').strip()
     account_type = request.GET.get('account_type', 'all').strip()
-    view_mode = request.GET.get('view', 'table').strip()
+    view_mode = request.GET.get('view', 'table').strip().lower()
+    if view_mode not in ['table', 'cards', 'kanban']:
+        view_mode = 'table'
     show_inactive = request.GET.get('inactive', 'no').strip()
 
     qs = Contact.objects.select_related('area', 'created_by').prefetch_related('addresses__area').all()
@@ -41,11 +43,18 @@ def contacts_list(request):
     # Active filters counter
     active_filters_count = 0
 
-    if show_inactive == 'no':
-        qs = qs.exclude(status='inactive')
-        active_filters_count += 1
-    elif show_inactive == 'yes':
-        active_filters_count += 1
+    if view_mode == 'kanban':
+        if show_inactive == 'yes':
+            active_filters_count += 1
+        elif 'inactive' in request.GET and show_inactive == 'no':
+            qs = qs.exclude(status='inactive')
+            active_filters_count += 1
+    else:
+        if show_inactive == 'no':
+            qs = qs.exclude(status='inactive')
+            active_filters_count += 1
+        elif show_inactive == 'yes':
+            active_filters_count += 1
 
     if relation == 'vendor':
         qs = qs.filter(is_supplier=True)
@@ -121,6 +130,90 @@ def contacts_list(request):
     if account_type and account_type != 'all':
         active_filters.append({'label': 'نوع الحساب', 'value': account_type, 'param': 'account_type'})
 
+    # Preserve existing filters across view switching (table / cards / kanban)
+    get_params = request.GET.copy()
+    if 'view' in get_params:
+        del get_params['view']
+    if 'page' in get_params:
+        del get_params['page']
+    filter_querystring = get_params.urlencode()
+
+    # Define standard Kanban pipeline stages
+    kanban_columns = [
+        {
+            'id': 'lead',
+            'title': 'عملاء محتملون',
+            'subtitle': 'Leads',
+            'icon': 'person_search',
+            'border_color': 'border-amber-200',
+            'badge_bg': 'bg-amber-100 text-amber-800',
+            'count_bg': 'bg-amber-500 text-white',
+            'col_bg': 'bg-amber-50/40',
+        },
+        {
+            'id': 'customer',
+            'title': 'عملاء معتمدون',
+            'subtitle': 'Customers',
+            'icon': 'verified',
+            'border_color': 'border-teal-200',
+            'badge_bg': 'bg-teal-100 text-[#196e6e]',
+            'count_bg': 'bg-[#27bebe] text-white',
+            'col_bg': 'bg-teal-50/40',
+        },
+        {
+            'id': 'active',
+            'title': 'عملاء نشطون',
+            'subtitle': 'Active',
+            'icon': 'store',
+            'border_color': 'border-emerald-200',
+            'badge_bg': 'bg-emerald-100 text-emerald-800',
+            'count_bg': 'bg-emerald-600 text-white',
+            'col_bg': 'bg-emerald-50/40',
+        },
+        {
+            'id': 'supplier',
+            'title': 'موردون وشركات',
+            'subtitle': 'Suppliers',
+            'icon': 'domain',
+            'border_color': 'border-blue-200',
+            'badge_bg': 'bg-blue-100 text-blue-800',
+            'count_bg': 'bg-blue-600 text-white',
+            'col_bg': 'bg-blue-50/40',
+        },
+        {
+            'id': 'inactive',
+            'title': 'غير نشط',
+            'subtitle': 'Inactive',
+            'icon': 'cancel',
+            'border_color': 'border-slate-200',
+            'badge_bg': 'bg-slate-200 text-slate-700',
+            'count_bg': 'bg-slate-500 text-white',
+            'col_bg': 'bg-slate-50/60',
+        },
+    ]
+
+    kanban_data = {col['id']: [] for col in kanban_columns}
+    if view_mode == 'kanban':
+        kanban_qs = qs.prefetch_related('addresses__area')[:250]
+        for c in kanban_qs:
+            if c.status == 'inactive':
+                stage = 'inactive'
+            elif c.status == 'lead':
+                stage = 'lead'
+            elif c.status == 'active':
+                stage = 'active'
+            elif c.status == 'supplier' or (c.is_supplier and not c.is_customer):
+                stage = 'supplier'
+            elif c.status == 'customer':
+                stage = 'customer'
+            elif c.is_supplier:
+                stage = 'supplier'
+            else:
+                stage = 'customer'
+            kanban_data[stage].append(c)
+
+    kanban_counts = {col_id: len(items) for col_id, items in kanban_data.items()}
+
     # Pagination: safe server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
@@ -156,6 +249,10 @@ def contacts_list(request):
         'current_account_type': account_type,
         'current_show_inactive': show_inactive,
         'view_mode': view_mode,
+        'filter_querystring': filter_querystring,
+        'kanban_columns': kanban_columns,
+        'kanban_data': kanban_data,
+        'kanban_counts': kanban_counts,
         'governorates': governorates,
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
@@ -768,8 +865,15 @@ def contact_update_status(request, pk):
     if request.method == 'POST':
         old_status = contact.status
         new_status = request.POST.get('status', '').strip().lower()
-        if new_status in ['lead', 'customer', 'inactive', 'active']:
-            contact.status = new_status
+        if new_status in ['lead', 'customer', 'inactive', 'active', 'supplier']:
+            if new_status == 'supplier':
+                contact.is_supplier = True
+                if contact.status == 'inactive':
+                    contact.status = 'active'
+            else:
+                contact.status = new_status
+                if new_status in ['lead', 'customer', 'active'] and not contact.is_customer:
+                    contact.is_customer = True
             contact.save()
 
             AuditLogService.log(
@@ -793,7 +897,7 @@ def contact_update_status(request, pk):
 
             messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {contact.status_label}.")
             if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
-                return JsonResponse({'status': 'ok', 'new_status': contact.status_label})
+                return JsonResponse({'status': 'ok', 'new_status': contact.status_label, 'stage': new_status, 'status_label': contact.status_label, 'contact_id': contact.id})
     return redirect('contact_detail', pk=pk)
 
 
