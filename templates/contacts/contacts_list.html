@@ -118,13 +118,13 @@
             
             <!-- View Mode Switcher: Kanban, Grid, Table -->
             <div class="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                <a href="?view=kanban{% if search_query %}&search={{ search_query }}{% endif %}" class="view-toggle-btn {% if view_mode == 'kanban' %}active{% endif %}" title="Kanban">
+                <a href="?view=kanban{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'kanban' %}active{% endif %}" title="Kanban">
                     <span class="material-symbols-outlined text-lg">view_week</span>
                 </a>
-                <a href="?view=cards{% if search_query %}&search={{ search_query }}{% endif %}" class="view-toggle-btn {% if view_mode == 'cards' %}active{% endif %}" title="بطاقات">
+                <a href="?view=cards{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'cards' %}active{% endif %}" title="بطاقات">
                     <span class="material-symbols-outlined text-lg">grid_view</span>
                 </a>
-                <a href="?view=table{% if search_query %}&search={{ search_query }}{% endif %}" class="view-toggle-btn {% if view_mode == 'table' %}active{% endif %}" title="جدول">
+                <a href="?view=table{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'table' %}active{% endif %}" title="جدول">
                     <span class="material-symbols-outlined text-lg">reorder</span>
                 </a>
             </div>
@@ -171,58 +171,197 @@
     </div>
 
     <!-- Dedicated Statistics Cards Section -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Contacts -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">إجمالي جهات الاتصال</span>
-                <span class="p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-lg">contacts</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي جهات الاتصال</span>
+                <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">contacts</span>
             </div>
-            <div class="mt-3">
-                <span class="text-2xl font-black text-slate-900 font-mono">{{ stats.total_contacts }}</span>
-                <span class="text-xs text-slate-400 mr-1.5">جهة مسجلة</span>
+            <div class="mt-2 sm:mt-3">
+                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono">{{ stats.total_contacts }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 mr-1 sm:mr-1.5">جهة مسجلة</span>
             </div>
         </div>
 
         <!-- Card 2: Active Customers -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">العملاء النشطون (Customers)</span>
-                <span class="p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-lg">store</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">العملاء النشطون</span>
+                <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">store</span>
             </div>
-            <div class="mt-3">
-                <span class="text-2xl font-black text-[#27bebe] font-mono">{{ stats.total_customers }}</span>
-                <span class="text-xs text-teal-600 mr-1 font-semibold">صيدلية / عيادة</span>
+            <div class="mt-2 sm:mt-3">
+                <span class="text-xl sm:text-2xl font-black text-[#27bebe] font-mono">{{ stats.total_customers }}</span>
+                <span class="text-[10px] sm:text-xs text-teal-600 mr-1 font-semibold">صيدلية / عيادة</span>
             </div>
         </div>
 
         <!-- Card 3: Potential Leads -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">عملاء محتملون (Leads)</span>
-                <span class="p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-lg">person_search</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء محتملون</span>
+                <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">person_search</span>
             </div>
-            <div class="mt-3">
-                <span class="text-2xl font-black text-amber-700 font-mono">{{ stats.total_leads }}</span>
-                <span class="text-xs text-amber-600 mr-1.5">عميل قيد التأهيل</span>
+            <div class="mt-2 sm:mt-3">
+                <span class="text-xl sm:text-2xl font-black text-amber-700 font-mono">{{ stats.total_leads }}</span>
+                <span class="text-[10px] sm:text-xs text-amber-600 mr-1 sm:mr-1.5">قيد التأهيل</span>
             </div>
         </div>
 
         <!-- Card 4: Suppliers -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 flex flex-col justify-between hover:shadow-sm transition-all">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-500">الموردون وشركات الأدوية</span>
-                <span class="p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-lg">domain</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">الموردون والشركات</span>
+                <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">domain</span>
             </div>
-            <div class="mt-3">
-                <span class="text-2xl font-black text-blue-700 font-mono">{{ stats.total_suppliers }}</span>
-                <span class="text-xs text-blue-600 mr-1.5">مورد معتمد</span>
+            <div class="mt-2 sm:mt-3">
+                <span class="text-xl sm:text-2xl font-black text-blue-700 font-mono">{{ stats.total_suppliers }}</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 mr-1 sm:mr-1.5">مورد معتمد</span>
             </div>
         </div>
     </div>
 
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
+
+    <!-- Kanban Board View -->
+    {% if view_mode == 'kanban' %}
+    <div class="mb-6 space-y-4" id="kanban-container">
+        {% csrf_token %}
+        <input type="hidden" id="kanban-csrf-token" value="{{ csrf_token }}">
+
+        <!-- Mobile Pipeline Switcher (Tabs) visible only on small screens -->
+        <div class="lg:hidden flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none select-none">
+            {% for col in kanban_columns %}
+            <button type="button" onclick="switchKanbanTab('{{ col.id }}')"
+                    id="kanban-tab-{{ col.id }}"
+                    class="kanban-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 shrink-0 {% if forloop.first %}bg-[#27bebe] text-white border-[#27bebe] shadow-sm shadow-teal-500/20{% else %}bg-white text-slate-700 border-slate-200 hover:bg-slate-50{% endif %}">
+                <span class="material-symbols-outlined text-sm">{{ col.icon }}</span>
+                <span>{{ col.title }}</span>
+                <span class="kanban-tab-count px-1.5 py-0.5 rounded-full text-[10px] font-mono {% if forloop.first %}bg-white/20 text-white{% else %}{{ col.badge_bg }}{% endif %}">
+                    {{ kanban_counts|get_item:col.id }}
+                </span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- Kanban Board Columns: Desktop (flex 5 columns) & Mobile (single active column) -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+            {% for col in kanban_columns %}
+            <div id="kanban-col-{{ col.id }}"
+                 data-column-id="{{ col.id }}"
+                 class="kanban-column bg-slate-50/70 rounded-2xl border {{ col.border_color }} shadow-2xs overflow-hidden flex flex-col transition-all {% if not forloop.first %}hidden lg:flex{% else %}flex{% endif %}">
+                
+                <!-- Column Header -->
+                <div class="p-3.5 {{ col.col_bg }} border-b {{ col.border_color }} flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base {{ col.badge_bg }} p-1 rounded-lg">{{ col.icon }}</span>
+                        <div>
+                            <h3 class="text-xs font-black text-slate-800">{{ col.title }}</h3>
+                            <p class="text-[10px] text-slate-500 font-mono">{{ col.subtitle }}</p>
+                        </div>
+                    </div>
+                    <span class="kanban-col-count {{ col.count_bg }} text-xs font-bold font-mono px-2 py-0.5 rounded-full">
+                        {{ kanban_counts|get_item:col.id }}
+                    </span>
+                </div>
+
+                <!-- Column Cards Drop Zone -->
+                <div class="kanban-dropzone p-3 space-y-3 min-h-[350px] max-h-[72vh] overflow-y-auto scrollbar-thin transition-colors"
+                     data-stage="{{ col.id }}"
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)"
+                     ondrop="handleDrop(event, '{{ col.id }}')">
+                    
+                    {% with cards=kanban_data|get_item:col.id %}
+                        {% for c in cards %}
+                        <div class="kanban-card bg-white rounded-xl border border-slate-200/90 hover:border-[#27bebe] p-3.5 shadow-2xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing select-none relative group"
+                             id="contact-card-{{ c.id }}"
+                             data-contact-id="{{ c.id }}"
+                             data-current-stage="{{ col.id }}"
+                             draggable="true"
+                             ondragstart="handleDragStart(event, '{{ c.id }}')"
+                             ondragend="handleDragEnd(event, '{{ c.id }}')">
+                            
+                            <!-- Card Header: Initials, Name, Code -->
+                            <div class="flex items-start justify-between gap-2 mb-2">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <div class="w-8 h-8 rounded-full bg-[#27bebe] text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-2xs">
+                                        {{ c.initials }}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <a href="{% url 'contact_detail_overview' c.id %}" class="text-xs font-bold text-slate-900 hover:text-[#27bebe] truncate block transition-colors">
+                                            {{ c.name }}
+                                        </a>
+                                        <span class="text-[10px] text-slate-400 font-mono block">[{{ c.formatted_number }}]</span>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0 {{ col.badge_bg }}">
+                                    {{ c.relation_display }}
+                                </span>
+                            </div>
+
+                            <!-- Card Middle: Category, Specialty, Area -->
+                            <div class="space-y-1.5 text-[11px] text-slate-600 border-t border-slate-100 pt-2.5 mb-2.5">
+                                {% if c.customer_category or c.specialty %}
+                                <div class="flex items-center justify-between text-[11px]">
+                                    <span class="text-slate-400">التصنيف/التخصص:</span>
+                                    <span class="font-bold text-slate-700 truncate max-w-[130px]">
+                                        {% if c.customer_category %}الفئة {{ c.customer_category }}{% endif %}
+                                        {% if c.customer_category and c.specialty %} - {% endif %}
+                                        {{ c.specialty|default:"" }}
+                                    </span>
+                                </div>
+                                {% endif %}
+
+                                <div class="flex items-center justify-between text-[11px]">
+                                    <span class="text-slate-400">المنطقة:</span>
+                                    <span class="text-slate-700 truncate max-w-[130px]">{{ c.area.name|default:"-" }}</span>
+                                </div>
+
+                                {% if c.mobile %}
+                                <div class="flex items-center justify-between text-[11px]">
+                                    <span class="text-slate-400">الموبايل:</span>
+                                    <a href="tel:{{ c.mobile }}" class="font-mono text-[#27bebe] hover:underline flex items-center gap-0.5" onclick="event.stopPropagation();">
+                                        <span class="material-symbols-outlined text-[13px]">call</span>
+                                        <span>{{ c.mobile }}</span>
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Card Footer: Quick Stage Switcher & Drag Indicator -->
+                            <div class="flex items-center justify-between pt-2 border-t border-dashed border-slate-200">
+                                <div class="flex items-center gap-1 text-[10px] text-slate-400">
+                                    <span class="material-symbols-outlined text-xs">drag_indicator</span>
+                                    <span>نقل</span>
+                                </div>
+                                <!-- Quick Select Stage for Mobile & Accessibility -->
+                                <select onchange="updateContactStage('{{ c.id }}', this.value)"
+                                        onclick="event.stopPropagation();"
+                                        class="text-[10px] font-bold py-1 px-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+                                    <option value="" disabled selected>تغيير المرحلة...</option>
+                                    <option value="lead" {% if col.id == 'lead' %}disabled{% endif %}>عميل محتمل (Lead)</option>
+                                    <option value="customer" {% if col.id == 'customer' %}disabled{% endif %}>عميل معتمد (Customer)</option>
+                                    <option value="active" {% if col.id == 'active' %}disabled{% endif %}>عميل نشط (Active)</option>
+                                    <option value="supplier" {% if col.id == 'supplier' %}disabled{% endif %}>مورد (Supplier)</option>
+                                    <option value="inactive" {% if col.id == 'inactive' %}disabled{% endif %}>غير نشط (Inactive)</option>
+                                </select>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="kanban-empty-msg py-8 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-3xl text-slate-300">inbox</span>
+                            <p class="text-[11px] font-medium mt-1">لا توجد جهات اتصال في هذه المرحلة</p>
+                        </div>
+                        {% endfor %}
+                    {% endwith %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Data Table View -->
     {% if view_mode == 'table' %}
@@ -616,6 +755,160 @@
             document.querySelectorAll('input[name="selected_contacts"]').forEach(cb => {
                 cb.checked = selectAll.checked;
             });
+        });
+    }
+
+    // --- KANBAN BOARD DRAG & DROP AND STAGE UPDATES ---
+    let draggedContactId = null;
+
+    function handleDragStart(e, contactId) {
+        draggedContactId = contactId;
+        e.dataTransfer.setData('text/plain', contactId);
+        e.dataTransfer.effectAllowed = 'move';
+        const card = document.getElementById(`contact-card-${contactId}`);
+        if (card) {
+            setTimeout(() => card.classList.add('opacity-40'), 0);
+        }
+    }
+
+    function handleDragEnd(e, contactId) {
+        const card = document.getElementById(`contact-card-${contactId}`);
+        if (card) {
+            card.classList.remove('opacity-40');
+        }
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const dropzone = e.currentTarget;
+        dropzone.classList.add('bg-teal-50/60', 'ring-2', 'ring-[#27bebe]', 'ring-inset');
+    }
+
+    function handleDragLeave(e) {
+        const dropzone = e.currentTarget;
+        dropzone.classList.remove('bg-teal-50/60', 'ring-2', 'ring-[#27bebe]', 'ring-inset');
+    }
+
+    function handleDrop(e, targetStage) {
+        e.preventDefault();
+        const dropzone = e.currentTarget;
+        dropzone.classList.remove('bg-teal-50/60', 'ring-2', 'ring-[#27bebe]', 'ring-inset');
+        const contactId = e.dataTransfer.getData('text/plain') || draggedContactId;
+        if (!contactId) return;
+
+        const card = document.getElementById(`contact-card-${contactId}`);
+        if (card) {
+            card.classList.remove('opacity-40');
+        }
+
+        const currentStage = card ? card.dataset.currentStage : null;
+        if (currentStage === targetStage) return;
+
+        updateContactStage(contactId, targetStage);
+    }
+
+    function updateContactStage(contactId, newStage) {
+        if (!newStage) return;
+
+        const csrfElem = document.getElementById('kanban-csrf-token') || document.querySelector('[name=csrfmiddlewaretoken]');
+        const csrfToken = csrfElem ? csrfElem.value : '';
+
+        const formData = new FormData();
+        formData.append('status', newStage);
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        fetch(`/contacts/${contactId}/status/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('فشل تحديث المرحلة');
+        })
+        .then(data => {
+            const card = document.getElementById(`contact-card-${contactId}`);
+            const targetDropzone = document.querySelector(`.kanban-dropzone[data-stage="${newStage}"]`);
+            if (card && targetDropzone) {
+                // Remove empty message from target column if present
+                const emptyMsg = targetDropzone.querySelector('.kanban-empty-msg');
+                if (emptyMsg) emptyMsg.remove();
+
+                const oldStage = card.dataset.currentStage;
+                card.dataset.currentStage = newStage;
+                targetDropzone.prepend(card);
+
+                // Update select dropdown value inside the card
+                const sel = card.querySelector('select');
+                if (sel) {
+                    Array.from(sel.options).forEach(opt => {
+                        opt.disabled = (opt.value === newStage);
+                    });
+                    sel.value = '';
+                }
+
+                // Check old dropzone if empty
+                if (oldStage) {
+                    const oldDropzone = document.querySelector(`.kanban-dropzone[data-stage="${oldStage}"]`);
+                    if (oldDropzone && oldDropzone.querySelectorAll('.kanban-card').length === 0) {
+                        oldDropzone.innerHTML = `
+                            <div class="kanban-empty-msg py-8 text-center text-slate-400">
+                                <span class="material-symbols-outlined text-3xl text-slate-300">inbox</span>
+                                <p class="text-[11px] font-medium mt-1">لا توجد جهات اتصال في هذه المرحلة</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Recalculate column counters
+                updateKanbanCounts();
+            } else {
+                window.location.reload();
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('حدث خطأ أثناء نقل جهة الاتصال.');
+        });
+    }
+
+    function updateKanbanCounts() {
+        document.querySelectorAll('.kanban-column').forEach(col => {
+            const stage = col.dataset.columnId;
+            const count = col.querySelectorAll('.kanban-card').length;
+            const badge = col.querySelector('.kanban-col-count');
+            if (badge) badge.textContent = count;
+            const tabBtnCount = document.querySelector(`#kanban-tab-${stage} .kanban-tab-count`);
+            if (tabBtnCount) tabBtnCount.textContent = count;
+        });
+    }
+
+    function switchKanbanTab(activeColId) {
+        document.querySelectorAll('.kanban-column').forEach(col => {
+            if (col.dataset.columnId === activeColId) {
+                col.classList.remove('hidden');
+                col.classList.add('flex');
+            } else {
+                col.classList.remove('flex');
+                col.classList.add('hidden');
+            }
+        });
+        document.querySelectorAll('.kanban-tab-btn').forEach(btn => {
+            if (btn.id === `kanban-tab-${activeColId}`) {
+                btn.className = 'kanban-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 shrink-0 bg-[#27bebe] text-white border-[#27bebe] shadow-sm shadow-teal-500/20';
+                const countBadge = btn.querySelector('.kanban-tab-count');
+                if (countBadge) countBadge.className = 'kanban-tab-count px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-white/20 text-white';
+            } else {
+                btn.className = 'kanban-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 shrink-0 bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
+                const countBadge = btn.querySelector('.kanban-tab-count');
+                if (countBadge) countBadge.className = 'kanban-tab-count px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-700';
+            }
         });
     }
 </script>

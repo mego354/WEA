@@ -16,16 +16,16 @@
 <div class="space-y-6">
 
     <!-- Top Action Bar -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
             <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-2xl">admin_panel_settings</span>
-                <h1 class="text-2xl font-black text-slate-900 tracking-tight">إعدادات المستخدمين والمندوبين</h1>
+                <span class="material-symbols-outlined text-brand-600 text-xl sm:text-2xl">admin_panel_settings</span>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">إعدادات المستخدمين والمندوبين</h1>
             </div>
-            <p class="text-sm text-slate-500 mt-1">التحكم في التوليد التلقائي لمخازن وخزائن عهد المندوبين ومراجعة التخصيصات</p>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1">التحكم في التوليد التلقائي لمخازن وخزائن عهد المندوبين ومراجعة التخصيصات</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{% url 'users_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
+            <a href="{% url 'users_list' %}" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">arrow_forward</span>
                 <span>العودة لقائمة المستخدمين</span>
             </a>
@@ -33,7 +33,7 @@
     </div>
 
     <!-- Alert / Explanation -->
-    <div class="bg-blue-50/80 border border-blue-200 rounded-2xl p-5 text-blue-900 shadow-xs">
+    <div class="bg-blue-50/80 border border-blue-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 text-blue-900 shadow-xs">
         <div class="flex items-start gap-3">
             <span class="material-symbols-outlined text-blue-600 text-xl mt-0.5">info</span>
             <div class="space-y-1 text-xs leading-relaxed">
@@ -46,15 +46,15 @@
 
     <!-- Configuration Form Card -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div class="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h2 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600">tune</span>
                 <span>خيارات التوليد التلقائي لعهد المندوبين</span>
             </h2>
-            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">خاص بمدراء النظام الأعلى</span>
+            <span class="self-start sm:self-auto text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">خاص بمدراء النظام الأعلى</span>
         </div>
 
-        <form method="POST" class="p-6 space-y-6">
+        <form method="POST" class="p-4 sm:p-6 space-y-6">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_settings">
 

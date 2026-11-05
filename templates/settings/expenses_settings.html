@@ -14,19 +14,19 @@
 <div class="max-w-4xl mx-auto space-y-6">
 
     <!-- Header matching Reference ERP (media_1792380227599.png) -->
-    <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-[#27bebe]">انواع المصروفات</h1>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h1 class="text-xl sm:text-2xl font-bold text-[#27bebe]">انواع المصروفات</h1>
     </div>
 
     <!-- Tabs: مصروفات عامة & مصروفات للزيارات فقط -->
     <div class="flex items-center justify-center border-b border-slate-200">
-        <div class="flex items-center gap-12">
+        <div class="flex items-center gap-6 sm:gap-12">
             <a href="{% url 'expenses_settings' %}?tab=general"
-               class="pb-3 text-sm font-bold transition-all relative {% if active_tab == 'general' %}text-[#27bebe] border-b-2 border-[#27bebe]{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+               class="pb-3 text-xs sm:text-sm font-bold transition-all relative {% if active_tab == 'general' %}text-[#27bebe] border-b-2 border-[#27bebe]{% else %}text-slate-500 hover:text-slate-700{% endif %}">
                 مصروفات عامة
             </a>
             <a href="{% url 'expenses_settings' %}?tab=visit"
-               class="pb-3 text-sm font-bold transition-all relative {% if active_tab == 'visit' %}text-[#27bebe] border-b-2 border-[#27bebe]{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+               class="pb-3 text-xs sm:text-sm font-bold transition-all relative {% if active_tab == 'visit' %}text-[#27bebe] border-b-2 border-[#27bebe]{% else %}text-slate-500 hover:text-slate-700{% endif %}">
                 مصروفات للزيارات فقط
             </a>
         </div>

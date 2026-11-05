@@ -106,3 +106,39 @@ Viewports to check: ~320, 390, 430, 768, 1024, 1440.
 Check: overflow, clipped sheets, unreachable FAB, console errors, failed XHR, RTL mirror issues, permission-hidden nav remaining hidden.
 
 Browser automation in this repo: Playwright scripts under `scratch/` and `test_responsive_viewports.py` / `test_e2e_workflows.py` at repo root. They are **not** in `INSTALLED_APPS`; run them explicitly. If you cannot drive a browser, say so and use Django test client + template assertions instead.
+
+## F. Global Responsive Hero & Top Action Bar Standards
+
+All page headers and hero sections across the application must adhere to the responsive design pattern to prevent horizontal scrolling or clipping on screens down to 320px:
+
+1. **Top Container Layout**:
+   - Use `flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full min-w-0 max-w-full` (or `.erp-page-hero`).
+   - Avoid rigid `flex items-center justify-between` without `flex-col sm:flex-row` when headers contain multiple action buttons or subtitles.
+2. **Action Buttons Wrapper**:
+   - Use `flex flex-wrap items-center gap-2 sm:gap-3` (or `.erp-hero-actions`).
+   - Action buttons must have `min-h-[38px]` or `min-h-[44px]` for mobile touch compliance, with responsive text (`text-xs sm:text-sm`).
+3. **Typography & Title Truncation**:
+   - Page titles: `text-xl sm:text-2xl font-bold text-slate-900` or `text-[#27bebe]`.
+   - Subtitles: `text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1`.
+4. **Statistics & Metrics Cards**:
+   - Use responsive grids: `grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4` with compact mobile padding (`p-3 sm:p-5`) and text truncation (`truncate`).
+
+## G. Contacts Kanban Pipeline Standards
+
+The Contacts module supports 3 view modes: `table`, `cards`, and `kanban` (`contacts/?view=Kanban`):
+
+1. **Pipeline Stages**:
+   - `lead`: عملاء محتملون (Leads)
+   - `customer`: عملاء معتمدون (Customers)
+   - `active`: عملاء نشطون (Active)
+   - `supplier`: موردون وشركات (Suppliers)
+   - `inactive`: غير نشط (Inactive)
+2. **Filter Querystring Preservation**:
+   - When toggling between views (`table`, `cards`, `kanban`), all active filters (`relation`, `status`, `area_id`, `sub_area`, `category`, `specialty`, `account_type`, `search`) are preserved via `filter_querystring`.
+3. **Responsive Display Architecture**:
+   - **Desktop (`>= 1024px`)**: Side-by-side 5-column Kanban board with smooth horizontal layout (`grid-cols-5 gap-4 items-start`) and drag-and-drop dropzones.
+   - **Mobile (`< 1024px`)**: Pill tab switcher row allowing thumb navigation between pipeline stages without horizontal viewport overflow.
+4. **Mutations & Status Transitions**:
+   - Cards support HTML5 drag-and-drop as well as accessible quick-select stage dropdowns.
+   - Stage changes issue an AJAX POST to `/contacts/<id>/status/`, saving the new state, logging to `SecurityAuditLog` via `AuditLogService`, and recording a `ContactActivity` entry.
+
