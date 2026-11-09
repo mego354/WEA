@@ -584,7 +584,7 @@ def vault_deposit(request):
             })
 
         vault = get_object_or_404(Vault, pk=vault_id)
-        if not can_user_access_object(request.user, vault, 'view'):
+        if not can_user_access_object(request.user, vault, 'deposit'):
             return render_forbidden_response(request, "لا يمكنك إجراء إيداع في خزنة تقع خارج نطاق صلاحياتك.")
 
         if not description:
@@ -657,7 +657,7 @@ def vault_withdraw(request):
             })
 
         vault = get_object_or_404(Vault, pk=vault_id)
-        if not can_user_access_object(request.user, vault, 'view'):
+        if not can_user_access_object(request.user, vault, 'withdraw'):
             return render_forbidden_response(request, "لا يمكنك إجراء صرف من خزنة تقع خارج نطاق صلاحياتك.")
 
         if not description:

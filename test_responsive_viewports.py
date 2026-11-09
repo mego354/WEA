@@ -1,20 +1,20 @@
 import os
-import django
 import sys
-
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-
-from django.test import Client
-from accounts.models import User
-from activities.models import Visit
-from contacts.models import Contact
 
 
 def test_responsive_viewports():
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    import django
+    django.setup()
+
+    from django.test import Client
+    from accounts.models import User
+    from activities.models import Visit
+    from contacts.models import Contact
+
     print("=" * 65)
     print("RESPONSIVE VIEWPORT AUDIT (320, 360, 375, 390, 430, 768, 1024, 1366 px)")
     print("=" * 65)

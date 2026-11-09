@@ -169,17 +169,13 @@ class VisitForm(forms.ModelForm):
             cleaned_data['owner'] = user
 
         # Determine Visit Type: Planned vs Unplanned
+        # Planned visits must ONLY be created via bulk planned-visits workflow and executed via planned_item_id.
+        # Direct visit creation via /visits/create/ is strictly Unplanned.
         planned_item_id = self.data.get('planned_item_id') or cleaned_data.get('planned_item_id')
-        visit_type_raw = (self.data.get('visit_type') or '').strip().lower()
-        is_planned_raw = str(self.data.get('is_planned', '')).strip().lower()
         if is_editing:
             is_planned_visit = self.instance.is_planned
         else:
-            is_planned_visit = bool(
-                planned_item_id or
-                visit_type_raw == 'planned' or
-                is_planned_raw in ('1', 'true', 'on', 'yes')
-            )
+            is_planned_visit = bool(planned_item_id)
         cleaned_data['is_planned'] = is_planned_visit
 
         # Geographical Scope Validation (Requirement 7)

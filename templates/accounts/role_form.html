@@ -204,6 +204,53 @@
             </div>
         </div>
 
+        <!-- Module Data Access Scopes Section (النطاق الجغرافي والبياني للموديولات) -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-xl">share_location</span>
+                    <h2 class="text-base font-bold text-slate-800">نطاقات البيانات الإقليمية والتنظيمية (Data Scopes)</h2>
+                </div>
+                <span class="text-xs text-slate-400">تحديد نطاق الرؤية والإدارة لكل موديول</span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs text-slate-700">
+                    <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 px-3">الموديول</th>
+                            <th class="py-2.5 px-3">نطاق الاستعراض والعرض (View Scope)</th>
+                            <th class="py-2.5 px-3">نطاق التعديل والإدارة (Manage Scope)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for mod in module_scopes %}
+                        <tr class="hover:bg-slate-50/70 transition-colors">
+                            <td class="py-2.5 px-3 font-semibold flex items-center gap-2">
+                                <span class="material-symbols-outlined text-slate-400 text-sm">{{ mod.icon }}</span>
+                                <span>{{ mod.name }}</span>
+                            </td>
+                            <td class="py-2.5 px-3">
+                                <select name="view_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+                                    {% for s_val, s_label in scope_options %}
+                                    <option value="{{ s_val }}" {% if mod.view_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="py-2.5 px-3">
+                                <select name="manage_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+                                    {% for s_val, s_label in scope_options %}
+                                    <option value="{{ s_val }}" {% if mod.manage_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Permissions Section matching Reference ERP -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">

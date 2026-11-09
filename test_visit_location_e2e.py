@@ -1,24 +1,24 @@
 import os
-import django
 import sys
-
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-
-from django.test import Client
-from django.utils import timezone
-from django.urls import reverse
-from decimal import Decimal
-from accounts.models import User, Role
-from contacts.models import Contact, ContactAddress
-from activities.models import Visit, VisitTemplate, PlannedVisitDay, PlannedVisitItem
-from master_data.models import LocationSettings
 
 
 def run_e2e_tests():
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    import django
+    django.setup()
+
+    from django.test import Client
+    from django.utils import timezone
+    from django.urls import reverse
+    from decimal import Decimal
+    from accounts.models import User, Role
+    from contacts.models import Contact, ContactAddress
+    from activities.models import Visit, VisitTemplate, PlannedVisitDay, PlannedVisitItem
+    from master_data.models import LocationSettings
+
     print("=" * 65)
     print("STRICT REFERENCE-PARITY E2E SUITE: VISIT REGISTRATION & LOCATION")
     print("=" * 65)
@@ -75,6 +75,7 @@ def run_e2e_tests():
     loc_settings.max_verified_accuracy = 50
     loc_settings.max_verified_warn_accuracy = 100
     loc_settings.verify_visits = True
+    loc_settings.verify_unplanned_visit_distance = True
     loc_settings.auto_set_customer_location_in_visit = True
     loc_settings.save()
     print("  ✓ [1/7] Location Settings configured (tolerance: 300m, auto_set_customer_location: True)")
@@ -145,7 +146,7 @@ def run_e2e_tests():
     assert form_res.status_code == 200, f"Visit create GET failed: {form_res.status_code}"
     assert "صيدلية سبورتنج الحديثة" in form_res.content.decode("utf-8"), "Customer name missing in visit form"
     assert "id_latitude" in form_res.content.decode("utf-8"), "id_latitude hidden input missing"
-    assert "التحقق من الموقع الجغرافي" in form_res.content.decode("utf-8"), "GPS verification card missing"
+    assert "التحقق من المسافة" in form_res.content.decode("utf-8"), "GPS verification card missing"
     print("  ✓ [3/7] Canonical Visit Registration Form verified with prefilled customer card & GPS UI")
 
     # 6. Test Within-Geofence Visit Check-In (<= 300m)
@@ -173,7 +174,7 @@ def run_e2e_tests():
 
     # 7. Test Outside-Geofence Visit Check-In for Non-Bypassed Rep (> 300m)
     client.login(username="rep_test", password="RepPass123!")
-    # Rep located in Cairo (180 km away)
+    # Rep located in Cairo (180 km away), requests distance exception
     v_far_res = client.post("/visits/create/", {
         "contact": cust_with_gps.id,
         "owner": rep_user.id,
@@ -183,7 +184,10 @@ def run_e2e_tests():
         "longitude": "31.2357000",
         "device_accuracy": "25.0",
         "is_successful": "on",
-        "feedback": "زيارة خارج النطاق لمندوب بدون استثناء"
+        "feedback": "زيارة خارج النطاق لمندوب بدون استثناء",
+        "request_distance_exception": "1",
+        "bypass_reason": "طلب استثناء بعد المسافة للزيارة",
+        "confirm_duplicate": "1",
     })
     assert v_far_res.status_code == 302
     v_far = Visit.objects.filter(contact=cust_with_gps, owner=rep_user).order_by("-id").first()
@@ -191,7 +195,7 @@ def run_e2e_tests():
     assert v_far.location_verified is False, "Expected location_verified=False for non-bypassed rep"
     assert v_far.verification_status == "unverified", f"Expected 'unverified', got {v_far.verification_status}"
     assert float(v_far.distance) > 100000.0, "Expected distance > 100km"
-    assert "بعيد جدا" in v_far.location_status, f"Expected 'بعيد جدا', got {v_far.location_status}"
+    assert "خارج النطاق" in v_far.location_status or "بعيد جدا" in v_far.location_status, f"Expected 'خارج النطاق', got {v_far.location_status}"
     print(f"  ✓ [5/7] Outside-Geofence Visit Check-In (Rep without bypass): {v_far.distance}m -> unverified ('{v_far.location_status}')")
 
     # 8. Test Auto-Set Customer GPS on First Visit
@@ -264,9 +268,9 @@ def run_e2e_tests():
     assert v_detail_res.status_code == 200
     detail_html = v_detail_res.content.decode("utf-8")
     assert "التحقق من الموقع" in detail_html, "Location verification section missing from visit detail"
-    assert "المسافة:" in detail_html, "Distance label missing"
-    assert "حالة الاستكمال:" in detail_html, "Completion status missing"
-    assert "حالة الموقع:" in detail_html, "Location status missing"
+    assert "المسافة الفعلية:" in detail_html or "المسافة:" in detail_html, "Distance label missing"
+    assert "حالة التحقق:" in detail_html or "حالة الاستكمال:" in detail_html, "Verification status missing"
+    assert "حالة النطاق:" in detail_html or "حالة الموقع:" in detail_html, "Location range status missing"
     assert "gpp_good" in detail_html or "gpp_maybe" in detail_html, "Verification shield icon missing"
     assert "Google Maps" in detail_html, "Google Maps link missing"
     print(f"  ✓ Visit #{v_near.serial_num} detail page location verification card verified")

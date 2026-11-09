@@ -203,8 +203,14 @@
                                 </div>
                             </div>
                         </td>
-                        <td data-col="date" class="py-3 px-4 text-slate-600 font-mono">
-                            {{ v.date|date:"d/m/Y" }}
+                        <td data-col="date" class="py-3 px-4 font-mono">
+                            <div class="text-slate-800 font-bold">{{ v.date|date:"d/m/Y" }}</div>
+                            <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')"
+                                    class="visit-time-btn-{{ v.pk }} text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 inline-flex items-center gap-0.5 mt-0.5 transition-colors"
+                                    title="تحديد أو تعديل وقت الزيارة">
+                                <span class="material-symbols-outlined text-[11px]">schedule</span>
+                                <span class="visit-time-label-{{ v.pk }}">{{ v.formatted_time|default:"تحديد الوقت" }}</span>
+                            </button>
                         </td>
                         <td data-col="started_at" class="py-3 px-4 text-slate-500 font-mono text-[11px]">
                             {{ v.started_at|date:"H:i"|default:"-" }}
@@ -264,6 +270,9 @@
                                     <span class="material-symbols-outlined text-lg">cancel</span>
                                 </button>
                                 {% endif %}
+                                <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="تحديد أو تعديل وقت الزيارة">
+                                    <span class="material-symbols-outlined text-lg">schedule</span>
+                                </button>
                                 <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="عرض التفاصيل">
                                     <span class="material-symbols-outlined text-lg">visibility</span>
                                 </a>
@@ -316,9 +325,17 @@
             </div>
 
             <div class="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl font-mono">
-                <div class="flex justify-between">
-                    <span class="text-slate-400">التاريخ:</span>
-                    <span>{{ v.date|date:"d/m/Y" }}</span>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">التاريخ والوقت:</span>
+                    <div class="flex items-center gap-1.5">
+                        <span>{{ v.date|date:"d/m/Y" }}</span>
+                        <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')"
+                                class="visit-time-btn-{{ v.pk }} text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 inline-flex items-center gap-0.5 transition-colors"
+                                title="تحديد أو تعديل وقت الزيارة">
+                            <span class="material-symbols-outlined text-[11px]">schedule</span>
+                            <span class="visit-time-label-{{ v.pk }}">{{ v.formatted_time|default:"تحديد الوقت" }}</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-slate-400">المسؤول:</span>
@@ -479,7 +496,171 @@ function closeVisitListRejectModal() {
     const modal = document.getElementById('visit-list-reject-modal');
     if (modal) modal.classList.add('hidden');
 }
+
+// Quick action time modal functions (Requirement 7)
+function openSetTimeModal(visitId, serialNum, currentTime) {
+    const modal = document.getElementById('visit-time-modal');
+    const visitIdInput = document.getElementById('time-modal-visit-id');
+    const timeInput = document.getElementById('time-modal-input');
+    const serialSpan = document.getElementById('time-modal-serial');
+    const feedback = document.getElementById('time-modal-feedback');
+
+    if (visitIdInput) visitIdInput.value = visitId;
+    if (serialSpan) serialSpan.textContent = `#${serialNum}`;
+    if (timeInput) {
+        timeInput.value = currentTime || '';
+    }
+    if (feedback) {
+        feedback.className = 'text-xs font-bold hidden py-1';
+        feedback.textContent = '';
+    }
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (timeInput) timeInput.focus();
+    }
+}
+
+function closeSetTimeModal() {
+    const modal = document.getElementById('visit-time-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setTimePreset(preset) {
+    const timeInput = document.getElementById('time-modal-input');
+    if (!timeInput) return;
+    if (preset === 'now') {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${hh}:${mm}`;
+    } else {
+        timeInput.value = preset;
+    }
+}
+
+async function submitVisitTimeAjax(e) {
+    if (e) e.preventDefault();
+    const visitId = document.getElementById('time-modal-visit-id')?.value;
+    const timeVal = document.getElementById('time-modal-input')?.value;
+    const saveBtn = document.getElementById('time-modal-save-btn');
+    const feedback = document.getElementById('time-modal-feedback');
+
+    if (!visitId || !timeVal) {
+        if (feedback) {
+            feedback.textContent = 'يرجى إدخال الوقت المطلوب.';
+            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+        }
+        return;
+    }
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري الحفظ...</span>`;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        formData.append('time', timeVal);
+
+        const resp = await fetch(`/activities/visits/${visitId}/set-time/`, {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // Update labels in table and card rows without page reload
+            document.querySelectorAll(`.visit-time-label-${visitId}`).forEach(el => {
+                el.textContent = data.display_time || data.time_12 || timeVal;
+            });
+            document.querySelectorAll(`.visit-time-btn-${visitId}`).forEach(el => {
+                el.setAttribute('onclick', `openSetTimeModal('${visitId}', '', '${data.time_24 || timeVal}')`);
+            });
+
+            if (feedback) {
+                feedback.textContent = data.message || 'تم تحديث وقت الزيارة بنجاح.';
+                feedback.className = 'text-xs font-bold text-emerald-600 block py-1';
+            }
+
+            setTimeout(() => {
+                closeSetTimeModal();
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
+                }
+            }, 600);
+        } else {
+            if (feedback) {
+                feedback.textContent = data.detail || data.message || 'حدث خطأ أثناء حفظ الوقت.';
+                feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+            }
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
+            }
+        }
+    } catch (err) {
+        console.error('Error saving visit time:', err);
+        if (feedback) {
+            feedback.textContent = 'تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.';
+            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+        }
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
+        }
+    }
+}
 </script>
+
+<!-- VISIT TIME QUICK ACTION MODAL (Requirement 7) -->
+<div id="visit-time-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 text-[#27bebe]">
+                <span class="material-symbols-outlined text-xl">schedule</span>
+                <h3 class="font-bold text-slate-900 text-sm">تحديد وقت الزيارة <span id="time-modal-serial" class="text-teal-600 font-mono"></span></h3>
+            </div>
+            <button type="button" onclick="closeSetTimeModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form id="visit-time-form" onsubmit="submitVisitTimeAjax(event)" class="space-y-3">
+            <input type="hidden" id="time-modal-visit-id" value="">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">الوقت المحدد *</label>
+                <input type="time" id="time-modal-input" required class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+            </div>
+
+            <!-- Quick time suggestions -->
+            <div class="space-y-1">
+                <span class="text-[10px] font-bold text-slate-400">اقتراحات سريعة:</span>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="setTimePreset('now')" class="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 text-[11px] font-bold transition-colors">الآن</button>
+                    <button type="button" onclick="setTimePreset('09:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">صباحاً (09:00)</button>
+                    <button type="button" onclick="setTimePreset('13:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">ظهراً (13:00)</button>
+                    <button type="button" onclick="setTimePreset('17:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">مساءً (17:00)</button>
+                </div>
+            </div>
+
+            <div id="time-modal-feedback" class="text-xs font-bold hidden py-1"></div>
+
+            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <button type="submit" id="time-modal-save-btn" class="flex-1 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">check</span>
+                    <span>حفظ الوقت</span>
+                </button>
+                <button type="button" onclick="closeSetTimeModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">
+                    إلغاء
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- VISIT LIST REJECT MODAL -->
 <div id="visit-list-reject-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">

@@ -302,7 +302,7 @@
                         </div>
                         <div>
                             <label class="custom-input-label">المنطقة الرئيسية</label>
-                            <select name="address_area[]" class="mat-like-select">
+                            <select name="address_area[]" class="mat-like-select area-select">
                                 <option value="">اختر المنطقة...</option>
                                 {% for gov in governorates %}
                                 <option value="{{ gov.id }}" {% if addr.area_id == gov.id %}selected{% endif %}>{{ gov.name }}</option>
@@ -314,7 +314,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                         <div>
                             <label class="custom-input-label">المنطقة الفرعية</label>
-                            <input type="text" name="address_sub_area[]" value="{{ addr.sub_area }}" placeholder="اسم الحي / المدينة" class="mat-like-input">
+                            <select name="address_sub_area[]" class="mat-like-select subarea-select">
+                                <option value="">اختر المنطقة الفرعية...</option>
+                                {% for br in bricks %}
+                                    {% if br.parent_id == addr.area_id %}
+                                    <option value="{{ br.id }}" {% if addr.brick_id == br.id or addr.sub_area == br.name %}selected{% endif %}>{{ br.name }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
                         </div>
                         <div>
                             <label class="custom-input-label">العنوان التفصيلي</label>
@@ -337,7 +344,7 @@
                         </div>
                         <div>
                             <label class="custom-input-label">المنطقة الرئيسية</label>
-                            <select name="address_area[]" class="mat-like-select">
+                            <select name="address_area[]" class="mat-like-select area-select">
                                 <option value="">اختر المنطقة...</option>
                                 {% for gov in governorates %}
                                 <option value="{{ gov.id }}">{{ gov.name }}</option>
@@ -348,7 +355,9 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                         <div>
                             <label class="custom-input-label">المنطقة الفرعية</label>
-                            <input type="text" name="address_sub_area[]" placeholder="اسم الحي / المدينة" class="mat-like-input">
+                            <select name="address_sub_area[]" class="mat-like-select subarea-select" disabled>
+                                <option value="" disabled selected>اختر المنطقة أولاً...</option>
+                            </select>
                         </div>
                         <div>
                             <label class="custom-input-label">العنوان التفصيلي</label>
@@ -539,6 +548,42 @@
         }
     }
 
+    function attachSubareaListener(card) {
+        const areaSelect = card.querySelector('.area-select') || card.querySelector('select[name="address_area[]"]');
+        const subareaSelect = card.querySelector('.subarea-select') || card.querySelector('select[name="address_sub_area[]"]');
+
+        if (areaSelect && subareaSelect) {
+            areaSelect.addEventListener('change', function () {
+                const areaId = this.value;
+                if (!areaId) {
+                    subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة أولاً...</option>';
+                    subareaSelect.disabled = true;
+                    return;
+                }
+
+                subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
+                subareaSelect.disabled = true;
+
+                fetch(`/contacts/api/subareas/?area_id=${areaId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.subareas && data.subareas.length > 0) {
+                            subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة الفرعية...</option>' +
+                                data.subareas.map(sub => `<option value="${sub.id}">${sub.name}</option>`).join('');
+                            subareaSelect.disabled = false;
+                        } else {
+                            subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                            subareaSelect.disabled = false;
+                        }
+                    })
+                    .catch(() => {
+                        subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                        subareaSelect.disabled = false;
+                    });
+            });
+        }
+    }
+
     function addNewAddressCard() {
         const container = document.getElementById('addresses-container');
         const count = container.querySelectorAll('.address-card').length + 1;
@@ -561,7 +606,7 @@
                 </div>
                 <div>
                     <label class="custom-input-label">المنطقة الرئيسية</label>
-                    <select name="address_area[]" class="mat-like-select">
+                    <select name="address_area[]" class="mat-like-select area-select">
                         <option value="">اختر المنطقة...</option>
                         {% for gov in governorates %}
                         <option value="{{ gov.id }}">{{ gov.name }}</option>
@@ -572,7 +617,9 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                 <div>
                     <label class="custom-input-label">المنطقة الفرعية</label>
-                    <input type="text" name="address_sub_area[]" placeholder="اسم الحي / المدينة" class="mat-like-input">
+                    <select name="address_sub_area[]" class="mat-like-select subarea-select" disabled>
+                        <option value="" disabled selected>اختر المنطقة أولاً...</option>
+                    </select>
                 </div>
                 <div>
                     <label class="custom-input-label">العنوان التفصيلي</label>
@@ -585,6 +632,11 @@
             </div>
         `;
         container.appendChild(card);
+        attachSubareaListener(card);
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.address-card').forEach(attachSubareaListener);
+    });
 </script>
 {% endblock %}

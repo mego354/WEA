@@ -37,7 +37,7 @@ Session cookie + CSRF for POST. `require_permission` treats the request as API i
 ### `GET /contacts/api/subareas/?area_id=`
 
 **Name:** `contact_subareas_api`.  
-**Auth:** login required.  
+**Auth:** login required (HTTP 401 if unauthenticated); requires any of `contacts:contacts/list`, `contacts:contacts/create`, `contacts:contacts/edit`, `contacts:contacts/view`, `activities:visits/create`.  
 **Success:** `{"subareas": [{"id": 1, "name": "..."}, ...]}`. Empty list if `area_id` missing.
 
 ---
@@ -198,6 +198,27 @@ Session cookie + CSRF for POST. `require_permission` treats the request as API i
 **Auth:** SuperAdmin only.  
 **Purpose:** Configure enterprise role permissions for warehouse operations (`roles_can_stock_in`, `roles_can_stock_out`, `roles_can_transfer`).  
 **Audit:** Writes `INVENTORY_SETTINGS_UPDATED` via `AuditLogService.log`.
+
+---
+
+### `POST /activities/visits/<pk>/set-time/`
+
+**Name:** `visit_set_time`.  
+**Auth:** Login required, `can_user_access_object(user, visit, 'edit')` or owner.  
+**Purpose:** Quick inline/modal action to set or update the scheduled time of a visit without a full page refresh.  
+**Payload (POST / FormData):**
+- `time`: Time string in `HH:MM` or `HH:MM:SS` format.
+**Response (200 JSON):**
+```json
+{
+  "success": true,
+  "time_24": "14:30",
+  "time_12": "02:30 م",
+  "display_time": "02:30 م",
+  "message": "تم تحديث وقت الزيارة بنجاح."
+}
+```
+**Audit:** Writes `VISIT_TIME_UPDATED` via `AuditLogService.log`.
 
 Other HTML-only POST endpoints (visit action, sales action, transfer action, vault reverse) are not public APIs; they return redirects or HTML. If you add JSON for them, document request/response here and update the caller together.
 

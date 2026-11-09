@@ -4,18 +4,10 @@ import time
 import subprocess
 import urllib.request
 
-if sys.platform == 'win32':
+if sys.platform == 'win32' and __name__ == '__main__':
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-import django
-django.setup()
-
-from accounts.models import User
-from contacts.models import Contact
-from master_data.models import Area
-from playwright.sync_api import sync_playwright
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 BASE_URL = "http://127.0.0.1:8000"
 SERVER_PROC = None
@@ -48,6 +40,15 @@ def ensure_server():
     raise RuntimeError("Could not start Django test server.")
 
 def run_tests():
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    import django
+    django.setup()
+
+    from accounts.models import User
+    from contacts.models import Contact
+    from master_data.models import Area
+    from playwright.sync_api import sync_playwright
+
     ensure_server()
 
     # Ensure admin user exists and password is set

@@ -10,11 +10,10 @@ def is_manager_or_higher(user) -> bool:
     """
     Returns True if user is a manager or higher:
     - Superuser or SuperAdmin
-    - CEO or Admin
     - Role marked is_manager_role, is_super, is_area_manager, or is_sub_area_manager
-    - Role name or display name indicating managerial rank (manager, director, supervisor, etc.)
+    - Configured with 'area' or 'all' management scope in activities or contacts
     """
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser or getattr(user, 'is_super_admin', False):
         return True
@@ -22,6 +21,9 @@ def is_manager_or_higher(user) -> bool:
     if not role or not role.is_active:
         return False
     if getattr(role, 'is_manager_role', False) or getattr(role, 'is_super', False) or getattr(role, 'is_area_manager', False) or getattr(role, 'is_sub_area_manager', False):
+        return True
+    from accounts.scope_service import ScopeResolutionService
+    if ScopeResolutionService.get_user_scope(user, 'activities', 'manage') in ['area', 'all']:
         return True
     name_l = (role.name or '').lower()
     disp_l = (role.display_name or '').lower()
@@ -34,56 +36,88 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
     """
     Checks if a user has a specific permission codename,
     with SuperAdmin automatic override and module inheritance.
-    Also honors settings-controlled universal access for visits, sales, purchases, and agreements.
+    When a user has custom permissions (has_custom_permissions=True),
+    their user-level permissions strictly and exclusively govern access
+    without settings-level bypasses (100% user-level authority).
     """
-    if not user.is_authenticated or not user.is_active:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser or getattr(user, 'is_super_admin', False):
         return True
     if isinstance(perm_codename, (list, tuple, set)):
         return any(has_perm_or_admin(user, p) for p in perm_codename)
 
-    # Check settings-controlled universal creation access
-    try:
-        from master_data.models import LocationSettings, SalesSettings, PurchaseSettings
-        if perm_codename in ['activities:visits/create', 'activities:visits/view', 'activities:visits/list', 'activities:planned/list', 'activities:planned/manage']:
-            if LocationSettings.get_settings().allow_all_users_to_create_visits:
-                return True
-        if perm_codename in ['activities:agreements/create', 'activities:agreements/view', 'activities:agreements/list']:
-            if LocationSettings.get_settings().allow_all_users_to_create_agreements:
-                return True
-        if perm_codename in ['sales:orders/create', 'sales:orders/view', 'sales:orders/list']:
-            if SalesSettings.get_settings().allow_all_users_to_create:
-                return True
-        if perm_codename in ['purchases:orders/create', 'purchases:orders/view', 'purchases:orders/list']:
-            if PurchaseSettings.get_settings().allow_all_users_to_create:
-                return True
-    except Exception:
-        pass
+    # Normalize redundant alias codenames for single source of truth
+    if perm_codename == 'treasury:vaults/transactions':
+        perm_codename = 'treasury:transactions/list'
 
-    if hasattr(user, 'has_permission'):
-        return user.has_permission(perm_codename)
-    if user.role and user.role.is_active:
-        return user.role.permissions.filter(codename=perm_codename).exists()
+    # 1. If user has custom permissions configured directly,
+    # those direct user permissions are 100% authoritative (no settings bypass).
+    if getattr(user, 'has_custom_permissions', False):
+        if hasattr(user, 'has_permission'):
+            return user.has_permission(perm_codename)
+        return False
+
+    # 2. Check user's effective permissions (enforces module-level inheritance)
+    if hasattr(user, 'has_permission') and user.has_permission(perm_codename):
+        return True
+
+    # 3. Dynamic settings flags apply only to non-custom role users when enabled
+    if perm_codename in ('activities:visits/create', 'activities:visits/view'):
+        from master_data.models import LocationSettings
+        loc_settings = LocationSettings.get_settings()
+        if getattr(loc_settings, 'allow_all_users_to_create_visits', False):
+            return True
+
+    if perm_codename in ('activities:agreements/create', 'activities:agreements/view'):
+        from master_data.models import LocationSettings
+        loc_settings = LocationSettings.get_settings()
+        if getattr(loc_settings, 'allow_all_users_to_create_agreements', False):
+            return True
+
+    if perm_codename in ('sales:orders/create', 'sales:orders/view'):
+        from master_data.models import SalesSettings
+        sales_settings = SalesSettings.get_settings()
+        if getattr(sales_settings, 'allow_all_users_to_create', False):
+            return True
+
+    if perm_codename in ('purchases:orders/create', 'purchases:orders/view'):
+        from master_data.models import PurchaseSettings
+        pur_settings = PurchaseSettings.get_settings()
+        if getattr(pur_settings, 'allow_all_users_to_create', False):
+            return True
+
     return False
 
 
 def can_user_access_module(user, module_key: str) -> bool:
     """
     Checks if a user has access to a top-level module (e.g. 'purchases', 'sales').
+    Strictly enforced via module root permission (e.g. 'module:sales').
+    Settings-level shortcuts only apply to default role-based users when enabled.
     """
     if has_perm_or_admin(user, f"module:{module_key}"):
         return True
-    try:
-        from master_data.models import LocationSettings, SalesSettings, PurchaseSettings
-        if module_key == 'activities' and (LocationSettings.get_settings().allow_all_users_to_create_visits or LocationSettings.get_settings().allow_all_users_to_create_agreements):
-            return True
-        if module_key == 'sales' and SalesSettings.get_settings().allow_all_users_to_create:
-            return True
-        if module_key == 'purchases' and PurchaseSettings.get_settings().allow_all_users_to_create:
-            return True
-    except Exception:
-        pass
+
+    if not getattr(user, 'has_custom_permissions', False):
+        if module_key == 'activities':
+            from master_data.models import LocationSettings
+            loc_settings = LocationSettings.get_settings()
+            if getattr(loc_settings, 'allow_all_users_to_create_visits', False) or getattr(loc_settings, 'allow_all_users_to_create_agreements', False):
+                return True
+
+        if module_key == 'sales':
+            from master_data.models import SalesSettings
+            sales_settings = SalesSettings.get_settings()
+            if getattr(sales_settings, 'allow_all_users_to_create', False):
+                return True
+
+        if module_key == 'purchases':
+            from master_data.models import PurchaseSettings
+            pur_settings = PurchaseSettings.get_settings()
+            if getattr(pur_settings, 'allow_all_users_to_create', False):
+                return True
+
     return False
 
 
@@ -92,6 +126,7 @@ def is_ajax_or_api(request) -> bool:
     return (
         request.headers.get('x-requested-with') == 'XMLHttpRequest' or
         request.path.startswith('/api/') or
+        '/api/' in request.path or
         'application/json' in request.headers.get('accept', '').lower()
     )
 
@@ -225,14 +260,9 @@ def get_main_area(area):
     """
     Returns the canonical root main area (e.g. Governorate) for an Area.
     Traverses parent relationships up to the top-level parent (parent is None).
-    Fails safely and returns None if area is None.
     """
-    if not area:
-        return None
-    curr = area
-    while getattr(curr, 'parent_id', None):
-        curr = curr.parent
-    return curr
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_main_area(area)
 
 
 def get_user_main_areas(user):
@@ -240,24 +270,8 @@ def get_user_main_areas(user):
     Returns a distinct QuerySet of canonical root Area objects (Main Areas / Governorates)
     assigned to this user.
     """
-    from master_data.models import Area
-    if not user or not user.is_authenticated or not user.is_active:
-        return Area.objects.none()
-
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return Area.objects.filter(parent__isnull=True)
-
-    assigned_areas = user.assigned_areas.all()
-    if not assigned_areas.exists():
-        return Area.objects.none()
-
-    main_area_ids = set()
-    for a in assigned_areas:
-        root = get_main_area(a)
-        if root:
-            main_area_ids.add(root.id)
-
-    return Area.objects.filter(id__in=main_area_ids)
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_user_main_areas(user)
 
 
 def is_accountant(user) -> bool:
@@ -271,6 +285,8 @@ def is_accountant(user) -> bool:
     role = getattr(user, 'role', None)
     if not role or not role.is_active:
         return False
+    if has_perm_or_admin(user, 'module:treasury') and has_perm_or_admin(user, 'treasury:transactions/list'):
+        return True
     name_l = (role.name or '').lower()
     disp_l = (role.display_name or '').lower()
     return 'accountant' in name_l or 'bookkeeper' in name_l or 'محاسب' in disp_l or 'حسابات' in disp_l
@@ -304,7 +320,7 @@ def is_rep(user) -> bool:
     if not role or not role.is_active:
         return False
     name_l = (role.name or '').lower()
-    return name_l == 'rep' or getattr(role, 'is_rep', False) and name_l != 'medical_rep'
+    return name_l == 'rep' or (getattr(role, 'is_rep', False) and name_l != 'medical_rep')
 
 
 def is_medical_rep(user) -> bool:
@@ -323,174 +339,38 @@ def is_medical_rep(user) -> bool:
 def is_manager_eligible_for_user(manager, target_user) -> bool:
     """
     Standardized eligibility check:
-    A representative's eligible manager is ANY authorized manager assigned to the SAME MAIN AREA.
-    Secondary / sub-area equality is NOT required.
-
-    Rules:
-    - SuperAdmin / Executive CEO has system-wide eligibility.
-    - Anti-self-approval: manager cannot manage or approve their own operations.
-    - Must be a manager or higher: is_manager_or_higher(manager).
-    - If either manager or target_user has no main areas assigned, fails securely (returns False).
-    - Checks intersection of manager's root main areas and target_user's root main areas.
+    Delegates to ScopeResolutionService.is_manager_eligible_for_user.
     """
-    if not manager or not manager.is_authenticated or not manager.is_active:
-        return False
-    if not target_user or not target_user.is_authenticated:
-        return False
-
-    # Anti-self-approval
-    if manager.id == target_user.id:
-        return False
-
-    # SuperAdmin / Executive override
-    if getattr(manager, 'is_super_admin', False) or manager.is_superuser:
-        return True
-
-    role = getattr(manager, 'role', None)
-    if role and role.is_active and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
-        return True
-
-    # Must be a manager
-    if not is_manager_or_higher(manager):
-        return False
-
-    mgr_main_area_ids = set(get_user_main_areas(manager).values_list('id', flat=True))
-    if not mgr_main_area_ids:
-        return False
-
-    target_main_area_ids = set(get_user_main_areas(target_user).values_list('id', flat=True))
-    if not target_main_area_ids:
-        return False
-
-    return bool(mgr_main_area_ids & target_main_area_ids)
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.is_manager_eligible_for_user(manager, target_user)
 
 
 def is_manager_eligible_for_area(manager, area) -> bool:
     """
     Checks if a manager is eligible for a given Area (governorate or subarea).
-    Matches based on canonical root main area.
+    Delegates to ScopeResolutionService.is_manager_eligible_for_area.
     """
-    if not manager or not manager.is_authenticated or not manager.is_active:
-        return False
-    if not area:
-        return False
-
-    if getattr(manager, 'is_super_admin', False) or manager.is_superuser:
-        return True
-
-    role = getattr(manager, 'role', None)
-    if role and role.is_active and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
-        return True
-
-    if not is_manager_or_higher(manager):
-        return False
-
-    root = get_main_area(area)
-    if not root:
-        return False
-
-    mgr_main_area_ids = set(get_user_main_areas(manager).values_list('id', flat=True))
-    return root.id in mgr_main_area_ids
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.is_manager_eligible_for_area(manager, area)
 
 
-# ==============================================================================
-# REGIONAL HIERARCHY & DATA ACCESS SCOPING (ABAC)
-# ==============================================================================
-
-def get_user_managed_areas(user):
+def get_user_managed_areas(user, scope: str = 'area'):
     """
-    Returns a QuerySet of all Area objects under the user's regional responsibility:
-    - Superusers / SuperAdmins / Company Executives: all areas.
-    - Managers: ALL areas (root main areas PLUS all their subareas) under the manager's assigned main areas.
-    - Representatives & staff: assigned areas and sibling subareas under same governorate.
+    Returns a QuerySet of all Area objects under the user's regional responsibility.
+    Delegates to ScopeResolutionService.get_user_managed_areas.
     """
-    from master_data.models import Area
-    if not user.is_authenticated or not user.is_active:
-        return Area.objects.none()
-
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return Area.objects.all()
-
-    role = user.role
-    if not role or not role.is_active:
-        return Area.objects.none()
-
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return Area.objects.all()
-
-    assigned_area_ids = list(user.assigned_areas.values_list('id', flat=True))
-    if not assigned_area_ids:
-        return Area.objects.none()
-
-    if is_manager_or_higher(user):
-        # Resolve all root main areas for this manager
-        main_area_ids = set(get_user_main_areas(user).values_list('id', flat=True))
-        if not main_area_ids:
-            return Area.objects.none()
-        # Manager has oversight over the root area PLUS all subareas whose root is this main area
-        return Area.objects.filter(
-            Q(id__in=main_area_ids) |
-            Q(parent_id__in=main_area_ids) |
-            Q(parent__parent_id__in=main_area_ids)
-        ).distinct()
-
-    # Representatives & staff: strictly their assigned bricks/areas (no sibling bricks in the same governorate)
-    return Area.objects.filter(
-        Q(id__in=assigned_area_ids) |
-        Q(parent_id__in=assigned_area_ids)
-    ).distinct()
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_user_managed_areas(user, scope=scope)
 
 
 def get_visit_eligible_contacts_queryset(queryset, user):
     """
     Filters Contact queryset for Visit creation, Planned Visit scheduling, and Visit client pickers
-    strictly according to geographical hierarchy (Requirement 7):
-    - Superadmin / Executive: all active contacts across all areas and bricks.
-    - Manager: contacts within their assigned Main Area (root governorate + all child bricks).
-      Managers without an assigned main area fail closed (none).
-    - Representative: contacts strictly within their assigned Brick(s) / operational scope.
-      Cannot access contacts belonging to other bricks or areas.
-      (In legacy unit tests where neither user nor contact has an Area assigned, area__isnull=True is allowed).
+    strictly according to configurable scoping.
+    Delegates to ScopeResolutionService.get_scoped_queryset.
     """
-    if not user or not user.is_authenticated or not user.is_active:
-        return queryset.none()
-
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return queryset
-
-    role = getattr(user, 'role', None)
-    if not role or not role.is_active:
-        return queryset.none()
-
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return queryset
-
-    managed_areas = get_user_managed_areas(user)
-    managed_reps = get_user_managed_representatives(user)
-
-    if is_manager_or_higher(user):
-        if not managed_areas.exists():
-            return queryset.none()
-        return queryset.filter(
-            Q(area__in=managed_areas) |
-            Q(addresses__area__in=managed_areas) |
-            Q(area__isnull=True, created_by__in=managed_reps) |
-            Q(area__isnull=True, assigned_team__in=managed_reps)
-        ).distinct()
-
-    # Representative: strictly assigned brick(s)
-    if managed_areas.exists():
-        return queryset.filter(
-            Q(area__in=managed_areas) |
-            Q(addresses__area__in=managed_areas) |
-            (Q(area__isnull=True) & (Q(created_by=user) | Q(assigned_team=user)))
-        ).exclude(
-            area__isnull=False,
-            pk__in=queryset.exclude(area__in=managed_areas).values('pk')
-        ).distinct()
-
-    # Representative with no assigned brick: can only access area-less contacts in non-geographic unit tests
-    return queryset.filter(area__isnull=True).distinct()
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_scoped_queryset(queryset, user, 'contact', 'view')
 
 
 def can_user_access_contact_for_visit(user, contact) -> bool:
@@ -499,17 +379,8 @@ def can_user_access_contact_for_visit(user, contact) -> bool:
     """
     if not user or not user.is_authenticated or not user.is_active or not contact:
         return False
-
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
-
-    role = getattr(user, 'role', None)
-    if not role or not role.is_active:
-        return False
-
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return True
-
     from contacts.models import Contact
     return get_visit_eligible_contacts_queryset(
         Contact.objects.filter(pk=contact.pk),
@@ -517,485 +388,32 @@ def can_user_access_contact_for_visit(user, contact) -> bool:
     ).exists()
 
 
-def get_user_managed_representatives(user):
+def get_user_managed_representatives(user, module: str = 'accounts'):
     """
-    Returns a QuerySet of all active User (representatives) who fall under the user's
-    regional management scope:
-    - SuperAdmin / Executive: all active users.
-    - Manager: all active representatives whose assigned areas share the SAME MAIN AREA
-      (root governorate) as the manager.
-    - Representative: only themselves.
+    Returns a QuerySet of all active User (representatives/subordinates) under user's scope.
+    Delegates to ScopeResolutionService.get_user_managed_subordinates.
     """
-    from django.contrib.auth import get_user_model
-    UserModel = get_user_model()
-
-    if not user.is_authenticated or not user.is_active:
-        return UserModel.objects.none()
-
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return UserModel.objects.filter(is_active=True)
-
-    role = user.role
-    if not role or not role.is_active:
-        return UserModel.objects.none()
-
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return UserModel.objects.filter(is_active=True)
-
-    if not is_manager_or_higher(user):
-        return UserModel.objects.filter(pk=user.pk)
-
-    managed_areas = get_user_managed_areas(user)
-    if not managed_areas.exists():
-        return UserModel.objects.none()
-
-    # Representatives assigned to any of the manager's managed main regions or subregions
-    return UserModel.objects.filter(
-        Q(assigned_areas__in=managed_areas) | Q(id=user.id)
-    ).filter(is_active=True).distinct()
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_user_managed_subordinates(user, module=module)
 
 
-def get_scoped_queryset(queryset, user, model_name: str = None):
+def get_scoped_queryset(queryset, user, model_name: str = None, scope_type: str = 'view'):
     """
-    Filters QuerySet based on user role, regional hierarchy, area assignment, and ownership rules:
-    - SuperAdmin: global unrestricted visibility.
-    - Accountant: broad visibility across financial, sales, purchases, treasury, and inventory records.
-    - Manager: records of representatives within the manager's same main area (regardless of sub-area differences).
-    - Rep: strictly own created / assigned records (no cross-rep access within the same area).
-    - Medical rep: strictly own created / assigned records, plus legitimate shared contact/product access.
+    Filters QuerySet based on configurable module data scopes (OWN, BRICK, AREA, ALL).
+    Delegates to ScopeResolutionService.get_scoped_queryset.
     """
-    if not user.is_authenticated:
-        return queryset.none()
-
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return queryset
-
-    role = user.role
-    if not role or not role.is_active:
-        return queryset.none()
-
-    # Executive roles see company-wide records
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return queryset
-
-    model = queryset.model
-    m_name = (model_name or model.__name__).lower()
-
-    managed_areas = get_user_managed_areas(user)
-    managed_reps = get_user_managed_representatives(user)
-
-    # 1. Activities: Visit
-    if m_name == 'visit':
-        if not is_manager_or_higher(user):
-            qs = queryset.filter(Q(owner=user) | Q(created_by=user))
-            if managed_areas.exists():
-                return qs.filter(Q(contact__area__in=managed_areas) | Q(contact__area__isnull=True)).distinct()
-            return qs.filter(contact__area__isnull=True).distinct()
-        if not managed_areas.exists():
-            return queryset.none()
-        return queryset.filter(
-            Q(owner__in=managed_reps) |
-            Q(created_by__in=managed_reps) |
-            Q(contact__area__in=managed_areas)
-        ).filter(
-            Q(contact__area__in=managed_areas) | Q(contact__area__isnull=True)
-        ).distinct()
-
-    # 2. Activities: PlannedVisitDay
-    elif m_name == 'plannedvisitday':
-        if not is_manager_or_higher(user):
-            return queryset.filter(assignee=user)
-        return queryset.filter(assignee__in=managed_reps).distinct()
-
-    # 3. Activities: Agreement
-    elif m_name == 'agreement':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(created_by__in=managed_reps).distinct()
-
-    # 4. Contacts: Contact
-    elif m_name == 'contact':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            if is_medical_rep(user):
-                return queryset.filter(
-                    Q(created_by=user) | Q(assigned_team=user) | Q(activities__performed_by=user)
-                ).distinct()
-            return queryset.filter(
-                Q(created_by=user) | Q(assigned_team=user)
-            ).distinct()
-        return queryset.filter(
-            Q(area__in=managed_areas) |
-            Q(created_by__in=managed_reps) |
-            Q(assigned_team__in=managed_reps)
-        ).distinct()
-
-    # 5. Sales: SalesOrder & SalesReturnOrder
-    elif m_name in ['salesorder', 'salesreturnorder']:
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(created_by__in=managed_reps).distinct()
-
-    # 6. Sales: Collection
-    elif m_name == 'collection':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(created_by__in=managed_reps).distinct()
-
-    # 7. Sales: CustomerAccount
-    elif m_name == 'customeraccount':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            from contacts.models import Contact
-            scoped_contacts = get_scoped_queryset(Contact.objects.all(), user, 'contact')
-            return queryset.filter(customer__in=scoped_contacts).distinct()
-        return queryset.filter(
-            Q(customer__area__in=managed_areas) |
-            Q(customer__created_by__in=managed_reps) |
-            Q(customer__assigned_team__in=managed_reps)
-        ).distinct()
-
-    # 8. Purchases: PurchaseOrder & PurchaseReturnOrder
-    elif m_name in ['purchaseorder', 'purchasereturnorder']:
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(
-            Q(created_by__in=managed_reps) |
-            Q(target_warehouse__assigned_user__in=managed_reps) |
-            Q(target_warehouse__area__in=managed_areas)
-        ).distinct()
-
-    # 9. Inventory: Warehouse
-    elif m_name == 'warehouse':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(Q(assigned_user=user) | Q(is_main=True))
-        # Manager sees main warehouses, plus rep warehouses belonging to reps in their main area,
-        # plus warehouses geographically located in their managed areas
-        return queryset.filter(
-            Q(is_main=True) |
-            Q(assigned_user__in=managed_reps) |
-            Q(area__in=managed_areas)
-        ).distinct()
-
-    # 10. Inventory: InventoryStock
-    elif m_name == 'inventorystock':
-        if is_accountant(user):
-            return queryset
-        from inventory.models import Warehouse
-        scoped_warehouses = get_scoped_queryset(Warehouse.objects.all(), user, 'warehouse')
-        return queryset.filter(warehouse__in=scoped_warehouses)
-
-    # 11. Inventory: InventoryMemo
-    elif m_name == 'inventorymemo':
-        if is_accountant(user):
-            return queryset
-        from inventory.models import Warehouse
-        scoped_warehouses = get_scoped_queryset(Warehouse.objects.all(), user, 'warehouse')
-        return queryset.filter(warehouse__in=scoped_warehouses)
-
-    # 12. Inventory: ProductTransferRequest
-    elif m_name == 'producttransferrequest':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(
-                Q(requesting_user=user) |
-                Q(source_warehouse__assigned_user=user) |
-                Q(destination_warehouse__assigned_user=user)
-            ).distinct()
-        # Manager sees requests where requester or either warehouse belongs to managed reps
-        return queryset.filter(
-            Q(requesting_user__in=managed_reps) |
-            Q(source_warehouse__assigned_user__in=managed_reps) |
-            Q(destination_warehouse__assigned_user__in=managed_reps) |
-            Q(source_warehouse__area__in=managed_areas) |
-            Q(destination_warehouse__area__in=managed_areas)
-        ).distinct()
-
-    # 13. Treasury: Vault
-    elif m_name == 'vault':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(assigned_user=user)
-        # Manager sees vaults of reps in their managed scope or assigned to themselves
-        return queryset.filter(
-            Q(assigned_user=user) |
-            Q(assigned_user__in=managed_reps)
-        ).distinct()
-
-    # 14. Treasury: VaultTransaction
-    elif m_name == 'vaulttransaction':
-        if is_accountant(user):
-            return queryset
-        from treasury.models import Vault
-        scoped_vaults = get_scoped_queryset(Vault.objects.all(), user, 'vault')
-        return queryset.filter(vault__in=scoped_vaults)
-
-    # 15. Treasury: VendorPayment
-    elif m_name == 'vendorpayment':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(created_by__in=managed_reps).distinct()
-
-    # 16. Treasury: VendorTransaction
-    elif m_name == 'vendortransaction':
-        if is_accountant(user):
-            return queryset
-        if not is_manager_or_higher(user):
-            return queryset.filter(created_by=user)
-        return queryset.filter(created_by__in=managed_reps).distinct()
-
-    # 17. Accounts: User
-    elif m_name == 'user':
-        if is_accountant(user) and not (getattr(user, 'is_super_admin', False) or user.is_superuser):
-            return queryset.none()
-        if not is_manager_or_higher(user):
-            return queryset.filter(pk=user.pk)
-        return queryset.filter(
-            Q(pk=user.pk) | Q(assigned_areas__in=managed_areas)
-        ).distinct()
-
-    return queryset
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.get_scoped_queryset(queryset, user, model_name=model_name, scope_type=scope_type)
 
 
 def can_user_access_object(user, obj, action: str = 'view') -> bool:
     """
     Object-level security checker protecting against IDOR, BOLA, and privilege escalation.
-    Enforces:
-    1. SuperAdmin / Superuser company-wide access.
-    2. Regional hierarchy: Area Manager has authority over Main Region + all Subregions + Reps.
-    3. Self-approval restriction: Users cannot approve or reject their own submissions.
-    4. Cross-region access rejection: Managers cannot view or alter records from other main areas.
-    5. Treasury visibility without transaction authority: Viewing a rep's vault does NOT allow transacting or modifying.
-    6. Product transfer requests: Superadmin or Accountant approval required before atomic execution.
+    Delegates to ScopeResolutionService.can_user_access_object.
     """
-    if not user.is_authenticated:
-        return False
+    from accounts.scope_service import ScopeResolutionService
+    return ScopeResolutionService.can_user_access_object(user, obj, action=action)
 
-    if getattr(user, 'is_super_admin', False) or user.is_superuser:
-        return True
-
-    role = user.role
-    if not role or not role.is_active:
-        return False
-
-    if role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']:
-        return True
-
-    # Approval integrity rule: no user can approve or reject their own submission (anti-self-approval)
-    if action in ['approve', 'reject', 'disapprove']:
-        owner_id = (
-            getattr(obj, 'owner_id', None) or
-            getattr(obj, 'created_by_id', None) or
-            getattr(obj, 'requesting_user_id', None)
-        )
-        if owner_id == user.id:
-            return False
-
-    managed_areas = set(get_user_managed_areas(user).values_list('id', flat=True))
-    managed_rep_ids = set(get_user_managed_representatives(user).values_list('id', flat=True))
-
-    model_name = obj.__class__.__name__.lower()
-
-    if model_name == 'visit':
-        contact_area_id = getattr(obj.contact, 'area_id', None) if getattr(obj, 'contact_id', None) else None
-        if not is_manager_or_higher(user):
-            if not (obj.owner_id == user.id or obj.created_by_id == user.id):
-                return False
-            if action in ['approve', 'reject', 'disapprove']:
-                return False
-            if contact_area_id is not None and contact_area_id not in managed_areas:
-                return False
-            return True
-
-        if not managed_areas:
-            return False
-        if contact_area_id is not None and contact_area_id not in managed_areas:
-            return False
-
-        if obj.owner_id == user.id or obj.created_by_id == user.id:
-            return action not in ['approve', 'reject', 'disapprove']
-
-        # Manager can only access visits of reps belonging to the same main area
-        rep = obj.owner or obj.created_by
-        rep_authorized = is_manager_eligible_for_user(user, rep) if rep else False
-        area_authorized = (contact_area_id in managed_areas) if contact_area_id else False
-        if action in ['approve', 'reject', 'disapprove']:
-            return rep_authorized or area_authorized
-        return rep_authorized or area_authorized
-
-    elif model_name == 'agreement':
-        if is_accountant(user):
-            return action == 'view'
-        if not is_manager_or_higher(user):
-            if action in ['edit', 'delete']:
-                if obj.status in ['approved', 'done']:
-                    return False
-            return obj.created_by_id == user.id
-        rep = obj.created_by
-        return is_manager_eligible_for_user(user, rep) if rep else False
-
-    elif model_name == 'contact':
-        if is_accountant(user):
-            return True
-        if not is_manager_or_higher(user):
-            if is_medical_rep(user):
-                return (
-                    obj.created_by_id == user.id or
-                    obj.assigned_team.filter(id=user.id).exists() or
-                    obj.activities.filter(performed_by=user).exists()
-                )
-            return obj.created_by_id == user.id or obj.assigned_team.filter(id=user.id).exists()
-        return (
-            obj.area_id in managed_areas or
-            obj.created_by_id in managed_rep_ids or
-            obj.assigned_team.filter(id__in=managed_rep_ids).exists() or
-            is_manager_eligible_for_area(user, obj.area)
-        )
-
-    elif model_name in ['salesorder', 'salesreturnorder']:
-        if is_accountant(user):
-            return True
-        if not is_manager_or_higher(user):
-            return obj.created_by_id == user.id
-        rep = obj.created_by
-        return is_manager_eligible_for_user(user, rep) if rep else False
-
-    elif model_name == 'collection':
-        if is_accountant(user):
-            return True
-        if not is_manager_or_higher(user):
-            return obj.created_by_id == user.id
-        rep = obj.created_by
-        return is_manager_eligible_for_user(user, rep) if rep else False
-
-    elif model_name in ['purchaseorder', 'purchasereturnorder']:
-        if is_accountant(user):
-            return True
-        if not is_manager_or_higher(user):
-            return obj.created_by_id == user.id
-        rep = obj.created_by
-        rep_auth = is_manager_eligible_for_user(user, rep) if rep else False
-        wh_rep = getattr(obj.target_warehouse, 'assigned_user', None)
-        wh_auth = is_manager_eligible_for_user(user, wh_rep) if wh_rep else False
-        area_auth = is_manager_eligible_for_area(user, getattr(obj.target_warehouse, 'area', None))
-        return rep_auth or wh_auth or area_auth
-
-    elif model_name == 'warehouse':
-        if is_accountant(user):
-            return True
-        if obj.is_main:
-            return action in ['view', 'operate']
-        if obj.assigned_user_id == user.id:
-            return True
-        if not is_manager_or_higher(user):
-            return False
-        # Manager can view/operate warehouses of reps in their main area or warehouses in their managed areas
-        wh_rep = obj.assigned_user
-        rep_auth = is_manager_eligible_for_user(user, wh_rep) if wh_rep else False
-        area_auth = is_manager_eligible_for_area(user, obj.area) if obj.area else False
-        if action in ['view', 'operate']:
-            return rep_auth or area_auth
-        # Editing/deleting warehouses is reserved for SuperAdmin / Admin
-        return False
-
-    elif model_name == 'inventorymemo':
-        if is_accountant(user):
-            return True
-        return can_user_access_object(user, obj.warehouse, action)
-
-    elif model_name == 'vault':
-        if is_accountant(user):
-            return True
-        if obj.assigned_user_id == user.id:
-            return True
-        if not is_manager_or_higher(user):
-            return False
-        vault_rep = obj.assigned_user
-        rep_auth = is_manager_eligible_for_user(user, vault_rep) if vault_rep else False
-        if action == 'view':
-            return rep_auth or (obj.assigned_user_id is None and has_perm_or_admin(user, 'treasury:vaults/view'))
-        if action in ['transfer', 'withdraw', 'deposit']:
-            return (rep_auth or obj.assigned_user_id == user.id) and has_perm_or_admin(user, 'treasury:vaults/transfer')
-        if action in ['edit', 'manage', 'delete']:
-            return has_perm_or_admin(user, 'treasury:vaults/manage')
-        return False
-
-    elif model_name == 'vaulttransaction':
-        if is_accountant(user):
-            return True
-        return can_user_access_object(user, obj.vault, action)
-
-    elif model_name == 'producttransferrequest':
-        if is_accountant(user):
-            return True
-        is_rep_involved = (
-            obj.requesting_user_id == user.id or
-            getattr(obj.source_warehouse, 'assigned_user_id', None) == user.id or
-            getattr(obj.destination_warehouse, 'assigned_user_id', None) == user.id
-        )
-        if is_rep_involved:
-            if action in ['approve', 'reject', 'execute']:
-                return False  # Rep cannot approve or execute transfer
-            return True
-
-        if not is_manager_or_higher(user):
-            return False
-
-        # Manager can only view requests involving reps in their main area
-        req_rep = obj.requesting_user
-        src_rep = getattr(obj.source_warehouse, 'assigned_user', None)
-        dst_rep = getattr(obj.destination_warehouse, 'assigned_user', None)
-        in_manager_scope = (
-            (req_rep and is_manager_eligible_for_user(user, req_rep)) or
-            (src_rep and is_manager_eligible_for_user(user, src_rep)) or
-            (dst_rep and is_manager_eligible_for_user(user, dst_rep))
-        )
-        if action == 'view':
-            return in_manager_scope
-        # Approving and executing inter-warehouse transfers is strictly superadmin / accountant
-        return False
-
-    elif model_name in ['vendorpayment', 'vendortransaction']:
-        if is_accountant(user):
-            return True
-        if not is_manager_or_higher(user):
-            return obj.created_by_id == user.id
-        rep = obj.created_by
-        return is_manager_eligible_for_user(user, rep) if rep else False
-
-    elif model_name == 'user':
-        # Accountant must not receive user admin or security management access
-        if is_accountant(user) and not (getattr(user, 'is_super_admin', False) or user.is_superuser):
-            return False
-        # Representative cannot manage users
-        if not is_manager_or_higher(user):
-            if action in ['edit', 'change_role', 'assign_area', 'deactivate', 'delete', 'reset_password']:
-                return False
-            return user.id == obj.id
-        # Manager: can view/edit representatives in their managed areas
-        if getattr(obj, 'is_super_admin', False) or obj.is_superuser or is_manager_or_higher(obj):
-            if obj.id == user.id:
-                return action == 'view'
-            return False
-        return is_manager_eligible_for_user(user, obj)
-
-    return True
 
 def can_user_perform_stock_in(user, warehouse=None) -> bool:
     """Checks if user has permission to create a Stock In memo for the given warehouse."""

@@ -174,8 +174,8 @@ def purchase_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_order_create')
 
-    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
-    warehouses = Warehouse.objects.filter(is_active=True).order_by('name')
+    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
+    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
     products = Product.objects.filter(is_active=True).order_by('name')
 
     context = {
@@ -273,8 +273,8 @@ def purchase_order_edit(request, pk):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_order_edit', pk=order.pk)
 
-    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
-    warehouses = Warehouse.objects.filter(is_active=True).order_by('name')
+    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
+    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
     products = Product.objects.filter(is_active=True).order_by('name')
 
     context = {
@@ -294,6 +294,9 @@ def purchase_order_detail(request, pk):
         ).prefetch_related('items__product', 'attachments', 'comments__author', 'vendor_payments__vault'),
         pk=pk
     )
+
+    if not can_user_access_object(request.user, order, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
 
     # Linked accounting transactions & settlements
     linked_tx = VendorTransaction.objects.filter(purchase_order=order).prefetch_related('installments__settlements').first()
@@ -333,6 +336,9 @@ def purchase_order_detail(request, pk):
 @login_required
 def purchase_order_update_status_ajax(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'approve'):
+        return render_forbidden_response(request, "لا يمكنك تغيير حالة هذا الطلب خارج نطاق منطقتك الجغرافية المصرح بها.")
+
     if request.method == 'POST':
         new_status = request.POST.get('status', '').strip().lower()
         valid_statuses = dict(PurchaseOrder.STATUS_CHOICES).keys()
@@ -380,6 +386,9 @@ def purchase_order_update_status_ajax(request, pk):
 @require_permission('purchases:orders/edit')
 def purchase_order_add_comment(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'view'):
+        return render_forbidden_response(request, "لا يمكنك التعليق على هذا الطلب خارج نطاق منطقتك الجغرافية.")
+
     if request.method == 'POST':
         text = request.POST.get('comment', '').strip()
         if text:
@@ -397,6 +406,9 @@ def purchase_order_add_comment(request, pk):
 @require_permission('purchases:orders/edit')
 def purchase_order_upload_attachment(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك رفع مرفقات لهذا الطلب خارج نطاق منطقتك الجغرافية.")
+
     if request.method == 'POST' and request.FILES.get('file'):
         f = request.FILES['file']
         title = request.POST.get('title') or f.name
@@ -430,6 +442,9 @@ def purchase_order_action(request, pk, action):
     order = get_object_or_404(PurchaseOrder, pk=pk)
 
     # Scoping and self-approval checks
+    if not can_user_access_object(request.user, order, action):
+        return render_forbidden_response(request, "لا يمكنك تنفيذ هذا الإجراء خارج نطاق منطقتك الجغرافية المصرح بها.")
+
     if action in ['approve', 'reject', 'disapprove']:
         if order.created_by_id == request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
             messages.error(request, "لا يمكن لمنشئ أمر الشراء اعتماده أو رفضه بنفسه (مبدأ الرقابة الثنائية).")
@@ -702,8 +717,8 @@ def purchase_return_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_return_order_create')
 
-    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
-    warehouses = Warehouse.objects.filter(is_active=True).order_by('name')
+    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
+    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
     products = Product.objects.filter(is_active=True).order_by('name')
     po_id = request.GET.get('po')
     selected_po = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
@@ -726,6 +741,9 @@ def purchase_return_order_detail(request, pk):
         pk=pk
     )
 
+    if not can_user_access_object(request.user, return_order, 'view'):
+        return render_forbidden_response(request, "لا يمكنك عرض هذا المرتجع خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
+
     # Linked debit transaction if settled
     linked_tx = VendorTransaction.objects.filter(
         account__supplier=return_order.supplier,
@@ -744,6 +762,9 @@ def purchase_return_order_detail(request, pk):
 @require_permission('purchases:returns/manage')
 def purchase_return_order_action(request, pk, action):
     return_order = get_object_or_404(PurchaseReturnOrder, pk=pk)
+
+    if not can_user_access_object(request.user, return_order, action):
+        return render_forbidden_response(request, "لا يمكنك تنفيذ هذا الإجراء خارج نطاق منطقتك الجغرافية المصرح بها.")
 
     try:
         if action == 'approve':
@@ -772,6 +793,8 @@ def purchase_return_order_print(request, pk):
         PurchaseReturnOrder.objects.select_related('supplier', 'supplier__area', 'warehouse', 'created_by').prefetch_related('items__product'),
         pk=pk
     )
+    if not can_user_access_object(request.user, return_order, 'view'):
+        return render_forbidden_response(request, "لا يمكنك طباعة هذا المرتجع خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
     return render(request, 'purchases/purchase_return_order_print.html', {'return_order': return_order})
 
 
@@ -784,6 +807,7 @@ def purchase_return_orders_export(request):
     qs = PurchaseReturnOrder.objects.select_related(
         'supplier', 'supplier__area', 'warehouse', 'created_by'
     ).all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)

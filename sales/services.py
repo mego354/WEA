@@ -24,15 +24,19 @@ class SalesOrderService:
         # Ensure customer account exists
         CustomerAccount.get_or_create_for_customer(customer)
 
-        # Resolve and enforce designated warehouse for representatives
+        # Resolve and validate source warehouse
         from accounts.services import is_representative, get_representative_warehouse
-        if is_representative(user):
-            rep_wh = get_representative_warehouse(user)
-            if not rep_wh:
-                raise ValidationError("لم يتم تعيين مخزن عهدة افتراضي لحساب المندوب الخاص بك. يرجى مراجعة إدارة النظام.")
-            if source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
-                raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
-            source_warehouse = rep_wh
+        from accounts.permissions import can_user_access_object
+        rep_wh = get_representative_warehouse(user) if is_representative(user) else None
+        if rep_wh and source_warehouse and source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
+        if not source_warehouse:
+            if rep_wh:
+                source_warehouse = rep_wh
+            else:
+                raise ValidationError("يرجى تحديد المخزن.")
+        elif not can_user_access_object(user, source_warehouse, 'operate'):
+            raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}).")
 
         if not source_warehouse.is_active:
             raise ValidationError(f"مخزن الصرف المحدد ({source_warehouse.name}) غير نشط حالياً.")
@@ -69,13 +73,13 @@ class SalesOrderService:
                     )
 
         from master_data.models import SalesSettings
-        from accounts.permissions import is_manager_or_higher
+        from accounts.permissions import has_perm_or_admin
         sales_settings = SalesSettings.get_settings()
 
         initial_status = 'pending'
         approved_by = None
         approved_at = None
-        if not sales_settings.require_manager_approval or is_manager_or_higher(user):
+        if not sales_settings.require_manager_approval or has_perm_or_admin(user, 'sales:orders/approve'):
             initial_status = 'manager_approval'
             approved_by = user
             approved_at = timezone.now()
@@ -161,15 +165,19 @@ class SalesOrderService:
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر البيع.")
 
-        # Resolve and enforce designated warehouse for representatives
+        # Resolve and validate source warehouse
         from accounts.services import is_representative, get_representative_warehouse
-        if is_representative(user):
-            rep_wh = get_representative_warehouse(user)
-            if not rep_wh:
-                raise ValidationError("لم يتم تعيين مخزن عهدة افتراضي لحساب المندوب الخاص بك. يرجى مراجعة إدارة النظام.")
-            if source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
-                raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
-            source_warehouse = rep_wh
+        from accounts.permissions import can_user_access_object
+        rep_wh = get_representative_warehouse(user) if is_representative(user) else None
+        if rep_wh and source_warehouse and source_warehouse.pk != rep_wh.pk and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}). يجب استخدام مخزن العهدة الخاص بك ({rep_wh.name}).")
+        if not source_warehouse:
+            if rep_wh:
+                source_warehouse = rep_wh
+            else:
+                raise ValidationError("يرجى تحديد المخزن.")
+        elif not can_user_access_object(user, source_warehouse, 'operate'):
+            raise ValidationError(f"غير مصرح للمندوب بإجراء مبيعات من مخزن آخر ({source_warehouse.name}).")
 
         if not source_warehouse.is_active:
             raise ValidationError(f"مخزن الصرف المحدد ({source_warehouse.name}) غير نشط حالياً.")

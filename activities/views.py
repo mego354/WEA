@@ -54,8 +54,7 @@ def can_manage_approvals(user, module_type='visits'):
     """
     if not user.is_authenticated:
         return False
-    from accounts.permissions import is_manager_or_higher
-    if is_manager_or_higher(user):
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     if module_type == 'agreements':
         return has_perm_or_admin(user, 'activities:agreements/approve')
@@ -76,7 +75,13 @@ def can_assign_other_representative(user):
         return False
     if user.is_superuser or getattr(user, 'is_super_admin', False):
         return True
-    if user.role and (user.role.is_area_manager or user.role.is_sub_area_manager):
+    from accounts.scope_service import ScopeResolutionService
+    if ScopeResolutionService.get_user_scope(user, 'activities', 'manage') in ['area', 'all']:
+        return True
+    if has_perm_or_admin(user, 'activities:planned/manage'):
+        return True
+    role = getattr(user, 'role', None)
+    if role and (role.is_manager_role or role.is_area_manager):
         return True
     return False
 
@@ -150,9 +155,8 @@ def agreements_list(request):
             agreement.updated_by = request.user
 
             from master_data.models import LocationSettings
-            from accounts.permissions import is_manager_or_higher
             loc_settings = LocationSettings.get_settings()
-            if not loc_settings.require_manager_approval_for_agreements or is_manager_or_higher(request.user):
+            if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
                 agreement.status = 'approved'
             else:
                 agreement.status = 'new'
@@ -273,9 +277,8 @@ def agreement_create(request):
             agreement.updated_by = request.user
 
             from master_data.models import LocationSettings
-            from accounts.permissions import is_manager_or_higher
             loc_settings = LocationSettings.get_settings()
-            if not loc_settings.require_manager_approval_for_agreements or is_manager_or_higher(request.user):
+            if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
                 agreement.status = 'approved'
             else:
                 agreement.status = 'new'
@@ -323,8 +326,10 @@ def agreement_action(request, pk, action):
         return redirect('agreement_detail', pk=pk)
 
     agreement = get_object_or_404(Agreement, pk=pk)
-    if not can_user_access_object(request.user, agreement, 'edit'):
-        return render_forbidden_response(request, "لا يمكنك تغيير حالة هذه الاتفاقية.")
+    if not can_user_access_object(request.user, agreement, action):
+        return render_forbidden_response(request, "لا يمكنك تغيير حالة هذه الاتفاقية خارج نطاق اختصاصك أو اعتماد اتفاقيتك الخاصة.")
+
+    status_before = agreement.status
 
     if action == 'approve':
         agreement.status = 'approved'
@@ -348,6 +353,20 @@ def agreement_action(request, pk, action):
         messages.info(request, f"تم إعادة فتح الاتفاقية #{agreement.serial_num} لحالة جديد.")
     else:
         messages.error(request, "إجراء غير معروف.")
+        return redirect('agreement_detail', pk=agreement.pk)
+
+    AuditLogService.log(
+        action_type='AGREEMENT_APPROVED' if action == 'approve' else ('AGREEMENT_REJECTED' if action == 'disapprove' else 'AGREEMENT_STATUS_CHANGED'),
+        module='activities',
+        actor=request.user,
+        record_id=agreement.id,
+        record_name=f"اتفاقية #{agreement.serial_num}",
+        description=f"تغيير حالة الاتفاقية من '{status_before}' إلى '{agreement.status}'",
+        previous_values={'status': status_before},
+        new_values={'status': agreement.status},
+        status='SUCCESS',
+        request=request,
+    )
 
     next_url = request.GET.get('next', 'agreement_detail')
     if next_url == 'list':
@@ -459,10 +478,11 @@ def planned_visits_list(request):
     Matches https://weapharma.bricks-rep.com/planned-visits
     """
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    from accounts.scope_service import ScopeResolutionService
     can_view_others = (
         is_super or
-        (request.user.role and request.user.role.is_manager_role) or
-        has_perm_or_admin(request.user, 'activities:planned/manage')
+        has_perm_or_admin(request.user, 'activities:planned/manage') or
+        ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     )
     if is_super:
         all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
@@ -541,7 +561,7 @@ def planned_visits_list(request):
 
     # Contacts for drawer & bulk planner (scoped strictly to user's permitted geographical scope)
     base_contacts_qs = get_visit_eligible_contacts_queryset(
-        Contact.objects.select_related('area', 'area__parent').exclude(status='inactive'),
+        Contact.objects.select_related('area', 'brick', 'area__parent', 'brick__parent').prefetch_related('addresses__area', 'addresses__brick').exclude(status='inactive'),
         request.user
     )
     contacts_qs = base_contacts_qs
@@ -554,9 +574,25 @@ def planned_visits_list(request):
     search_contact = (request.GET.get('contact_search') or '').strip()
 
     if main_area_filter and main_area_filter.isdigit():
-        contacts_qs = contacts_qs.filter(Q(area_id=int(main_area_filter)) | Q(area__parent_id=int(main_area_filter)))
+        ma_id = int(main_area_filter)
+        contacts_qs = contacts_qs.filter(
+            Q(area_id=ma_id) |
+            Q(area__parent_id=ma_id) |
+            Q(brick_id=ma_id) |
+            Q(brick__parent_id=ma_id) |
+            Q(addresses__area_id=ma_id) |
+            Q(addresses__brick__parent_id=ma_id)
+        ).distinct()
+
     if area_filter and area_filter.isdigit():
-        contacts_qs = contacts_qs.filter(area_id=int(area_filter))
+        b_id = int(area_filter)
+        contacts_qs = contacts_qs.filter(
+            Q(brick_id=b_id) |
+            Q(area_id=b_id) |
+            Q(addresses__brick_id=b_id) |
+            Q(addresses__area_id=b_id)
+        ).distinct()
+
     if account_type_filter:
         contacts_qs = contacts_qs.filter(account_type__iexact=account_type_filter)
     if category_filter:
@@ -567,8 +603,9 @@ def planned_visits_list(request):
         contacts_qs = contacts_qs.filter(
             Q(name__icontains=search_contact) |
             Q(code__icontains=search_contact) |
-            Q(phone__icontains=search_contact)
-        )
+            Q(phone__icontains=search_contact) |
+            Q(mobile__icontains=search_contact)
+        ).distinct()
 
     # AJAX Incremental Client Loader (Requirement 2: Performance & See More)
     if (request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json') and request.GET.get('action') == 'load_contacts':
@@ -585,6 +622,17 @@ def planned_visits_list(request):
         batch = list(contacts_qs.order_by('name')[offset:offset+limit])
         items_data = []
         for c in batch:
+            brick_name = c.brick.name if c.brick else ''
+            area_name = c.area.name if c.area else ''
+            if brick_name and area_name:
+                location_label = f"{brick_name} ({area_name})"
+            elif brick_name:
+                location_label = brick_name
+            elif area_name:
+                location_label = area_name
+            else:
+                location_label = ''
+
             items_data.append({
                 'id': c.id,
                 'name': c.name,
@@ -592,8 +640,10 @@ def planned_visits_list(request):
                 'account_type': c.account_type or 'عميل',
                 'customer_category': c.customer_category or '',
                 'specialty': c.specialty or 'عام',
-                'area_name': c.area.name if c.area else '',
-                'parent_area_name': c.area.parent.name if c.area and c.area.parent else '',
+                'brick_name': brick_name,
+                'area_name': area_name,
+                'location_label': location_label,
+                'parent_area_name': c.area.parent.name if c.area and c.area.parent else (c.brick.parent.name if c.brick and c.brick.parent else ''),
             })
         return JsonResponse({
             'success': True,
@@ -801,9 +851,11 @@ def planned_visit_add_item(request):
 
         assignee = get_object_or_404(User, pk=assignee_id)
         is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+        from accounts.scope_service import ScopeResolutionService
         can_manage_others = (
             is_super or
-            (request.user.role and request.user.role.is_manager_role)
+            has_perm_or_admin(request.user, 'activities:planned/manage') or
+            ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
         )
         if assignee != request.user:
             if not can_manage_others or (not is_super and not get_user_managed_representatives(request.user).filter(pk=assignee.pk).exists()):
@@ -941,27 +993,32 @@ def planned_visits_bulk_add(request):
         messages.error(request, msg)
         return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
-    # Mandatory template validation & eligibility (Requirement 1)
-    if not template_id or not str(template_id).isdigit():
-        msg = "اختيار قالب الزيارة إلزامي لإتمام التخطيط المجمع."
-        if is_ajax:
-            return JsonResponse({'success': False, 'message': msg}, status=400)
-        messages.error(request, msg)
-        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+    # Parse templates_by_type (Group by Client Type - Requirement 5)
+    templates_by_type = {}
+    raw_templates_by_type = request.POST.get('templates_by_type')
+    if raw_templates_by_type:
+        try:
+            parsed = json.loads(raw_templates_by_type)
+            if isinstance(parsed, dict):
+                templates_by_type.update({str(k).strip(): str(v).strip() for k, v in parsed.items() if v})
+        except Exception:
+            pass
 
-    template = VisitTemplate.objects.filter(pk=int(template_id), active=True).first()
-    if not template or not template.is_user_eligible(request.user):
-        msg = "قالب الزيارة المحدد غير موجود أو غير مصرح لدورك الوظيفي باستخدامه."
-        if is_ajax:
-            return JsonResponse({'success': False, 'message': msg}, status=403)
-        messages.error(request, msg)
-        return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+    for k, v in request.POST.items():
+        if k.startswith('template_for_type_') and v:
+            type_name = k[len('template_for_type_'):].strip()
+            templates_by_type[type_name] = str(v).strip()
+            templates_by_type[type_name.lower()] = str(v).strip()
+
+    fallback_template_id = (request.POST.get('template_id') or '').strip()
 
     assignee = get_object_or_404(User, pk=assignee_id)
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    from accounts.scope_service import ScopeResolutionService
     can_manage_others = (
         is_super or
-        (request.user.role and request.user.role.is_manager_role)
+        has_perm_or_admin(request.user, 'activities:planned/manage') or
+        ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
     )
     if assignee != request.user:
         if not can_manage_others or (not is_super and not get_user_managed_representatives(request.user).filter(pk=assignee.pk).exists()):
@@ -971,7 +1028,7 @@ def planned_visits_bulk_add(request):
             messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
-    contacts = list(Contact.objects.filter(id__in=contact_ids).select_related('area', 'area__parent'))
+    contacts = list(Contact.objects.filter(id__in=contact_ids).select_related('area', 'brick', 'area__parent'))
     if len(contacts) != len(contact_ids):
         msg = "بعض العملاء المحددين غير موجودين."
         if is_ajax:
@@ -988,7 +1045,55 @@ def planned_visits_bulk_add(request):
             messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
-    template = VisitTemplate.objects.filter(pk=template_id).first() if template_id and template_id.isdigit() else None
+    # Collect and validate templates for each client type (Requirement 5.1)
+    needed_template_ids = set()
+    client_template_map = {}
+    for c in contacts:
+        c_type = (c.account_type or '').strip()
+        t_id = (
+            templates_by_type.get(c_type) or
+            templates_by_type.get(c_type.lower()) or
+            templates_by_type.get('__default__') or
+            fallback_template_id
+        )
+        if not t_id or not str(t_id).isdigit():
+            type_label = c_type or 'عام'
+            msg = f"اختيار قالب الزيارة إلزامي لمجموعة العملاء من نوع '{type_label}' ({c.name})."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+        t_id_int = int(t_id)
+        needed_template_ids.add(t_id_int)
+        client_template_map[c.id] = t_id_int
+
+    templates_cache = {
+        t.id: t for t in VisitTemplate.objects.filter(id__in=needed_template_ids, active=True).prefetch_related('restricted_roles')
+    }
+
+    # Validate each client against its assigned template atomically
+    for c in contacts:
+        t_id = client_template_map.get(c.id)
+        tmpl = templates_cache.get(t_id)
+        if not tmpl:
+            msg = f"قالب الزيارة المحدد للعميل '{c.name}' غير موجود أو غير نشط."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+        if not tmpl.is_user_eligible(request.user):
+            msg = f"قالب الزيارة '{tmpl.display_name_ar}' غير مصرح لدورك الوظيفي باستخدامه."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+        if not tmpl.is_contact_eligible(c, user=request.user):
+            allowed_str = ", ".join(tmpl.restrict_account_types) if tmpl.restrict_account_types else "الكل"
+            msg = f"العميل '{c.name}' (نوع الحساب: {c.account_type or 'غير محدد'}) غير متوافق مع قالب الزيارة '{tmpl.display_name_ar}'. الأنواع المصرح بها: {allowed_str}."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
     with transaction.atomic():
         plan_day, _ = PlannedVisitDay.objects.get_or_create(
@@ -1013,10 +1118,7 @@ def planned_visits_bulk_add(request):
             if cid in existing_contact_ids:
                 skipped_duplicates.append(c.name)
                 continue
-            item_template = template
-            if item_template and not item_template.is_contact_eligible(c, user=request.user):
-                skipped_ineligible.append(c.name)
-                continue
+            item_template = templates_cache.get(client_template_map.get(cid))
             current_order += 1
             item = PlannedVisitItem.objects.create(
                 plan_day=plan_day,
@@ -1040,7 +1142,7 @@ def planned_visits_bulk_add(request):
                 new_values={
                     'date': date_str,
                     'assignee_id': assignee.id,
-                    'template_id': template.id if template else None,
+                    'template_ids': list(needed_template_ids),
                     'created_count': len(created_items),
                     'skipped_duplicates_count': len(skipped_duplicates),
                     'contact_ids': [it.contact_id for it in created_items],
@@ -1085,10 +1187,12 @@ def planned_visit_item_delete(request, pk):
     """Remove a planned visit item."""
     item = get_object_or_404(PlannedVisitItem, pk=pk)
     is_owner = (item.plan_day.assignee == request.user)
+    from accounts.scope_service import ScopeResolutionService
     can_override = (
         request.user.is_superuser or
         getattr(request.user, 'is_super_admin', False) or
-        (request.user.role and request.user.role.is_manager_role)
+        has_perm_or_admin(request.user, 'activities:planned/manage') or
+        ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
     )
     if not (is_owner or can_override):
         return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب آخر.")
@@ -1113,7 +1217,7 @@ def planned_visit_item_execute(request, pk):
     can_override = (
         request.user.is_superuser or
         getattr(request.user, 'is_super_admin', False) or
-        (request.user.role and request.user.role.name in ['manager', 'admin'])
+        has_perm_or_admin(request.user, 'activities:planned/manage')
     )
     if not (is_owner or can_override):
         return render_forbidden_response(request, "غير مصرح لك بتنفيذ خطة زيارة تابعة لمندوب آخر.")
@@ -1132,10 +1236,12 @@ def planned_visits_export(request):
     """Export planned visits list to Excel."""
     items = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact__area', 'template', 'visit').all().order_by('plan_day__date', 'order')
 
+    from accounts.scope_service import ScopeResolutionService
     can_view_all = (
         request.user.is_superuser or
         getattr(request.user, 'is_super_admin', False) or
-        (request.user.role and request.user.role.is_manager_role)
+        has_perm_or_admin(request.user, 'activities:planned/manage') or
+        ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     )
     if not can_view_all:
         items = items.filter(plan_day__assignee=request.user)
@@ -1760,7 +1866,7 @@ def visit_create(request):
             can_override = (
                 request.user.is_superuser or
                 getattr(request.user, 'is_super_admin', False) or
-                (request.user.role and request.user.role.name in ['manager', 'admin'])
+                has_perm_or_admin(request.user, 'activities:planned/manage')
             )
             if not (is_owner or can_override):
                 messages.error(request, "غير مصرح لك بتسجيل أو تنفيذ خطة زيارة تابعة لمندوب آخر.")
@@ -1776,13 +1882,9 @@ def visit_create(request):
     location_settings = LocationSettings.get_settings()
     can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='create')
 
-    visit_type_param = (request.POST.get('visit_type') or request.GET.get('visit_type') or '').strip().lower()
-    is_planned_param = (request.POST.get('is_planned') or request.GET.get('is_planned') or '').strip().lower()
-    is_planned_visit = bool(
-        planned_item or
-        visit_type_param == 'planned' or
-        is_planned_param in ('1', 'true', 'on', 'planned')
-    )
+    # Planned visits must ONLY be created through the bulk planned-visits workflow
+    # and executed via planned_item_id. Direct visits via /visits/create/ are strictly unplanned.
+    is_planned_visit = bool(planned_item is not None)
 
     duplicate_warning = False
     existing_same_day_visits = Visit.objects.none()
@@ -1793,7 +1895,7 @@ def visit_create(request):
         if form.is_valid():
             contact = form.cleaned_data['contact']
             template = form.cleaned_data.get('template')
-            is_planned_visit = bool(form.cleaned_data.get('is_planned') or planned_item)
+            is_planned_visit = bool(planned_item is not None)
 
             # Backend Eligibility Validation (Requirement 1 & Requirement 4)
             if not template:
@@ -1865,7 +1967,7 @@ def visit_create(request):
                         visit.started_at = None
                         visit.allowed_distance = location_settings.get_effective_tolerance(template)
 
-                        if not location_settings.require_manager_approval_for_visits or is_manager_or_higher(request.user):
+                        if not location_settings.require_manager_approval_for_visits or has_perm_or_admin(request.user, 'activities:visits/approve'):
                             visit.approval_status = 'approved'
                             visit.approved_by = request.user
                             visit.approved_at = timezone.now()
@@ -1882,29 +1984,18 @@ def visit_create(request):
                         request_distance_exception = bool((request_exception_raw or (force_bypass_raw and not can_bypass_gps)) and not can_bypass_gps)
                         bypass_reason = (request.POST.get('bypass_reason') or '').strip()
 
-                        if not is_planned_visit:
-                            if location_settings.verify_visits and location_settings.verify_unplanned_visit_distance:
-                                verify_visit_location(
-                                    visit, request.user, contact,
-                                    visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                    photo_file=photo_file, force_bypass=force_bypass,
-                                    bypass_reason=bypass_reason, stage='create',
-                                    request_distance_exception=request_distance_exception,
-                                    strict_distance=True
-                                )
-                            elif lat or lng or photo_file or force_bypass:
-                                verify_visit_location(
-                                    visit, request.user, contact,
-                                    visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                    photo_file=photo_file, force_bypass=force_bypass,
-                                    bypass_reason=bypass_reason, stage='create',
-                                    request_distance_exception=request_distance_exception,
-                                    strict_distance=False
-                                )
-                        else:
-                            # Planned visits: distance validation is NOT required during creation (Section 3.B)
-                            if (lat or lng) and location_settings.verify_visits:
-                                try:
+                        try:
+                            if not is_planned_visit:
+                                if location_settings.verify_visits and location_settings.verify_unplanned_visit_distance:
+                                    verify_visit_location(
+                                        visit, request.user, contact,
+                                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                        photo_file=photo_file, force_bypass=force_bypass,
+                                        bypass_reason=bypass_reason, stage='create',
+                                        request_distance_exception=request_distance_exception,
+                                        strict_distance=True
+                                    )
+                                elif lat or lng or photo_file or force_bypass:
                                     verify_visit_location(
                                         visit, request.user, contact,
                                         visit_lat=lat, visit_lng=lng, device_accuracy=acc,
@@ -1913,8 +2004,36 @@ def visit_create(request):
                                         request_distance_exception=request_distance_exception,
                                         strict_distance=False
                                     )
-                                except Exception:
-                                    pass
+                            else:
+                                # Planned visits: distance validation is NOT required during creation (Section 3.B)
+                                if (lat or lng) and location_settings.verify_visits:
+                                    try:
+                                        verify_visit_location(
+                                            visit, request.user, contact,
+                                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
+                                            photo_file=photo_file, force_bypass=force_bypass,
+                                            bypass_reason=bypass_reason, stage='create',
+                                            request_distance_exception=request_distance_exception,
+                                            strict_distance=False
+                                        )
+                                    except Exception:
+                                        pass
+                        except ValidationError as ve:
+                            err_msg = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
+                            form.add_error(None, err_msg)
+                            return render(request, 'activities/visit_form.html', {
+                                'form': form,
+                                'contacts': contacts,
+                                'templates': templates,
+                                'location_settings': location_settings,
+                                'planned_item': planned_item,
+                                'planned_item_id': planned_item.id if planned_item else None,
+                                'is_planned_workflow': is_planned_visit,
+                                'verify_visits_enabled': location_settings.verify_visits,
+                                'verify_unplanned_distance': location_settings.verify_unplanned_visit_distance,
+                                'can_bypass_gps': can_bypass_gps,
+                                'default_tolerance': location_settings.tolerance,
+                            })
 
                         visit.save()
 
@@ -2284,6 +2403,86 @@ def visit_edit(request, pk):
         'verify_visits_enabled': location_settings.verify_visits,
         'gps_tolerance': visit.effective_allowed_distance,
         'title': f'تعديل الزيارة #{visit.serial_num}'
+    })
+
+
+@require_permission('activities:visits/edit')
+def visit_set_time(request, pk):
+    """
+    Quick-action endpoint to set or update a visit's scheduled time
+    without a full page reload (Requirement 7).
+    Enforces authorization, regional/ABAC data scope, validates time format,
+    updates Visit.time and Visit.visit_time, and records to SecurityAuditLog.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'MethodNotAllowed', 'detail': 'POST method required.'}, status=405)
+
+    visit = get_object_or_404(Visit.objects.select_related('contact', 'owner'), pk=pk)
+
+    # Scoping check: Representatives can only edit their own visits within their scope
+    if not can_user_access_object(request.user, visit, 'edit'):
+        return JsonResponse({
+            'success': False,
+            'error': 'PermissionDenied',
+            'detail': 'غير مصرح لك بتعديل وقت هذه الزيارة خارج نطاقك الجغرافي أو صلاحياتك.'
+        }, status=403)
+
+    raw_time = (request.POST.get('time') or '').strip()
+    if not raw_time:
+        return JsonResponse({
+            'success': False,
+            'error': 'ValidationError',
+            'detail': 'يرجى تحديد وقت الزيارة.'
+        }, status=400)
+
+    # Parse time (supports HH:MM or HH:MM:SS or 12h formats)
+    parsed_time = None
+    for fmt in ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M%p'):
+        try:
+            parsed_time = datetime.datetime.strptime(raw_time, fmt).time()
+            break
+        except ValueError:
+            continue
+
+    if not parsed_time:
+        return JsonResponse({
+            'success': False,
+            'error': 'ValidationError',
+            'detail': 'صيغة الوقت غير صالحة. يرجى إدخال الوقت بصيغة (HH:MM).'
+        }, status=400)
+
+    old_time_str = visit.time.strftime('%H:%M') if visit.time else None
+    new_time_str = parsed_time.strftime('%H:%M')
+
+    with transaction.atomic():
+        visit.time = parsed_time
+        if visit.date:
+            combined_dt = datetime.datetime.combine(visit.date, parsed_time)
+            visit.visit_time = timezone.make_aware(combined_dt) if timezone.is_naive(combined_dt) else combined_dt
+        visit.save(update_fields=['time', 'visit_time'])
+
+        AuditLogService.log(
+            action='update',
+            action_type='VISIT_TIME_UPDATED',
+            module='visits',
+            user=request.user,
+            request=request,
+            record_id=visit.pk,
+            object_repr=f"Visit #{visit.serial_num} ({visit.contact.name})",
+            previous_values={'time': old_time_str},
+            new_values={'time': new_time_str},
+        )
+
+    formatted_12h = parsed_time.strftime('%I:%M %p')
+    arabic_period = 'م' if parsed_time.hour >= 12 else 'ص'
+    display_time_ar = f"{parsed_time.strftime('%I:%M')} {arabic_period}"
+
+    return JsonResponse({
+        'success': True,
+        'message': f"تم تحديث وقت الزيارة بنجاح إلى {display_time_ar}.",
+        'time_24': new_time_str,
+        'time_12': formatted_12h,
+        'display_time': display_time_ar,
     })
 
 
@@ -3125,8 +3324,9 @@ def agenda_view(request):
     - Includes '+ تسجيل زيارة خارج الخطة' action modal.
     - Displays empty state 'لا خطط أخرى لهذا اليوم' when no visits are scheduled.
     """
+    from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     can_view_others = is_super or is_mgr
 
     if is_super:
@@ -3326,8 +3526,9 @@ def agenda_todo_add(request):
 
     target_user = request.user
     if target_user_id:
+        from accounts.scope_service import ScopeResolutionService
         is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-        is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+        is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
         if is_super or is_mgr:
             managed_reps = get_user_managed_representatives(request.user)
             rep = managed_reps.filter(pk=target_user_id).first()
@@ -3348,8 +3549,9 @@ def agenda_todo_add(request):
 def agenda_todo_toggle(request, pk):
     """Toggle completion status of a todo."""
     todo = get_object_or_404(AgendaTodo, pk=pk)
+    from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     if todo.user != request.user and not is_super:
         if is_mgr:
             managed_reps = get_user_managed_representatives(request.user)
@@ -3372,8 +3574,9 @@ def agenda_todo_toggle(request, pk):
 def agenda_todo_delete(request, pk):
     """Delete a todo."""
     todo = get_object_or_404(AgendaTodo, pk=pk)
+    from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = bool(request.user.role and request.user.role.is_manager_role)
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     if todo.user != request.user and not is_super:
         if is_mgr:
             managed_reps = get_user_managed_representatives(request.user)

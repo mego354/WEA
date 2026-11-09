@@ -57,6 +57,18 @@
                 </span>
                 {% endif %}
 
+                {% if target_user.has_custom_permissions %}
+                <span class="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold rounded-full flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">tune</span>
+                    <span>صلاحيات مخصصة (Custom Override)</span>
+                </span>
+                {% else %}
+                <span class="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-full flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">schema</span>
+                    <span>وراثة تلقائية من الدور (Inherited)</span>
+                </span>
+                {% endif %}
+
                 {% if target_user.is_active %}
                 <span class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-full flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">check_circle</span>
@@ -104,81 +116,346 @@
         </div>
     </div>
 
-    <!-- Effective Permissions Matrix -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-                <h2 class="text-xl font-bold text-[#27bebe] flex items-center gap-2">
-                    <span class="material-symbols-outlined">security</span>
-                    <span>جدول الصلاحيات الفعالة (Effective Permissions)</span>
-                </h2>
-                <p class="text-xs text-slate-500 mt-0.5">الصلاحيات المضاءة بالأخضر هي المتاحة فعلياً لهذا المستخدم في النظام.</p>
-            </div>
-            <span class="text-xs font-bold px-3 py-1 bg-teal-50 text-[#27bebe] rounded-full border border-teal-200">
-                إجمالي المتاح: {{ effective_codenames|length }}
-            </span>
-        </div>
+    <!-- Interactive User Permissions Management Form -->
+    <form method="POST" action="{% url 'user_effective_permissions' target_user.pk %}" id="userPermsForm">
+        {% csrf_token %}
+        <input type="hidden" name="action" id="formActionInput" value="save">
 
-        <div class="space-y-4">
-            {% for mod in modules_tree %}
-            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                <!-- Module Header -->
-                <div class="p-3.5 bg-slate-50 flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <span class="material-symbols-outlined text-xl text-[#27bebe]">{{ mod.icon }}</span>
-                        <span class="text-sm font-bold text-slate-800">{{ mod.name_ar }}</span>
-                    </div>
-
-                    {% if mod.root_perm.codename in effective_codenames %}
-                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm">check</span>
-                        <span>الموديول مفعل</span>
-                    </span>
-                    {% else %}
-                    <span class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-xs font-bold flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm">close</span>
-                        <span>الموديول محجوب</span>
-                    </span>
-                    {% endif %}
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-5">
+            <!-- Top Controls & Mode Switch -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+                <div>
+                    <h2 class="text-xl font-bold text-[#27bebe] flex items-center gap-2">
+                        <span class="material-symbols-outlined">security</span>
+                        <span>التحكم في صلاحيات المستخدم (User Permissions Matrix)</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1">تحديد وإدارة الصلاحيات المطبقة على هذا الحساب بشكل مباشر أو بالوراثة من الدور.</p>
                 </div>
 
-                <!-- Pages & Actions -->
-                <div class="p-4 space-y-3">
-                    {% for page in mod.pages %}
-                    <div class="bg-slate-50/60 p-3 rounded-lg border border-slate-100">
-                        <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
-                            <span class="material-symbols-outlined text-sm text-slate-400">subdirectory_arrow_left</span>
-                            <span>{{ page.name_ar }}</span>
-                        </h4>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-xs font-bold px-3 py-1 bg-teal-50 text-[#27bebe] rounded-full border border-teal-200">
+                        الصلاحيات الفعالة: <span id="effectiveCounter">{{ effective_codenames|length }}</span>
+                    </span>
+                    <button type="submit" class="px-5 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-1.5 min-h-[40px]">
+                        <span class="material-symbols-outlined text-base">save</span>
+                        <span>حفظ الصلاحيات</span>
+                    </button>
+                </div>
+            </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                            {% for act in page.actions %}
-                            {% if act.codename in effective_codenames %}
-                            <div class="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between text-right">
-                                <div class="overflow-hidden">
-                                    <span class="text-xs font-bold text-emerald-900 block truncate">{{ act.name }}</span>
-                                    <span class="text-[10px] font-mono text-emerald-600 block truncate" dir="ltr">{{ act.codename }}</span>
-                                </div>
-                                <span class="material-symbols-outlined text-emerald-600 text-base shrink-0">check_circle</span>
-                            </div>
-                            {% else %}
-                            <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/60 flex items-center justify-between text-right opacity-60">
-                                <div class="overflow-hidden">
-                                    <span class="text-xs text-slate-500 block truncate">{{ act.name }}</span>
-                                    <span class="text-[10px] font-mono text-slate-400 block truncate" dir="ltr">{{ act.codename }}</span>
-                                </div>
-                                <span class="material-symbols-outlined text-slate-400 text-base shrink-0">block</span>
-                            </div>
-                            {% endif %}
+            <!-- Custom Mode & Action Presets Bar -->
+            <div class="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <!-- Custom Mode Toggle Switch -->
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="has_custom_permissions" id="customModeToggle"
+                           {% if target_user.has_custom_permissions %}checked{% endif %}
+                           onchange="onCustomModeToggled(this.checked)"
+                           class="w-5 h-5 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300">
+                    <div>
+                        <span class="text-xs font-bold text-slate-800 block">تفعيل التخصيص المستقل لصلاحيات هذا المستخدم</span>
+                        <span class="text-[11px] text-slate-500">عند التفعيل، تصبح الصلاحيات المحددة هنا هي المتحكمة بنسبة 100% في إتاحة العمليات</span>
+                    </div>
+                </label>
+
+                <!-- Action Tools -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="copyFromRole()" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]" title="تحديد الصلاحيات المطابقة لدور المستخدم">
+                        <span class="material-symbols-outlined text-sm">content_copy</span>
+                        <span>نسخ من الدور</span>
+                    </button>
+                    <button type="button" onclick="selectAll(true)" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]">
+                        <span class="material-symbols-outlined text-sm">select_all</span>
+                        <span>تحديد الكل</span>
+                    </button>
+                    <button type="button" onclick="selectAll(false)" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]">
+                        <span class="material-symbols-outlined text-sm">deselect</span>
+                        <span>إلغاء الكل</span>
+                    </button>
+                    <button type="button" onclick="resetToRoleDefaults()" class="px-3 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]" title="إلغاء التخصيص والعودة لوراثة الدور">
+                        <span class="material-symbols-outlined text-sm">restart_alt</span>
+                        <span>استعادة الافتراضي للدور</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Custom User Module Data Scopes (نطاقات بيانات الموديولات المخصصة) -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 space-y-3" id="userScopesCard">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-lg">share_location</span>
+                        <h3 class="text-sm font-bold text-slate-800">نطاقات البيانات الإقليمية للمستخدم (User Data Scopes)</h3>
+                    </div>
+                    <span class="text-[11px] text-slate-400">تخصيص نطاق العرض والإدارة المباشر لكل موديول</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-xs text-slate-700">
+                        <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">
+                            <tr>
+                                <th class="py-2 px-3">الموديول</th>
+                                <th class="py-2 px-3">نطاق الاستعراض والعرض (View Scope)</th>
+                                <th class="py-2 px-3">نطاق التعديل والإدارة (Manage Scope)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for mod in module_scopes %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="py-2 px-3 font-semibold flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-slate-400 text-sm">{{ mod.icon }}</span>
+                                    <span>{{ mod.name }}</span>
+                                </td>
+                                <td class="py-2 px-3">
+                                    <select name="view_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+                                        {% for s_val, s_label in scope_options %}
+                                        <option value="{{ s_val }}" {% if mod.view_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td class="py-2 px-3">
+                                    <select name="manage_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
+                                        {% for s_val, s_label in scope_options %}
+                                        <option value="{{ s_val }}" {% if mod.manage_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            {% endfor %}
+
+            <!-- Search Filter Bar -->
+            <div class="relative w-full">
+                <input type="text" id="permSearch" oninput="filterPermissions()" placeholder="بحث سريع في الصلاحيات أو الأكواد..."
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-base">search</span>
+            </div>
+
+            <!-- Permission Modules List -->
+            <div class="space-y-4" id="permsContainer">
+                {% for mod in modules_tree %}
+                <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs perm-module-block" id="block_{{ mod.code }}">
+                    <!-- Module Header -->
+                    <div class="p-3.5 bg-slate-50 flex items-center justify-between border-b border-slate-100">
+                        <div class="flex items-center gap-2.5">
+                            <span class="material-symbols-outlined text-xl text-[#27bebe]">{{ mod.icon }}</span>
+                            <span class="text-sm font-bold text-slate-800">{{ mod.name_ar }}</span>
+                            <span class="text-[10px] text-slate-400 font-mono">({{ mod.name_en }})</span>
+                        </div>
+
+                        <!-- Module Root Permission Checkbox -->
+                        {% if mod.root_perm %}
+                        <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-1 rounded-lg border border-slate-200 text-xs font-bold">
+                            <input type="checkbox" name="permissions" value="{{ mod.root_perm.codename }}"
+                                   data-module="{{ mod.code }}"
+                                   data-is-root="true"
+                                   onchange="onModuleRootToggled('{{ mod.code }}', this.checked)"
+                                   {% if mod.root_perm.codename in effective_codenames or mod.root_perm.codename in direct_codenames %}checked{% endif %}
+                                   class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox root-perm-{{ mod.code }}">
+                            <span class="text-slate-700">تفعيل الموديول كامل</span>
+                        </label>
+                        {% endif %}
+                    </div>
+
+                    <!-- Pages & Actions -->
+                    <div class="p-4 space-y-3">
+                        {% for page in mod.pages %}
+                        <div class="bg-slate-50/60 p-3 rounded-lg border border-slate-100 perm-page-block">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm text-slate-400">subdirectory_arrow_left</span>
+                                    <span>{{ page.name_ar }}</span>
+                                </h4>
+                                <button type="button" onclick="togglePagePerms('{{ mod.code }}', '{{ page.code }}')" class="text-[10px] font-bold text-[#27bebe] hover:underline">
+                                    تحديد/إلغاء الصفحة
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                {% for act in page.actions %}
+                                <label class="p-2.5 rounded-lg border transition-all cursor-pointer flex items-start gap-2.5 text-right perm-action-item {% if act.codename in effective_codenames or act.codename in direct_codenames %}bg-emerald-50/70 border-emerald-200 text-emerald-950{% else %}bg-white border-slate-200/80 text-slate-700 hover:bg-slate-50{% endif %}"
+                                       id="item_{{ act.codename|slugify }}">
+                                    <input type="checkbox" name="permissions" value="{{ act.codename }}"
+                                           data-module="{{ mod.code }}"
+                                           data-page="{{ page.code }}"
+                                           onchange="onActionToggled(this)"
+                                           {% if act.codename in effective_codenames or act.codename in direct_codenames %}checked{% endif %}
+                                           class="w-4 h-4 mt-0.5 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox perm-child-{{ mod.code }} perm-page-{{ mod.code }}-{{ page.code }}">
+                                    <div class="overflow-hidden flex-1 min-w-0">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="text-xs font-bold block truncate">{{ act.name }}</span>
+                                            {% if act.action_type == 'workflow' %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 shrink-0">اعتماد</span>
+                                            {% elif act.action_type == 'financial' %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 shrink-0">مالي</span>
+                                            {% elif act.action_type == 'delete' %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 shrink-0">حذف</span>
+                                            {% elif act.action_type == 'admin' %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-700 shrink-0">إدارة</span>
+                                            {% elif act.action_type == 'write' %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 shrink-0">كتابة</span>
+                                            {% else %}
+                                            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-200 text-slate-600 shrink-0">عرض</span>
+                                            {% endif %}
+                                        </div>
+                                        <span class="text-[10px] font-mono text-slate-400 block truncate" dir="ltr">{{ act.codename }}</span>
+                                        {% if act.codename in role_codenames %}
+                                        <span class="text-[9px] text-teal-600 font-semibold block mt-0.5 flex items-center gap-0.5">
+                                            <span class="material-symbols-outlined text-[11px]">schema</span>
+                                            <span>في الدور: {{ target_user.role.display_name }}</span>
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Sticky Save Bar at Bottom -->
+            <div class="pt-4 flex items-center justify-between gap-3 border-t border-slate-200">
+                <span class="text-xs text-slate-500">احرص على حفظ التغييرات لتفعيل الصلاحيات مباشرة على الحساب.</span>
+                <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2 min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">save</span>
+                    <span>حفظ صلاحيات المستخدم</span>
+                </button>
+            </div>
         </div>
-    </div>
+    </form>
 
 </div>
+
+<!-- Client-side Interactive Perms Script -->
+<script>
+    // List of role permission codenames for copying
+    const ROLE_PERMS = {{ role_codenames|safe }};
+
+    function onCustomModeToggled(checked) {
+        // If enabling custom mode for first time and no perms checked, prompt to copy from role
+        if (checked) {
+            const anyChecked = document.querySelectorAll('.perm-checkbox:checked').length > 0;
+            if (!anyChecked && ROLE_PERMS && ROLE_PERMS.length > 0) {
+                copyFromRole();
+            }
+        }
+    }
+
+    function onActionToggled(cb) {
+        const item = cb.closest('.perm-action-item');
+        if (cb.checked) {
+            item.classList.remove('bg-white', 'border-slate-200/80', 'text-slate-700');
+            item.classList.add('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+            // Auto-enable module root permission if child is checked
+            const modKey = cb.getAttribute('data-module');
+            if (modKey) {
+                const rootCb = document.querySelector('.root-perm-' + modKey);
+                if (rootCb && !rootCb.checked) {
+                    rootCb.checked = true;
+                }
+            }
+        } else {
+            item.classList.add('bg-white', 'border-slate-200/80', 'text-slate-700');
+            item.classList.remove('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+        }
+        updateCounter();
+    }
+
+    function onModuleRootToggled(modKey, isChecked) {
+        const children = document.querySelectorAll('.perm-child-' + modKey);
+        children.forEach(cb => {
+            cb.checked = isChecked;
+            const item = cb.closest('.perm-action-item');
+            if (isChecked) {
+                item.classList.remove('bg-white', 'border-slate-200/80', 'text-slate-700');
+                item.classList.add('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+            } else {
+                item.classList.add('bg-white', 'border-slate-200/80', 'text-slate-700');
+                item.classList.remove('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+            }
+        });
+        updateCounter();
+    }
+
+    function togglePagePerms(modKey, pageKey) {
+        const cbs = document.querySelectorAll('.perm-page-' + modKey + '-' + pageKey);
+        const anyUnchecked = Array.from(cbs).some(c => !c.checked);
+        cbs.forEach(cb => {
+            cb.checked = anyUnchecked;
+            onActionToggled(cb);
+        });
+    }
+
+    function selectAll(state) {
+        const cbs = document.querySelectorAll('.perm-checkbox');
+        cbs.forEach(cb => {
+            cb.checked = state;
+            const item = cb.closest('.perm-action-item');
+            if (item) {
+                if (state) {
+                    item.classList.remove('bg-white', 'border-slate-200/80', 'text-slate-700');
+                    item.classList.add('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+                } else {
+                    item.classList.add('bg-white', 'border-slate-200/80', 'text-slate-700');
+                    item.classList.remove('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+                }
+            }
+        });
+        // Auto-turn on custom mode
+        document.getElementById('customModeToggle').checked = true;
+        updateCounter();
+    }
+
+    function copyFromRole() {
+        if (!ROLE_PERMS) return;
+        const cbs = document.querySelectorAll('.perm-checkbox');
+        cbs.forEach(cb => {
+            const val = cb.value;
+            const shouldCheck = ROLE_PERMS.includes(val);
+            cb.checked = shouldCheck;
+            const item = cb.closest('.perm-action-item');
+            if (item) {
+                if (shouldCheck) {
+                    item.classList.remove('bg-white', 'border-slate-200/80', 'text-slate-700');
+                    item.classList.add('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+                } else {
+                    item.classList.add('bg-white', 'border-slate-200/80', 'text-slate-700');
+                    item.classList.remove('bg-emerald-50/70', 'border-emerald-200', 'text-emerald-950');
+                }
+            }
+        });
+        document.getElementById('customModeToggle').checked = true;
+        updateCounter();
+    }
+
+    function resetToRoleDefaults() {
+        if (confirm("هل أنت متأكد من إلغاء التخصيص والعودة إلى وراثة صلاحيات الدور الوظيفي للمستخدم؟")) {
+            document.getElementById('formActionInput').value = 'reset_to_role';
+            document.getElementById('userPermsForm').submit();
+        }
+    }
+
+    function updateCounter() {
+        const cnt = document.querySelectorAll('.perm-checkbox:checked').length;
+        const el = document.getElementById('effectiveCounter');
+        if (el) el.textContent = cnt;
+    }
+
+    function filterPermissions() {
+        const q = (document.getElementById('permSearch').value || '').trim().toLowerCase();
+        const items = document.querySelectorAll('.perm-action-item');
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            if (!q || text.includes(q)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+</script>
 {% endblock %}

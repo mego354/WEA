@@ -29,7 +29,10 @@ flowchart TB
   Area -->|parent| Area
   User -->|role| Role
   Role -->|permissions M2M| Permission
+  Role -->|module scopes| RoleModuleScope
+  User -->|custom module scopes| UserModuleScope
   Contact -->|area| Area
+  Contact -->|brick| Area
   Contact -->|created_by / assigned_team| User
   Visit -->|contact| Contact
   Visit -->|owner / created_by| User
@@ -38,14 +41,16 @@ flowchart TB
   PurchaseOrder -->|supplier| Contact
   PurchaseOrder -->|target_warehouse| Warehouse
   Warehouse -->|assigned_user / area| User
-  Vault -->|assigned_user| User
+  Vault -->|assigned_user / area| User
   Collection -->|customer / vault| Contact
   ProductTransferRequest -->|source / destination| Warehouse
 ```
 
+- **Configurable Module Scopes (`RoleModuleScope` & `UserModuleScope`):** Centralized authorization engine (`accounts.scope_service.ScopeResolutionService`). Administrators configure `view_scope` and `manage_scope` per module (`contacts`, `activities`, `sales`, `purchases`, `inventory`, `treasury`, `accounts`) with 4 granular scopes: `OWN`, `BRICK`, `AREA`, `ALL`. Roles define base scopes, and users with `has_custom_permissions=True` can override scopes per user.
 - **Area:** `area_type` `governorate` (root, `parent=None`) or `subarea` (brick). Users may be assigned either; authorization walks to the root via `get_main_area` for managers, while representatives are scoped strictly to their assigned Brick(s) (`get_visit_eligible_contacts_queryset`, `can_user_access_contact_for_visit`).
+- **Contact & ContactAddress:** Store both canonical `area` (`Area.parent is None`, Governorate) and `brick` (`Area.parent is not None`, Subarea) as real database ForeignKeys with automatic reverse lookup and cascade filtering.
 - **Role:** five canonical keys: `superadmin`, `manager`, `accountant`, `rep`, `medical_rep`. Extra flags (`is_super`, `is_area_manager`, `is_rep`, …) still exist for compatibility.
-- **Visit:** lifecycle `planned → started → finished` plus separate `approval_status` (`pending` / `approved` / `disapproved`), `requires_approval_due_to_distance`, and `waiting_for_reapproval` (triggered when a representative edits an already-approved visit). Tracks `distance`, `allowed_distance` (from `LocationSettings.tolerance` or `VisitTemplate.special_tolerance` when `allow_template_distance_override=True`), and `distance_discrepancy`.
+- **Visit:** lifecycle `planned → started → finished` plus separate `approval_status` (`pending` / `approved` / `disapproved`), `requires_approval_due_to_distance`, and `waiting_for_reapproval` (triggered when a representative edits an already-approved visit). Planned visits are created strictly through the bulk planned-visits workflow; direct visits via `/visits/create/` are strictly identified as unplanned. Every visit supports a dedicated scheduled time `time` (`TimeField`) and localized 12-hour property `formatted_time`, manageable via quick-action modals (`/activities/visits/<pk>/set-time/`). Tracks `distance`, `allowed_distance` (from `LocationSettings.tolerance` or `VisitTemplate.special_tolerance` when `allow_template_distance_override=True`), and `distance_discrepancy`.
 - **SalesOrder:** `pending → manager_approval → preparing → delivered → invoiced` (also `rejected`, `cancelled`). Includes financial breakdown fields (`subtotal`, `items_discount_total`, `custom_discount_percentage`, `custom_discount_amount`, `tax_amount`, `shipping_fees`) and item-level discounts/taxes. Stock availability is strictly validated on creation and execution.
 - **PurchaseOrder:** `pending → approved → picked → settled` (also `rejected`, `split`, `cancelled`). Includes discounts, item pricing validation, and automatic stock addition upon picking.
 - **ProductTransferRequest:** `pending → approved → transferred` (also `rejected`, `cancelled`). Approval/execute is SuperAdmin/accountant, not area managers. Strictly validates that source and destination warehouses differ, belong to the same canonical main area, and source available stock (`qty_on_hand - qty_reserved`) satisfies transfer quantity.
@@ -106,6 +111,7 @@ Template visibility uses `{% load erp_tags %}` filters `has_permission`, `can_ac
 | Vault deposit/withdraw/transfer, vendor pay | `treasury/services.py` |
 | Inter-warehouse transfer | `inventory/services.py` (`ProductTransferService`) |
 | Stock in / Stock out memos | `inventory/services.py` (`InventoryMemoService`) |
+| Settings lifecycle, caching & audit | `master_data/services.py` (`SettingsService`) |
 | Rep warehouse/vault provisioning | `accounts/services.py` (`ensure_representative_resources`) |
 | Excel helpers | `master_data/excel_utils.py`, `master_data/pagination_utils.py` |
 | Forms | `activities/forms.py` (other apps often read `request.POST` in views) |

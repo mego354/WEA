@@ -4,7 +4,13 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.urls import reverse
 from django.utils.html import format_html
-from .models import User, Role, RoleTag, SecurityAuditLog
+from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope, UserModuleScope
+
+
+class RoleModuleScopeInline(admin.TabularInline):
+    model = RoleModuleScope
+    extra = 0
+    fields = ('module', 'view_scope', 'manage_scope')
 
 
 class CustomUserChangeForm(UserChangeForm):
@@ -94,6 +100,7 @@ class RoleAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'is_system', 'is_super', 'is_area_manager', 'is_sub_area_manager', 'is_rep')
     search_fields = ('name', 'display_name', 'description')
     filter_horizontal = ('permissions', 'tags')
+    inlines = [RoleModuleScopeInline]
     actions = ['activate_roles', 'deactivate_roles']
 
     def is_active_badge(self, obj):
@@ -167,7 +174,7 @@ class UserAdmin(BaseUserAdmin):
             )
         }),
         ('الدور والصلاحيات الجغرافية', {
-            'fields': ('role', 'assigned_areas', 'bypass_location_verification')
+            'fields': ('role', 'assigned_areas', 'has_custom_permissions', 'bypass_location_verification')
         }),
         ('أذونات النظام وحالة الحساب', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')

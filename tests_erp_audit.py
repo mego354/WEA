@@ -15,6 +15,10 @@ from sales.models import SalesOrder, SalesOrderItem, Collection, CustomerAccount
 from treasury.models import Vault, VendorAccount, VendorPayment
 from catalog.models import Product, ProductCategory
 from inventory.models import Warehouse, InventoryStock, InventoryMemo
+from activities.models import Agreement, AgreementType
+from master_data.services import SettingsService, _thread_locals
+from master_data.models import CompanyProfile, LocationSettings
+from django.core.signals import request_started, request_finished
 from purchases.services import PurchaseOrderService
 from sales.services import SalesOrderService, CollectionService
 from treasury.services import TreasuryService
@@ -466,3 +470,144 @@ class ERPAuditTestSuite(TestCase):
         self.assertIn("المدفوع للموردين", content)
         self.assertIn("أحدث أوامر الشراء", content)
         self.assertIn(f"{po.order_number}", content)
+
+    # =========================================================================
+    # 6. REGRESSION TESTS: SETTINGS, APPROVALS, TREASURY SCOPING, SUBAREAS API
+    # =========================================================================
+
+    def test_settings_service_request_lifecycle_and_invalidation(self):
+        """SettingsService must not retain stale cache across test transactions or outside requests."""
+        # 1. Non-request calls fetch directly from DB and do not pollute thread local
+        p1 = SettingsService.get_company_profile()
+        self.assertFalse(getattr(_thread_locals, 'in_request', False))
+
+        # 2. Simulate HTTP request start
+        request_started.send(sender=self.__class__)
+        self.assertTrue(getattr(_thread_locals, 'in_request', False))
+
+        p2 = SettingsService.get_company_profile()
+        self.assertIn('company_profile', SettingsService._get_cache())
+
+        # 3. Model save triggers post_save and clears settings cache
+        p2.company_name = "New Company Name Test"
+        p2.save()
+        self.assertNotIn('company_profile', getattr(_thread_locals, 'settings_cache', {}))
+
+        # 4. Request finished clears thread local state
+        request_finished.send(sender=self.__class__)
+        self.assertFalse(getattr(_thread_locals, 'in_request', False))
+
+    def test_agreement_anti_self_approval_and_audit(self):
+        """Users cannot approve their own agreements, managers can approve subordinate agreements with audit logging."""
+        ag_type, _ = AgreementType.objects.get_or_create(name="عقد توريد تجريبي")
+
+        # 1. Cairo rep creates an agreement
+        agreement = Agreement.objects.create(
+            title="اتفاقية توريد أدوية مندوب",
+            customer=self.customer,
+            type=ag_type,
+            status='new',
+            created_by=self.rep_cairo
+        )
+
+        # 2. Cairo rep attempts to approve own agreement -> Blocked
+        self.client.force_login(self.rep_cairo)
+        resp_rep = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        agreement.refresh_from_db()
+        self.assertEqual(agreement.status, 'new')
+
+        # 3. Cairo manager approves Cairo rep's agreement -> Allowed
+        self.client.force_login(self.manager_cairo)
+        resp_mgr = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        self.assertEqual(resp_mgr.status_code, 302)
+        agreement.refresh_from_db()
+        self.assertEqual(agreement.status, 'approved')
+
+        # Verify audit log was created
+        audit_exists = SecurityAuditLog.objects.filter(
+            action_type='AGREEMENT_APPROVED',
+            record_id=agreement.id,
+            actor=self.manager_cairo
+        ).exists()
+        self.assertTrue(audit_exists)
+
+        # 4. Cairo manager creates own agreement and attempts to self-approve -> Blocked
+        mgr_agreement = Agreement.objects.create(
+            title="اتفاقية توريد أدوية مدير",
+            customer=self.customer,
+            type=ag_type,
+            status='new',
+            created_by=self.manager_cairo
+        )
+        resp_self_mgr = self.client.get(reverse('agreement_action', args=[mgr_agreement.pk, 'approve']))
+        self.assertEqual(resp_self_mgr.status_code, 403)
+        mgr_agreement.refresh_from_db()
+        self.assertEqual(mgr_agreement.status, 'new')
+
+    def test_vault_deposit_and_withdraw_authorization(self):
+        """Users with view-only rights on vaults cannot deposit or withdraw funds."""
+        rep_vault = self.rep_cairo.get_default_treasury()
+
+        # Create user with view-only permissions on treasury
+        view_only_role, _ = Role.objects.get_or_create(
+            name='treasury_auditor',
+            defaults={'display_name': 'مراجع خزائن'}
+        )
+        from accounts.models import Permission
+        view_perm = Permission.objects.filter(codename='treasury:vaults/view').first()
+        if view_perm:
+            view_only_role.permissions.add(view_perm)
+
+        auditor = User.objects.create_user(
+            username='auditor_user',
+            email='auditor@erp.com',
+            password='Password123!',
+            role=view_only_role
+        )
+
+        # 1. Auditor attempts deposit -> Blocked with 403
+        self.client.force_login(auditor)
+        dep_resp = self.client.post(reverse('vault_deposit'), {
+            'vault_id': rep_vault.id,
+            'amount': '150.00',
+            'description': 'إيداع تجريبي غير مصرح به'
+        })
+        self.assertEqual(dep_resp.status_code, 403)
+
+        # 2. Auditor attempts withdraw -> Blocked with 403
+        with_resp = self.client.post(reverse('vault_withdraw'), {
+            'vault_id': rep_vault.id,
+            'amount': '50.00',
+            'description': 'سحب تجريبي غير مصرح به'
+        })
+        self.assertEqual(with_resp.status_code, 403)
+
+        # 3. Superadmin deposits successfully
+        self.client.force_login(self.superadmin_user)
+        succ_resp = self.client.post(reverse('vault_deposit'), {
+            'vault_id': rep_vault.id,
+            'amount': '200.00',
+            'description': 'إيداع معتمد من الإدارة'
+        })
+        self.assertEqual(succ_resp.status_code, 302)
+        rep_vault.refresh_from_db()
+        self.assertGreaterEqual(rep_vault.current_balance, Decimal('200.00'))
+
+    def test_get_subareas_api_auth_and_scoping(self):
+        """Subareas API requires authentication and returns children of parent area."""
+        subarea = Area.objects.create(name='حي الدقي', code='DOK-AUDIT', parent=self.area_cairo, area_type='subarea')
+
+        # 1. Anonymous user -> 401 Unauthorized
+        anon_client = Client()
+        anon_resp = anon_client.get(reverse('contact_subareas_api') + f'?area_id={self.area_cairo.id}')
+        self.assertEqual(anon_resp.status_code, 401)
+
+        # 2. Authenticated user -> 200 OK with subareas
+        self.client.force_login(self.rep_cairo)
+        auth_resp = self.client.get(reverse('contact_subareas_api') + f'?area_id={self.area_cairo.id}')
+        self.assertEqual(auth_resp.status_code, 200)
+        data = auth_resp.json()
+        self.assertIn('subareas', data)
+        subarea_names = [s['name'] for s in data['subareas']]
+        self.assertIn('حي الدقي', subarea_names)
+
