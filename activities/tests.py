@@ -2987,3 +2987,2345 @@ class GPSValidationAndToleranceTestCase(TestCase):
 
 
 
+
+
+
+import datetime
+from decimal import Decimal
+from django.core.exceptions import ValidationError
+from django.contrib.auth.models import Permission
+from accounts.models import SecurityAuditLog
+from accounts.permissions import get_scoped_queryset, can_user_access_object, get_user_managed_areas, get_user_managed_representatives
+from master_data.models import Area, LocationSettings, SalesSettings, PurchaseSettings
+from contacts.models import ContactAddress
+from inventory.models import Warehouse
+from sales.models import SalesOrder, SalesOrderItem
+from sales.services import SalesOrderService
+from purchases.models import PurchaseOrder, PurchaseOrderItem
+from purchases.services import PurchaseOrderService
+from activities.models import AgendaTodo, ApprovalAuditLog
+
+
+class AgendaWorkflowTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        # Roles
+        self.manager_role = Role.objects.create(
+            name='area_manager',
+            display_name='مدير منطقة',
+            is_area_manager=True
+        )
+        self.rep_role = Role.objects.create(
+            name='sales_rep',
+            display_name='مندوب مبيعات',
+            is_rep=True
+        )
+
+        # Assign standard permissions
+        perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
+                'activities:visits/approve', 'activities:planned/list', 'activities:planned/manage',
+                'module:activities', 'module:contacts'
+            ]
+        )
+        for perm in perms:
+            self.manager_role.permissions.add(perm)
+            if perm.codename in ['activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:planned/list', 'module:activities', 'module:contacts']:
+                self.rep_role.permissions.add(perm)
+
+        # Regional hierarchy
+        self.region_cairo = Area.objects.create(name='القاهرة الكبرى', code='AGN-CAI', area_type='governorate')
+        self.subregion_nasr_city = Area.objects.create(name='مدينة نصر', code='AGN-NASR', parent=self.region_cairo, area_type='subarea')
+
+        self.region_alex = Area.objects.create(name='الإسكندرية', code='AGN-ALX', area_type='governorate')
+        self.subregion_smouha = Area.objects.create(name='سموحة', code='AGN-SMH', parent=self.region_alex, area_type='subarea')
+
+        # Users
+        self.rep_cairo = User.objects.create_user(
+            username='rep_cairo', password='Password123!', role=self.rep_role
+        )
+        self.rep_cairo.assigned_areas.add(self.subregion_nasr_city)
+
+        self.rep_alex = User.objects.create_user(
+            username='rep_alex', password='Password123!', role=self.rep_role
+        )
+        self.rep_alex.assigned_areas.add(self.subregion_smouha)
+
+        self.manager_cairo = User.objects.create_user(
+            username='manager_cairo', password='Password123!', role=self.manager_role
+        )
+        self.manager_cairo.assigned_areas.add(self.region_cairo)
+
+        self.superadmin = User.objects.create_superuser(
+            username='superadmin', password='Password123!', email='admin@wea.com'
+        )
+
+        # Contacts
+        self.contact_cairo = Contact.objects.create(
+            name='د. أحمد القاهرة', area=self.subregion_nasr_city, status='lead'
+        )
+        self.contact_alex = Contact.objects.create(
+            name='د. محمود الإسكندرية', area=self.subregion_smouha, status='lead'
+        )
+
+        self.template = VisitTemplate.objects.create(
+            name='single_visit_dr', display_name_ar='زيارة فردية - أطباء', active=True
+        )
+
+        self.today = timezone.now().date()
+        self.tomorrow = self.today + datetime.timedelta(days=1)
+
+    def test_representative_can_view_own_agenda(self):
+        """Rep can view their own agenda and sees empty state when no visits are planned."""
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.get(reverse('agenda'))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'جدول الاعمال')
+        self.assertContains(res, 'لا خطط أخرى لهذا اليوم')
+
+    def test_representative_cannot_access_other_representative_agenda(self):
+        """Rep cannot pass ?assignee=<other_user_id> to view another rep's agenda."""
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.get(reverse('agenda'), {'assignee': self.rep_alex.id})
+        self.assertEqual(res.status_code, 403)
+
+    def test_manager_can_access_subordinate_agenda(self):
+        """Manager of Cairo can view the agenda of a representative in their subregion."""
+        self.client.login(username='manager_cairo', password='Password123!')
+        res = self.client.get(reverse('agenda'), {'assignee': self.rep_cairo.id})
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'rep_cairo')
+
+    def test_manager_cannot_access_unrelated_regional_representative_agenda(self):
+        """Manager of Cairo cannot view the agenda of an Alexandria representative."""
+        self.client.login(username='manager_cairo', password='Password123!')
+        res = self.client.get(reverse('agenda'), {'assignee': self.rep_alex.id})
+        self.assertEqual(res.status_code, 403)
+
+    def test_superadmin_has_global_agenda_access(self):
+        """Superadmin can view any representative's agenda across all regions."""
+        self.client.login(username='superadmin', password='Password123!')
+        res_cairo = self.client.get(reverse('agenda'), {'assignee': self.rep_cairo.id})
+        self.assertEqual(res_cairo.status_code, 200)
+
+        res_alex = self.client.get(reverse('agenda'), {'assignee': self.rep_alex.id})
+        self.assertEqual(res_alex.status_code, 200)
+
+    def test_agenda_displays_planned_and_executed_visits(self):
+        """Agenda correctly combines planned visit items and executed visits with badges."""
+        # 1. Create a planned day with 1 item
+        plan_day = PlannedVisitDay.objects.create(assignee=self.rep_cairo, date=self.today)
+        plan_item = PlannedVisitItem.objects.create(
+            plan_day=plan_day,
+            contact=self.contact_cairo,
+            template=self.template,
+            order=1,
+            notes='مناقشة عينات جديدة'
+        )
+
+        # 2. Create an executed out-of-plan visit for the same day
+        unplanned_visit = Visit.objects.create(
+            serial_num=8801,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            is_planned=False,
+            date=self.today,
+            status='finished',
+            approval_status='approved'
+        )
+
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.get(reverse('agenda'), {'date': self.today.strftime('%Y-%m-%d')})
+        self.assertEqual(res.status_code, 200)
+
+        # Both items should be present
+        self.assertContains(res, 'د. أحمد القاهرة')
+        self.assertContains(res, 'من الخطة')
+        self.assertContains(res, 'خارج الخطة')
+        self.assertContains(res, 'بدء الزيارة')
+        self.assertContains(res, 'معاينة التفاصيل')
+        self.assertContains(res, reverse('visit_detail', args=[unplanned_visit.pk]))
+
+    def test_agenda_date_navigation(self):
+        """Changing date correctly displays only records belonging to the selected date."""
+        # Visit today
+        v_today = Visit.objects.create(
+            serial_num=8802,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            date=self.today,
+            status='finished',
+            approval_status='approved'
+        )
+        # Visit tomorrow
+        v_tomorrow = Visit.objects.create(
+            serial_num=8803,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            date=self.tomorrow,
+            status='finished',
+            approval_status='approved'
+        )
+
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_today = self.client.get(reverse('agenda'), {'date': self.today.strftime('%Y-%m-%d')})
+        self.assertContains(res_today, reverse('visit_detail', args=[v_today.pk]))
+        self.assertNotContains(res_today, reverse('visit_detail', args=[v_tomorrow.pk]))
+
+        res_tomorrow = self.client.get(reverse('agenda'), {'date': self.tomorrow.strftime('%Y-%m-%d')})
+        self.assertContains(res_tomorrow, reverse('visit_detail', args=[v_tomorrow.pk]))
+        self.assertNotContains(res_tomorrow, reverse('visit_detail', args=[v_today.pk]))
+
+    def test_agenda_todos_lifecycle(self):
+        """Adding, toggling, and deleting daily todos in Agenda."""
+        self.client.login(username='rep_cairo', password='Password123!')
+
+        # Add Todo
+        add_res = self.client.post(reverse('agenda_todo_add'), {
+            'title': 'متابعة شيك الصيدلية',
+            'date': self.today.strftime('%Y-%m-%d')
+        }, follow=True)
+        self.assertEqual(add_res.status_code, 200)
+        self.assertTrue(AgendaTodo.objects.filter(user=self.rep_cairo, title='متابعة شيك الصيدلية').exists())
+
+        todo = AgendaTodo.objects.get(user=self.rep_cairo, title='متابعة شيك الصيدلية')
+        self.assertFalse(todo.is_completed)
+
+        # Toggle Todo
+        toggle_res = self.client.post(reverse('agenda_todo_toggle', args=[todo.id]), follow=True)
+        self.assertEqual(toggle_res.status_code, 200)
+        todo.refresh_from_db()
+        self.assertTrue(todo.is_completed)
+
+        # Rep alex cannot toggle Rep cairo's todo
+        self.client.login(username='rep_alex', password='Password123!')
+        unauth_res = self.client.post(reverse('agenda_todo_toggle', args=[todo.id]))
+        self.assertEqual(unauth_res.status_code, 403)
+
+        # Cairo rep can delete their todo
+        self.client.login(username='rep_cairo', password='Password123!')
+        del_res = self.client.post(reverse('agenda_todo_delete', args=[todo.id]), follow=True)
+        self.assertEqual(del_res.status_code, 200)
+        self.assertFalse(AgendaTodo.objects.filter(pk=todo.id).exists())
+
+    def test_manager_can_approve_subordinate_visit_from_agenda(self):
+        """Manager can approve subordinate representative visit from agenda with return redirect."""
+        visit = Visit.objects.create(
+            serial_num=801,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.rep_cairo
+        )
+
+        self.client.login(username='manager_cairo', password='Password123!')
+        agenda_url = f"{reverse('agenda')}?assignee={self.rep_cairo.id}&date={self.today.strftime('%Y-%m-%d')}"
+        res_view = self.client.get(agenda_url)
+        self.assertEqual(res_view.status_code, 200)
+        self.assertContains(res_view, 'اعتماد')
+        self.assertContains(res_view, 'رفض')
+
+        approve_res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'approve']),
+            {'next': agenda_url}
+        )
+        self.assertEqual(approve_res.status_code, 302)
+        self.assertEqual(approve_res.url, agenda_url)
+
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.approved_by, self.manager_cairo)
+
+    def test_manager_can_decline_subordinate_visit_from_agenda(self):
+        """Manager can decline subordinate visit from agenda with required reason and next redirect."""
+        visit = Visit.objects.create(
+            serial_num=802,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.rep_cairo
+        )
+
+        self.client.login(username='manager_cairo', password='Password123!')
+        agenda_url = f"{reverse('agenda')}?assignee={self.rep_cairo.id}&date={self.today.strftime('%Y-%m-%d')}"
+
+        # Rejection without reason fails
+        fail_res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'disapprove']),
+            {'next': agenda_url, 'approval_notes': ''}
+        )
+        self.assertEqual(fail_res.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+
+        # Rejection with reason succeeds and preserves next redirect
+        ok_res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'disapprove']),
+            {'next': agenda_url, 'approval_notes': 'يرجى مراجعة إجابات استبيان الزيارة بدقة'}
+        )
+        self.assertEqual(ok_res.status_code, 302)
+        self.assertEqual(ok_res.url, agenda_url)
+
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'disapproved')
+        self.assertEqual(visit.approval_notes, 'يرجى مراجعة إجابات استبيان الزيارة بدقة')
+
+    def test_manager_can_approve_and_decline_from_visits_list(self):
+        """Manager can approve and decline visits directly from visits list view."""
+        v1 = Visit.objects.create(
+            serial_num=803,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.rep_cairo
+        )
+        v2 = Visit.objects.create(
+            serial_num=804,
+            owner=self.rep_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.rep_cairo
+        )
+
+        self.client.login(username='manager_cairo', password='Password123!')
+        res_list = self.client.get(reverse('visits_list'))
+        self.assertEqual(res_list.status_code, 200)
+        self.assertContains(res_list, 'اعتماد')
+
+        # Approve v1 with next=/activities/visits/
+        list_url = reverse('visits_list')
+        appr_res = self.client.post(
+            reverse('visit_action', args=[v1.pk, 'approve']),
+            {'next': list_url}
+        )
+        self.assertEqual(appr_res.status_code, 302)
+        self.assertEqual(appr_res.url, list_url)
+        v1.refresh_from_db()
+        self.assertEqual(v1.approval_status, 'approved')
+
+        # Decline v2 with next=/activities/visits/
+        decl_res = self.client.post(
+            reverse('visit_action', args=[v2.pk, 'disapprove']),
+            {'next': list_url, 'approval_notes': 'تم الرفض من جدول الزيارات'}
+        )
+        self.assertEqual(decl_res.status_code, 302)
+        self.assertEqual(decl_res.url, list_url)
+        v2.refresh_from_db()
+        self.assertEqual(v2.approval_status, 'disapproved')
+
+    def test_anti_self_approval_and_cross_region_security(self):
+        """Dual-control anti-self-approval rule and cross-region isolation remain strictly enforced."""
+        # 1. Manager own visit cannot be approved by self
+        mgr_visit = Visit.objects.create(
+            serial_num=805,
+            owner=self.manager_cairo,
+            contact=self.contact_cairo,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.manager_cairo
+        )
+        self.client.login(username='manager_cairo', password='Password123!')
+        res_self = self.client.post(reverse('visit_action', args=[mgr_visit.pk, 'approve']))
+        self.assertEqual(res_self.status_code, 302)
+        mgr_visit.refresh_from_db()
+        self.assertEqual(mgr_visit.approval_status, 'pending')
+
+        # 2. Cairo manager cannot approve Alexandria rep visit
+        alex_visit = Visit.objects.create(
+            serial_num=806,
+            owner=self.rep_alex,
+            contact=self.contact_alex,
+            template=self.template,
+            date=self.today,
+            status='finished',
+            approval_status='pending',
+            created_by=self.rep_alex
+        )
+        res_cross = self.client.post(reverse('visit_action', args=[alex_visit.pk, 'approve']))
+        self.assertEqual(res_cross.status_code, 302)
+        alex_visit.refresh_from_db()
+        self.assertEqual(alex_visit.approval_status, 'pending')
+
+class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        # 1. Create Roles
+        self.manager_role = Role.objects.create(
+            name='area_manager',
+            display_name='مدير منطقة',
+            is_area_manager=True
+        )
+        self.rep_role = Role.objects.create(
+            name='sales_rep',
+            display_name='مندوب مبيعات',
+            is_rep=True
+        )
+
+        # 2. Assign standard permissions to manager and rep roles
+        perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit',
+                'activities:visits/approve', 'activities:planned/list', 'activities:planned/manage',
+                'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/approve',
+                'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/create', 'purchases:orders/approve',
+                'module:activities', 'module:sales', 'module:contacts', 'module:purchases'
+            ]
+        )
+        self.manager_role.permissions.set(perms)
+        self.rep_role.permissions.set(
+            perms.exclude(codename__in=['activities:visits/approve', 'sales:orders/approve', 'purchases:orders/approve'])
+        )
+
+        # 3. Create Regional Hierarchy
+        # Region A: Riyadh (Governorate) with Subregions Olaya and Malaz
+        self.region_a = Area.objects.create(code='REG-A', name='الرياض', area_type='governorate')
+        self.subregion_a1 = Area.objects.create(code='SUB-A1', name='العليا', area_type='subarea', parent=self.region_a)
+        self.subregion_a2 = Area.objects.create(code='SUB-A2', name='الملز', area_type='subarea', parent=self.region_a)
+
+        # Region B: Jeddah (Governorate) with Subregion Rawdah
+        self.region_b = Area.objects.create(code='REG-B', name='جدة', area_type='governorate')
+        self.subregion_b1 = Area.objects.create(code='SUB-B1', name='الروضة', area_type='subarea', parent=self.region_b)
+
+        # 4. Create Users
+        # SuperAdmin
+        self.superadmin = User.objects.create_superuser(
+            username='superadmin', email='super@example.com', password='Password123!',
+            first_name='Super', last_name='Admin'
+        )
+
+        # Manager A (Assigned to Region A)
+        self.manager_a = User.objects.create_user(
+            username='manager_a', email='manager_a@example.com', password='Password123!',
+            first_name='أحمد', last_name='مدير الرياض', role=self.manager_role
+        )
+        self.manager_a.assigned_areas.add(self.region_a)
+
+        # Manager B (Assigned to Region B)
+        self.manager_b = User.objects.create_user(
+            username='manager_b', email='manager_b@example.com', password='Password123!',
+            first_name='سعيد', last_name='مدير جدة', role=self.manager_role
+        )
+        self.manager_b.assigned_areas.add(self.region_b)
+
+        # Rep A1 (Assigned to Subregion A1 under Region A)
+        self.rep_a1 = User.objects.create_user(
+            username='rep_a1', email='rep_a1@example.com', password='Password123!',
+            first_name='خالد', last_name='مندوب العليا', role=self.rep_role
+        )
+        self.rep_a1.assigned_areas.add(self.subregion_a1)
+
+        # Rep B1 (Assigned to Subregion B1 under Region B)
+        self.rep_b1 = User.objects.create_user(
+            username='rep_b1', email='rep_b1@example.com', password='Password123!',
+            first_name='طارق', last_name='مندوب الروضة', role=self.rep_role
+        )
+        self.rep_b1.assigned_areas.add(self.subregion_b1)
+
+        # 5. Create Contacts
+        self.contact_pharmacy_a = Contact.objects.create(
+            name='صيدلية الأمل', code='PH001', account_type='Pharmacy',
+            area=self.subregion_a1, is_customer=True, status='customer'
+        )
+        self.contact_clinic_a = Contact.objects.create(
+            name='عيادة النور', code='CL001', account_type='Clinic',
+            area=self.subregion_a1, is_customer=True, status='customer'
+        )
+        self.contact_clinic_a2 = Contact.objects.create(
+            name='عيادة الملز', code='CL002', account_type='Clinic',
+            area=self.subregion_a2, is_customer=True, status='customer'
+        )
+        self.contact_pharmacy_b = Contact.objects.create(
+            name='صيدلية الشفاء بجدة', code='PH002', account_type='Pharmacy',
+            area=self.subregion_b1, is_customer=True, status='customer'
+        )
+        self.supplier = Contact.objects.create(
+            name='شركة توريد الأدوية العالمية', code='SUP001', account_type='Store',
+            area=self.subregion_a1, is_supplier=True, status='supplier'
+        )
+
+        # 6. Create Templates
+        self.pharmacy_template = VisitTemplate.objects.create(
+            name='Pharmacy Routine Visit',
+            display_name_ar='زيارة دورية لصيدلية',
+            restrict_account_types=['Pharmacy', 'Store'],
+            active=True
+        )
+        self.clinic_template = VisitTemplate.objects.create(
+            name='Physician Detailing',
+            display_name_ar='زيارة شرح لطبيب بعيادة',
+            restrict_account_types=['Clinic', 'Center'],
+            active=True
+        )
+        self.general_template = VisitTemplate.objects.create(
+            name='General Contact Visit',
+            display_name_ar='زيارة عامة لأي عميل',
+            restrict_account_types=[],
+            active=True
+        )
+
+        # 7. Create Warehouse and Product for Sales Orders
+        self.category = ProductCategory.objects.create(name='الأدوية', code='CAT-MED')
+        self.product = Product.objects.create(
+            name='بانادول 500 ملجم', sku_code='PAN500', category=self.category,
+            retail_price=Decimal('15.00'), default_purchase_cost=Decimal('10.00'), is_active=True
+        )
+        self.warehouse = Warehouse.objects.create(name='مستودع الرياض المركزي', code='WH-RYD', is_active=True)
+
+    # =========================================================================
+    # REQUIREMENT 1 & 2: Role-Based Visit Templates & Contact Compatibility
+    # =========================================================================
+    def test_visit_template_contact_eligibility_model_level(self):
+        """Model level tests for template/contact eligibility with aliases."""
+        # Pharmacy template vs Pharmacy contact -> True
+        self.assertTrue(self.pharmacy_template.is_contact_eligible(self.contact_pharmacy_a))
+        # Pharmacy template vs Clinic contact -> False
+        self.assertFalse(self.pharmacy_template.is_contact_eligible(self.contact_clinic_a))
+        # Clinic template vs Clinic contact -> True
+        self.assertTrue(self.clinic_template.is_contact_eligible(self.contact_clinic_a))
+        # Clinic template vs Pharmacy contact -> False
+        self.assertFalse(self.clinic_template.is_contact_eligible(self.contact_pharmacy_a))
+        # General template (empty restrictions) -> True for all
+        self.assertTrue(self.general_template.is_contact_eligible(self.contact_pharmacy_a))
+        self.assertTrue(self.general_template.is_contact_eligible(self.contact_clinic_a))
+
+    def test_planned_visit_add_item_enforces_template_compatibility(self):
+        """Planned visit item creation must reject incompatible templates."""
+        self.client.login(username='rep_a1', password='Password123!')
+        
+        # Incompatible: Assigning Pharmacy template to Clinic contact
+        res_incompatible = self.client.post(reverse('planned_visit_add_item'), {
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'contact_id': self.contact_clinic_a.id,
+            'template_id': self.pharmacy_template.id,
+            'assignee_id': self.rep_a1.id,
+        })
+        self.assertFalse(PlannedVisitItem.objects.filter(contact=self.contact_clinic_a, template=self.pharmacy_template).exists())
+
+        # Compatible: Assigning Clinic template to Clinic contact
+        res_compatible = self.client.post(reverse('planned_visit_add_item'), {
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'contact_id': self.contact_clinic_a.id,
+            'template_id': self.clinic_template.id,
+            'assignee_id': self.rep_a1.id,
+        })
+        self.assertTrue(PlannedVisitItem.objects.filter(contact=self.contact_clinic_a, template=self.clinic_template).exists())
+
+    def test_unplanned_visit_backend_rejects_incompatible_template(self):
+        """Unplanned visit form submission must reject incompatible template independently on backend."""
+        self.client.login(username='rep_a1', password='Password123!')
+        
+        # Try submitting visit for Clinic contact with Pharmacy template
+        post_data = {
+            'contact': self.contact_clinic_a.id,
+            'template': self.pharmacy_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+            'latitude': '24.7136',
+            'longitude': '46.6753',
+            'device_accuracy': '15.0',
+        }
+        res = self.client.post(reverse('visit_create'), post_data)
+        # Form error should prevent creation
+        self.assertFalse(Visit.objects.filter(contact=self.contact_clinic_a, template=self.pharmacy_template).exists())
+
+        # Now submit compatible template
+        post_data['template'] = self.clinic_template.id
+        res_valid = self.client.post(reverse('visit_create'), post_data)
+        self.assertTrue(Visit.objects.filter(contact=self.contact_clinic_a, template=self.clinic_template).exists())
+
+    def test_visit_templates_api_filters_by_contact_and_user_role(self):
+        """API /api/templates/ must return only templates eligible for the requested contact."""
+        self.client.login(username='rep_a1', password='Password123!')
+        
+        # Query for Pharmacy contact
+        res_ph = self.client.get(f"{reverse('visit_templates_api')}?contact_id={self.contact_pharmacy_a.id}")
+        self.assertEqual(res_ph.status_code, 200)
+        data_ph = res_ph.json()
+        ids_ph = [t['id'] for t in data_ph['results']]
+        self.assertIn(self.pharmacy_template.id, ids_ph)
+        self.assertIn(self.general_template.id, ids_ph)
+        self.assertNotIn(self.clinic_template.id, ids_ph)
+
+        # Query for Clinic contact
+        res_cl = self.client.get(f"{reverse('visit_templates_api')}?contact_id={self.contact_clinic_a.id}")
+        self.assertEqual(res_cl.status_code, 200)
+        data_cl = res_cl.json()
+        ids_cl = [t['id'] for t in data_cl['results']]
+        self.assertIn(self.clinic_template.id, ids_cl)
+        self.assertIn(self.general_template.id, ids_cl)
+        self.assertNotIn(self.pharmacy_template.id, ids_cl)
+
+    # =========================================================================
+    # REQUIREMENT 4: Regional Hierarchy & Horizontal/Vertical Data Isolation
+    # =========================================================================
+    def test_regional_hierarchy_scope_calculation(self):
+        """Manager assigned to governorate automatically manages all child subareas and their reps."""
+        managed_areas_a = get_user_managed_areas(self.manager_a)
+        self.assertIn(self.region_a, managed_areas_a)
+        self.assertIn(self.subregion_a1, managed_areas_a)
+        self.assertIn(self.subregion_a2, managed_areas_a)
+        self.assertNotIn(self.region_b, managed_areas_a)
+        self.assertNotIn(self.subregion_b1, managed_areas_a)
+
+        managed_reps_a = get_user_managed_representatives(self.manager_a)
+        self.assertIn(self.rep_a1, managed_reps_a)
+        self.assertNotIn(self.rep_b1, managed_reps_a)
+
+        # SuperAdmin manages all
+        all_reps = get_user_managed_representatives(self.superadmin)
+        self.assertIn(self.rep_a1, all_reps)
+        self.assertIn(self.rep_b1, all_reps)
+
+    def test_horizontal_data_isolation_between_regions(self):
+        """Manager A cannot access or view records of Region B."""
+        # Create Visit and Order in Region A
+        visit_a = Visit.objects.create(
+            serial_num=8001, contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template, owner=self.rep_a1,
+            approval_status='pending', status='finished'
+        )
+        order_a = SalesOrder.objects.create(
+            serial_num=9001,
+            order_number='SO-REG-A01', customer=self.contact_pharmacy_a,
+            source_warehouse=self.warehouse, created_by=self.rep_a1,
+            grand_total=Decimal('150.00'), status='pending'
+        )
+
+        # Create Visit and Order in Region B
+        visit_b = Visit.objects.create(
+            serial_num=8002, contact=self.contact_pharmacy_b,
+            template=self.pharmacy_template, owner=self.rep_b1,
+            approval_status='pending', status='finished'
+        )
+        order_b = SalesOrder.objects.create(
+            serial_num=9002,
+            order_number='SO-REG-B01', customer=self.contact_pharmacy_b,
+            source_warehouse=self.warehouse, created_by=self.rep_b1,
+            grand_total=Decimal('200.00'), status='pending'
+        )
+
+        # Manager A access checks:
+        self.assertTrue(can_user_access_object(self.manager_a, visit_a, 'view'))
+        self.assertTrue(can_user_access_object(self.manager_a, visit_a, 'approve'))
+        self.assertTrue(can_user_access_object(self.manager_a, order_a, 'view'))
+        self.assertTrue(can_user_access_object(self.manager_a, order_a, 'approve'))
+
+        # Manager A cross-region access to Region B must be FALSE:
+        self.assertFalse(can_user_access_object(self.manager_a, visit_b, 'view'))
+        self.assertFalse(can_user_access_object(self.manager_a, visit_b, 'approve'))
+        self.assertFalse(can_user_access_object(self.manager_a, order_b, 'view'))
+        self.assertFalse(can_user_access_object(self.manager_a, order_b, 'approve'))
+
+        # Direct HTTP attempt by Manager A on Region B records must be blocked:
+        self.client.login(username='manager_a', password='Password123!')
+        res_visit_b = self.client.get(reverse('visit_detail', args=[visit_b.pk]))
+        self.assertEqual(res_visit_b.status_code, 403)
+
+        res_order_b = self.client.get(reverse('sales_order_detail', args=[order_b.pk]))
+        self.assertEqual(res_order_b.status_code, 403)
+
+    # =========================================================================
+    # REQUIREMENT 3 & 5: Approval Workflows, Self-Approval Block & Resubmission
+    # =========================================================================
+    def test_representative_cannot_self_approve_visit_or_order(self):
+        """A representative must never be able to approve their own visit or sales order."""
+        visit_a = Visit.objects.create(
+            serial_num=8003, contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template, owner=self.rep_a1,
+            approval_status='pending', status='finished'
+        )
+        order_a = SalesOrder.objects.create(
+            serial_num=9003,
+            order_number='SO-REG-A02', customer=self.contact_pharmacy_a,
+            source_warehouse=self.warehouse, created_by=self.rep_a1,
+            grand_total=Decimal('300.00'), status='pending'
+        )
+
+        self.assertFalse(can_user_access_object(self.rep_a1, visit_a, 'approve'))
+        self.assertFalse(can_user_access_object(self.rep_a1, order_a, 'approve'))
+
+        # Rep direct HTTP approval attempt must fail
+        self.client.login(username='rep_a1', password='Password123!')
+        res_approve_visit = self.client.post(reverse('visit_action', args=[visit_a.pk, 'approve']))
+        visit_a.refresh_from_db()
+        self.assertEqual(visit_a.approval_status, 'pending')
+
+        res_approve_order = self.client.post(reverse('sales_order_action', args=[order_a.pk, 'approve']))
+        order_a.refresh_from_db()
+        self.assertEqual(order_a.status, 'pending')
+
+    def test_visit_approval_rejection_and_resubmission_lifecycle(self):
+        """Full lifecycle of visit approval, rejection with mandatory reason, and resubmission."""
+        visit = Visit.objects.create(
+            serial_num=8004, contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template, owner=self.rep_a1,
+            approval_status='pending', status='finished'
+        )
+
+        # 1. Manager rejects without reason -> must be blocked
+        self.client.login(username='manager_a', password='Password123!')
+        res_reject_no_reason = self.client.post(reverse('visit_action', args=[visit.pk, 'disapprove']), {
+            'approval_notes': ''
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+
+        # 2. Manager rejects with reason -> succeeds and logs audit
+        res_reject = self.client.post(reverse('visit_action', args=[visit.pk, 'disapprove']), {
+            'approval_notes': 'يرجى مراجعة إجابات أسئلة المخزون وإعادة الإرسال.'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'disapproved')
+        self.assertEqual(visit.approved_by, self.manager_a)
+        self.assertIn('يرجى مراجعة', visit.approval_notes)
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='rejected').exists())
+
+        # 3. Representative resubmits after correction
+        self.client.login(username='rep_a1', password='Password123!')
+        res_resubmit = self.client.post(reverse('visit_action', args=[visit.pk, 'resubmit']), {
+            'notes': 'تم تعديل البيانات وفق الملاحظات.'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertIsNone(visit.approved_by)
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='resubmitted').exists())
+
+        # 4. Manager approves -> succeeds
+        self.client.login(username='manager_a', password='Password123!')
+        res_approve = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
+            'approval_notes': 'معتمد ومقبول.'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.approved_by, self.manager_a)
+        self.assertIsNotNone(visit.approved_at)
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='approved').exists())
+
+    def test_sales_order_approval_rejection_resubmission_and_downstream_enforcement(self):
+        """Full sales order approval lifecycle and strict prevention of downstream bypass."""
+        from inventory.models import InventoryStock
+        InventoryStock.objects.create(
+            warehouse=self.warehouse, product=self.product,
+            qty_on_hand=Decimal('100.00'), qty_reserved=Decimal('0.00'),
+            product_cost=Decimal('10.00')
+        )
+
+        order = SalesOrder.objects.create(
+            serial_num=9004,
+            order_number='SO-REG-A03', customer=self.contact_pharmacy_a,
+            source_warehouse=self.warehouse, created_by=self.rep_a1,
+            grand_total=Decimal('450.00'), status='pending'
+        )
+        SalesOrderItem.objects.create(
+            order=order, product=self.product, quantity=30,
+            unit_price=Decimal('15.00'), subtotal=Decimal('450.00')
+        )
+
+        # 1. Downstream preparation while status is 'pending' MUST fail
+        with self.assertRaises(ValidationError):
+            SalesOrderService.prepare_order(order, self.manager_a)
+        with self.assertRaises(ValidationError):
+            SalesOrderService.deliver_order(order, self.manager_a)
+        with self.assertRaises(ValidationError):
+            SalesOrderService.invoice_order(order, self.manager_a)
+
+        # 2. Manager rejects order with reason
+        SalesOrderService.reject_order(order, self.manager_a, reason='تجاوز الحد الائتماني المسموح به')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'rejected')
+        self.assertEqual(order.rejection_reason, 'تجاوز الحد الائتماني المسموح به')
+        self.assertTrue(ApprovalAuditLog.objects.filter(sales_order=order, action='rejected').exists())
+
+        # 3. Downstream operations while rejected MUST fail
+        with self.assertRaises(ValidationError):
+            SalesOrderService.prepare_order(order, self.manager_a)
+
+        # 4. Rep resubmits order
+        SalesOrderService.resubmit_order(order, self.rep_a1)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'pending')
+        self.assertTrue(ApprovalAuditLog.objects.filter(sales_order=order, action='resubmitted').exists())
+
+        # 5. Manager approves order
+        SalesOrderService.approve_order(order, self.manager_a)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'manager_approval')
+        self.assertEqual(order.approved_by, self.manager_a)
+        self.assertIsNotNone(order.approved_at)
+        self.assertTrue(ApprovalAuditLog.objects.filter(sales_order=order, action='approved').exists())
+
+        # 6. Now downstream prepare_order is allowed!
+        SalesOrderService.prepare_order(order, self.manager_a)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'preparing')
+
+    # =========================================================================
+    # REQUIREMENT 5 & 8: Approvals Removal & Canonical List/Detail Integration
+    # =========================================================================
+    def test_approvals_hub_and_regional_dashboard_endpoints(self):
+        """Verify approvals hub redirects to canonical item list views and regional dashboard loads."""
+        # Unauthenticated or rep login
+        self.client.login(username='rep_a1', password='Password123!')
+        res_rep_appr = self.client.get(reverse('approvals_hub'))
+        # Canonical redirect to visits list pending
+        self.assertEqual(res_rep_appr.status_code, 302)
+        self.assertIn('/visits/', res_rep_appr.url)
+
+        # Manager A accessing approvals_hub also cleanly redirects to canonical list
+        self.client.login(username='manager_a', password='Password123!')
+        res_mgr_appr = self.client.get(reverse('approvals_hub'))
+        self.assertEqual(res_mgr_appr.status_code, 302)
+        self.assertIn('/visits/', res_mgr_appr.url)
+
+        # Orders tab redirects to sales list
+        res_orders_tab = self.client.get(f"{reverse('approvals_hub')}?tab=orders")
+        self.assertEqual(res_orders_tab.status_code, 302)
+        self.assertIn('/sales/', res_orders_tab.url)
+
+        # Manager A can view Agenda for subordinate reps
+        res_mgr_agenda = self.client.get(reverse('agenda'), {'assignee': self.rep_a1.id})
+        self.assertEqual(res_mgr_agenda.status_code, 200)
+        self.assertContains(res_mgr_agenda, 'جدول الاعمال')
+
+    def test_purchase_order_approval_lifecycle_and_downstream_enforcement(self):
+        """Verify purchase order approval, rejection with reason, resubmit, self-approval prevention, and downstream blocks."""
+        po = PurchaseOrder.objects.create(
+            serial_num=999,
+            order_number="#999",
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending'
+        )
+        PurchaseOrderItem.objects.create(
+            order=po,
+            product=self.product,
+            quantity=10,
+            unit_price=100
+        )
+        po.recalculate_totals()
+
+        # 1. Downstream block: Cannot stock unapproved purchase order
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.stock_order(po, self.manager_a)
+
+        # 2. Self-approval prevention: Purchaser/creator cannot approve own order
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.approve_order(po, self.rep_a1)
+
+        # 3. Rejection requires non-empty reason
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.reject_order(po, self.manager_a, reason="")
+
+        # 4. Authorized rejection
+        PurchaseOrderService.reject_order(po, self.manager_a, reason="سعر التكلفة غير مطابق للاتفاقية")
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'rejected')
+        self.assertEqual(po.rejection_reason, "سعر التكلفة غير مطابق للاتفاقية")
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='rejected').exists())
+
+        # 5. Resubmission by creator resets status to pending
+        PurchaseOrderService.resubmit_order(po, self.rep_a1)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'pending')
+        self.assertEqual(po.rejection_reason, "")
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='resubmitted').exists())
+
+        # 6. Authorized approval by manager
+        PurchaseOrderService.approve_order(po, self.manager_a, notes="معتمد للشراء")
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'approved')
+        self.assertEqual(po.approved_by, self.manager_a)
+        self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='approved').exists())
+
+        # 7. Downstream stocking unlocked after approval
+        PurchaseOrderService.stock_order(po, self.manager_a)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'picked')
+
+    def test_item_detail_pages_approval_actions_and_list_filters(self):
+        """Verify approval actions directly on Visit, SalesOrder, and PurchaseOrder detail pages, and list filters."""
+        # --- Visit Detail & Approval ---
+        visit = Visit.objects.create(
+            serial_num=888,
+            owner=self.rep_a1,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            status='finished',
+            approval_status='pending',
+            date=timezone.now().date(),
+            created_by=self.rep_a1
+        )
+        self.client.login(username='manager_a', password='Password123!')
+        res_v_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_v_detail.status_code, 200)
+        self.assertTrue(res_v_detail.context['can_approve'])
+
+        # Approve visit via detail page action
+        res_v_act = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']))
+        self.assertEqual(res_v_act.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+        # Visits list filter by approval_status
+        res_v_list = self.client.get(reverse('visits_list') + '?approval_status=approved')
+        self.assertEqual(res_v_list.status_code, 200)
+        self.assertContains(res_v_list, str(visit.serial_num))
+
+        # --- Sales Order Detail & Approval ---
+        order = SalesOrder.objects.create(
+            serial_num=888,
+            order_number="#SO-888",
+            customer=self.contact_pharmacy_a,
+            source_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending',
+            order_date=timezone.now().date()
+        )
+        res_so_detail = self.client.get(reverse('sales_order_detail', args=[order.pk]))
+        self.assertEqual(res_so_detail.status_code, 200)
+        self.assertTrue(res_so_detail.context['can_approve'])
+
+        # Reject sales order with reason
+        res_so_reject = self.client.post(reverse('sales_order_action', args=[order.pk, 'reject']), {
+            'rejection_reason': 'الحد الائتماني غير كافي'
+        })
+        self.assertEqual(res_so_reject.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'rejected')
+
+        # Sales list filter by status=rejected
+        res_so_list = self.client.get(reverse('sales_orders_list') + '?status=rejected')
+        self.assertEqual(res_so_list.status_code, 200)
+        self.assertContains(res_so_list, order.order_number)
+
+        # --- Purchase Order Detail & Approval ---
+        po = PurchaseOrder.objects.create(
+            serial_num=888,
+            order_number="#PO-888",
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            created_by=self.rep_a1,
+            status='pending',
+            order_date=timezone.now().date()
+        )
+        res_po_detail = self.client.get(reverse('purchase_order_detail', args=[po.pk]))
+        self.assertEqual(res_po_detail.status_code, 200)
+        self.assertTrue(res_po_detail.context['can_approve'])
+
+        # Approve purchase order via detail action
+        res_po_act = self.client.post(reverse('purchase_order_action', args=[po.pk, 'approve']), {
+            'approval_notes': 'معتمد من مدير المشتريات'
+        })
+        self.assertEqual(res_po_act.status_code, 302)
+        po.refresh_from_db()
+        self.assertEqual(po.status, 'approved')
+
+        # Purchase orders list filter by status=approved
+        res_po_list = self.client.get(reverse('purchase_orders_list') + '?status=approved')
+        self.assertEqual(res_po_list.status_code, 200)
+        self.assertContains(res_po_list, po.order_number)
+
+    def test_manager_of_same_area_can_change_visit_status_and_approve(self):
+        """Manager of the same regional area can approve and change visit status from detail page."""
+        visit = Visit.objects.create(
+            serial_num=9901,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        # Manager A (same area) views detail page
+        self.client.force_login(self.manager_a)
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_detail.status_code, 200)
+        self.assertTrue(res_detail.context['can_approve'])
+        self.assertFalse(res_detail.context['is_in_agenda'])
+
+        # Manager A changes status to approved and finished
+        res_change = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'change_status']),
+            {
+                'approval_status': 'approved',
+                'visit_status': 'finished',
+                'reason': 'اعتماد وتغيير الحالة من مدير المنطقة'
+            }
+        )
+        self.assertEqual(res_change.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.approved_by, self.manager_a)
+        self.assertIsNotNone(visit.approved_at)
+
+        # Audit log verification
+        audit = ApprovalAuditLog.objects.filter(visit=visit, action='status_changed').first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.actor, self.manager_a)
+
+    def test_manager_of_different_area_cannot_change_visit_status(self):
+        """Manager of a different region cannot approve or change visit status."""
+        visit = Visit.objects.create(
+            serial_num=9902,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        # Manager B (Alexandria/Jeddah) attempts to change status of Region A visit
+        self.client.force_login(self.manager_b)
+        res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'change_status']),
+            {
+                'approval_status': 'approved',
+                'visit_status': 'finished',
+            }
+        )
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertEqual(visit.status, 'started')
+
+    def test_representative_cannot_self_approve_visit(self):
+        """Representative cannot approve or change approval status on their own visit."""
+        visit = Visit.objects.create(
+            serial_num=9903,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='finished',
+            approval_status='pending'
+        )
+
+        self.client.force_login(self.rep_a1)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+
+    def test_unapproved_visit_cannot_be_sent_to_agenda(self):
+        """A visit must be approved before sending it to the agenda."""
+        visit = Visit.objects.create(
+            serial_num=9904,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='pending'
+        )
+
+        self.client.force_login(self.manager_a)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        # Should redirect back to detail with an error message
+        self.assertEqual(res.status_code, 302)
+        self.assertFalse(PlannedVisitItem.objects.filter(visit=visit).exists())
+
+    def test_approved_visit_can_be_sent_to_agenda(self):
+        """Once approved by area manager, the visit is successfully sent to the agenda."""
+        visit = Visit.objects.create(
+            serial_num=9905,
+            contact=self.contact_pharmacy_a,
+            template=self.pharmacy_template,
+            owner=self.rep_a1,
+            created_by=self.rep_a1,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='approved',
+            approved_by=self.manager_a,
+            approved_at=timezone.now()
+        )
+
+        self.client.force_login(self.manager_a)
+        res = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        self.assertEqual(res.status_code, 302)
+        self.assertIn('/agenda/', res.url)
+
+        # Verify item added to PlannedVisitDay
+        item = PlannedVisitItem.objects.filter(visit=visit).first()
+        self.assertIsNotNone(item)
+        self.assertEqual(item.plan_day.assignee, self.rep_a1)
+        self.assertEqual(item.plan_day.date, visit.date)
+        self.assertEqual(item.contact, self.contact_pharmacy_a)
+
+        # Detail page now reflects is_in_agenda=True
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertTrue(res_detail.context['is_in_agenda'])
+
+class VisitSuggestedProductsTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.admin_user = User.objects.create_superuser(
+            username='admin_sugg@wea.com',
+            email='admin_sugg@wea.com',
+            password='Password123!',
+            name='Admin Sugg',
+            role=self.superadmin_role
+        )
+
+        self.category = ProductCategory.objects.create(name='Test Category', code='CAT-01')
+
+        # Products: 1 active sellable, 1 non-sellable, 1 inactive
+        self.p_active_sellable = Product.objects.create(
+            category=self.category,
+            name='Panadol Extra Active Sellable',
+            sku_code='PAN-01',
+            sellable=True,
+            is_active=True
+        )
+        self.p_non_sellable = Product.objects.create(
+            category=self.category,
+            name='Display Stand Non Sellable',
+            sku_code='DISP-01',
+            sellable=False,
+            is_active=True
+        )
+        self.p_inactive = Product.objects.create(
+            category=self.category,
+            name='Old Medicine Inactive',
+            sku_code='OLD-01',
+            sellable=True,
+            is_active=False
+        )
+
+    def test_eligible_suggested_products_filtering(self):
+        """VisitTemplate.get_eligible_suggested_products() must return only active, sellable products."""
+        template = VisitTemplate.objects.create(
+            name='doctor_routine_visit',
+            display_name_ar='قالب زيارة الأطباء',
+            active=True
+        )
+        template.suggested_products.add(self.p_active_sellable, self.p_non_sellable, self.p_inactive)
+
+        eligible = list(template.get_eligible_suggested_products())
+        self.assertEqual(len(eligible), 1)
+        self.assertEqual(eligible[0].id, self.p_active_sellable.id)
+
+    def test_visit_template_form_suggested_products(self):
+        """VisitTemplateForm should only offer sellable, active products in suggested_products field."""
+        form = VisitTemplateForm()
+        queryset_product_ids = list(form.fields['suggested_products'].queryset.values_list('id', flat=True))
+        self.assertIn(self.p_active_sellable.id, queryset_product_ids)
+        self.assertNotIn(self.p_non_sellable.id, queryset_product_ids)
+        self.assertNotIn(self.p_inactive.id, queryset_product_ids)
+
+    def test_location_settings_does_not_contain_suggested_products(self):
+        """Location settings view should no longer manage suggested products."""
+        self.client.login(username='admin_sugg@wea.com', password='Password123!')
+        res = self.client.get(reverse('location_settings'))
+        self.assertEqual(res.status_code, 200)
+        # Verify Card 4 text is removed
+        self.assertNotContains(res, 'المنتجات المقترحة للزيارات الميدانية')
+
+class ComprehensiveUserWorkflowsTestCase(TestCase):
+    """
+    Full end-to-end test suite for user workflows:
+    - Different kinds of users: Medical Rep, Area Manager, Accountant.
+    - Planned and unplanned visits.
+    - Single and double visits (doubled=True/False).
+    - Creation, Manager Approval, Rep Completion flow.
+    - Settings-controlled permissions and require_manager_approval for visits, sales, purchases, and agreements.
+    """
+
+    def setUp(self):
+        self.client = Client()
+
+        # 1. Settings Setup
+        self.loc_settings = LocationSettings.get_settings()
+        self.loc_settings.allow_all_users_to_create_visits = True
+        self.loc_settings.require_manager_approval_for_visits = True
+        self.loc_settings.allow_all_users_to_create_agreements = True
+        self.loc_settings.require_manager_approval_for_agreements = True
+        self.loc_settings.verify_visits = False
+        self.loc_settings.save()
+
+        self.sales_settings = SalesSettings.get_settings()
+        self.sales_settings.allow_all_users_to_create = True
+        self.sales_settings.require_manager_approval = True
+        self.sales_settings.save()
+
+        self.purchase_settings = PurchaseSettings.get_settings()
+        self.purchase_settings.allow_all_users_to_create = True
+        self.purchase_settings.require_manager_approval = True
+        self.purchase_settings.save()
+
+        # 2. Roles Setup
+        self.manager_role = Role.objects.create(
+            name='area_manager',
+            display_name='مدير منطقة',
+            is_area_manager=True
+        )
+        self.rep_role = Role.objects.create(
+            name='sales_rep',
+            display_name='مندوب مبيعات',
+            is_rep=True
+        )
+        self.accountant_role, _ = Role.objects.get_or_create(
+            name='accountant',
+            defaults={
+                'display_name': 'محاسب',
+                'is_rep': False,
+                'is_area_manager': False
+            }
+        )
+
+        all_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit',
+                'activities:visits/approve', 'activities:planned/list', 'activities:planned/manage',
+                'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create', 'activities:agreements/approve',
+                'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/approve',
+                'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/create', 'purchases:orders/approve',
+                'module:activities', 'module:sales', 'module:contacts', 'module:purchases', 'module:treasury'
+            ]
+        )
+        self.manager_role.permissions.set(all_perms)
+        self.rep_role.permissions.set(
+            all_perms.exclude(codename__in=['activities:visits/approve', 'sales:orders/approve', 'purchases:orders/approve', 'activities:agreements/approve'])
+        )
+        # Accountant role has accounting/treasury perms only, no visit/sales creation perms
+        self.accountant_role.permissions.set(
+            Permission.objects.filter(codename__in=['module:treasury', 'module:contacts'])
+        )
+
+        # 3. Areas Hierarchy
+        self.region_cairo = Area.objects.create(code='CAI', name='القاهرة', area_type='governorate')
+        self.sub_nasr_city = Area.objects.create(code='CAI-NASR', name='مدينة نصر', area_type='subarea', parent=self.region_cairo)
+        self.sub_maadi = Area.objects.create(code='CAI-MAADI', name='المعادي', area_type='subarea', parent=self.region_cairo)
+
+        self.region_alex = Area.objects.create(code='ALX', name='الإسكندرية', area_type='governorate')
+        self.sub_smouha = Area.objects.create(code='ALX-SMO', name='سموحة', area_type='subarea', parent=self.region_alex)
+
+        # 4. Users
+        self.manager_cairo = User.objects.create_user(
+            username='mgr_cairo', email='mgr_cairo@example.com', password='Password123!',
+            first_name='مدير', last_name='القاهرة', role=self.manager_role
+        )
+        self.manager_cairo.assigned_areas.add(self.region_cairo)
+
+        self.manager_alex = User.objects.create_user(
+            username='mgr_alex', email='mgr_alex@example.com', password='Password123!',
+            first_name='مدير', last_name='الإسكندرية', role=self.manager_role
+        )
+        self.manager_alex.assigned_areas.add(self.region_alex)
+
+        self.rep_cairo = User.objects.create_user(
+            username='rep_cairo', email='rep_cairo@example.com', password='Password123!',
+            first_name='مندوب', last_name='القاهرة', role=self.rep_role
+        )
+        self.rep_cairo.assigned_areas.add(self.sub_nasr_city)
+
+        self.accountant_user = User.objects.create_user(
+            username='acc_user', email='acc@example.com', password='Password123!',
+            first_name='محمود', last_name='محاسب', role=self.accountant_role
+        )
+        self.accountant_user.assigned_areas.add(self.sub_nasr_city)
+
+        # 5. Contacts (Customers & Suppliers)
+        self.customer_cairo = Contact.objects.create(
+            name='صيدلية الشفاء مدينة نصر', code='CUST-001', account_type='Pharmacy',
+            area=self.sub_nasr_city, is_customer=True, status='customer'
+        )
+        self.customer_maadi = Contact.objects.create(
+            name='مستشفى المعادي الدولي', code='CUST-002', account_type='Hospital',
+            area=self.sub_maadi, is_customer=True, status='customer'
+        )
+        self.customer_alex = Contact.objects.create(
+            name='صيدلية سموحة الإسكندرية', code='CUST-003', account_type='Pharmacy',
+            area=self.sub_smouha, is_customer=True, status='customer'
+        )
+        self.supplier_cairo = Contact.objects.create(
+            name='شركة الأدوية المتحدة', code='SUPP-001', is_supplier=True, status='supplier',
+            area=self.sub_nasr_city
+        )
+
+        # 6. Inventory & Catalog
+        self.cat = ProductCategory.objects.create(name='أدوية عامة', code='GEN-CAT')
+        self.product = Product.objects.create(
+            name='بانادول إكسترا 500 ملجم', sku_code='PAN-01', retail_price=50.00, default_purchase_cost=35.00, category=self.cat
+        )
+        self.warehouse = Warehouse.objects.create(name='المخزن الرئيسي بالقاهرة', code='WH-CAI')
+
+        # 7. Visit Templates & Agreement Type
+        self.general_template = VisitTemplate.objects.create(
+            name='general_field_visit',
+            display_name_ar='زيارة ميدانية عامة',
+            active=True
+        )
+        self.agreement_type = AgreementType.objects.create(
+            name='اتفاقية توريد سنوية'
+        )
+
+    # =========================================================================
+    # Test 1: Rep creates Unplanned Single Visit -> Manager Approves -> Rep Completes
+    # =========================================================================
+    def test_rep_unplanned_single_visit_full_flow(self):
+        """
+        Flow:
+        1. Rep creates unplanned single visit (doubled=False) in their area.
+        2. Visit starts in approval_status='pending' because rep is not a manager.
+        3. Area manager reviews and approves visit in visit detail page.
+        4. Rep completes visit (status='finished').
+        5. Prior manager approval is preserved (approval_status remains 'approved').
+        6. Visit can now be sent to agenda.
+        """
+        # Step 1: Rep logs in and creates unplanned single visit
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_create = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'doubled': '',  # Single visit (unchecked)
+            'is_successful': 'on',
+            'feedback': 'مناقشة طلبيات الشهر الجديد مع صيدلية الشفاء',
+        })
+        self.assertEqual(res_create.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo).first()
+        self.assertIsNotNone(visit)
+        self.assertFalse(visit.is_planned)
+        self.assertFalse(visit.doubled, "Must be recorded as a single visit")
+        self.assertEqual(visit.status, 'planned')
+        self.assertEqual(visit.approval_status, 'pending', "Must require manager approval for non-manager rep")
+
+        # Rep attempts to start visit before manager approval -> MUST FAIL
+        res_start_unapproved = self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'planned', "Visit cannot be started before manager approval")
+
+        # Step 2: Rep tries to send unapproved visit to agenda -> MUST FAIL
+        res_agenda_unapproved = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        self.assertEqual(visit.approval_status, 'pending')
+        # Agenda should not have this item
+        self.assertFalse(PlannedVisitItem.objects.filter(visit=visit).exists())
+
+        # Step 3: Area Manager logs in and approves the visit
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        res_approve = self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
+            'approval_status': 'approved',
+            'approval_notes': 'معتمد من مدير منطقة القاهرة'
+        })
+        self.assertEqual(res_approve.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved', "Manager of the area successfully approved the visit")
+        self.assertEqual(visit.approved_by, self.manager_cairo)
+        self.assertIsNotNone(visit.approved_at)
+
+        # Step 4: Rep logs in, starts the visit, submits answers, and completes the visit
+        self.client.logout()
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_start = self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        self.assertEqual(res_start.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started', "Visit successfully transitioned to started upon explicit start action")
+        self.assertIsNotNone(visit.started_at)
+
+        # Rep saves draft answers -> status remains 'started'
+        res_draft = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'save_draft',
+            'feedback': 'حفظ مسودة مؤقتة',
+        })
+        self.assertEqual(res_draft.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started', "Submitting answers does not end visit; status remains started")
+
+        # Rep explicitly completes the visit
+        res_complete = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'visit_outcome': 'successful',
+            'feedback': 'تم إنهاء الزيارة بنجاح والاتفاق على التوريد',
+        })
+        self.assertEqual(res_complete.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished', "Visit status transitioned to finished")
+        self.assertEqual(visit.approval_status, 'approved', "Approval status must remain approved after completion")
+        self.assertFalse(visit.doubled)
+
+        # Step 5: Send approved visit to agenda -> MUST SUCCEED
+        res_agenda = self.client.post(reverse('visit_action', args=[visit.pk, 'send_to_agenda']))
+        self.assertEqual(res_agenda.status_code, 302)
+        item = PlannedVisitItem.objects.filter(visit=visit).first()
+        self.assertIsNotNone(item, "Visit was successfully dispatched to agenda after approval")
+        self.assertTrue(item.is_executed)
+
+    # =========================================================================
+    # Test 2: Rep creates Unplanned Double Visit -> Manager Approves -> Rep Completes
+    # =========================================================================
+    def test_rep_unplanned_double_visit_full_flow(self):
+        """
+        Flow:
+        1. Rep creates double visit (doubled=True) for coaching/joint visit.
+        2. Visit starts in approval_status='pending', doubled=True.
+        3. Manager approves the double visit.
+        4. Rep completes the double visit.
+        5. Double flag and approved status are preserved.
+        """
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'doubled': 'on',  # Double visit checked
+            'is_successful': 'on',
+            'feedback': 'زيارة مشتركة ومرافقة ميدانية مع الإدارة',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo, doubled=True).first()
+        self.assertIsNotNone(visit)
+        self.assertTrue(visit.doubled, "Must be recorded as a double visit")
+        self.assertEqual(visit.status, 'planned')
+        self.assertEqual(visit.approval_status, 'pending')
+
+        # Manager approves
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
+            'approval_status': 'approved',
+            'approval_notes': 'اعتماد الزيارة المزدوجة'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+        # Rep starts and completes
+        self.client.logout()
+        self.client.login(username='rep_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'visit_outcome': 'successful',
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertTrue(visit.doubled, "Double visit flag must remain True upon completion")
+
+    # =========================================================================
+    # Test 3: Rep Planned Visit Flow (Plan Item -> Execute -> Manager Approves -> Complete)
+    # =========================================================================
+    def test_rep_planned_visit_flow(self):
+        """
+        Flow:
+        1. Rep plans a visit via planned_visit_add_item for their area.
+        2. Rep executes the planned visit via planned_visit_item_execute.
+        3. Visit is created with is_planned=True and approval_status='pending'.
+        4. Manager of the same area approves the visit.
+        5. Rep completes the planned visit -> finished and approved.
+        """
+        self.client.login(username='rep_cairo', password='Password123!')
+        today_str = timezone.now().strftime('%Y-%m-%d')
+
+        # 1. Add item to plan
+        res_plan = self.client.post(reverse('planned_visit_add_item'), {
+            'assignee_id': self.rep_cairo.id,
+            'date': today_str,
+            'contact_id': self.customer_cairo.id,
+            'template_id': self.general_template.id,
+            'notes': 'زيارة مجدولة ضمن الخطة الأسبوعية'
+        })
+        self.assertEqual(res_plan.status_code, 302)
+        plan_item = PlannedVisitItem.objects.filter(contact=self.customer_cairo, plan_day__assignee=self.rep_cairo).first()
+        self.assertIsNotNone(plan_item)
+
+        # 2. Execute planned item
+        res_exec = self.client.post(reverse('visit_create'), {
+            'planned_item_id': plan_item.pk,
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': today_str,
+            'is_successful': 'on',
+        })
+        self.assertEqual(res_exec.status_code, 302)
+        plan_item.refresh_from_db()
+        self.assertFalse(plan_item.is_executed, "Planned item is NOT executed until visit finishes")
+        visit = plan_item.visit
+        self.assertIsNotNone(visit)
+        self.assertTrue(visit.is_planned)
+        self.assertEqual(visit.status, 'planned')
+        self.assertEqual(visit.approval_status, 'pending')
+
+        # 3. Manager approves
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
+            'approval_status': 'approved',
+            'approval_notes': 'معتمد'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+        # 4. Rep starts and completes
+        self.client.logout()
+        self.client.login(username='rep_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'visit_outcome': 'successful',
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        plan_item.refresh_from_db()
+        self.assertTrue(plan_item.is_executed, "Planned item is executed after visit finishes")
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertTrue(visit.is_planned)
+
+    # =========================================================================
+    # Test 4: Manager Created Visit Auto-Approved (No Manager Approval Required)
+    # =========================================================================
+    def test_manager_created_visit_auto_approved(self):
+        """When an Area Manager or executive creates a visit, approval is auto-granted."""
+        self.client.login(username='mgr_cairo', password='Password123!')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+            'feedback': 'زيارة تفقدية من مدير المنطقة',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.manager_cairo).first()
+        self.assertIsNotNone(visit)
+        self.assertEqual(visit.approval_status, 'approved', "Manager creation must auto-approve")
+        self.assertEqual(visit.approved_by, self.manager_cairo)
+
+    # =========================================================================
+    # Test 5: Accountant Can Create Visits When Setting Enabled
+    # =========================================================================
+    def test_accountant_user_can_create_and_complete_visit(self):
+        """
+        'all kind of users can make a visit either planned or not'
+        Accountant user (without rep permissions) can create visit because
+        allow_all_users_to_create_visits is True in settings.
+        """
+        self.client.login(username='acc_user', password='Password123!')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+            'feedback': 'زيارة ميدانية لمطابقة أرصدة العميل',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.accountant_user).first()
+        self.assertIsNotNone(visit)
+        self.assertEqual(visit.approval_status, 'pending', "Accountant is non-manager so approval is required")
+
+        # Manager approves
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
+            'approval_status': 'approved',
+            'approval_notes': 'موافق على زيارة المحاسب'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+        # Accountant starts and completes
+        self.client.logout()
+        self.client.login(username='acc_user', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'visit_outcome': 'successful',
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.approval_status, 'approved')
+
+    # =========================================================================
+    # Test 6: Settings Toggle - require_manager_approval_for_visits=False Auto-Approves
+    # =========================================================================
+    def test_require_manager_approval_disabled_auto_approves_for_all(self):
+        """When require_manager_approval_for_visits is turned OFF in settings, all users auto-approve."""
+        self.loc_settings.require_manager_approval_for_visits = False
+        self.loc_settings.save()
+
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo).order_by('-id').first()
+        self.assertEqual(visit.approval_status, 'approved', "Must auto-approve when require_manager_approval is False")
+
+    # =========================================================================
+    # Test 7: Universal Purchases, Sales, and Agreements Approval Workflows
+    # =========================================================================
+    def test_sales_purchases_agreements_approval_by_role(self):
+        """
+        Verify settings-controlled creation and require_manager_approval for:
+        - Sales Orders
+        - Purchase Orders
+        - Agreements
+        """
+        # A. Sales Orders
+        # 1. Rep creates Sales Order -> Pending
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_so_rep = self.client.post(reverse('sales_order_create'), {
+            'customer': self.customer_cairo.id,
+            'warehouse': self.warehouse.id,
+            'order_date': timezone.now().strftime('%Y-%m-%d'),
+            'product_id[]': [self.product.id],
+            'quantity[]': ['10'],
+            'unit_price[]': ['50.00'],
+        })
+        self.assertEqual(res_so_rep.status_code, 302)
+        so_rep = SalesOrder.objects.filter(customer=self.customer_cairo, created_by=self.rep_cairo).first()
+        self.assertIsNotNone(so_rep)
+        self.assertEqual(so_rep.status, 'pending', "Rep sales order must be pending manager approval")
+
+        # 2. Manager creates Sales Order -> Auto-approved to manager_approval
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        res_so_mgr = self.client.post(reverse('sales_order_create'), {
+            'customer': self.customer_cairo.id,
+            'warehouse': self.warehouse.id,
+            'order_date': timezone.now().strftime('%Y-%m-%d'),
+            'product_id[]': [self.product.id],
+            'quantity[]': ['5'],
+            'unit_price[]': ['50.00'],
+        })
+        self.assertEqual(res_so_mgr.status_code, 302)
+        so_mgr = SalesOrder.objects.filter(customer=self.customer_cairo, created_by=self.manager_cairo).first()
+        self.assertIsNotNone(so_mgr)
+        self.assertEqual(so_mgr.status, 'manager_approval', "Manager sales order must be auto-approved")
+        self.assertEqual(so_mgr.approved_by, self.manager_cairo)
+
+        # B. Purchase Orders
+        # 1. Accountant creates Purchase Order -> Pending
+        self.client.logout()
+        self.client.login(username='acc_user', password='Password123!')
+        res_po_acc = self.client.post(reverse('purchase_order_create'), {
+            'supplier': self.supplier_cairo.id,
+            'warehouse': self.warehouse.id,
+            'order_date': timezone.now().strftime('%Y-%m-%d'),
+            'product_id[]': [self.product.id],
+            'quantity[]': ['20'],
+            'unit_price[]': ['35.00'],
+        })
+        self.assertEqual(res_po_acc.status_code, 302)
+        po_acc = PurchaseOrder.objects.filter(supplier=self.supplier_cairo, created_by=self.accountant_user).first()
+        self.assertIsNotNone(po_acc)
+        self.assertEqual(po_acc.status, 'pending', "Accountant purchase order must require manager approval")
+
+        # 2. Manager creates Purchase Order -> Auto-approved
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        res_po_mgr = self.client.post(reverse('purchase_order_create'), {
+            'supplier': self.supplier_cairo.id,
+            'warehouse': self.warehouse.id,
+            'order_date': timezone.now().strftime('%Y-%m-%d'),
+            'product_id[]': [self.product.id],
+            'quantity[]': ['10'],
+            'unit_price[]': ['35.00'],
+        })
+        self.assertEqual(res_po_mgr.status_code, 302)
+        po_mgr = PurchaseOrder.objects.filter(supplier=self.supplier_cairo, created_by=self.manager_cairo).first()
+        self.assertIsNotNone(po_mgr)
+        self.assertEqual(po_mgr.status, 'approved', "Manager purchase order must auto-approve")
+        self.assertEqual(po_mgr.approved_by, self.manager_cairo)
+
+        # C. Agreements
+        # 1. Rep creates agreement -> status='new' (awaiting approval)
+        self.client.logout()
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_ag_rep = self.client.post(reverse('agreement_create'), {
+            'customer': self.customer_cairo.id,
+            'title': 'اتفاقية توريد صيدلية الشفاء',
+            'type': self.agreement_type.id,
+            'amount': '15000.00',
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'description': 'شروط التوريد'
+        })
+        self.assertEqual(res_ag_rep.status_code, 302)
+        ag_rep = Agreement.objects.filter(customer=self.customer_cairo, created_by=self.rep_cairo).first()
+        self.assertIsNotNone(ag_rep)
+        self.assertEqual(ag_rep.status, 'new', "Rep agreement must be in new/pending status")
+
+        # 2. Manager creates agreement -> status='approved'
+        self.client.logout()
+        self.client.login(username='mgr_cairo', password='Password123!')
+        res_ag_mgr = self.client.post(reverse('agreement_create'), {
+            'customer': self.customer_cairo.id,
+            'title': 'اتفاقية توريد معتمدة من الإدارة',
+            'type': self.agreement_type.id,
+            'amount': '50000.00',
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'description': 'معتمدة مباشرة'
+        })
+        self.assertEqual(res_ag_mgr.status_code, 302)
+        ag_mgr = Agreement.objects.filter(customer=self.customer_cairo, created_by=self.manager_cairo).first()
+        self.assertIsNotNone(ag_mgr)
+        self.assertEqual(ag_mgr.status, 'approved', "Manager agreement must be auto-approved")
+
+    # =========================================================================
+    # Test 8: Cross-Regional Security & Isolation
+    # =========================================================================
+    def test_cross_region_isolation(self):
+        """Manager B (Alex) cannot approve visits created in Region A (Cairo)."""
+        # Rep Cairo creates visit
+        self.client.login(username='rep_cairo', password='Password123!')
+        self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': self.general_template.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'is_successful': 'on',
+        })
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo).first()
+
+        # Manager Alex tries to approve Cairo visit -> MUST BE 403 FORBIDDEN
+        self.client.logout()
+        self.client.login(username='mgr_alex', password='Password123!')
+        res_cross = self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
+            'approval_status': 'approved',
+        })
+        self.assertEqual(res_cross.status_code, 403, "Cross-region manager status change must be rejected with 403")
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending', "Approval status must remain unchanged")
+
+    # =========================================================================
+    # Test 9: Product Eligibility in Visits (Sellable Only)
+    # =========================================================================
+    def test_product_eligibility_in_visits(self):
+        """
+        Products not intended for sale (sellable=False or is_active=False)
+        must not be selectable for new visit-related operations.
+        """
+        pharmacy_tmpl = VisitTemplate.objects.create(
+            name='single_visit_pharmacy',
+            display_name_ar='زيارة فردية صيدلية',
+            active=True,
+            enable_product_detailing=True
+        )
+
+        p_sellable = Product.objects.create(
+            name='دواء معتمد للبيع', sku_code='SELL-01', retail_price=100.00,
+            category=self.cat, sellable=True, is_active=True
+        )
+        p_nonsellable = Product.objects.create(
+            name='عينات مجانية غير معروضة للبيع', sku_code='FREE-01', retail_price=0.00,
+            category=self.cat, sellable=False, is_active=True
+        )
+        p_inactive = Product.objects.create(
+            name='دواء مسحوب من السوق', sku_code='INACT-01', retail_price=50.00,
+            category=self.cat, sellable=True, is_active=False
+        )
+
+        eligible_qs = Product.get_eligible_for_visits()
+        self.assertIn(p_sellable, eligible_qs)
+        self.assertNotIn(p_nonsellable, eligible_qs)
+        self.assertNotIn(p_inactive, eligible_qs)
+
+        self.client.login(username='rep_cairo', password='Password123!')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.customer_cairo.id,
+            'template': pharmacy_tmpl.id,
+            'date': timezone.now().strftime('%Y-%m-%d'),
+            'detailed_products': [str(p_sellable.id), str(p_nonsellable.id), str(p_inactive.id)],
+            'is_successful': 'on',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo).order_by('-id').first()
+        detailed_ids = set(visit.detailed_products.values_list('id', flat=True))
+        self.assertIn(p_sellable.id, detailed_ids, "Sellable product must be linked")
+        self.assertNotIn(p_nonsellable.id, detailed_ids, "Non-sellable product must be filtered out")
+        self.assertNotIn(p_inactive.id, detailed_ids, "Inactive product must be filtered out")
+
+        # Rep attempts to add non-sellable product during visit completion
+        res_complete = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'save_details',
+            'detailed_products': [str(p_nonsellable.id)],
+            'detailed_products_submitted': '1',
+        })
+        self.assertEqual(res_complete.status_code, 302)
+        visit.refresh_from_db()
+        self.assertNotIn(p_nonsellable.id, visit.detailed_products.values_list('id', flat=True))
+
+    # =========================================================================
+    # Test 10: Configurable Product Suggestions in Settings and Visit Detail
+    # =========================================================================
+    def test_configurable_product_suggestions(self):
+        """
+        Product suggestions must be configurable through the existing settings UI
+        and restricted to eligible products.
+        """
+        pharmacy_tmpl = VisitTemplate.objects.create(
+            name='single_visit_pharmacy',
+            display_name_ar='زيارة فردية صيدلية',
+            active=True,
+            enable_product_detailing=True
+        )
+
+        p_sugg1 = Product.objects.create(
+            name='بانادول مقترح 1', sku_code='PAN-SUGG1', retail_price=60.00,
+            category=self.cat, sellable=True, is_active=True
+        )
+        p_sugg2 = Product.objects.create(
+            name='بانادول مقترح 2', sku_code='PAN-SUGG2', retail_price=70.00,
+            category=self.cat, sellable=True, is_active=True
+        )
+        p_nonsellable = Product.objects.create(
+            name='عينات غير معروضة للبيع', sku_code='SAMPLE-X', retail_price=0.00,
+            category=self.cat, sellable=False, is_active=True
+        )
+
+        # 1. Global Location Settings configure suggestions
+        self.loc_settings.enable_product_suggestions = True
+        self.loc_settings.suggested_products.set([p_sugg1, p_nonsellable])
+        self.loc_settings.save()
+
+        eligible_global_sugg = list(self.loc_settings.get_eligible_suggested_products())
+        self.assertIn(p_sugg1, eligible_global_sugg)
+        self.assertNotIn(p_nonsellable, eligible_global_sugg)
+
+        # 2. Template-level configurable suggestions
+        pharmacy_tmpl.suggested_products.set([p_sugg2, p_nonsellable])
+        eligible_tmpl_sugg = list(pharmacy_tmpl.get_eligible_suggested_products())
+        self.assertIn(p_sugg2, eligible_tmpl_sugg)
+        self.assertNotIn(p_nonsellable, eligible_tmpl_sugg)
+
+        # 3. Create visit and view visit detail
+        visit = Visit.objects.create(
+            contact=self.customer_cairo,
+            template=pharmacy_tmpl,
+            owner=self.rep_cairo,
+            created_by=self.rep_cairo,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='approved'
+        )
+
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_view = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_view.status_code, 200)
+
+        suggested_ids = res_view.context['suggested_product_ids']
+        self.assertIn(p_sugg1.id, suggested_ids)
+        self.assertIn(p_sugg2.id, suggested_ids)
+        self.assertNotIn(p_nonsellable.id, suggested_ids)
+
+    # =========================================================================
+    # Test 11: Historical Non-Sellable Products Preserved
+    # =========================================================================
+    def test_historical_non_sellable_products_preserved(self):
+        """
+        Historical data preservation: if a product was previously detailed and is
+        later marked non-sellable (sellable=False), it must remain linked to the visit.
+        """
+        pharmacy_tmpl = VisitTemplate.objects.create(
+            name='single_visit_pharmacy',
+            display_name_ar='زيارة فردية صيدلية',
+            active=True,
+            enable_product_detailing=True
+        )
+
+        p_historical = Product.objects.create(
+            name='دواء تم إيقاف بيعه لاحقاً', sku_code='HIST-01', retail_price=80.00,
+            category=self.cat, sellable=True, is_active=True
+        )
+
+        visit = Visit.objects.create(
+            contact=self.customer_cairo,
+            template=pharmacy_tmpl,
+            owner=self.rep_cairo,
+            created_by=self.rep_cairo,
+            date=timezone.now().date(),
+            status='started',
+            approval_status='approved'
+        )
+        visit.detailed_products.set([p_historical])
+
+        # Product is now retired/marked non-sellable
+        p_historical.sellable = False
+        p_historical.save()
+
+        # Rep opens visit_detail: historical product should still be included in context products
+        self.client.login(username='rep_cairo', password='Password123!')
+        res_view = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_view.status_code, 200)
+        context_product_ids = set(p.id for p in res_view.context['products'])
+        self.assertIn(p_historical.id, context_product_ids, "Historical product must be preserved in context")
+
+        # Rep completes visit without removing detailed products
+        res_complete = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            'detailed_products': [str(p_historical.id)],
+            'visit_outcome': 'successful',
+        })
+        self.assertEqual(res_complete.status_code, 302)
+        visit.refresh_from_db()
+        self.assertIn(p_historical.id, visit.detailed_products.values_list('id', flat=True),
+                      "Historical product must remain attached to the completed visit")
+
+class VisitsScopeGbsTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        # Location Settings: Disable GPS validation initially for easy setup
+        self.loc_settings = LocationSettings.get_settings()
+        self.loc_settings.verify_visits = False
+        self.loc_settings.verify_unplanned_visit_distance = False
+        self.loc_settings.verify_end_visit_distance = False
+        self.loc_settings.save()
+
+        # Roles
+        self.manager_role = Role.objects.create(
+            name='area_manager',
+            display_name='مدير منطقة',
+            is_area_manager=True
+        )
+        self.rep_role = Role.objects.create(
+            name='sales_rep',
+            display_name='مندوب مبيعات',
+            is_rep=True
+        )
+
+        all_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
+                'activities:visits/edit', 'activities:visits/approve', 'activities:planned/list',
+                'activities:planned/manage', 'module:activities', 'module:contacts',
+                'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
+                'contacts:contacts/edit'
+            ]
+        )
+        for p in all_perms:
+            self.manager_role.permissions.add(p)
+            if p.codename not in ['activities:visits/approve']:
+                self.rep_role.permissions.add(p)
+
+        # Geographic Areas
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-01', area_type='governorate')
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='NASR-01', parent=self.cairo, area_type='subarea')
+        self.maadi = Area.objects.create(name='المعادي', code='MAADI-01', parent=self.cairo, area_type='subarea')
+
+        self.alex = Area.objects.create(name='الإسكندرية', code='ALX-01', area_type='governorate')
+        self.smouha = Area.objects.create(name='سموحة', code='SMOU-01', parent=self.alex, area_type='subarea')
+
+        # Users
+        self.superadmin = User.objects.create_superuser('sa_user', 'sa@test.com', 'pass123')
+
+        self.cairo_manager = User.objects.create_user('cairo_mgr', 'cmgr@test.com', 'pass123', role=self.manager_role)
+        self.cairo_manager.main_area = self.cairo
+        self.cairo_manager.assigned_areas.set([self.cairo, self.nasr_city, self.maadi])
+        self.cairo_manager.save()
+
+        self.nasr_rep = User.objects.create_user('nasr_rep', 'nrep@test.com', 'pass123', role=self.rep_role)
+        self.nasr_rep.assigned_areas.set([self.nasr_city])
+        self.nasr_rep.save()
+
+        self.maadi_rep = User.objects.create_user('maadi_rep', 'mrep@test.com', 'pass123', role=self.rep_role)
+        self.maadi_rep.assigned_areas.set([self.maadi])
+        self.maadi_rep.save()
+
+        # Contacts with Area and Brick
+        self.contact_nasr = Contact.objects.create(
+            name='صيدلية الأمل',
+            contact_type='organization',
+            is_customer=True,
+            account_type='صيدلية',
+            area=self.cairo,
+            brick=self.nasr_city,
+            created_by=self.nasr_rep
+        )
+        self.contact_maadi = Contact.objects.create(
+            name='عيادة النور د. أحمد',
+            contact_type='person',
+            is_customer=True,
+            account_type='عيادة',
+            area=self.cairo,
+            brick=self.maadi,
+            created_by=self.maadi_rep
+        )
+        self.contact_alex = Contact.objects.create(
+            name='مستشفى الإسكندرية',
+            contact_type='organization',
+            is_customer=True,
+            account_type='مستشفى',
+            area=self.alex,
+            brick=self.smouha,
+            created_by=self.superadmin
+        )
+
+        # Visit Templates
+        self.template_general = VisitTemplate.objects.create(
+            name='general_template',
+            display_name_ar='قالب عام لجميع العملاء',
+            active=True
+        )
+        self.template_pharmacy = VisitTemplate.objects.create(
+            name='pharmacy_template',
+            display_name_ar='قالب الصيدليات',
+            restrict_account_types=['صيدلية'],
+            active=True
+        )
+        self.template_clinic = VisitTemplate.objects.create(
+            name='clinic_template',
+            display_name_ar='قالب العيادات والأطباء',
+            restrict_account_types=['عيادة'],
+            active=True
+        )
+
+    def test_01_automatic_planned_vs_unplanned_determination(self):
+        """
+        Requirement 2:
+        - Manual POST with visit_type='planned' or is_planned='1' WITHOUT planned_item_id
+          must be automatically coerced to an unplanned visit (is_planned=False).
+        - Execution with valid planned_item_id automatically identifies as planned (is_planned=True).
+        """
+        self.client.force_login(self.nasr_rep)
+        today = timezone.now().date().strftime('%Y-%m-%d')
+
+        # 1. Tampered request trying to create a planned visit directly
+        res_tampered = self.client.post(reverse('visit_create'), {
+            'visit_type': 'planned',
+            'is_planned': '1',
+            'contact': self.contact_nasr.id,
+            'template': self.template_general.id,
+            'date': today,
+        })
+        self.assertEqual(res_tampered.status_code, 302)
+        visit_unplanned = Visit.objects.filter(contact=self.contact_nasr).order_by('-id').first()
+        self.assertIsNotNone(visit_unplanned)
+        self.assertFalse(visit_unplanned.is_planned, "Direct visit_create must enforce is_planned=False without planned_item_id")
+
+        visit_unplanned.delete()
+
+        # 2. Execution with valid planned_item_id -> automatically sets is_planned=True
+        plan_day, _ = PlannedVisitDay.objects.get_or_create(assignee=self.nasr_rep, date=timezone.now().date())
+        plan_item = PlannedVisitItem.objects.create(
+            plan_day=plan_day,
+            order=1,
+            contact=self.contact_nasr,
+            template=self.template_pharmacy
+        )
+
+        res_planned = self.client.post(reverse('visit_create'), {
+            'planned_item_id': plan_item.id,
+            'contact': self.contact_nasr.id,
+            'template': self.template_pharmacy.id,
+            'date': today,
+        })
+        self.assertEqual(res_planned.status_code, 302)
+        visit_planned = Visit.objects.filter(contact=self.contact_nasr, is_planned=True).order_by('-id').first()
+        self.assertIsNotNone(visit_planned)
+        self.assertTrue(visit_planned.is_planned)
+        plan_item.refresh_from_db()
+        self.assertEqual(plan_item.visit, visit_planned)
+
+    def test_02_contact_and_address_brick_relationships(self):
+        """
+        Requirement 7:
+        - Contact and ContactAddress must properly store both area (Governorate) and brick (Subarea).
+        """
+        self.client.force_login(self.nasr_rep)
+        res_create = self.client.post(reverse('contact_create'), {
+            'name': 'مركز مصر الطبي',
+            'contact_type': 'organization',
+            'relations': ['عميل'],
+            'customer_category': 'A',
+            'account_type': 'مستشفى',
+            'address_title[]': ['الفرع الرئيسي'],
+            'address_area[]': [str(self.cairo.id)],
+            'address_sub_area[]': [str(self.nasr_city.id)],
+            'address_street[]': ['شارع عباس العقاد'],
+            'address_is_main[]': ['1'],
+        })
+        self.assertEqual(res_create.status_code, 302)
+
+        c = Contact.objects.filter(name='مركز مصر الطبي').first()
+        self.assertIsNotNone(c)
+        self.assertEqual(c.area, self.cairo)
+        self.assertEqual(c.brick, self.nasr_city)
+
+        addr = c.addresses.first()
+        self.assertIsNotNone(addr)
+        self.assertEqual(addr.area, self.cairo)
+        self.assertEqual(addr.brick, self.nasr_city)
+        self.assertEqual(addr.sub_area, self.nasr_city.name)
+
+    def test_03_organizational_data_scoping_rep_vs_manager(self):
+        """
+        Requirement 3:
+        - Reps are restricted to their authorized brick(s).
+        - Managers can access all bricks within their assigned root governorate.
+        - Superadmins access all areas.
+        """
+        # Rep view: Nasr Rep searching contacts
+        self.client.force_login(self.nasr_rep)
+        search_res = self.client.get('/contacts/api/search/')
+        ids = [c['id'] for c in search_res.json()['results']]
+        self.assertIn(self.contact_nasr.id, ids)
+        self.assertNotIn(self.contact_maadi.id, ids)
+        self.assertNotIn(self.contact_alex.id, ids)
+
+        # Manager view: Cairo Manager sees both Nasr City and Maadi, but not Alex
+        self.client.force_login(self.cairo_manager)
+        search_mgr = self.client.get('/contacts/api/search/')
+        mgr_ids = [c['id'] for c in search_mgr.json()['results']]
+        self.assertIn(self.contact_nasr.id, mgr_ids)
+        self.assertIn(self.contact_maadi.id, mgr_ids)
+        self.assertNotIn(self.contact_alex.id, mgr_ids)
+
+        # Superadmin sees all
+        self.client.force_login(self.superadmin)
+        search_sa = self.client.get('/contacts/api/search/')
+        sa_ids = [c['id'] for c in search_sa.json()['results']]
+        self.assertIn(self.contact_nasr.id, sa_ids)
+        self.assertIn(self.contact_maadi.id, sa_ids)
+        self.assertIn(self.contact_alex.id, sa_ids)
+
+    def test_04_bulk_planning_with_per_client_type_templates(self):
+        """
+        Requirement 5:
+        - Multi-client selection with different client types groups by type and assigns eligible templates.
+        - Atomic validation creates all items or aborts if any client is incompatible.
+        """
+        self.client.force_login(self.cairo_manager)
+        today_str = timezone.now().date().strftime('%Y-%m-%d')
+
+        # 1. Successful bulk add with heterogeneous client types
+        templates_by_type = {
+            'صيدلية': str(self.template_pharmacy.id),
+            'عيادة': str(self.template_clinic.id),
+        }
+        res_bulk = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'date': today_str,
+                'assignee_id': self.cairo_manager.id,
+                'contact_ids[]': [self.contact_nasr.id, self.contact_maadi.id],
+                'templates_by_type': json.dumps(templates_by_type),
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bulk.status_code, 200)
+        data = res_bulk.json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(data.get('created_count'), 2)
+
+        item_pharm = PlannedVisitItem.objects.filter(contact=self.contact_nasr, plan_day__date=today_str).first()
+        self.assertEqual(item_pharm.template, self.template_pharmacy)
+
+        item_clinic = PlannedVisitItem.objects.filter(contact=self.contact_maadi, plan_day__date=today_str).first()
+        self.assertEqual(item_clinic.template, self.template_clinic)
+
+        # 2. Reject incompatible template atomically
+        tomorrow_str = (timezone.now().date() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        bad_templates = {
+            'صيدلية': str(self.template_clinic.id),  # Incompatible: Pharmacy using Clinic template!
+        }
+        res_bad = self.client.post(
+            reverse('planned_visits_bulk_add'),
+            {
+                'date': tomorrow_str,
+                'assignee_id': self.cairo_manager.id,
+                'contact_ids[]': [self.contact_nasr.id],
+                'templates_by_type': json.dumps(bad_templates),
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_bad.status_code, 400)
+        self.assertFalse(PlannedVisitItem.objects.filter(contact=self.contact_nasr, plan_day__date=tomorrow_str).exists())
+
+    def test_05_gbs_disabled_workflow(self):
+        """
+        Requirement 3:
+        - When LocationSettings.verify_visits is False, visits can be created and completed without GPS coordinates.
+        """
+        self.loc_settings.verify_visits = False
+        self.loc_settings.verify_unplanned_visit_distance = False
+        self.loc_settings.verify_end_visit_distance = False
+        self.loc_settings.save()
+
+        self.client.force_login(self.nasr_rep)
+        today = timezone.now().date().strftime('%Y-%m-%d')
+
+        # Create unplanned visit without GPS coordinates
+        res_create = self.client.post(reverse('visit_create'), {
+            'contact': self.contact_nasr.id,
+            'template': self.template_general.id,
+            'date': today,
+        })
+        self.assertEqual(res_create.status_code, 302)
+        v = Visit.objects.filter(contact=self.contact_nasr).order_by('-id').first()
+        self.assertIsNotNone(v)
+
+        # Complete visit without GPS coordinates
+        res_complete = self.client.post(reverse('visit_detail', args=[v.pk]), {
+            'action': 'complete',
+            'feedback': 'تمت الزيارة بنجاح دون الحاجة لـ GPS',
+            'visit_outcome': 'successful'
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_complete.status_code, 200)
+        data = res_complete.json()
+        self.assertTrue(data.get('success'))
+        v.refresh_from_db()
+        self.assertEqual(v.status, 'finished')
+
+    def test_06_visit_set_time_quick_action(self):
+        """
+        Requirement 6:
+        - Every visit supports a scheduled time field.
+        - POST /activities/visits/<pk>/set-time/ updates time, logs audit, and returns JSON.
+        - Representatives cannot edit visits of other representatives.
+        """
+        today = timezone.now().date()
+        v = Visit.objects.create(
+            serial_num=1001,
+            contact=self.contact_nasr,
+            template=self.template_general,
+            owner=self.nasr_rep,
+            created_by=self.nasr_rep,
+            date=today,
+            status='planned'
+        )
+
+        # 1. Nasr rep sets time
+        self.client.force_login(self.nasr_rep)
+        res_time = self.client.post(
+            reverse('visit_set_time', args=[v.pk]),
+            {'time': '15:45'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_time.status_code, 200)
+        data = res_time.json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(data.get('time_24'), '15:45')
+        self.assertEqual(data.get('display_time'), '03:45 م')
+
+        v.refresh_from_db()
+        self.assertEqual(v.time, datetime.time(15, 45))
+        self.assertIsNotNone(v.visit_time)
+        self.assertEqual(v.formatted_time, '03:45 م')
+
+        # Check SecurityAuditLog
+        audit_entry = SecurityAuditLog.objects.filter(
+            record_id=str(v.pk),
+            action_type='VISIT_TIME_UPDATED'
+        ).first()
+        self.assertIsNotNone(audit_entry)
+
+        # 2. Maadi rep (unauthorized for Nasr visit) tries to set time -> blocked (403 or 404)
+        self.client.force_login(self.maadi_rep)
+        res_blocked = self.client.post(
+            reverse('visit_set_time', args=[v.pk]),
+            {'time': '16:00'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertIn(res_blocked.status_code, [403, 404])
+
+class AgreementWorkflowTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.cairo_gov = Area.objects.create(name='محافظة القاهرة - اتفاقيات', code='CAI-AGR', area_type='governorate')
+        self.nasr_city = Area.objects.create(name='حي مدينة نصر - اتفاقيات', code='NASR-AGR', area_type='subarea', parent=self.cairo_gov)
+
+        self.rep_role = Role.objects.get(name=Role.ROLE_REP)
+        self.manager_role = Role.objects.get(name=Role.ROLE_MANAGER)
+
+        self.rep_cairo = User.objects.create_user(
+            username='rep_cairo_ag@example.com', email='rep_cairo_ag@example.com', password='Password123!',
+            role=self.rep_role
+        )
+        self.rep_cairo.assigned_areas.add(self.nasr_city)
+
+        self.manager_cairo = User.objects.create_user(
+            username='manager_cairo_ag@example.com', email='manager_cairo_ag@example.com', password='Password123!',
+            role=self.manager_role
+        )
+        self.manager_cairo.assigned_areas.add(self.cairo_gov)
+
+        self.customer = Contact.objects.create(
+            name='صيدلية الاتفاقيات التجريبية', area=self.nasr_city, status='customer'
+        )
+
+    def test_agreement_anti_self_approval_and_audit(self):
+        """Users cannot approve their own agreements, managers can approve subordinate agreements with audit logging."""
+        ag_type, _ = AgreementType.objects.get_or_create(name="عقد توريد تجريبي")
+
+        # 1. Cairo rep creates an agreement
+        agreement = Agreement.objects.create(
+            title="اتفاقية توريد أدوية مندوب",
+            customer=self.customer,
+            type=ag_type,
+            status='new',
+            created_by=self.rep_cairo
+        )
+
+        # 2. Cairo rep attempts to approve own agreement -> Blocked
+        self.client.force_login(self.rep_cairo)
+        resp_rep = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        agreement.refresh_from_db()
+        self.assertEqual(agreement.status, 'new')
+
+        # 3. Cairo manager approves Cairo rep's agreement -> Allowed
+        self.client.force_login(self.manager_cairo)
+        resp_mgr = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        self.assertEqual(resp_mgr.status_code, 302)
+        agreement.refresh_from_db()
+        self.assertEqual(agreement.status, 'approved')
+
+        # Verify audit log was created
+        audit_exists = SecurityAuditLog.objects.filter(
+            action_type='AGREEMENT_APPROVED',
+            record_id=agreement.id,
+            actor=self.manager_cairo
+        ).exists()
+        self.assertTrue(audit_exists)
+
+        # 4. Cairo manager creates own agreement and attempts to self-approve -> Blocked
+        mgr_agreement = Agreement.objects.create(
+            title="اتفاقية توريد أدوية مدير",
+            customer=self.customer,
+            type=ag_type,
+            status='new',
+            created_by=self.manager_cairo
+        )
+        resp_self_mgr = self.client.get(reverse('agreement_action', args=[mgr_agreement.pk, 'approve']))
+        self.assertEqual(resp_self_mgr.status_code, 403)
+        mgr_agreement.refresh_from_db()
+        self.assertEqual(mgr_agreement.status, 'new')
