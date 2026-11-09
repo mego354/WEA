@@ -119,35 +119,24 @@
             {% endif %}
 
             {% if not visit %}
-            <!-- FIELD 1: VISIT TYPE SELECTOR (Section 4.A & 4.B) -->
-            <div class="space-y-2 pb-5 border-b border-slate-100">
-                <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+            <!-- VISIT WORKFLOW BADGE (Automatically Determined by Entry Point) -->
+            <div class="pb-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-sm text-[#27bebe]">category</span>
-                    <span>نوع الزيارة *</span>
-                </label>
-                <div class="grid grid-cols-2 gap-3">
-                    <label id="visit-type-unplanned-card" onclick="setVisitType('unplanned')" class="cursor-pointer rounded-xl border-2 p-3.5 flex items-center gap-3 transition-all {% if not is_planned_visit and not planned_item %}border-[#27bebe] bg-teal-50/40{% else %}border-slate-200 bg-white hover:bg-slate-50{% endif %}">
-                        <input type="radio" name="visit_type" value="unplanned" id="visit_type_unplanned" class="text-[#27bebe] focus:ring-[#27bebe]" {% if not is_planned_visit and not planned_item %}checked{% endif %} {% if planned_item %}disabled{% endif %} onchange="setVisitType('unplanned')">
-                        <div>
-                            <div class="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm text-purple-600">room</span>
-                                <span>زيارة خارج الخطة (Unplanned)</span>
-                            </div>
-                            <p class="text-[11px] text-slate-500 mt-0.5">التحقق من المسافة إلزامي عند الإنشاء والإنهاء</p>
-                        </div>
-                    </label>
-
-                    <label id="visit-type-planned-card" onclick="setVisitType('planned')" class="cursor-pointer rounded-xl border-2 p-3.5 flex items-center gap-3 transition-all {% if is_planned_visit or planned_item %}border-[#27bebe] bg-teal-50/40{% else %}border-slate-200 bg-white hover:bg-slate-50{% endif %}">
-                        <input type="radio" name="visit_type" value="planned" id="visit_type_planned" class="text-[#27bebe] focus:ring-[#27bebe]" {% if is_planned_visit or planned_item %}checked{% endif %} onchange="setVisitType('planned')">
-                        <div>
-                            <div class="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm text-blue-600">event_available</span>
-                                <span>زيارة مخططة (Planned)</span>
-                            </div>
-                            <p class="text-[11px] text-slate-500 mt-0.5">جدولة مسبقة — يتم التحقق من المسافة عند إنهاء الزيارة</p>
-                        </div>
-                    </label>
+                    <span class="text-xs font-bold text-slate-700">نوع الزيارة:</span>
+                    {% if planned_item %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                        <span class="material-symbols-outlined text-sm text-blue-600">event_available</span>
+                        <span>تنفيذ زيارة مخططة (خطة يوم {{ planned_item.plan_day.date|date:'d/m/Y' }})</span>
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs">
+                        <span class="material-symbols-outlined text-sm text-purple-600">room</span>
+                        <span>زيارة خارج الخطة (مباشرة)</span>
+                    </span>
+                    {% endif %}
                 </div>
+                <span class="text-[11px] text-slate-400 font-medium">يتم تحديد نوع الزيارة تلقائياً وفق مسار العمل</span>
             </div>
             {% endif %}
 
@@ -1156,8 +1145,8 @@
             return false;
         }
 
-        // Validate GPS and Distance constraints for unplanned visits
-        if (!isEditMode && currentVisitType === 'unplanned') {
+        // Validate GPS and Distance constraints for unplanned visits (strictly when GBS verification is active)
+        if (!isEditMode && currentVisitType === 'unplanned' && verifyVisitsEnabled && verifyUnplannedDistance) {
             const bypassChk = document.getElementById('id_force_bypass_location') || document.getElementById('id_request_distance_exception');
             const isBypassed = bypassChk && bypassChk.checked;
             const bypassReasonInput = document.getElementById('id_bypass_reason');

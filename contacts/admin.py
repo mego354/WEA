@@ -9,7 +9,7 @@ from .models import (
 class ContactAddressInline(admin.TabularInline):
     model = ContactAddress
     extra = 1
-    fields = ('title', 'is_main', 'area', 'sub_area', 'street_address', 'latitude', 'longitude')
+    fields = ('title', 'is_main', 'area', 'brick', 'sub_area', 'street_address', 'latitude', 'longitude')
 
 
 class ContactCommentInline(admin.TabularInline):
@@ -29,10 +29,10 @@ class ContactTodoInline(admin.TabularInline):
 class ContactAdmin(admin.ModelAdmin):
     list_display = (
         'serial_num', 'name', 'contact_type_badge', 'business_relation_badges',
-        'account_type', 'area', 'mobile', 'credit_limit_display',
+        'account_type', 'area', 'brick', 'mobile', 'credit_limit_display',
         'status_badge', 'created_at'
     )
-    list_filter = ('contact_type', 'is_customer', 'is_supplier', 'status', 'area', 'account_type', 'is_kol')
+    list_filter = ('contact_type', 'is_customer', 'is_supplier', 'status', 'area', 'brick', 'account_type', 'is_kol')
     search_fields = ('name', 'serial_num', 'code', 'mobile', 'phone', 'email', 'tax_id', 'contact_person')
     filter_horizontal = ('assigned_team',)
     inlines = [ContactAddressInline, ContactCommentInline, ContactTodoInline]
@@ -41,7 +41,7 @@ class ContactAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('المعلومات الأساسية', {
-            'fields': ('serial_num', 'name', 'contact_type', 'is_customer', 'is_supplier', 'is_other', 'status', 'area', 'code')
+            'fields': ('serial_num', 'name', 'contact_type', 'is_customer', 'is_supplier', 'is_other', 'status', 'area', 'brick', 'code')
         }),
         ('بيانات التواصل', {
             'fields': ('mobile', 'phone', 'email', 'website', 'contact_person', 'job_title', 'visit_timing')

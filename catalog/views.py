@@ -280,7 +280,12 @@ def product_detail(request, pk):
         Product.objects.select_related('category', 'created_by').prefetch_related('volume_discounts', 'price_lists'),
         pk=pk
     )
-    stocks = InventoryStock.objects.filter(product=product).select_related('warehouse')
+    from accounts.permissions import get_scoped_queryset
+    stocks = get_scoped_queryset(
+        InventoryStock.objects.filter(product=product).select_related('warehouse'),
+        request.user,
+        'inventorystock'
+    )
     total_stock = sum((s.qty_on_hand for s in stocks), Decimal('0.00'))
 
     context = {

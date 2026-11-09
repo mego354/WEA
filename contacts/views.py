@@ -37,7 +37,9 @@ def contacts_list(request):
         view_mode = 'table'
     show_inactive = request.GET.get('inactive', 'no').strip()
 
-    qs = Contact.objects.select_related('area', 'created_by').prefetch_related('addresses__area').all()
+    brick_id = request.GET.get('brick_id', '').strip() or request.GET.get('brick', '').strip()
+
+    qs = Contact.objects.select_related('area', 'brick', 'created_by').prefetch_related('addresses__area', 'addresses__brick').all()
     qs = get_scoped_queryset(qs, request.user, 'contact')
 
     # Active filters counter
@@ -71,11 +73,27 @@ def contacts_list(request):
         active_filters_count += 1
 
     if area_id:
-        qs = qs.filter(Q(area_id=area_id) | Q(addresses__area_id=area_id)).distinct()
+        qs = qs.filter(
+            Q(area_id=area_id) |
+            Q(brick__parent_id=area_id) |
+            Q(addresses__area_id=area_id) |
+            Q(addresses__brick__parent_id=area_id)
+        ).distinct()
+        active_filters_count += 1
+
+    if brick_id:
+        qs = qs.filter(
+            Q(brick_id=brick_id) |
+            Q(addresses__brick_id=brick_id)
+        ).distinct()
         active_filters_count += 1
 
     if sub_area:
-        qs = qs.filter(addresses__sub_area__icontains=sub_area).distinct()
+        qs = qs.filter(
+            Q(brick__name__icontains=sub_area) |
+            Q(addresses__sub_area__icontains=sub_area) |
+            Q(addresses__brick__name__icontains=sub_area)
+        ).distinct()
         active_filters_count += 1
 
     if contact_type and contact_type != 'all':
@@ -217,9 +235,8 @@ def contacts_list(request):
     # Pagination: safe server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
-    governorates = Area.objects.filter(area_type='governorate').order_by('name')
-    if not governorates.exists():
-        governorates = Area.objects.all().order_by('name')
+    from accounts.scope_service import ScopeResolutionService
+    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
 
     # Dedicated real scoped statistics cards
     scoped_all = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
@@ -229,7 +246,6 @@ def contacts_list(request):
         'total_leads': scoped_all.filter(is_customer=True, status='lead').count(),
         'total_suppliers': scoped_all.filter(is_supplier=True).count(),
     }
-
     context = {
         'contacts': page_obj.object_list,
         'page_obj': page_obj,
@@ -449,9 +465,33 @@ def contact_create(request):
         else:
             status_val = 'lead'
 
-        # Area / Address info
+        # Area & Brick resolution
         area_id = request.POST.get('area_id') or request.POST.get('area')
-        area = Area.objects.filter(id=area_id).first() if area_id else None
+        brick_id = request.POST.get('brick_id') or request.POST.get('brick')
+        area = Area.objects.filter(id=area_id).first() if area_id and str(area_id).isdigit() else None
+        brick = Area.objects.filter(id=brick_id).first() if brick_id and str(brick_id).isdigit() else None
+
+        if brick and not area and brick.parent:
+            area = brick.parent
+        elif area and area.parent:
+            if not brick:
+                brick = area
+            area = area.parent
+
+        # Validate area and brick assignment within user's manage scope
+        from accounts.scope_service import ScopeResolutionService
+        manage_scope = ScopeResolutionService.get_user_scope(request.user, 'contacts', 'manage')
+        if manage_scope == 'brick' and request.user.assigned_areas.exists():
+            user_bricks = ScopeResolutionService.get_user_bricks(request.user)
+            if brick and not user_bricks.filter(id=brick.id).exists():
+                messages.error(request, "لا يمكنك إنشاء جهة اتصال خارج خط السير أو المنطقة الجغرافية (Brick) المخصصة لك.")
+                return render_create_form(request, errors={'brick': 'خارج النطاق الجغرافي المصرح به'})
+        elif manage_scope == 'area' and request.user.assigned_areas.exists():
+            managed_areas = ScopeResolutionService.get_user_managed_areas(request.user, 'area')
+            target_a = brick or area
+            if target_a and not managed_areas.filter(id=target_a.id).exists():
+                messages.error(request, "لا يمكنك إنشاء جهة اتصال خارج نطاق منطقتك الجغرافية المصرح بها.")
+                return render_create_form(request, errors={'area': 'خارج النطاق الجغرافي المصرح به'})
 
         custom_values = extract_custom_values_from_post(request.POST)
 
@@ -469,6 +509,7 @@ def contact_create(request):
             email=email,
             website=website,
             area=area,
+            brick=brick,
             tax_id=tax_id,
             code=code,
             contact_person=contact_person,
@@ -486,6 +527,7 @@ def contact_create(request):
         # Handle addresses
         address_titles = request.POST.getlist('address_title[]')
         address_areas = request.POST.getlist('address_area[]')
+        address_bricks = request.POST.getlist('address_brick[]')
         address_sub_areas = request.POST.getlist('address_sub_area[]')
         address_streets = request.POST.getlist('address_street[]')
         address_is_mains = request.POST.getlist('address_is_main[]')
@@ -493,19 +535,41 @@ def contact_create(request):
         main_addr_created = False
         if address_areas:
             for idx, a_id in enumerate(address_areas):
-                card_area = Area.objects.filter(id=a_id).first() if a_id else area
+                card_area = Area.objects.filter(id=a_id).first() if a_id and str(a_id).isdigit() else area
+                b_id = address_bricks[idx] if idx < len(address_bricks) else None
                 sub_name = address_sub_areas[idx] if idx < len(address_sub_areas) else ''
+                card_brick = None
+                if b_id and str(b_id).isdigit():
+                    card_brick = Area.objects.filter(id=int(b_id)).first()
+                elif sub_name and str(sub_name).isdigit():
+                    card_brick = Area.objects.filter(id=int(sub_name)).first()
+                elif sub_name and card_area:
+                    card_brick = Area.objects.filter(parent=card_area, name__iexact=sub_name.strip()).first()
+                if not card_brick:
+                    card_brick = brick
+
+                if card_brick and not card_area and card_brick.parent:
+                    card_area = card_brick.parent
+                elif card_area and card_area.parent:
+                    if not card_brick:
+                        card_brick = card_area
+                    card_area = card_area.parent
+
+                if card_brick:
+                    sub_name = card_brick.name
+
                 street = address_streets[idx] if idx < len(address_streets) else ''
                 title = address_titles[idx] if idx < len(address_titles) else ''
                 is_main = (idx == 0) or (idx < len(address_is_mains) and address_is_mains[idx] in ['on', 'true', '1'])
 
-                if card_area or street or title or (is_main and lat_val is not None):
+                if card_area or card_brick or street or title or (is_main and lat_val is not None):
                     addr_lat = lat_val if is_main else None
                     addr_lng = lng_val if is_main else None
                     ContactAddress.objects.create(
                         contact=contact,
                         title=title or ("العنوان الرئيسي" if is_main else ""),
                         area=card_area,
+                        brick=card_brick,
                         sub_area=sub_name,
                         street_address=street,
                         latitude=addr_lat,
@@ -514,14 +578,24 @@ def contact_create(request):
                     )
                     if is_main:
                         main_addr_created = True
-        elif area or street or lat_val is not None:
+                        update_fields = []
+                        if not contact.brick and card_brick:
+                            contact.brick = card_brick
+                            update_fields.append('brick')
+                        if not contact.area and card_area:
+                            contact.area = card_area
+                            update_fields.append('area')
+                        if update_fields:
+                            contact.save(update_fields=update_fields)
+        elif area or brick or street or lat_val is not None:
             sub_name = request.POST.get('sub_area', '')
             street = request.POST.get('street_address', '')
             ContactAddress.objects.create(
                 contact=contact,
                 title=request.POST.get('address_title', 'العنوان الرئيسي'),
                 area=area,
-                sub_area=sub_name,
+                brick=brick,
+                sub_area=sub_name or (brick.name if brick else ''),
                 street_address=street,
                 latitude=lat_val,
                 longitude=lng_val,
@@ -568,14 +642,15 @@ def contact_create(request):
 
 
 def render_create_form(request, errors=None):
-    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
-    if not governorates.exists():
-        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+    from accounts.scope_service import ScopeResolutionService
+    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
+    bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
 
     custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
 
     context = {
         'governorates': governorates,
+        'bricks': bricks,
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
         'account_types': ACCOUNT_TYPES,
@@ -691,8 +766,18 @@ def contact_edit(request, pk):
             contact.status = status_input
 
         area_id = request.POST.get('area_id') or request.POST.get('area')
-        if area_id:
-            contact.area = Area.objects.filter(id=area_id).first()
+        brick_id = request.POST.get('brick_id') or request.POST.get('brick')
+        if area_id and str(area_id).isdigit():
+            contact.area = Area.objects.filter(id=int(area_id)).first()
+        if brick_id and str(brick_id).isdigit():
+            contact.brick = Area.objects.filter(id=int(brick_id)).first()
+
+        if contact.brick and not contact.area and contact.brick.parent:
+            contact.area = contact.brick.parent
+        elif contact.area and contact.area.parent:
+            if not contact.brick:
+                contact.brick = contact.area
+            contact.area = contact.area.parent
 
         contact.custom_values = extract_custom_values_from_post(request.POST)
         contact.save()
@@ -700,6 +785,7 @@ def contact_edit(request, pk):
         # Update addresses: delete removed and re-create / update
         address_titles = request.POST.getlist('address_title[]')
         address_areas = request.POST.getlist('address_area[]')
+        address_bricks = request.POST.getlist('address_brick[]')
         address_sub_areas = request.POST.getlist('address_sub_area[]')
         address_streets = request.POST.getlist('address_street[]')
         address_is_mains = request.POST.getlist('address_is_main[]')
@@ -708,19 +794,41 @@ def contact_edit(request, pk):
         if address_areas:
             contact.addresses.all().delete()
             for idx, a_id in enumerate(address_areas):
-                card_area = Area.objects.filter(id=a_id).first() if a_id else contact.area
+                card_area = Area.objects.filter(id=a_id).first() if a_id and str(a_id).isdigit() else contact.area
+                b_id = address_bricks[idx] if idx < len(address_bricks) else None
                 sub_name = address_sub_areas[idx] if idx < len(address_sub_areas) else ''
+                card_brick = None
+                if b_id and str(b_id).isdigit():
+                    card_brick = Area.objects.filter(id=int(b_id)).first()
+                elif sub_name and str(sub_name).isdigit():
+                    card_brick = Area.objects.filter(id=int(sub_name)).first()
+                elif sub_name and card_area:
+                    card_brick = Area.objects.filter(parent=card_area, name__iexact=sub_name.strip()).first()
+                if not card_brick:
+                    card_brick = contact.brick
+
+                if card_brick and not card_area and card_brick.parent:
+                    card_area = card_brick.parent
+                elif card_area and card_area.parent:
+                    if not card_brick:
+                        card_brick = card_area
+                    card_area = card_area.parent
+
+                if card_brick:
+                    sub_name = card_brick.name
+
                 street = address_streets[idx] if idx < len(address_streets) else ''
                 title = address_titles[idx] if idx < len(address_titles) else ''
                 is_main = (idx == 0) or (idx < len(address_is_mains) and address_is_mains[idx] in ['on', 'true', '1'])
 
-                if card_area or street or title or (is_main and lat_val is not None):
+                if card_area or card_brick or street or title or (is_main and lat_val is not None):
                     addr_lat = lat_val if is_main else None
                     addr_lng = lng_val if is_main else None
                     ContactAddress.objects.create(
                         contact=contact,
                         title=title or ("العنوان الرئيسي" if is_main else ""),
                         area=card_area,
+                        brick=card_brick,
                         sub_area=sub_name,
                         street_address=street,
                         latitude=addr_lat,
@@ -729,7 +837,16 @@ def contact_edit(request, pk):
                     )
                     if is_main:
                         main_addr_created = True
-        elif request.POST.get('street_address') or contact.area or lat_val is not None:
+                        update_fields = []
+                        if not contact.brick and card_brick:
+                            contact.brick = card_brick
+                            update_fields.append('brick')
+                        if not contact.area and card_area:
+                            contact.area = card_area
+                            update_fields.append('area')
+                        if update_fields:
+                            contact.save(update_fields=update_fields)
+        elif request.POST.get('street_address') or contact.area or contact.brick or lat_val is not None:
             sub_name = request.POST.get('sub_area', '')
             street = request.POST.get('street_address', '')
             contact.addresses.all().delete()
@@ -737,7 +854,8 @@ def contact_edit(request, pk):
                 contact=contact,
                 title=request.POST.get('address_title', 'العنوان الرئيسي'),
                 area=contact.area,
-                sub_area=sub_name,
+                brick=contact.brick,
+                sub_area=sub_name or (contact.brick.name if contact.brick else ''),
                 street_address=street,
                 latitude=lat_val,
                 longitude=lng_val,
@@ -787,9 +905,9 @@ def contact_edit(request, pk):
 
 
 def render_edit_form(request, contact, errors=None):
-    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
-    if not governorates.exists():
-        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+    from accounts.scope_service import ScopeResolutionService
+    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
+    bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
 
     custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
     formatted_custom_fields = []
@@ -813,6 +931,7 @@ def render_edit_form(request, contact, errors=None):
         'contact': contact,
         'addresses': contact.addresses.all(),
         'governorates': governorates,
+        'bricks': bricks,
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
         'account_types': ACCOUNT_TYPES,
@@ -1586,12 +1705,20 @@ def contacts_import(request):
     return render(request, 'contacts/contacts_import.html', {'preview_mode': False})
 
 
-@require_permission('contacts:contacts/list')
+@require_permission([
+    'contacts:contacts/list',
+    'contacts:contacts/create',
+    'contacts:contacts/edit',
+    'contacts:contacts/view',
+    'activities:visits/create',
+])
 def get_subareas(request):
     area_id = request.GET.get('area_id')
     if not area_id:
         return JsonResponse({'subareas': []})
-    subareas = list(Area.objects.filter(parent_id=area_id).values('id', 'name'))
+    from accounts.scope_service import ScopeResolutionService
+    scoped_bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
+    subareas = list(scoped_bricks.filter(parent_id=area_id).values('id', 'name'))
     return JsonResponse({'subareas': subareas})
 
 
@@ -1636,8 +1763,8 @@ def customers_search_api(request):
     qs = Contact.objects.filter(
         Q(is_customer=True) | Q(status='customer') | Q(account_type__gt='')
     ).exclude(status='inactive')\
-        .select_related('area', 'area__parent', 'created_by')\
-        .prefetch_related('addresses__area')
+        .select_related('area', 'brick', 'area__parent', 'created_by')\
+        .prefetch_related('addresses__area', 'addresses__brick')
 
     # Authorization Scoping (Superadmin: all, Manager: Main Area, Representative: Brick)
     from accounts.permissions import get_visit_eligible_contacts_queryset
@@ -1652,7 +1779,8 @@ def customers_search_api(request):
             Q(code__icontains=q) |
             Q(serial_num__icontains=q) |
             Q(mobile__icontains=q) |
-            Q(area__name__icontains=q)
+            Q(area__name__icontains=q) |
+            Q(brick__name__icontains=q)
         ).distinct()
 
     qs = qs.order_by('name')
@@ -1675,6 +1803,8 @@ def customers_search_api(request):
             'specialty': c.specialty or '',
             'account_type': c.account_type or '',
             'area_name': c.area.name if c.area else (main_addr.area.name if main_addr and main_addr.area else ''),
+            'brick_id': c.brick_id or (main_addr.brick_id if main_addr else None),
+            'brick_name': c.brick.name if c.brick else (main_addr.brick.name if main_addr and main_addr.brick else ''),
             'street_address': main_addr.street_address if main_addr else '',
             'has_location': c.has_saved_location,
             'has_saved_location': c.has_saved_location,

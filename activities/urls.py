@@ -36,6 +36,7 @@ urlpatterns = [
     path('visits/export/', views.visits_export, name='visits_export'),
     path('visits/<int:pk>/', views.visit_detail, name='visit_detail'),
     path('visits/<int:pk>/edit/', views.visit_edit, name='visit_edit'),
+    path('visits/<int:pk>/set-time/', views.visit_set_time, name='visit_set_time'),
     path('visits/<int:pk>/evidence/photo/', views.visit_evidence_photo, name='visit_evidence_photo'),
     path('visits/<int:pk>/action/<str:action>/', views.visit_action, name='visit_action'),
 

@@ -71,8 +71,8 @@ class CompanyProfile(models.Model):
 
     @classmethod
     def get_settings(cls):
-        profile, _ = cls.objects.get_or_create(id=1)
-        return profile
+        from .services import SettingsService
+        return SettingsService.get_company_profile()
 
 
 class LocationSettings(models.Model):
@@ -213,8 +213,8 @@ class LocationSettings(models.Model):
 
     @classmethod
     def get_settings(cls):
-        obj, _ = cls.objects.get_or_create(id=1)
-        return obj
+        from .services import SettingsService
+        return SettingsService.get_location_settings()
 
 
 class ExpenseType(models.Model):
@@ -331,8 +331,8 @@ class SalesSettings(models.Model):
 
     @classmethod
     def get_settings(cls):
-        obj, _ = cls.objects.get_or_create(id=1)
-        return obj
+        from .services import SettingsService
+        return SettingsService.get_sales_settings()
 
 
 class PurchaseSettings(models.Model):
@@ -377,8 +377,8 @@ class PurchaseSettings(models.Model):
 
     @classmethod
     def get_settings(cls):
-        obj, _ = cls.objects.get_or_create(id=1)
-        return obj
+        from .services import SettingsService
+        return SettingsService.get_purchase_settings()
 
 
 class ContactFieldSetting(models.Model):

@@ -161,7 +161,7 @@ class VisitExpenseInline(admin.TabularInline):
 @admin.register(Visit)
 class VisitAdmin(admin.ModelAdmin):
     list_display = (
-        'serial_num', 'contact', 'owner', 'template', 'date',
+        'serial_num', 'contact', 'owner', 'template', 'date', 'time',
         'status_badge', 'approval_badge', 'location_status_badge',
         'distance', 'allowed_distance', 'requires_approval_due_to_distance',
         'waiting_for_reapproval', 'is_successful', 'doubled'
@@ -188,7 +188,7 @@ class VisitAdmin(admin.ModelAdmin):
     fieldsets = (
         ('معلومات الزيارة الأساسية', {
             'fields': (
-                ('serial_num', 'date', 'visit_time'),
+                ('serial_num', 'date', 'time', 'visit_time'),
                 ('contact', 'template', 'owner'),
                 ('status', 'approval_status', 'is_planned'),
                 ('requires_approval_due_to_distance', 'waiting_for_reapproval'),

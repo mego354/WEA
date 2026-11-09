@@ -29,6 +29,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'إدارة الأدوار ومصفوفة الصلاحيات',
                 'actions': [
                     ('system:rbac/manage', 'إنشاء وتعديل وتكرار وحذف أدوار الصلاحيات', 'admin'),
+                    ('settings:rbac/view', 'عرض واستعراض أدوار ومصفوفة الصلاحيات', 'read'),
                 ]
             },
             'audit': {
@@ -137,6 +138,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:orders/list', 'عرض قائمة أوامر المبيعات', 'read'),
                     ('sales:orders/view', 'عرض تفاصيل أمر البيع والأسعار', 'read'),
                     ('sales:orders/create', 'إنشاء وتجهيز أمر بيع جديد', 'write'),
+                    ('sales:orders/edit', 'تعديل بيانات أمر البيع والبنود قبل الاعتماد', 'write'),
                     ('sales:orders/approve', 'اعتماد أمر البيع من مدير المبيعات', 'workflow'),
                     ('sales:orders/unstock', 'صرف بضاعة أمر البيع من المخزن (Delivered)', 'workflow'),
                     ('sales:orders/invoice', 'ترحيل فاتورة البيع لحساب العميل المدين', 'financial'),
@@ -172,6 +174,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'أرصدة المخزون والتشغيلات',
                 'actions': [
                     ('inventory:stocks/view', 'عرض أرصدة المخزون والتشغيلات وتواريخ الصلاحية', 'read'),
+                    ('inventory:stocks/export', 'تصدير كشف أرصدة المخزون إلى Excel', 'export'),
                 ]
             },
             'warehouses': {
@@ -184,6 +187,17 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'أذونات المخزن (إضافة وصرف وتحويل)',
                 'actions': [
                     ('inventory:memos/manage', 'إنشاء واعتماد أذونات الإضافة والصرف المخزني', 'workflow'),
+                ]
+            },
+            'transfers': {
+                'name_ar': 'التحويلات المخزنية بين الفروع',
+                'actions': [
+                    ('inventory:transfers/list', 'عرض قائمة طلبات التحويل المخزني', 'read'),
+                    ('inventory:transfers/view', 'عرض تفاصيل طلب التحويل المخزني والبنود', 'read'),
+                    ('inventory:transfers/create', 'إنشاء وطلب تحويل مخزني جديد', 'write'),
+                    ('inventory:transfers/approve', 'اعتماد أو رفض طلب التحويل المخزني', 'workflow'),
+                    ('inventory:transfers/execute', 'تنفيذ التحويل المخزني ونقل البضاعة', 'workflow'),
+                    ('inventory:transfers/cancel', 'إلغاء طلب التحويل المخزني', 'workflow'),
                 ]
             }
         }

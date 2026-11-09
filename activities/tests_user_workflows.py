@@ -428,9 +428,13 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'approved')
 
-        # Accountant completes
+        # Accountant starts and completes
         self.client.logout()
         self.client.login(username='acc_user', password='Password123!')
+        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
         self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'complete',
             'visit_outcome': 'successful',

@@ -124,7 +124,7 @@ def inventory_stock_export(request):
     return export_to_excel_response(qs, columns, filename="inventory_stock_export", sheet_title="أرصدة المخزون")
 
 
-@login_required
+@require_permission(['inventory:warehouses/manage', 'inventory:stocks/view'])
 def warehouses_list(request):
     """
     List of warehouses scoped by manager region or rep ownership.
@@ -339,7 +339,7 @@ def inventory_memo_create(request):
     return render(request, 'inventory/memo_create.html', context)
 
 
-@login_required
+@require_permission('inventory:memos/manage')
 def inventory_memo_detail(request, pk):
     memo = get_object_or_404(
         InventoryMemo.objects.select_related('warehouse', 'created_by').prefetch_related('items__product'),
@@ -359,7 +359,7 @@ def inventory_memo_detail(request, pk):
 # PRODUCT TRANSFERS BETWEEN WAREHOUSES IN THE SAME MAIN AREA
 # ==============================================================================
 
-@login_required
+@require_permission('inventory:transfers/list')
 def product_transfers_list(request):
     """
     List of product transfer requests scoped by user role and main area.
@@ -395,7 +395,7 @@ def product_transfers_list(request):
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
-    can_approve = is_super or is_accountant(request.user) or has_perm_or_admin(request.user, 'inventory:transfers/approve')
+    can_approve = is_super or has_perm_or_admin(request.user, 'inventory:transfers/approve')
 
     context = {
         'transfers': page_obj.object_list,
@@ -410,7 +410,7 @@ def product_transfers_list(request):
     return render(request, 'inventory/product_transfers_list.html', context)
 
 
-@login_required
+@require_permission('inventory:transfers/create')
 def product_transfer_create(request):
     """
     Creates a new product transfer request from a warehouse in the same main area.
@@ -426,14 +426,14 @@ def product_transfer_create(request):
         dest_wh_id = request.POST.get('destination_warehouse')
         notes = request.POST.get('notes', '').strip()
 
-        # If user is representative, always enforce their designated warehouse as destination
-        if user_rep_wh:
+        # Resolve destination warehouse
+        if dest_wh_id:
+            destination_warehouse = get_object_or_404(Warehouse, id=dest_wh_id)
+        elif user_rep_wh:
             destination_warehouse = user_rep_wh
         else:
-            if not dest_wh_id:
-                messages.error(request, "يرجى اختيار مخزن الاستلام.")
-                return redirect('product_transfer_create')
-            destination_warehouse = get_object_or_404(Warehouse, id=dest_wh_id)
+            messages.error(request, "يرجى اختيار مخزن الاستلام.")
+            return redirect('product_transfer_create')
 
         if not source_wh_id:
             messages.error(request, "يرجى اختيار المخزن المحول منه.")
@@ -482,12 +482,8 @@ def product_transfer_create(request):
             return redirect('product_transfer_create')
 
     # Available destination warehouses
-    if user_rep_wh:
-        dest_warehouses = [user_rep_wh]
-        dest_main_area = user_rep_wh.main_area
-    else:
-        dest_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
-        dest_main_area = None
+    dest_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
+    dest_main_area = user_rep_wh.main_area if user_rep_wh else None
 
     # Available source warehouses: filter to same main area as destination
     all_active_whs = Warehouse.objects.filter(is_active=True).select_related('area', 'assigned_user')
@@ -512,6 +508,7 @@ def product_transfer_create(request):
 
 
 @login_required
+@require_permission('inventory:transfers/view')
 def product_transfer_detail(request, pk):
     """
     Detail page for a product transfer request showing approval status,
@@ -530,14 +527,14 @@ def product_transfer_detail(request, pk):
         return render_forbidden_response(request, "لا يمكنك عرض هذا الطلب خارج نطاق منطقتك الجغرافية أو صلاحيتك.")
 
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
-    is_accountant_user = is_accountant(request.user)
-    has_approval_perm = is_super or is_accountant_user or has_perm_or_admin(request.user, 'inventory:transfers/approve')
+    has_approval_perm = is_super or has_perm_or_admin(request.user, 'inventory:transfers/approve')
+    has_execute_perm = is_super or has_perm_or_admin(request.user, 'inventory:transfers/execute')
 
-    # Approval permission checks
+    # Approval and execution permission checks
     can_approve = has_approval_perm and transfer_req.status == 'pending' and (is_super or transfer_req.requesting_user_id != request.user.id)
     can_reject = has_approval_perm and transfer_req.status in ['pending', 'approved']
-    can_execute = has_approval_perm and transfer_req.status == 'approved'
-    can_cancel = (transfer_req.requesting_user_id == request.user.id or is_super) and transfer_req.status in ['pending', 'approved']
+    can_execute = has_execute_perm and transfer_req.status == 'approved'
+    can_cancel = (transfer_req.requesting_user_id == request.user.id or is_super or has_perm_or_admin(request.user, 'inventory:transfers/cancel')) and transfer_req.status in ['pending', 'approved']
 
     context = {
         'transfer': transfer_req,
@@ -554,19 +551,33 @@ def product_transfer_detail(request, pk):
 def product_transfer_action(request, pk, action):
     """
     Action endpoint to approve, reject, cancel, or execute an inter-warehouse transfer.
-    Strictly enforced on the backend.
+    Strictly enforced via permissions.
     """
     transfer_req = get_object_or_404(ProductTransferRequest, pk=pk)
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
 
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
-    is_accountant_user = is_accountant(request.user)
-    has_approval_perm = is_super or is_accountant_user or has_perm_or_admin(request.user, 'inventory:transfers/approve')
+
+    action_perm_map = {
+        'approve': 'inventory:transfers/approve',
+        'reject': 'inventory:transfers/approve',
+        'execute': 'inventory:transfers/execute',
+        'cancel': 'inventory:transfers/cancel',
+    }
+    needed_perm = action_perm_map.get(action)
+    if action == 'cancel' and transfer_req.requesting_user_id == request.user.id:
+        pass  # Creator allowed to cancel pending transfer
+    elif needed_perm and not has_perm_or_admin(request.user, needed_perm):
+        return render_forbidden_response(request, f"ليس لديك صلاحية لتنفيذ هذا الإجراء ({needed_perm})", perm_codename=needed_perm)
+
+    if not can_user_access_object(request.user, transfer_req, action):
+        return render_forbidden_response(request, "لا يمكنك اتخاذ هذا الإجراء خارج نطاق صلاحيتك أو مخازنك المصرح بها.")
 
     try:
         if action == 'approve':
-            if not has_approval_perm:
-                return render_forbidden_response(request, "صلاحية اعتماد طلب التحويل مقصورة على SuperAdmin والمحاسبين المعتمدين.")
+            if not is_super and transfer_req.requesting_user_id == request.user.id:
+                messages.error(request, "لا يمكن لمقدم طلب التحويل اعتماده بنفسه (مبدأ الرقابة الثنائية).")
+                return redirect('product_transfer_detail', pk=transfer_req.pk)
             notes = request.POST.get('approval_notes', '').strip()
             ProductTransferService.approve_request(transfer_req, request.user, notes=notes)
             msg = f"تم اعتماد طلب التحويل المخزني {transfer_req.reference_number} بنجاح. الطلب الآن جاهز للتنفيذ المخزني."
@@ -575,8 +586,6 @@ def product_transfer_action(request, pk, action):
             messages.success(request, msg)
 
         elif action == 'reject':
-            if not has_approval_perm:
-                return render_forbidden_response(request, "صلاحية رفض طلب التحويل مقصورة على SuperAdmin والمحاسبين المعتمدين.")
             reason = request.POST.get('rejection_reason', '').strip() or request.POST.get('reason', '').strip()
             if not reason:
                 msg = "يرجى كتابة سبب رفض طلب التحويل."
@@ -599,8 +608,6 @@ def product_transfer_action(request, pk, action):
             messages.warning(request, msg)
 
         elif action == 'execute':
-            if not has_approval_perm:
-                return render_forbidden_response(request, "صلاحية تنفيذ التحويل ونقل المخزون مقصورة على SuperAdmin والمحاسبين.")
             ProductTransferService.execute_transfer(transfer_req, request.user)
             msg = f"تم تنفيذ التحويل المخزني {transfer_req.reference_number} بنجاح، وتم خصم وإضافة الكميات وتوليد أذونات المخازن المقابلة."
             if is_ajax:

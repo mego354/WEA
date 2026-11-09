@@ -28,6 +28,7 @@ from .models import (
     SalesSettings, PurchaseSettings, ContactFieldSetting,
     DataSyncConfig
 )
+from .services import SettingsService
 
 
 def _format_metric_amount(val):
@@ -152,11 +153,14 @@ def home_view(request):
     """
     user = request.user
     UserModel = get_user_model()
+    from accounts.scope_service import ScopeResolutionService
 
-    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser or (user.role and user.role.name in ['CEO', 'Admin'])
+    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser or (user.role and getattr(user.role, 'is_super', False))
+    user_act_scope = ScopeResolutionService.get_user_scope(user, 'activities', 'view')
+    user_sales_scope = ScopeResolutionService.get_user_scope(user, 'sales', 'view')
     is_acct = not is_super and is_accountant(user)
-    is_mgr = not is_super and not is_acct and is_manager_or_higher(user)
-    is_rep = not is_super and not is_acct and not is_mgr
+    is_mgr = not is_super and not is_acct and (user_act_scope in ['area', 'all'] or user_sales_scope in ['area', 'all'])
+    is_rep = not is_super and not is_mgr and not is_acct
 
     # Manager / Superadmin representative selection
     eligible_reps = []
@@ -167,7 +171,7 @@ def home_view(request):
                 Q(role__is_rep=True) | Q(assigned_warehouses__isnull=False) | Q(assigned_vaults__isnull=False)
             ).distinct().select_related('role').order_by('name'))
         else:
-            eligible_reps = list(get_user_managed_representatives(user).filter(
+            eligible_reps = list(ScopeResolutionService.get_user_managed_subordinates(user, 'sales').filter(
                 is_active=True
             ).exclude(id=user.id).select_related('role').order_by('name'))
 
@@ -175,10 +179,9 @@ def home_view(request):
         if selected_rep_id and selected_rep_id.isdigit():
             target_user = UserModel.objects.filter(id=int(selected_rep_id), is_active=True).first()
             if target_user:
-                if is_super or is_manager_eligible_for_user(user, target_user):
+                if is_super or ScopeResolutionService.is_manager_eligible_for_user(user, target_user):
                     selected_rep = target_user
                 else:
-                    # Security restriction: Rep is outside manager's authorized area scope
                     selected_rep = None
                     messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
 
@@ -210,7 +213,7 @@ def home_view(request):
         end_date_str = '2026-10-31'
         display_range = "01/10/2026 – 31/10/2026"
 
-    # Querysets strictly filtered by role and authorized scope
+    # Querysets strictly filtered by authorized scope and selected rep (if any)
     if selected_rep:
         so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
         ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
@@ -220,30 +223,11 @@ def home_view(request):
         cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
         po_qs = PurchaseOrder.objects.filter(created_by=selected_rep)
         vendor_payments_qs = VendorPayment.objects.filter(created_by=selected_rep)
-    elif is_rep:
-        so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=user)
-        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=user)
-        col_qs = Collection.objects.filter(created_by=user)
-        vis_qs = Visit.objects.filter(Q(owner=user) | Q(created_by=user))
-        cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=user) | Q(assigned_team=user))
-        cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
-        po_qs = PurchaseOrder.objects.filter(created_by=user)
-        vendor_payments_qs = VendorPayment.objects.filter(created_by=user)
-    elif is_acct:
-        so_qs = SalesOrder.objects.exclude(status='cancelled')
-        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled')
-        col_qs = Collection.objects.all()
-        vis_qs = Visit.objects.none()
-        cont_qs = Contact.objects.filter(is_customer=True)
-        cust_acc_qs = CustomerAccount.objects.all()
-        po_qs = PurchaseOrder.objects.all()
-        vendor_payments_qs = VendorPayment.objects.all()
     else:
-        # Superadmin or Manager (Team Scope)
         so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user, 'salesorder')
         ro_qs = get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), user, 'salesreturnorder')
         col_qs = get_scoped_queryset(Collection.objects.all(), user, 'collection')
-        vis_qs = get_scoped_queryset(Visit.objects.all(), user, 'visit')
+        vis_qs = get_scoped_queryset(Visit.objects.all(), user, 'visit') if has_perm_or_admin(user, 'activities:visits/list') else Visit.objects.none()
         cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
         cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')
         po_qs = get_scoped_queryset(PurchaseOrder.objects.all(), user, 'purchaseorder')
@@ -421,19 +405,14 @@ def home_view(request):
 @login_required
 @require_permission('settings:branding/edit')
 def branding_settings_view(request):
-    profile = CompanyProfile.get_settings()
+    profile = SettingsService.get_company_profile()
     if request.method == 'POST':
-        profile.company_name = request.POST.get('company_name', profile.company_name).strip()
-        profile.commercial_registry = request.POST.get('commercial_registry', profile.commercial_registry).strip()
-        profile.tax_id = request.POST.get('tax_id', profile.tax_id).strip()
-        profile.phone = request.POST.get('phone', profile.phone).strip()
-        profile.address = request.POST.get('address', profile.address).strip()
-        profile.email = request.POST.get('email', profile.email).strip()
-
-        if 'logo' in request.FILES:
-            profile.logo = request.FILES['logo']
-
-        profile.save()
+        profile = SettingsService.update_company_profile(
+            user=request.user,
+            data=request.POST,
+            files=request.FILES,
+            request=request
+        )
         messages.success(request, "تم حفظ إعدادات بيانات الشركة بنجاح.")
         return redirect('branding_settings')
 
@@ -451,69 +430,15 @@ def location_settings_view(request):
     Location settings view matching https://weapharma.bricks-rep.com/settings/location
     """
     from accounts.models import Role
-    loc_settings = LocationSettings.get_settings()
+    loc_settings = SettingsService.get_location_settings()
     all_roles = Role.objects.filter(is_active=True).order_by('id')
 
     if request.method == 'POST':
-        try:
-            loc_settings.tolerance = int(request.POST.get('tolerance', 300))
-            loc_settings.max_verified_accuracy = int(request.POST.get('max_verified_accuracy', 50))
-            loc_settings.max_verified_warn_accuracy = int(request.POST.get('max_verified_warn_accuracy', 100))
-        except (ValueError, TypeError):
-            pass
-
-        loc_settings.auto_start_location_tracking_service = request.POST.get('auto_start_location_tracking_service') == 'on'
-        loc_settings.auto_set_customer_location_in_visit = request.POST.get('auto_set_customer_location_in_visit') == 'on'
-
-        # Workflow verification dropdowns
-        loc_settings.verify_visits = request.POST.get('verify_visits') in ('1', 'on', 'true')
-        loc_settings.verify_sales_orders = request.POST.get('verify_sales_orders') in ('1', 'on', 'true')
-        loc_settings.verify_sales_returns = request.POST.get('verify_sales_returns') in ('1', 'on', 'true')
-
-        # User creation and manager approval controls
-        loc_settings.allow_all_users_to_create_visits = request.POST.get('allow_all_users_to_create_visits') in ('on', '1', 'true')
-        loc_settings.require_manager_approval_for_visits = request.POST.get('require_manager_approval_for_visits') in ('on', '1', 'true')
-        loc_settings.allow_all_users_to_create_agreements = request.POST.get('allow_all_users_to_create_agreements') in ('on', '1', 'true')
-        loc_settings.require_manager_approval_for_agreements = request.POST.get('require_manager_approval_for_agreements') in ('on', '1', 'true')
-
-        # Distance & Bypass Governance Controls
-        if 'allow_template_distance_override' in request.POST or 'distance_governance_submitted' in request.POST:
-            loc_settings.allow_template_distance_override = request.POST.get('allow_template_distance_override') in ('on', '1', 'true')
-            loc_settings.verify_unplanned_visit_distance = request.POST.get('verify_unplanned_visit_distance') in ('on', '1', 'true')
-            loc_settings.verify_end_visit_distance = request.POST.get('verify_end_visit_distance') in ('on', '1', 'true')
-            loc_settings.bypass_reason_mandatory = request.POST.get('bypass_reason_mandatory') in ('on', '1', 'true')
-            loc_settings.distance_bypass_requires_approval = request.POST.get('distance_bypass_requires_approval') in ('on', '1', 'true')
-
-        loc_settings.save()
-
-        if 'distance_governance_submitted' in request.POST or 'roles_can_bypass_distance_creation' in request.POST:
-            creation_role_ids = [int(r) for r in request.POST.getlist('roles_can_bypass_distance_creation') if str(r).isdigit()]
-            ending_role_ids = [int(r) for r in request.POST.getlist('roles_can_bypass_distance_ending') if str(r).isdigit()]
-            loc_settings.roles_can_bypass_distance_creation.set(creation_role_ids)
-            loc_settings.roles_can_bypass_distance_ending.set(ending_role_ids)
-
-        from accounts.services import AuditLogService
-        AuditLogService.log(
-            action_type='LOCATION_SETTINGS_UPDATED',
-            module='settings',
-            actor=request.user,
-            record_id=loc_settings.id,
-            record_name="إعدادات الموقع الجغرافي",
-            description="تحديث إعدادات التحقق من الموقع الجغرافي وسماحية الزيارات وصلاحيات التجاوز",
-            new_values={
-                'tolerance': loc_settings.tolerance,
-                'max_verified_accuracy': loc_settings.max_verified_accuracy,
-                'verify_visits': loc_settings.verify_visits,
-                'allow_template_distance_override': loc_settings.allow_template_distance_override,
-                'verify_unplanned_visit_distance': loc_settings.verify_unplanned_visit_distance,
-                'verify_end_visit_distance': loc_settings.verify_end_visit_distance,
-                'bypass_reason_mandatory': loc_settings.bypass_reason_mandatory,
-                'distance_bypass_requires_approval': loc_settings.distance_bypass_requires_approval,
-            },
-            status='SUCCESS',
-            request=request,
+        loc_settings = SettingsService.update_location_settings(
+            user=request.user,
+            data=request.POST,
+            request=request
         )
-
         messages.success(request, "تم حفظ إعدادات الموقع والزيارات بنجاح.")
         return redirect('location_settings')
 
@@ -528,7 +453,7 @@ def location_settings_view(request):
 @require_permission(['settings:location/manage', 'activities:visits/create', 'activities:visits/edit', 'activities:visits/view'])
 def geofence_settings_api(request):
     """API endpoint returning geofence settings, matching /api/v1/geofence/settings."""
-    loc_settings = LocationSettings.get_settings()
+    loc_settings = SettingsService.get_location_settings()
     return JsonResponse({
         'settings': {
             'tolerance': loc_settings.tolerance,
@@ -931,23 +856,13 @@ def agreement_delete(request, pk):
 @login_required
 @require_permission('settings:sales/manage')
 def sales_settings_view(request):
-    sales_settings = SalesSettings.get_settings()
+    sales_settings = SettingsService.get_sales_settings()
     if request.method == 'POST':
-        sales_settings.require_verification_manager = request.POST.get('require_verification_manager') == 'on'
-        sales_settings.auto_invoice_on_dispatch = request.POST.get('auto_invoice_on_dispatch') == 'on'
-        sales_settings.auto_invoice_on_return = request.POST.get('auto_invoice_on_return') == 'on'
-        sales_settings.collect_payment_on_invoicing = request.POST.get('collect_payment_on_invoicing') == 'on'
-        sales_settings.auto_link_accounting_on_collection = request.POST.get('auto_link_accounting_on_collection') == 'on'
-        sales_settings.use_receipt_books = request.POST.get('use_receipt_books') == 'on'
-        sales_settings.auto_close_cash_collection = request.POST.get('auto_close_cash_collection') == 'on'
-        sales_settings.auto_close_collection_on_full_payment = request.POST.get('auto_close_collection_on_full_payment') == 'on'
-
-        sales_settings.tax_mode = request.POST.get('tax_mode', 'optional')
-        sales_settings.default_packaging_unit = request.POST.get('default_packaging_unit', 'box')
-        sales_settings.allow_all_users_to_create = request.POST.get('allow_all_users_to_create') == 'on'
-        sales_settings.require_manager_approval = request.POST.get('require_manager_approval') == 'on'
-        sales_settings.save()
-
+        sales_settings = SettingsService.update_sales_settings(
+            user=request.user,
+            data=request.POST,
+            request=request
+        )
         messages.success(request, "تم حفظ إعدادات المبيعات بنجاح.")
         return redirect('sales_settings')
 
@@ -961,21 +876,13 @@ def sales_settings_view(request):
 @login_required
 @require_permission('settings:purchase/manage')
 def purchase_settings_view(request):
-    purchase_settings = PurchaseSettings.get_settings()
+    purchase_settings = SettingsService.get_purchase_settings()
     if request.method == 'POST':
-        purchase_settings.auto_invoice_on_dispatch = request.POST.get('auto_invoice_on_dispatch') == 'on'
-        purchase_settings.auto_invoice_on_return = request.POST.get('auto_invoice_on_return') == 'on'
-        purchase_settings.collect_payment_on_invoicing = request.POST.get('collect_payment_on_invoicing') == 'on'
-        purchase_settings.auto_link_accounting_on_payment = request.POST.get('auto_link_accounting_on_payment') == 'on'
-        purchase_settings.auto_close_cash_payment = request.POST.get('auto_close_cash_payment') == 'on'
-        purchase_settings.auto_close_payment_on_full_settlement = request.POST.get('auto_close_payment_on_full_settlement') == 'on'
-
-        purchase_settings.tax_mode = request.POST.get('tax_mode', 'optional')
-        purchase_settings.default_packaging_unit = request.POST.get('default_packaging_unit', 'piece')
-        purchase_settings.allow_all_users_to_create = request.POST.get('allow_all_users_to_create') == 'on'
-        purchase_settings.require_manager_approval = request.POST.get('require_manager_approval') == 'on'
-        purchase_settings.save()
-
+        purchase_settings = SettingsService.update_purchase_settings(
+            user=request.user,
+            data=request.POST,
+            request=request
+        )
         messages.success(request, "تم حفظ إعدادات المشتريات بنجاح.")
         return redirect('purchase_settings')
 
@@ -990,41 +897,15 @@ def purchase_settings_view(request):
 @require_permission('settings:inventory/manage')
 def inventory_settings_view(request):
     from accounts.models import Role
-    from accounts.services import AuditLogService
-    profile = CompanyProfile.get_settings()
+    profile = SettingsService.get_company_profile()
     roles = Role.objects.filter(is_active=True).order_by('name')
 
     if request.method == 'POST':
-        profile.use_expiry_date = request.POST.get('use_expiry_date') == 'on'
-        profile.is_expiry_mandatory = request.POST.get('is_expiry_mandatory') == 'on'
-        profile.use_batch_number = request.POST.get('use_batch_number') == 'on'
-        profile.is_batch_mandatory = request.POST.get('is_batch_mandatory') == 'on'
-        profile.save()
-
-        roles_stock_in = request.POST.getlist('roles_can_stock_in')
-        roles_stock_out = request.POST.getlist('roles_can_stock_out')
-        roles_transfer = request.POST.getlist('roles_can_transfer')
-
-        profile.roles_can_stock_in.set(roles_stock_in)
-        profile.roles_can_stock_out.set(roles_stock_out)
-        profile.roles_can_transfer.set(roles_transfer)
-
-        AuditLogService.log(
+        profile = SettingsService.update_inventory_settings(
             user=request.user,
-            action='UPDATE',
-            resource_type='InventorySettings',
-            resource_id=str(profile.id),
-            resource_name=profile.company_name,
-            details={
-                'use_expiry_date': profile.use_expiry_date,
-                'use_batch_number': profile.use_batch_number,
-                'roles_can_stock_in': list(roles_stock_in),
-                'roles_can_stock_out': list(roles_stock_out),
-                'roles_can_transfer': list(roles_transfer),
-            },
+            data=request.POST,
             request=request
         )
-
         messages.success(request, "تم حفظ إعدادات وصلاحيات المخازن بنجاح.")
         return redirect('inventory_settings')
 

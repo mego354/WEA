@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, Permission
 
 
@@ -95,6 +96,11 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True, verbose_name="الصورة الشخصية")
     locale = models.CharField(max_length=10, default="ar", verbose_name="لغة الواجهة")
     bypass_location_verification = models.BooleanField(default=False, verbose_name="تجاوز التحقق من الموقع (خاص بالمدراء)")
+    has_custom_permissions = models.BooleanField(
+        default=False,
+        verbose_name="تخصيص صلاحيات مستقلة للمستخدم",
+        help_text="عند التفعيل، تُطبق الصلاحيات المحددة مباشرة للمستخدم بدلاً من وراثة صلاحيات الدور الوظيفي."
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ التسجيل")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
 
@@ -197,10 +203,14 @@ class User(AbstractUser):
             self._cached_perm_codenames = all_codenames
             return self._cached_perm_codenames
 
-        # Get all permissions assigned to the role plus any direct user permissions
-        role_perms = set(self.role.permissions.values_list('codename', flat=True)) if (self.role and self.role.is_active) else set()
-        user_perms = set(self.user_permissions.values_list('codename', flat=True))
-        all_assigned = role_perms | user_perms
+        # If user has custom direct permissions enabled, use user_permissions explicitly
+        if getattr(self, 'has_custom_permissions', False):
+            all_assigned = set(self.user_permissions.values_list('codename', flat=True))
+        else:
+            # Get all permissions assigned to the role plus any direct user permissions
+            role_perms = set(self.role.permissions.values_list('codename', flat=True)) if (self.role and self.role.is_active) else set()
+            user_perms = set(self.user_permissions.values_list('codename', flat=True))
+            all_assigned = role_perms | user_perms
         
         # Enforce Module-Level Inheritance:
         # A child permission is effective IF AND ONLY IF its parent module root permission is enabled!
@@ -237,8 +247,91 @@ class User(AbstractUser):
         if isinstance(perm_codename, (list, tuple, set)):
             return any(self.has_permission(p) for p in perm_codename)
 
+        # Normalize redundant alias codenames for single source of truth
+        if perm_codename == 'treasury:vaults/transactions':
+            perm_codename = 'treasury:transactions/list'
+
         effective_perms = self.get_effective_permission_codenames()
         return perm_codename in effective_perms
+
+
+class RoleModuleScope(models.Model):
+    SCOPE_OWN = 'own'
+    SCOPE_BRICK = 'brick'
+    SCOPE_AREA = 'area'
+    SCOPE_ALL = 'all'
+
+    SCOPE_CHOICES = [
+        (SCOPE_OWN, 'سجلات المستخدم فقط (Own)'),
+        (SCOPE_BRICK, 'سجلات الخط الجغرافي المعين (Brick)'),
+        (SCOPE_AREA, 'سجلات المنطقة الرئيسية والمحافظة (Area)'),
+        (SCOPE_ALL, 'كافة سجلات النظام (All)'),
+    ]
+
+    MODULE_CONTACTS = 'contacts'
+    MODULE_ACTIVITIES = 'activities'
+    MODULE_SALES = 'sales'
+    MODULE_PURCHASES = 'purchases'
+    MODULE_INVENTORY = 'inventory'
+    MODULE_TREASURY = 'treasury'
+    MODULE_CATALOG = 'catalog'
+    MODULE_ACCOUNTS = 'accounts'
+
+    MODULE_CHOICES = [
+        (MODULE_CONTACTS, 'جهات الاتصال (العملاء والموردين)'),
+        (MODULE_ACTIVITIES, 'الأنشطة الميدانية والزيارات والاتفاقيات'),
+        (MODULE_SALES, 'المبيعات والطلبات والتحصيلات'),
+        (MODULE_PURCHASES, 'المشتريات وأوامر التوريد'),
+        (MODULE_INVENTORY, 'المخازن والمخزون والتحويلات'),
+        (MODULE_TREASURY, 'الخزينة والمالية والمدفوعات'),
+        (MODULE_CATALOG, 'دليل المنتجات والكتالوج'),
+        (MODULE_ACCOUNTS, 'المستخدمين وإدارة الأدوار'),
+    ]
+
+    MODULE_KEYS = [
+        MODULE_CONTACTS,
+        MODULE_ACTIVITIES,
+        MODULE_SALES,
+        MODULE_PURCHASES,
+        MODULE_INVENTORY,
+        MODULE_TREASURY,
+        MODULE_CATALOG,
+        MODULE_ACCOUNTS,
+    ]
+
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='module_scopes', verbose_name="الدور الوظيفي")
+    module = models.CharField(max_length=50, choices=MODULE_CHOICES, verbose_name="الموديول")
+    view_scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default=SCOPE_OWN, verbose_name="نطاق العرض والاستعراض")
+    manage_scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default=SCOPE_OWN, verbose_name="نطاق التعديل والإدارة")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "نطاق بيانات الموديول للدور"
+        verbose_name_plural = "نطاقات بيانات الموديولات للأدوار"
+        unique_together = ('role', 'module')
+        ordering = ['role', 'module']
+
+    def __str__(self):
+        return f"{self.role.display_name} - {self.get_module_display()} [عرض: {self.view_scope} / إدارة: {self.manage_scope}]"
+
+
+class UserModuleScope(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_module_scopes', verbose_name="المستخدم")
+    module = models.CharField(max_length=50, choices=RoleModuleScope.MODULE_CHOICES, verbose_name="الموديول")
+    view_scope = models.CharField(max_length=20, choices=RoleModuleScope.SCOPE_CHOICES, default=RoleModuleScope.SCOPE_OWN, verbose_name="نطاق العرض المخصص")
+    manage_scope = models.CharField(max_length=20, choices=RoleModuleScope.SCOPE_CHOICES, default=RoleModuleScope.SCOPE_OWN, verbose_name="نطاق الإدارة المخصص")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "نطاق بيانات الموديول المخصص للمستخدم"
+        verbose_name_plural = "نطاقات بيانات الموديولات المخصصة للمستخدمين"
+        unique_together = ('user', 'module')
+        ordering = ['user', 'module']
+
+    def __str__(self):
+        return f"{self.user} - {self.get_module_display()} [عرض: {self.view_scope} / إدارة: {self.manage_scope}]"
 
 
 class SecurityAuditLog(models.Model):
@@ -553,8 +646,8 @@ class UserSettings(models.Model):
 
     @classmethod
     def get_settings(cls):
-        obj, _ = cls.objects.get_or_create(id=1)
-        return obj
+        from master_data.services import SettingsService
+        return SettingsService.get_user_settings()
 
 
 

@@ -46,19 +46,20 @@ Browser/AJAX → `config/urls.py` (includes plus **reference-ERP URL aliases**) 
 
 ## C. Mandatory business and permission rules
 
-Enforced in `accounts/permissions.py` and `accounts.User.has_permission`. Details: [`docs/business-rules-and-permissions.md`](docs/business-rules-and-permissions.md).
+Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissions`, and `accounts.User.has_permission`. Details: [`docs/business-rules-and-permissions.md`](docs/business-rules-and-permissions.md).
 
-1. **Superadmin** (`User.is_superuser` or active role `name='superadmin'` / `role.is_super`): system-wide access to records and admin functions. Role/RBAC screens and audit log UI remain SuperAdmin-gated.
-2. **Managers**: access representatives, customers, and records whose **canonical root main area** (governorate, `Area.parent is None`) intersects the manager's assigned areas (including all child bricks inside that main area). Sub-area equality is **not** required for managers. A Cairo manager may supervise Nasr City and Maadi reps. A Giza manager must not see Cairo records. Managers with **no** assigned main area fail closed (empty scope).
-3. **Representatives** (`rep`, `medical_rep`): own created/assigned records only, and for visit creation/planning are restricted to customers in their assigned **Brick(s)** (`Area.parent is not None`). No peer-rep access inside the same area.
-4. **Accountant**: broad **view** of financial, sales, purchase, treasury, and inventory records; not user-admin; transfer **approval/execute** is SuperAdmin/accountant (plus `inventory:transfers/approve`).
-5. **Server-side enforcement**: `@require_permission`, `has_perm_or_admin`, `get_scoped_queryset`, `can_user_access_object`, `get_visit_eligible_contacts_queryset`. Hiding a sidebar link is not authorization.
-6. **Data isolation**: never return another area's or user's records merely because an ID is known.
-7. **Consistency**: same scope on list, detail, create, update, delete, export, approval, and related operations.
-8. **Auditability**: mutations must write `SecurityAuditLog` via `AuditLogService` (and visit/order workflow history via `ApprovalAuditLog` where that model is used).
-9. **No unauthorized bypasses**: SuperAdmin exceptions must stay explicit. Settings flags such as `allow_all_users_to_create_visits` grant **create/list permission**, not cross-area data.
-10. **Anti-self-approval**: a user cannot approve/reject their own visit, order, or transfer.
-11. **Post-approval editing**: when a Representative edits an already-approved visit, approval is automatically invalidated (`approval_status='pending'`, `waiting_for_reapproval=True`) while preserving prior `ApprovalAuditLog` history.
+1. **Configurable Module Scopes (`OWN`, `BRICK`, `AREA`, `ALL`)**: All organizational data access is resolved through `ScopeResolutionService` based on configurable `view_scope` and `manage_scope` per module (stored in `RoleModuleScope`, customizable per-user via `UserModuleScope`). Hardcoded role-name checks must never control data access or authorization.
+2. **Superadmin** (`User.is_superuser` or active role `name='superadmin'` / `role.is_super`): system-wide access to records and admin functions. Role/RBAC screens and audit log UI remain SuperAdmin-gated.
+3. **Managers**: access representatives, customers, and records whose **canonical root main area** (governorate, `Area.parent is None`) intersects the manager's assigned areas (including all child bricks inside that main area). Sub-area equality is **not** required for managers. A Cairo manager may supervise Nasr City and Maadi reps. A Giza manager must not see Cairo records. Managers with **no** assigned main area fail closed (empty scope).
+4. **Representatives** (`rep`, `medical_rep`): own created/assigned records only, and for visit creation/planning are restricted to customers in their assigned **Brick(s)** (`Area.parent is not None`). No peer-rep access inside the same area.
+5. **Accountant**: broad **view** of financial, sales, purchase, treasury, and inventory records; not user-admin; transfer **approval/execute** is governed by `inventory:transfers/approve` and module manage scope.
+6. **Server-side enforcement**: `@require_permission`, `has_perm_or_admin`, `get_scoped_queryset`, `can_user_access_object`, `get_visit_eligible_contacts_queryset`. Hiding a sidebar link is not authorization.
+7. **Data isolation**: never return another area's or user's records merely because an ID is known.
+8. **Consistency**: same scope on list, detail, create, update, delete, export, approval, and related operations.
+9. **Auditability**: mutations must write `SecurityAuditLog` via `AuditLogService` (and visit/order workflow history via `ApprovalAuditLog` where that model is used).
+10. **No unauthorized bypasses**: SuperAdmin exceptions must stay explicit. Settings flags such as `allow_all_users_to_create_visits` grant **create/list permission**, not cross-area data.
+11. **Anti-self-approval**: a user cannot approve/reject their own visit, order, or transfer.
+12. **Post-approval editing**: when a Representative edits an already-approved visit, approval is automatically invalidated (`approval_status='pending'`, `waiting_for_reapproval=True`) while preserving prior `ApprovalAuditLog` history.
 
 **Visit customer picker scoping:** `customers_search_api` scopes active customers via `get_visit_eligible_contacts_queryset(request.user)` (all areas for SuperAdmin, Main Area + child bricks for Manager, assigned Bricks for Representative). Contact **list/detail** uses `get_scoped_queryset`.
 

@@ -36,7 +36,16 @@ class Contact(models.Model):
     email = models.EmailField(blank=True, verbose_name="البريد الإلكتروني")
     website = models.CharField(max_length=255, blank=True, verbose_name="الموقع الإلكتروني")
 
-    area = models.ForeignKey(Area, on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts", verbose_name="المنطقة الجغرافية")
+    area = models.ForeignKey(Area, on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts", verbose_name="المنطقة الجغرافية / المحافظة")
+    brick = models.ForeignKey(
+        Area,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts_in_brick",
+        limit_choices_to={'parent__isnull': False},
+        verbose_name="الخط الجغرافي / المنطقة الفرعية (Brick)"
+    )
     tax_id = models.CharField(max_length=100, blank=True, verbose_name="المعرف الضريبي")
     tax_card = models.CharField(max_length=100, blank=True, verbose_name="البطاقة الضريبية")
     commercial_registry = models.CharField(max_length=100, blank=True, verbose_name="السجل التجاري")
@@ -198,12 +207,17 @@ class Contact(models.Model):
                 title="العنوان الرئيسي",
                 is_main=True,
                 area=self.area,
+                brick=self.brick,
                 latitude=lat,
                 longitude=lng
             )
         else:
             addr.latitude = lat
             addr.longitude = lng
+            if not addr.brick and self.brick:
+                addr.brick = self.brick
+            if not addr.area and self.area:
+                addr.area = self.area
             addr.save()
         return addr
 
@@ -229,8 +243,17 @@ class ContactAddress(models.Model):
     title = models.CharField(max_length=150, blank=True, default="", verbose_name="اسم العنوان")
     is_main = models.BooleanField(default=True, verbose_name="العنوان الرئيسي")
     street_address = models.TextField(blank=True, verbose_name="العنوان")
-    area = models.ForeignKey(Area, on_delete=models.SET_NULL, null=True, blank=True, related_name="addresses", verbose_name="المنطقة")
-    sub_area = models.CharField(max_length=150, blank=True, verbose_name="المنطقة الفرعية")
+    area = models.ForeignKey(Area, on_delete=models.SET_NULL, null=True, blank=True, related_name="addresses", verbose_name="المحافظة / المنطقة الرئيسية")
+    brick = models.ForeignKey(
+        Area,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="addresses_in_brick",
+        limit_choices_to={'parent__isnull': False},
+        verbose_name="الخط الجغرافي / المنطقة الفرعية (Brick)"
+    )
+    sub_area = models.CharField(max_length=150, blank=True, verbose_name="المنطقة الفرعية (نص)")
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط العرض")
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط الطول")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -241,6 +264,22 @@ class ContactAddress(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.contact.name}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_main and self.contact:
+            updated = False
+            fields_to_update = []
+            if self.area and not self.contact.area:
+                self.contact.area = self.area
+                fields_to_update.append('area')
+                updated = True
+            if self.brick and not self.contact.brick:
+                self.contact.brick = self.brick
+                fields_to_update.append('brick')
+                updated = True
+            if updated:
+                self.contact.save(update_fields=fields_to_update)
 
 
 class ContactComment(models.Model):

@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
-from accounts.models import Role, User, SecurityAuditLog
+from accounts.models import Role, User, SecurityAuditLog, RoleModuleScope
 from accounts.permission_registry import (
     ERP_PERMISSIONS_CATALOG,
     get_all_registered_permissions,
@@ -149,12 +149,12 @@ class Command(BaseCommand):
             'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/approve',
             'activities:agreements/export',
-            'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/approve', 'sales:orders/export',
+            'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/edit', 'sales:orders/approve', 'sales:orders/export',
             'sales:collections/list',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
             'contacts:contacts/edit', 'contacts:contacts/export',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
-            'module:inventory', 'inventory:stocks/view',
+            'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export', 'inventory:transfers/list', 'inventory:transfers/view',
             'module:purchases', 'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/approve',
             'purchases:orders/export',
         ]
@@ -191,7 +191,8 @@ class Command(BaseCommand):
             'sales:collections/list', 'sales:collections/create', 'sales:collections/export',
             'sales:customers/accounting', 'sales:customers/transactions',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/export',
-            'module:inventory', 'inventory:stocks/view',
+            'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export',
+            'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/approve', 'inventory:transfers/execute',
         ]
         accountant.permissions.set([perm_map[c] for c in acc_codenames if c in perm_map])
 
@@ -229,6 +230,7 @@ class Command(BaseCommand):
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create',
             'sales:collections/list', 'sales:collections/create',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
+            'module:inventory', 'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/create',
         ]
         rep_role.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
 
@@ -261,4 +263,78 @@ class Command(BaseCommand):
         # Deactivate any non-canonical roles so only the 5 canonical roles are active
         Role.objects.exclude(name__in=Role.CANONICAL_ROLE_KEYS).update(is_active=False)
 
+        # Synchronize default module scopes
+        self.sync_standard_scopes()
+
         self.stdout.write(self.style.SUCCESS("Canonical 5 enterprise roles configured and synchronized successfully."))
+
+    def sync_standard_scopes(self):
+        from django.db import connection, OperationalError, ProgrammingError
+        try:
+            if 'accounts_rolemodulescope' not in connection.introspection.table_names():
+                return
+        except Exception:
+            return
+
+        default_scopes_by_role = {
+            Role.ROLE_SUPERADMIN: {
+                'contacts': ('all', 'all'),
+                'activities': ('all', 'all'),
+                'sales': ('all', 'all'),
+                'purchases': ('all', 'all'),
+                'inventory': ('all', 'all'),
+                'treasury': ('all', 'all'),
+                'catalog': ('all', 'all'),
+                'accounts': ('all', 'all'),
+            },
+            Role.ROLE_MANAGER: {
+                'contacts': ('area', 'area'),
+                'activities': ('area', 'area'),
+                'sales': ('area', 'area'),
+                'purchases': ('area', 'area'),
+                'inventory': ('area', 'area'),
+                'treasury': ('area', 'area'),
+                'catalog': ('all', 'own'),
+                'accounts': ('area', 'area'),
+            },
+            Role.ROLE_ACCOUNTANT: {
+                'contacts': ('all', 'own'),
+                'activities': ('own', 'own'),
+                'sales': ('all', 'all'),
+                'purchases': ('all', 'all'),
+                'inventory': ('all', 'all'),
+                'treasury': ('all', 'all'),
+                'catalog': ('all', 'own'),
+                'accounts': ('own', 'own'),
+            },
+            Role.ROLE_REP: {
+                'contacts': ('brick', 'brick'),
+                'activities': ('own', 'own'),
+                'sales': ('own', 'own'),
+                'purchases': ('own', 'own'),
+                'inventory': ('own', 'own'),
+                'treasury': ('own', 'own'),
+                'catalog': ('all', 'own'),
+                'accounts': ('own', 'own'),
+            },
+            Role.ROLE_MEDICAL_REP: {
+                'contacts': ('brick', 'brick'),
+                'activities': ('own', 'own'),
+                'sales': ('own', 'own'),
+                'purchases': ('own', 'own'),
+                'inventory': ('own', 'own'),
+                'treasury': ('own', 'own'),
+                'catalog': ('all', 'own'),
+                'accounts': ('own', 'own'),
+            },
+        }
+
+        for role in Role.objects.filter(name__in=Role.CANONICAL_ROLE_KEYS):
+            mapping = default_scopes_by_role.get(role.name, {})
+            for mod in RoleModuleScope.MODULE_KEYS:
+                v_scope, m_scope = mapping.get(mod, ('own', 'own'))
+                RoleModuleScope.objects.get_or_create(
+                    role=role,
+                    module=mod,
+                    defaults={'view_scope': v_scope, 'manage_scope': m_scope}
+                )

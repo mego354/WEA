@@ -711,7 +711,12 @@
                         </div>
 
                         <!-- Distance Bypass / Exception Request Section (Section 3.C & 3.D) -->
-                        {% if can_bypass_gps %}
+                        {% if not verify_visits_enabled or not verify_end_visit_distance %}
+                        <div class="p-3.5 bg-slate-100/80 border border-slate-200 rounded-xl text-slate-600 text-xs flex items-center gap-2.5">
+                            <span class="material-symbols-outlined text-slate-400 text-base">info</span>
+                            <span class="font-medium">التحقق من المسافة عند إنهاء الزيارة غير مفعّل في إعدادات النظام الحالية. يمكنك إنهاء وتوثيق الزيارة مباشرة.</span>
+                        </div>
+                        {% elif can_bypass_gps %}
                         <div id="end-distance-bypass-container" class="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-3">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-indigo-600 text-lg">admin_panel_settings</span>
@@ -1094,6 +1099,19 @@
                         </span>
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span class="text-slate-400">وقت الزيارة المحدد:</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="detail-visit-time-display" class="font-mono font-bold {% if visit.time %}text-teal-700{% else %}text-slate-400{% endif %}">
+                                {{ visit.formatted_time|default:'غير محدد' }}
+                            </span>
+                            <button type="button" onclick="openSetTimeModal('{{ visit.pk }}', '#{{ visit.serial_num }}', '{{ visit.time|time:'H:i'|default:'' }}')"
+                                    class="p-1 text-slate-400 hover:text-[#27bebe] hover:bg-teal-50 rounded-lg transition-colors"
+                                    title="تحديد أو تعديل وقت الزيارة">
+                                <span class="material-symbols-outlined text-sm">schedule</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">المدة:</span>
                         <span class="font-bold text-slate-800">{{ visit.duration_formatted }}{% if visit.duration > 0 %} <span class="text-slate-400 font-normal text-xs">({{ visit.duration }} ثانية)</span>{% endif %}</span>
                     </div>
@@ -1282,6 +1300,8 @@
 const clientRegisteredLat = {% if visit.contact.latitude %}Number("{{ visit.contact.latitude|stringformat:'s' }}"){% else %}null{% endif %};
 const clientRegisteredLng = {% if visit.contact.longitude %}Number("{{ visit.contact.longitude|stringformat:'s' }}"){% else %}null{% endif %};
 const visitAllowedDistance = Number("{{ allowed_distance|default:300 }}");
+const verifyVisitsEnabled = {{ verify_visits_enabled|yesno:"true,false" }};
+const verifyEndVisitDistance = {{ verify_end_visit_distance|yesno:"true,false" }};
 
 function computeHaversineDistance(lat1, lon1, lat2, lon2) {
     if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
@@ -1318,8 +1338,13 @@ function updateEndVisitDistanceDisplay(lat, lng) {
         pillEl.textContent = `ضمن النطاق المسموح (${visitAllowedDistance}م) ✓`;
     } else {
         const diff = Math.round(dist - visitAllowedDistance);
-        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200";
-        pillEl.textContent = `خارج النطاق بـ ${diff} متر ⚠️`;
+        if (!verifyVisitsEnabled || !verifyEndVisitDistance) {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-200";
+            pillEl.textContent = `المسافة ${Math.round(dist)}م (التحقق معطل)`;
+        } else {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200";
+            pillEl.textContent = `خارج النطاق بـ ${diff} متر ⚠️`;
+        }
     }
 }
 
@@ -1529,6 +1554,110 @@ function showUnapprovedAlert() {
     alert('عذراً، يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال.');
 }
 
+function openSetTimeModal(visitId, serialNum, currentTime) {
+    const modal = document.getElementById('visit-time-modal');
+    const visitIdInput = document.getElementById('time-modal-visit-id');
+    const timeInput = document.getElementById('time-modal-input');
+    const serialSpan = document.getElementById('time-modal-serial');
+    const feedback = document.getElementById('time-modal-feedback');
+
+    if (visitIdInput) visitIdInput.value = visitId;
+    if (serialSpan) serialSpan.textContent = serialNum || '';
+    if (timeInput) {
+        timeInput.value = currentTime || '';
+    }
+    if (feedback) {
+        feedback.className = 'text-xs font-bold hidden py-1';
+        feedback.textContent = '';
+    }
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (timeInput) timeInput.focus();
+    }
+}
+
+function closeSetTimeModal() {
+    const modal = document.getElementById('visit-time-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setTimePreset(preset) {
+    const timeInput = document.getElementById('time-modal-input');
+    if (!timeInput) return;
+    if (preset === 'now') {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${hh}:${mm}`;
+    } else {
+        timeInput.value = preset;
+    }
+}
+
+async function submitVisitTimeAjax(e) {
+    if (e) e.preventDefault();
+    const visitId = document.getElementById('time-modal-visit-id')?.value;
+    const timeVal = document.getElementById('time-modal-input')?.value;
+    const saveBtn = document.getElementById('time-modal-save-btn');
+    const feedback = document.getElementById('time-modal-feedback');
+
+    if (!visitId || !timeVal) {
+        if (feedback) {
+            feedback.textContent = 'يرجى إدخال الوقت المطلوب.';
+            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+        }
+        return;
+    }
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري الحفظ...</span>`;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        formData.append('time', timeVal);
+
+        const resp = await fetch(`/activities/visits/${visitId}/set-time/`, {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            const displayEl = document.getElementById('detail-visit-time-display');
+            if (displayEl) {
+                displayEl.textContent = data.display_time || data.time_12 || timeVal;
+                displayEl.className = 'font-mono font-bold text-teal-700';
+            }
+            if (feedback) {
+                feedback.textContent = 'تم تحديث الوقت بنجاح ✓';
+                feedback.className = 'text-xs font-bold text-emerald-600 block py-1';
+            }
+            setTimeout(() => {
+                closeSetTimeModal();
+            }, 300);
+        } else {
+            if (feedback) {
+                feedback.textContent = data.error || 'تعذر تحديث الوقت.';
+                feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+            }
+        }
+    } catch (err) {
+        if (feedback) {
+            feedback.textContent = 'حدث خطأ في الاتصال بالخادم.';
+            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
+        }
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     evaluateConditionalQuestions();
     evaluateRequiredQuestions();
@@ -1620,6 +1749,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">check</span>
                     <span>حفظ التعديلات</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- VISIT TIME MODAL -->
+<div id="visit-time-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 text-[#27bebe]">
+                <span class="material-symbols-outlined text-xl">schedule</span>
+                <h3 class="font-bold text-slate-900 text-sm">تحديد وقت الزيارة <span id="time-modal-serial" class="text-teal-600 font-mono"></span></h3>
+            </div>
+            <button type="button" onclick="closeSetTimeModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form id="visit-time-form" onsubmit="submitVisitTimeAjax(event)" class="space-y-3">
+            <input type="hidden" id="time-modal-visit-id" value="">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">الوقت المحدد *</label>
+                <input type="time" id="time-modal-input" required class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+            </div>
+
+            <!-- Quick time suggestions -->
+            <div class="space-y-1.5">
+                <span class="text-[11px] font-semibold text-slate-500 block">اقتراحات سريعة:</span>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="setTimePreset('now')" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">الآن</button>
+                    <button type="button" onclick="setTimePreset('09:00')" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">صباحاً 09:00</button>
+                    <button type="button" onclick="setTimePreset('13:00')" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">ظهراً 13:00</button>
+                    <button type="button" onclick="setTimePreset('17:00')" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">مساءً 17:00</button>
+                </div>
+            </div>
+
+            <div id="time-modal-feedback" class="text-xs font-bold hidden py-1"></div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="button" onclick="closeSetTimeModal()" class="px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold transition-colors">إلغاء</button>
+                <button type="submit" id="time-modal-save-btn" class="px-4 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">check</span>
+                    <span>حفظ الوقت</span>
                 </button>
             </div>
         </form>

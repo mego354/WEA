@@ -45,6 +45,7 @@ class LocationSettingsAdmin(admin.ModelAdmin):
         'allow_template_distance_override', 'verify_unplanned_visit_distance',
         'verify_end_visit_distance', 'bypass_reason_mandatory',
         'distance_bypass_requires_approval', 'require_manager_approval_for_visits',
+        'require_manager_approval_for_agreements',
         'allow_all_users_to_create_visits', 'enable_product_suggestions', 'suggested_products_count'
     )
     filter_horizontal = (
@@ -74,8 +75,8 @@ class LocationSettingsAdmin(admin.ModelAdmin):
 @admin.register(SalesSettings)
 class SalesSettingsAdmin(admin.ModelAdmin):
     list_display = (
-        'tax_mode', 'default_packaging_unit', 'auto_invoice_on_dispatch',
-        'allow_all_users_to_create', 'require_manager_approval'
+        'tax_mode', 'default_packaging_unit', 'require_manager_approval',
+        'allow_all_users_to_create'
     )
 
     def has_add_permission(self, request):
@@ -85,8 +86,8 @@ class SalesSettingsAdmin(admin.ModelAdmin):
 @admin.register(PurchaseSettings)
 class PurchaseSettingsAdmin(admin.ModelAdmin):
     list_display = (
-        'tax_mode', 'default_packaging_unit', 'auto_invoice_on_dispatch',
-        'allow_all_users_to_create', 'require_manager_approval'
+        'tax_mode', 'default_packaging_unit', 'require_manager_approval',
+        'allow_all_users_to_create'
     )
 
     def has_add_permission(self, request):

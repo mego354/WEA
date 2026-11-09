@@ -285,10 +285,13 @@ def can_start_visit(visit, user):
         return False, "يجب تسجيل الدخول لبدء الزيارة."
 
     is_owner = (visit.owner_id == user.id or visit.created_by_id == user.id)
+    from accounts.permissions import has_perm_or_admin
+    from accounts.scope_service import ScopeResolutionService
     can_manage = (
         user.is_superuser or
         getattr(user, 'is_super_admin', False) or
-        bool(user.role and user.role.is_manager_role)
+        has_perm_or_admin(user, 'activities:visits/manage') or
+        ScopeResolutionService.get_user_scope(user, 'activities', 'manage') in ['area', 'all']
     )
     if not (is_owner or can_manage):
         return False, "غير مصرح لك ببدء هذه الزيارة (فقط المندوب المسؤول أو المشرف المصرح له)."

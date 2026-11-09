@@ -48,13 +48,13 @@ class PurchaseOrderService:
                 raise ValidationError(f"نسبة الخصم في البند #{idx} يجب أن تكون بين 0% و 100%.")
 
         from master_data.models import PurchaseSettings
-        from accounts.permissions import is_manager_or_higher
+        from accounts.permissions import has_perm_or_admin
         purchase_settings = PurchaseSettings.get_settings()
 
         initial_status = 'pending'
         approved_by = None
         approved_at = None
-        if not purchase_settings.require_manager_approval or is_manager_or_higher(user):
+        if not purchase_settings.require_manager_approval or has_perm_or_admin(user, 'purchases:orders/approve'):
             initial_status = 'approved'
             approved_by = user
             approved_at = timezone.now()

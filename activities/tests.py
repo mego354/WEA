@@ -2107,9 +2107,10 @@ class VisitManagementImprovementsTestCase(TestCase):
         today = timezone.now().date().strftime('%Y-%m-%d')
 
         # 1. Planned visit created without GPS coordinates -> succeeds!
+        pday, _ = PlannedVisitDay.objects.get_or_create(assignee=self.nasr_rep, date=timezone.now().date())
+        pitem = PlannedVisitItem.objects.create(plan_day=pday, order=1, contact=self.contact_nasr_1, template=self.default_template)
         res_planned = self.client.post(reverse('visit_create'), {
-            'visit_type': 'planned',
-            'is_planned': '1',
+            'planned_item_id': pitem.id,
             'contact': self.contact_nasr_1.id,
             'template': self.default_template.id,
             'date': today,
@@ -2423,15 +2424,17 @@ class VisitManagementImprovementsTestCase(TestCase):
 
         # 1. Nasr Rep attempts to create visit for Maadi contact (sibling brick) -> blocked!
         self.client.force_login(self.nasr_rep)
+        pday_rep, _ = PlannedVisitDay.objects.get_or_create(assignee=self.nasr_rep, date=timezone.now().date())
+        pitem_rep = PlannedVisitItem.objects.create(plan_day=pday_rep, order=1, contact=self.contact_maadi, template=self.default_template)
         res_sibling = self.client.post(reverse('visit_create'), {
-            'visit_type': 'planned',
-            'is_planned': '1',
+            'planned_item_id': pitem_rep.id,
             'contact': self.contact_maadi.id,
             'template': self.default_template.id,
             'date': today_str,
         })
         self.assertEqual(res_sibling.status_code, 200)
         self.assertFalse(Visit.objects.filter(contact=self.contact_maadi).exists())
+        pitem_rep.delete()
 
         # Customer search API for Nasr Rep returns only Nasr Brick contacts
         search_rep = self.client.get('/contacts/api/search/')
@@ -2442,9 +2445,10 @@ class VisitManagementImprovementsTestCase(TestCase):
 
         # 2. Cairo Manager can create planned visits in both Nasr Brick and Maadi Brick, but NOT Alex Smouha Brick
         self.client.force_login(self.cairo_manager)
+        pday_mgr, _ = PlannedVisitDay.objects.get_or_create(assignee=self.cairo_manager, date=timezone.now().date())
+        pitem_mgr_maadi = PlannedVisitItem.objects.create(plan_day=pday_mgr, order=1, contact=self.contact_maadi, template=self.default_template)
         res_mgr_maadi = self.client.post(reverse('visit_create'), {
-            'visit_type': 'planned',
-            'is_planned': '1',
+            'planned_item_id': pitem_mgr_maadi.id,
             'contact': self.contact_maadi.id,
             'template': self.default_template.id,
             'date': today_str,
@@ -2452,21 +2456,23 @@ class VisitManagementImprovementsTestCase(TestCase):
         self.assertEqual(res_mgr_maadi.status_code, 302)
         self.assertTrue(Visit.objects.filter(contact=self.contact_maadi).exists())
 
+        pitem_mgr_alex = PlannedVisitItem.objects.create(plan_day=pday_mgr, order=2, contact=self.contact_smouha, template=self.default_template)
         res_mgr_alex = self.client.post(reverse('visit_create'), {
-            'visit_type': 'planned',
-            'is_planned': '1',
+            'planned_item_id': pitem_mgr_alex.id,
             'contact': self.contact_smouha.id,
             'template': self.default_template.id,
             'date': today_str,
         })
         self.assertEqual(res_mgr_alex.status_code, 200)
         self.assertFalse(Visit.objects.filter(contact=self.contact_smouha).exists())
+        pitem_mgr_alex.delete()
 
         # 3. Superadmin can create in Alex Smouha Brick
         self.client.force_login(self.superadmin)
+        pday_sa, _ = PlannedVisitDay.objects.get_or_create(assignee=self.superadmin, date=timezone.now().date())
+        pitem_sa = PlannedVisitItem.objects.create(plan_day=pday_sa, order=1, contact=self.contact_smouha, template=self.default_template)
         res_sa_alex = self.client.post(reverse('visit_create'), {
-            'visit_type': 'planned',
-            'is_planned': '1',
+            'planned_item_id': pitem_sa.id,
             'contact': self.contact_smouha.id,
             'template': self.default_template.id,
             'date': today_str,

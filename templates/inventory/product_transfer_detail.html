@@ -77,11 +77,11 @@
 
             {% if transfer.status == 'transferred' and transfer.executed_at %}
             <div class="text-xs text-emerald-800">
-                <span class="font-bold">تاريخ التنفيذ:</span> {{ transfer.executed_at|date:"Y-m-d H:i" }} | <span class="font-bold">المنفذ:</span> {{ transfer.executed_by.get_full_name|default:transfer.executed_by.username }}
+                <span class="font-bold">تاريخ التنفيذ:</span> {{ transfer.executed_at|date:"Y-m-d H:i" }} | <span class="font-bold">المنفذ:</span> {% if transfer.executed_by %}{{ transfer.executed_by.get_full_name|default:transfer.executed_by.username }}{% else %}النظام{% endif %}
             </div>
             {% elif transfer.status == 'approved' and transfer.approved_at %}
             <div class="text-xs text-blue-800">
-                <span class="font-bold">تاريخ الاعتماد:</span> {{ transfer.approved_at|date:"Y-m-d H:i" }} | <span class="font-bold">المعتمد:</span> {{ transfer.approved_by.get_full_name|default:transfer.approved_by.username }}
+                <span class="font-bold">تاريخ الاعتماد:</span> {{ transfer.approved_at|date:"Y-m-d H:i" }} | <span class="font-bold">المعتمد:</span> {% if transfer.approved_by %}{{ transfer.approved_by.get_full_name|default:transfer.approved_by.username }}{% else %}النظام{% endif %}
             </div>
             {% endif %}
         </div>
@@ -108,7 +108,7 @@
             <div class="space-y-1.5 text-xs text-slate-600">
                 <div class="flex items-center justify-between">
                     <span class="text-slate-400">المندوب المسئول:</span>
-                    <span class="font-bold text-slate-800">{{ transfer.source_warehouse.assigned_user.get_full_name|default:transfer.source_warehouse.assigned_user.username|default:"مخزن عام" }}</span>
+                    <span class="font-bold text-slate-800">{% if transfer.source_warehouse.assigned_user %}{{ transfer.source_warehouse.assigned_user.get_full_name|default:transfer.source_warehouse.assigned_user.username }}{% else %}مخزن عام{% endif %}</span>
                 </div>
                 <div class="flex items-center justify-between">
                     <span class="text-slate-400">المنطقة الرئيسية:</span>
@@ -130,7 +130,7 @@
             <div class="space-y-1.5 text-xs text-slate-600">
                 <div class="flex items-center justify-between">
                     <span class="text-slate-400">المندوب المسئول:</span>
-                    <span class="font-bold text-slate-800">{{ transfer.destination_warehouse.assigned_user.get_full_name|default:transfer.destination_warehouse.assigned_user.username|default:"مخزن عام" }}</span>
+                    <span class="font-bold text-slate-800">{% if transfer.destination_warehouse.assigned_user %}{{ transfer.destination_warehouse.assigned_user.get_full_name|default:transfer.destination_warehouse.assigned_user.username }}{% else %}مخزن عام{% endif %}</span>
                 </div>
                 <div class="flex items-center justify-between">
                     <span class="text-slate-400">المنطقة الرئيسية:</span>

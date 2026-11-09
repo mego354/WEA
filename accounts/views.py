@@ -8,7 +8,26 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
-from .models import User, Role, RoleTag, SecurityAuditLog
+from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope, UserModuleScope
+from django.db import transaction
+
+MODULE_INFO = [
+    {'key': 'contacts', 'name': 'جهات الاتصال (العملاء والموردين)', 'icon': 'contacts'},
+    {'key': 'activities', 'name': 'الأنشطة الميدانية والزيارات والاتفاقيات', 'icon': 'explore'},
+    {'key': 'sales', 'name': 'المبيعات والطلبات والتحصيلات', 'icon': 'point_of_sale'},
+    {'key': 'purchases', 'name': 'المشتريات وأوامر التوريد', 'icon': 'shopping_cart'},
+    {'key': 'inventory', 'name': 'المخازن والمخزون والتحويلات', 'icon': 'inventory_2'},
+    {'key': 'treasury', 'name': 'الخزينة والمالية والمدفوعات', 'icon': 'payments'},
+    {'key': 'catalog', 'name': 'دليل المنتجات والكتالوج', 'icon': 'category'},
+    {'key': 'accounts', 'name': 'المستخدمين وإدارة الأدوار', 'icon': 'manage_accounts'},
+]
+
+SCOPE_OPTIONS = [
+    ('own', 'سجلات المستخدم فقط (Own)'),
+    ('brick', 'الخط الجغرافي المعين (Brick)'),
+    ('area', 'المنطقة الرئيسية والمحافظة (Area)'),
+    ('all', 'كافة سجلات النظام (All)'),
+]
 from .services import AuditLogService
 from master_data.models import Area
 from .permissions import (
@@ -712,18 +731,118 @@ def users_export(request):
 @require_super_admin()
 def user_effective_permissions(request, pk):
     """
-    SuperAdmin inspector to view a user's effective permissions,
-    including role attributes, assigned areas, tags, and active module/action trees.
+    SuperAdmin interface to inspect and customize a user's permissions,
+    allowing 100% granular control over feature availability directly for this user.
     """
-    target_user = get_object_or_404(User.objects.select_related('role').prefetch_related('assigned_areas', 'role__tags'), pk=pk)
+    target_user = get_object_or_404(
+        User.objects.select_related('role').prefetch_related('assigned_areas', 'role__tags', 'user_permissions'),
+        pk=pk
+    )
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'save')
+
+        # Action: Reset to Role Defaults
+        if action == 'reset_to_role':
+            target_user.has_custom_permissions = False
+            target_user.user_permissions.clear()
+            target_user.custom_module_scopes.all().delete()
+            target_user.save(update_fields=['has_custom_permissions'])
+            target_user.clear_perm_cache()
+
+            AuditLogService.log(
+                action='update',
+                action_type='USER_PERMISSIONS_RESET',
+                module='accounts',
+                actor=request.user,
+                target_user=target_user,
+                target_role=target_user.role,
+                record_id=target_user.id,
+                record_name=target_user.name,
+                description=f"استعادة صلاحيات الدور الافتراضية للمستخدم: {target_user.name} ({target_user.role.display_name if target_user.role else 'بدون دور'})",
+                status='SUCCESS',
+                request=request,
+            )
+            messages.success(request, f"تمت استعادة صلاحيات الدور الافتراضية للمستخدم '{target_user.name}' بنجاح.")
+            return redirect('user_effective_permissions', pk=pk)
+
+        # Action: Save Permissions
+        has_custom = request.POST.get('has_custom_permissions') in ['on', '1', 'true', 'True']
+        submitted_codenames = request.POST.getlist('permissions')
+
+        # Retrieve corresponding Permission objects from database
+        perms_to_set = list(Permission.objects.filter(codename__in=submitted_codenames))
+
+        new_mode = 'مخصصة' if has_custom else 'وراثة'
+
+        target_user.has_custom_permissions = has_custom
+        target_user.user_permissions.set(perms_to_set)
+        if has_custom:
+            for m_info in MODULE_INFO:
+                m = m_info['key']
+                v_scope = request.POST.get(f"view_scope_{m}", 'own')
+                m_scope = request.POST.get(f"manage_scope_{m}", 'own')
+                UserModuleScope.objects.update_or_create(
+                    user=target_user,
+                    module=m,
+                    defaults={'view_scope': v_scope, 'manage_scope': m_scope}
+                )
+        else:
+            target_user.custom_module_scopes.all().delete()
+
+        target_user.save(update_fields=['has_custom_permissions'])
+        target_user.clear_perm_cache()
+
+        effective_count = len(target_user.get_effective_permission_codenames())
+
+        AuditLogService.log(
+            action='update',
+            action_type='USER_PERMISSIONS_UPDATED',
+            module='accounts',
+            actor=request.user,
+            target_user=target_user,
+            target_role=target_user.role,
+            record_id=target_user.id,
+            record_name=target_user.name,
+            description=f"تحديث مصفوفة صلاحيات المستخدم: {target_user.name} (النمط: {new_mode}، تم تحديد {len(perms_to_set)} صلاحية مباشرة، الإجمالي الفعال: {effective_count}).",
+            status='SUCCESS',
+            request=request,
+        )
+
+        if has_custom:
+            messages.success(request, f"تم تفعيل الصلاحيات المخصصة للمستخدم '{target_user.name}' بنجاح ({effective_count} صلاحية فعالة).")
+        else:
+            messages.success(request, f"تم تحديث صلاحيات المستخدم '{target_user.name}' (الوراثة التلقائية من الدور مفعلة).")
+
+        return redirect('user_effective_permissions', pk=pk)
+
     effective_codenames = target_user.get_effective_permission_codenames()
+    role_codenames = set(target_user.role.permissions.values_list('codename', flat=True)) if target_user.role else set()
+    direct_codenames = set(target_user.user_permissions.values_list('codename', flat=True))
 
     modules_tree = get_grouped_permissions()
+
+    user_scopes_map = {ums.module: (ums.view_scope, ums.manage_scope) for ums in target_user.custom_module_scopes.all()}
+    role_scopes = {rms.module: (rms.view_scope, rms.manage_scope) for rms in target_user.role.module_scopes.all()} if target_user.role else {}
+    user_module_scopes = []
+    for m in MODULE_INFO:
+        v_s, m_s = user_scopes_map.get(m['key'], role_scopes.get(m['key'], ('own', 'own')))
+        user_module_scopes.append({
+            'key': m['key'],
+            'name': m['name'],
+            'icon': m['icon'],
+            'view_scope': v_s,
+            'manage_scope': m_s,
+        })
 
     return render(request, 'accounts/effective_permissions.html', {
         'target_user': target_user,
         'effective_codenames': effective_codenames,
+        'role_codenames': role_codenames,
+        'direct_codenames': direct_codenames,
         'modules_tree': modules_tree,
+        'module_scopes': user_module_scopes,
+        'scope_options': SCOPE_OPTIONS,
     })
 
 
@@ -867,6 +986,17 @@ def role_create(request):
         if perm_ids:
             role.permissions.set(perm_ids)
 
+        # Module Scopes
+        for m_info in MODULE_INFO:
+            m = m_info['key']
+            v_scope = request.POST.get(f"view_scope_{m}", 'own')
+            m_scope = request.POST.get(f"manage_scope_{m}", 'own')
+            RoleModuleScope.objects.update_or_create(
+                role=role,
+                module=m,
+                defaults={'view_scope': v_scope, 'manage_scope': m_scope}
+            )
+
         # Record Security Audit Log
         SecurityAuditLog.objects.create(
             actor=request.user,
@@ -882,10 +1012,23 @@ def role_create(request):
 
     all_tags = RoleTag.objects.all().order_by('tag')
     modules_tree = get_grouped_permissions()
+    scopes_map = {m['key']: ('own', 'own') for m in MODULE_INFO}
+    module_scopes_display = [
+        {
+            'key': m['key'],
+            'name': m['name'],
+            'icon': m['icon'],
+            'view_scope': 'own',
+            'manage_scope': 'own',
+        }
+        for m in MODULE_INFO
+    ]
     return render(request, 'accounts/role_form.html', {
         'role': None,
         'all_tags': all_tags,
         'modules_tree': modules_tree,
+        'module_scopes': module_scopes_display,
+        'scope_options': SCOPE_OPTIONS,
         'is_create': True,
     })
 
@@ -932,6 +1075,17 @@ def role_edit(request, pk):
         perm_ids = request.POST.getlist('permissions')
         role.permissions.set(perm_ids)
 
+        # Update Module Scopes
+        for m_info in MODULE_INFO:
+            m = m_info['key']
+            v_scope = request.POST.get(f"view_scope_{m}", 'own')
+            m_scope = request.POST.get(f"manage_scope_{m}", 'own')
+            RoleModuleScope.objects.update_or_create(
+                role=role,
+                module=m,
+                defaults={'view_scope': v_scope, 'manage_scope': m_scope}
+            )
+
         # Invalidate cached permissions across existing sessions/users for this role
         for u in role.users.all():
             u.clear_perm_cache()
@@ -954,12 +1108,26 @@ def role_edit(request, pk):
     role_perm_ids = set(role.permissions.values_list('id', flat=True))
     modules_tree = get_grouped_permissions()
 
+    scopes_map = {rms.module: (rms.view_scope, rms.manage_scope) for rms in role.module_scopes.all()}
+    module_scopes_display = []
+    for m in MODULE_INFO:
+        v_s, m_s = scopes_map.get(m['key'], ('own', 'own'))
+        module_scopes_display.append({
+            'key': m['key'],
+            'name': m['name'],
+            'icon': m['icon'],
+            'view_scope': v_s,
+            'manage_scope': m_s,
+        })
+
     return render(request, 'accounts/role_form.html', {
         'role': role,
         'all_tags': all_tags,
         'role_tag_ids': role_tag_ids,
         'role_perm_ids': role_perm_ids,
         'modules_tree': modules_tree,
+        'module_scopes': module_scopes_display,
+        'scope_options': SCOPE_OPTIONS,
         'is_create': False,
     })
 
@@ -1191,20 +1359,25 @@ def users_settings_view(request):
     Includes toggle controls, explicit business rules documentation, and interactive backfill execution.
     Restricted strictly to authorized SuperAdmins.
     """
-    from accounts.models import UserSettings
+    from master_data.services import SettingsService
     from accounts.services import is_representative
     from django.core.management import call_command
     import io
 
-    settings_obj = UserSettings.get_settings()
+    settings_obj = SettingsService.get_user_settings()
 
     if request.method == 'POST':
         action = request.POST.get('action', 'save_settings')
 
         if action == 'save_settings':
-            settings_obj.auto_create_rep_warehouse = bool(request.POST.get('auto_create_rep_warehouse') == '1')
-            settings_obj.auto_create_rep_treasury = bool(request.POST.get('auto_create_rep_treasury') == '1')
-            settings_obj.save()
+            settings_obj = SettingsService.update_user_settings(
+                user=request.user,
+                data={
+                    'auto_create_rep_warehouse': request.POST.get('auto_create_rep_warehouse') == '1',
+                    'auto_create_rep_treasury': request.POST.get('auto_create_rep_treasury') == '1',
+                },
+                request=request
+            )
             messages.success(request, "تم حفظ إعدادات إنشاء المخازن والخزائن للمندوبين بنجاح.")
             return redirect('users_settings')
 

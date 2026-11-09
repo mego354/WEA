@@ -401,6 +401,7 @@ class Visit(models.Model):
     is_planned = models.BooleanField(default=False, db_index=True, verbose_name="مخططة")
     
     date = models.DateField(default=timezone.now, db_index=True, verbose_name="تاريخ الزيارة")
+    time = models.TimeField(null=True, blank=True, db_index=True, verbose_name="وقت الزيارة المحدد")
     visit_time = models.DateTimeField(default=timezone.now, verbose_name="وقت الزيارة")
     started_at = models.DateTimeField(null=True, blank=True, verbose_name="بدأ في")
     ended_at = models.DateTimeField(null=True, blank=True, verbose_name="انتهى في")
@@ -460,6 +461,16 @@ class Visit(models.Model):
             max_serial = Visit.objects.aggregate(models.Max('serial_num'))['serial_num__max']
             self.serial_num = (max_serial or 1000) + 1
         super().save(*args, **kwargs)
+
+    @property
+    def formatted_time(self):
+        if self.time:
+            hour_12 = self.time.hour % 12
+            if hour_12 == 0:
+                hour_12 = 12
+            period = 'م' if self.time.hour >= 12 else 'ص'
+            return f"{hour_12:02d}:{self.time.minute:02d} {period}"
+        return None
 
     @property
     def plan_type_display_ar(self):

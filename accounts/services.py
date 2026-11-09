@@ -63,14 +63,14 @@ def ensure_representative_resources(user, create_warehouse=None, create_treasury
     
     Returns tuple: (warehouse, vault, created_wh, created_vault)
     """
-    from accounts.models import UserSettings
+    from master_data.services import SettingsService
     from inventory.models import Warehouse
     from treasury.models import Vault
 
     if not is_representative(user):
         return None, None, False, False
 
-    settings = UserSettings.get_settings()
+    settings = SettingsService.get_user_settings()
     if create_warehouse is None:
         create_warehouse = settings.auto_create_rep_warehouse
     if create_treasury is None:

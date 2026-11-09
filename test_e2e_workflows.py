@@ -3,30 +3,29 @@ import sys
 import django
 from decimal import Decimal
 
-# Ensure utf-8 stdout on Windows
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-
-from django.test import Client
-from django.utils import timezone
-from django.contrib.auth import get_user_model
-from contacts.models import Contact
-from catalog.models import Product, ProductCategory
-from inventory.models import Warehouse, InventoryStock, InventoryMemo
-from purchases.models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
-from purchases.services import PurchaseOrderService, PurchaseReturnOrderService
-from treasury.models import Vault, VendorAccount, VendorTransaction, VendorPayment
-from treasury.services import TreasuryService
-from sales.models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
-from sales.services import SalesOrderService, CollectionService
-
-User = get_user_model()
-
 def run_tests():
+    if sys.platform == 'win32':
+        import io
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    django.setup()
+
+    from django.test import Client
+    from django.utils import timezone
+    from django.contrib.auth import get_user_model
+    from contacts.models import Contact
+    from catalog.models import Product, ProductCategory
+    from inventory.models import Warehouse, InventoryStock, InventoryMemo
+    from purchases.models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
+    from purchases.services import PurchaseOrderService, PurchaseReturnOrderService
+    from treasury.models import Vault, VendorAccount, VendorTransaction, VendorPayment
+    from treasury.services import TreasuryService
+    from sales.models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
+    from sales.services import SalesOrderService, CollectionService
+
+    User = get_user_model()
     print("=" * 60)
     print("STARTING COMPLETE E2E WORKFLOW VERIFICATION TEST")
     print("=" * 60)
