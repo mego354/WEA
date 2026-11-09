@@ -1,15 +1,20 @@
+import datetime
 import json
 from decimal import Decimal
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+
+from accounts.models import Role, SecurityAuditLog
 from contacts.models import Contact
 from catalog.models import Product, ProductCategory
 from inventory.models import Warehouse, InventoryStock, InventoryLot, InventoryMemo
 from purchases.models import PurchaseOrder, PurchaseOrderItem, PurchaseOrderComment, PurchaseReturnOrder, PurchaseReturnOrderItem
 from purchases.services import PurchaseOrderService, PurchaseReturnOrderService
-from treasury.models import VendorAccount, VendorTransaction
+from treasury.models import Vault, VendorAccount, VendorTransaction, VendorPayment
+from treasury.services import TreasuryService
 
 User = get_user_model()
 
@@ -391,4 +396,170 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         # /accounting/vendor-transactions/
         resp_tx = self.client.get('/accounting/vendor-transactions/')
         self.assertEqual(resp_tx.status_code, 200)
+
+
+class PurchaseOrderLifecycleAndSettlementTests(TestCase):
+    """Verifies purchase order lifecycle, state transitions, security audit logging, and order-linked payments."""
+
+    def setUp(self):
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.accountant_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_ACCOUNTANT,
+            defaults={'display_name': 'محاسب', 'is_accountant': True}
+        )
+
+        self.superadmin = User.objects.create_superuser(
+            username='po_superadmin',
+            email='po_super@wea.com',
+            password='Password123!',
+            role=self.superadmin_role
+        )
+        self.accountant = User.objects.create_user(
+            username='po_accountant',
+            email='po_acct@wea.com',
+            password='Password123!',
+            role=self.accountant_role
+        )
+
+        self.warehouse = Warehouse.objects.create(name='مخزن التوريدات المركزي', code='WH-PO-MAIN', is_main=True)
+        self.vault = Vault.objects.create(name='خزينة التوريدات', serial_num=8801, current_balance=Decimal('100000.00'))
+
+        self.supplier = Contact.objects.create(name='شركة فارما للتوريدات الطبية', is_supplier=True, mobile='01055566677')
+        VendorAccount.get_or_create_for_supplier(self.supplier)
+
+        self.category = ProductCategory.objects.create(name='أدوية عامة', code='PO-GEN')
+        self.product = Product.objects.create(
+            name='أموكسيسيلين 500',
+            sku_code='AMX-500',
+            retail_price=Decimal('50.00'),
+            default_purchase_cost=Decimal('40.00'),
+            category=self.category
+        )
+
+    def test_purchase_order_lifecycle_and_audit_logging(self):
+        """Purchase order lifecycle generates audit log events with correct actor and status."""
+        due_date = datetime.date(2026, 11, 15)
+        order = PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{
+                'product': self.product,
+                'quantity': 100,
+                'unit_price': Decimal('40.00'),
+                'discount_percentage': Decimal('0.00'),
+                'tax_percentage': Decimal('0.00'),
+            }],
+            user=self.accountant,
+            due_date=due_date,
+            notes='شحنة أدوية طارئة'
+        )
+        self.assertEqual(order.grand_total, Decimal('4000.00'))
+        self.assertEqual(order.due_date, due_date)
+        self.assertEqual(order.outstanding_balance, Decimal('4000.00'))
+        self.assertFalse(order.is_paid)
+
+        create_audit = SecurityAuditLog.objects.filter(
+            module='purchases', action_type='PURCHASE_ORDER_CREATED', record_id=order.id
+        ).first()
+        self.assertIsNotNone(create_audit)
+        self.assertEqual(create_audit.actor, self.accountant)
+
+        # Approve Order
+        PurchaseOrderService.approve_order(order, self.superadmin)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'approved')
+
+        approve_audit = SecurityAuditLog.objects.filter(
+            module='purchases', action_type='PURCHASE_ORDER_APPROVED', record_id=order.id
+        ).first()
+        self.assertIsNotNone(approve_audit)
+        self.assertEqual(approve_audit.actor, self.superadmin)
+
+        # Stock Order in warehouse
+        PurchaseOrderService.stock_order(order, self.superadmin)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'picked')
+
+        # Invoice / Settle Order
+        PurchaseOrderService.invoice_order(order, self.accountant)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'settled')
+
+        settle_audit = SecurityAuditLog.objects.filter(
+            module='purchases', action_type='PURCHASE_ORDER_SETTLED', record_id=order.id
+        ).first()
+        self.assertIsNotNone(settle_audit)
+
+    def test_vendor_payment_linked_to_purchase_order(self):
+        """Vendor payment linked to a specific purchase order reduces its outstanding balance."""
+        po = PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 50, 'unit_price': Decimal('40.00')}],
+            user=self.accountant,
+            due_date=datetime.date(2026, 11, 20)
+        )
+        PurchaseOrderService.approve_order(po, self.superadmin)
+        PurchaseOrderService.stock_order(po, self.superadmin)
+        PurchaseOrderService.invoice_order(po, self.accountant)
+        po.refresh_from_db()
+        self.assertEqual(po.outstanding_balance, Decimal('2000.00'))
+
+        # Partial payment: 800 LE
+        payment1 = TreasuryService.record_vendor_payment(
+            supplier=self.supplier,
+            vault=self.vault,
+            amount=Decimal('800.00'),
+            payment_method='cash',
+            user=self.accountant,
+            purchase_order=po,
+            notes='دفعة أولى'
+        )
+        po.refresh_from_db()
+        self.assertEqual(po.total_paid, Decimal('800.00'))
+        self.assertEqual(po.outstanding_balance, Decimal('1200.00'))
+        self.assertFalse(po.is_paid)
+
+        # Full settlement remaining: 1200 LE
+        payment2 = TreasuryService.record_vendor_payment(
+            supplier=self.supplier,
+            vault=self.vault,
+            amount=Decimal('1200.00'),
+            payment_method='cash',
+            user=self.accountant,
+            purchase_order=po,
+            notes='تسوية كاملة'
+        )
+        po.refresh_from_db()
+        self.assertEqual(po.total_paid, Decimal('2000.00'))
+        self.assertEqual(po.outstanding_balance, Decimal('0.00'))
+        self.assertTrue(po.is_paid)
+
+    def test_vendor_payment_overpayment_rejected(self):
+        """Attempting to pay more than the purchase order's outstanding balance must raise ValidationError."""
+        po = PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 10, 'unit_price': Decimal('40.00')}],
+            user=self.accountant
+        )
+        self.assertEqual(po.outstanding_balance, Decimal('400.00'))
+
+        with self.assertRaises(ValidationError) as ctx:
+            TreasuryService.record_vendor_payment(
+                supplier=self.supplier,
+                vault=self.vault,
+                amount=Decimal('500.00'),
+                payment_method='cash',
+                user=self.accountant,
+                purchase_order=po
+            )
+        self.assertIn('يتجاوز الرصيد المستحق', str(ctx.exception))
+
 

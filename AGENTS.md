@@ -38,7 +38,7 @@ Django project package: `config`. Custom user: `accounts.User`. UI language: Ara
 | `sales` | Sales orders, collections, customer accounts/transactions |
 | `activities` | Visits, planned visits, agreements, visit templates, agenda, approval hub |
 
-Business mutations for sales, purchases, treasury, and stock transfers belong in `*/services.py` with `@transaction.atomic`. HTTP views authenticate, authorize, validate input, call services, and render templates. Shared UI: `templates/layouts/base.html` (Tailwind CDN, Cairo, Material Symbols, Leaflet). Full map: [`docs/architecture.md`](docs/architecture.md).
+Business mutations for sales, purchases, treasury, and stock transfers belong in `*/services.py` with `@transaction.atomic`. HTTP views authenticate, authorize, validate input, call services, and render templates. Shared UI: `templates/layouts/base.html` (Tailwind CDN, Cairo, Material Symbols, Leaflet). Full map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Request flow
 
@@ -46,7 +46,7 @@ Browser/AJAX → `config/urls.py` (includes plus **reference-ERP URL aliases**) 
 
 ## C. Mandatory business and permission rules
 
-Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissions`, and `accounts.User.has_permission`. Details: [`docs/business-rules-and-permissions.md`](docs/business-rules-and-permissions.md).
+Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissions`, and `accounts.User.has_permission`. Details: [`docs/AUTHORIZATION.md`](docs/AUTHORIZATION.md) and [`docs/BUSINESS_LOGIC.md`](docs/BUSINESS_LOGIC.md).
 
 1. **Configurable Module Scopes (`OWN`, `BRICK`, `AREA`, `ALL`)**: All organizational data access is resolved through `ScopeResolutionService` based on configurable `view_scope` and `manage_scope` per module (stored in `RoleModuleScope`, customizable per-user via `UserModuleScope`). Hardcoded role-name checks must never control data access or authorization.
 2. **Superadmin** (`User.is_superuser` or active role `name='superadmin'` / `role.is_super`): system-wide access to records and admin functions. Role/RBAC screens and audit log UI remain SuperAdmin-gated.
@@ -70,9 +70,9 @@ Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissio
 - Put HTTP in views, rules in `accounts.permissions`, multi-step mutations in services, persistence in models.
 - Validate on the server. Use the ORM. Wrap multi-table writes in `transaction.atomic`.
 - No unused imports, duplicate URL **names**, hardcoded production secrets, or swallowed exceptions without logging.
-- Preserve Arabic RTL, teal brand (`#27bebe`), and mobile patterns in [`docs/ui-ux-guidelines.md`](docs/ui-ux-guidelines.md).
+- Preserve Arabic RTL, teal brand (`#27bebe`), and mobile patterns in [`docs/UI_UX_GUIDE.md`](docs/UI_UX_GUIDE.md).
 - **Product Owner UI Preference**: Strict preference for simple, clean, compact UI without verbose notes, paragraphs, or oversized components. Present data concisely using icons and simple text. Avoid full-page refreshes on drawer/filter operations.
-- Coding detail: [`docs/coding-standards.md`](docs/coding-standards.md).
+- Coding detail: [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md).
 
 ## E. Mandatory completion checklist
 
@@ -82,7 +82,7 @@ Before reporting done, verify:
 - [ ] Permissions and data isolation (including IDOR on `pk` URLs)
 - [ ] Audit logs on mutation paths you touched
 - [ ] Tests run (`python manage.py test <labels>`) — report real results
-- [ ] API JSON consumers still match [`docs/api-contracts.md`](docs/api-contracts.md)
+- [ ] API JSON consumers still match [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 - [ ] Mobile + desktop UI if templates/CSS/JS changed
 - [ ] Docs updated
 - [ ] Migrations safe (no destructive surprise)
@@ -95,13 +95,11 @@ Before reporting done, verify:
 |---|---|
 | Any task | This file |
 | Index | [`docs/README.md`](docs/README.md) |
-| Apps, URLs, services, workflows | [`docs/architecture.md`](docs/architecture.md) |
-| Roles, areas, approvals, matrix | [`docs/business-rules-and-permissions.md`](docs/business-rules-and-permissions.md) |
-| Templates, Tailwind, mobile | [`docs/ui-ux-guidelines.md`](docs/ui-ux-guidelines.md) |
-| Style, ORM, security coding | [`docs/coding-standards.md`](docs/coding-standards.md) |
-| Test layout and commands | [`docs/testing-strategy.md`](docs/testing-strategy.md) |
-| `SecurityAuditLog` / `ApprovalAuditLog` | [`docs/audit-logging.md`](docs/audit-logging.md) |
-| JSON/AJAX endpoints | [`docs/api-contracts.md`](docs/api-contracts.md) |
-| Local/prod operations | [`docs/maintenance-and-deployment.md`](docs/maintenance-and-deployment.md) |
-
-Historical notes (not the contract): [`docs/archive/`](docs/archive/README.md).
+| Apps, URLs, services, workflows | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Roles, areas, scopes, matrix | [`docs/AUTHORIZATION.md`](docs/AUTHORIZATION.md) |
+| Workflows, lifecycles, audits | [`docs/BUSINESS_LOGIC.md`](docs/BUSINESS_LOGIC.md) |
+| Templates, Tailwind, mobile | [`docs/UI_UX_GUIDE.md`](docs/UI_UX_GUIDE.md) |
+| Style, ORM, security coding | [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) |
+| Test layout and commands | [`docs/TESTING.md`](docs/TESTING.md) |
+| JSON/AJAX endpoints | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) |
+| Local/prod operations | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
