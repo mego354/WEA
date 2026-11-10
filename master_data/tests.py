@@ -989,3 +989,39 @@ class UrlReplaceAndFilterTagsTests(TestCase):
         self.assertEqual(pages[-1], 20)
         self.assertIn('...', pages)
 
+
+class WeaMigrationCommandTests(TestCase):
+    """
+    Automated regression and validation tests for the WEA enterprise migration command.
+    """
+
+    def test_migration_dry_run_execution(self):
+        """Verifies that execute_wea_migration runs in dry-run mode without modifying the database."""
+        out = StringIO()
+        call_command('execute_wea_migration', '--phase=all', '--dry-run', stdout=out)
+        output = out.getvalue()
+        self.assertIn('WEA PHARMA ERP — ENTERPRISE DATA MIGRATION ENGINE', output)
+        self.assertIn('[DRY-RUN]', output)
+        self.assertIn('MIGRATION COMMAND COMPLETED SUCCESSFULLY!', output)
+
+    def test_migration_command_phase_filtering(self):
+        """Verifies that phase ranges like 1-3 can be scheduled."""
+        from master_data.management.commands.execute_wea_migration import Command
+        cmd = Command()
+        self.assertEqual(cmd.get_phases('all'), [0, 1, 2, 3, 4, 6, 7, 8, 10, 12, 13, 14, 15])
+        self.assertEqual(cmd.get_phases('1-3'), [1, 2, 3])
+        self.assertEqual(cmd.get_phases('4,6,7'), [4, 6, 7])
+        self.assertEqual(cmd.get_phases('15'), [15])
+
+    def test_parse_dec_helper(self):
+        """Verifies safe decimal parsing handles NaN, commas, None, and strings gracefully."""
+        import numpy as np
+        from master_data.management.commands.execute_wea_migration import parse_dec
+        self.assertEqual(parse_dec(None), Decimal('0.00'))
+        self.assertEqual(parse_dec(np.nan), Decimal('0.00'))
+        self.assertEqual(parse_dec('nan'), Decimal('0.00'))
+        self.assertEqual(parse_dec(''), Decimal('0.00'))
+        self.assertEqual(parse_dec('1,234.50'), Decimal('1234.50'))
+        self.assertEqual(parse_dec(100.25), Decimal('100.25'))
+
+

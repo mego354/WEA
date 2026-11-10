@@ -29,7 +29,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
         'approved_by', 'approved_at'
     )
     list_filter = ('status', 'source_warehouse', 'order_date')
-    search_fields = ('order_number', 'customer__name', 'notes')
+    search_fields = ('order_number', 'serial_num', 'customer__name', 'customer__code', 'notes')
     date_hierarchy = 'order_date'
     inlines = [SalesOrderItemInline]
     readonly_fields = ('serial_num', 'order_number', 'subtotal', 'items_discount_total', 'custom_discount_amount', 'grand_total', 'created_at', 'updated_at')
@@ -82,7 +82,7 @@ class SalesOrderItemAdmin(admin.ModelAdmin):
 class CollectionAdmin(admin.ModelAdmin):
     list_display = ('serial_num', 'customer', 'vault', 'amount_display', 'collection_date', 'payment_method_badge', 'created_by')
     list_filter = ('payment_method', 'vault', 'collection_date')
-    search_fields = ('customer__name', 'serial_num')
+    search_fields = ('serial_num', 'customer__name', 'customer__code', 'notes')
     date_hierarchy = 'collection_date'
 
     def amount_display(self, obj):

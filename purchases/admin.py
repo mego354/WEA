@@ -26,7 +26,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         'created_by', 'approved_by', 'approved_at'
     )
     list_filter = ('status', 'target_warehouse', 'order_date', 'is_hold', 'is_canceled')
-    search_fields = ('order_number', 'supplier__name', 'notes')
+    search_fields = ('order_number', 'serial_num', 'supplier__name', 'supplier__code', 'notes')
     date_hierarchy = 'order_date'
     inlines = [PurchaseOrderItemInline]
     readonly_fields = (
