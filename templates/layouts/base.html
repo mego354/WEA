@@ -526,6 +526,11 @@
 
             <!-- Top Actions -->
             <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                <!-- Mobile Header Refresh Button -->
+                <button type="button" onclick="handleMobileRefresh(this)" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 rounded-xl transition-all active:scale-95" title="تحديث الصفحة" aria-label="تحديث الصفحة">
+                    <span class="material-symbols-outlined text-xl transition-transform duration-300">refresh</span>
+                </button>
+
                 <!-- Notifications -->
                 <button class="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                     <span class="material-symbols-outlined text-xl">notifications</span>
@@ -648,8 +653,18 @@
     <!-- UNIFIED CUSTOMER SELECTION MODAL (Matching Reference <app-visit-create-customer-selection>) -->
     {% include 'components/customer_selection_modal.html' %}
 
-    <!-- Script for sidebar toggle, bottom sheet, and submenus -->
+    <!-- UNIFIED GLOBAL DELETE CONFIRMATION MODAL -->
+    {% include 'components/confirm_delete_modal.html' %}
+
+    <!-- Script for sidebar toggle, bottom sheet, submenus, and mobile refresh -->
     <script>
+        function handleMobileRefresh(btn) {
+            if (!btn) return;
+            const icon = btn.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('animate-spin');
+            window.location.reload();
+        }
+
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
@@ -665,12 +680,120 @@
             }
         }
 
-        function toggleSubmenu(id) {
-            const menu = document.getElementById(id);
-            if (menu) {
-                menu.classList.toggle('hidden');
+        function getStoredExpandedSubmenus() {
+            try {
+                return JSON.parse(localStorage.getItem('wea_sidebar_expanded') || '[]');
+            } catch (e) {
+                return [];
             }
         }
+
+        function saveExpandedSubmenu(menuId, isOpen) {
+            try {
+                let list = getStoredExpandedSubmenus();
+                if (isOpen) {
+                    if (!list.includes(menuId)) list.push(menuId);
+                } else {
+                    list = list.filter(id => id !== menuId);
+                }
+                localStorage.setItem('wea_sidebar_expanded', JSON.stringify(list));
+            } catch (e) {}
+        }
+
+        function toggleSubmenu(id, userTriggered = true) {
+            const menu = document.getElementById(id);
+            if (!menu) return;
+
+            const isCurrentlyHidden = menu.classList.contains('hidden');
+            const arrowId = id.replace('submenu-', 'arrow-');
+            const arrow = document.getElementById(arrowId);
+
+            if (isCurrentlyHidden) {
+                menu.classList.remove('hidden');
+                if (arrow) arrow.classList.add('rotate-180');
+                if (userTriggered) saveExpandedSubmenu(id, true);
+            } else {
+                menu.classList.add('hidden');
+                if (arrow) arrow.classList.remove('rotate-180');
+                if (userTriggered) saveExpandedSubmenu(id, false);
+            }
+        }
+
+        function initSidebarActiveState() {
+            const currentPath = window.location.pathname;
+            const sidebar = document.getElementById('sidebar');
+            if (!sidebar) return;
+
+            // 1. Restore user expanded accordions from localStorage
+            const savedExpanded = getStoredExpandedSubmenus();
+            savedExpanded.forEach(menuId => {
+                const menu = document.getElementById(menuId);
+                if (menu) {
+                    menu.classList.remove('hidden');
+                    const arrow = document.getElementById(menuId.replace('submenu-', 'arrow-'));
+                    if (arrow) arrow.classList.add('rotate-180');
+                }
+            });
+
+            // 2. Find matching link inside sidebar
+            const allLinks = Array.from(sidebar.querySelectorAll('a[href]'));
+            let matchedLink = null;
+            let maxMatchLen = 0;
+
+            allLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (!href || href === '#' || href.startsWith('javascript:')) return;
+                try {
+                    const url = new URL(href, window.location.origin);
+                    const linkPath = url.pathname;
+                    
+                    if (currentPath === linkPath) {
+                        if (linkPath.length >= maxMatchLen) {
+                            matchedLink = link;
+                            maxMatchLen = linkPath.length;
+                        }
+                    } else if (linkPath !== '/' && currentPath.startsWith(linkPath)) {
+                        if (linkPath.length > maxMatchLen) {
+                            matchedLink = link;
+                            maxMatchLen = linkPath.length;
+                        }
+                    }
+                } catch (e) {}
+            });
+
+            // 3. Highlight matched link and expand its parent accordion
+            if (matchedLink) {
+                matchedLink.classList.remove('text-slate-600', 'hover:bg-slate-50', 'hover:text-slate-900');
+                matchedLink.classList.add('bg-teal-50', 'text-[#27bebe]', 'font-bold', 'border-r-2', 'border-[#27bebe]');
+                const icon = matchedLink.querySelector('.material-symbols-outlined');
+                if (icon) icon.classList.add('text-[#27bebe]', 'material-symbols-fill');
+
+                // Check if inside a submenu
+                const parentSubmenu = matchedLink.closest('[id^="submenu-"]');
+                if (parentSubmenu) {
+                    parentSubmenu.classList.remove('hidden');
+                    const subId = parentSubmenu.id;
+                    const arrow = document.getElementById(subId.replace('submenu-', 'arrow-'));
+                    if (arrow) arrow.classList.add('rotate-180');
+                    const parentBtn = parentSubmenu.previousElementSibling;
+                    if (parentBtn && parentBtn.tagName === 'BUTTON') {
+                        parentBtn.classList.remove('text-slate-600');
+                        parentBtn.classList.add('bg-teal-50/60', 'text-teal-900', 'font-bold');
+                        const pIcon = parentBtn.querySelector('.material-symbols-outlined');
+                        if (pIcon && !pIcon.id) pIcon.classList.add('text-[#27bebe]', 'material-symbols-fill');
+                    }
+                }
+
+                // Auto-scroll active link smoothly into view in the sidebar
+                setTimeout(() => {
+                    matchedLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 150);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initSidebarActiveState();
+        });
 
         function openQuickAddBottomSheet() {
             const sheet = document.getElementById('quick-add-sheet');

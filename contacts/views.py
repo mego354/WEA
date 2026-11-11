@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
 from .models import Contact, ContactAddress, ContactComment, ContactAttachment, ContactTodo, ContactActivity
@@ -958,7 +958,11 @@ def contact_delete(request, pk):
         serial = contact.serial_num
         record_id = contact.id
         status_val = contact.status
-        contact.delete()
+        try:
+            contact.delete()
+        except ProtectedError:
+            messages.error(request, f"لا يمكن حذف جهة الاتصال '{name}' (#{serial}) لوجود حركات مالية أو زيارات أو طلبات مرتبطة بها.")
+            return redirect('contact_detail', pk=pk)
 
         AuditLogService.log(
             action='delete',

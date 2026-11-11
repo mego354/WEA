@@ -42,21 +42,43 @@ stateDiagram-v2
   - **SuperAdmins and Managers**: Can directly force-bypass distance restrictions (`verification_status='force_bypassed'`).
   - **Representatives**: When outside the geofence, reps cannot directly bypass. They must request an exception (`request_distance_exception=1`) with a mandatory text `bypass_reason`. This flags `requires_approval_due_to_distance=True` and marks `approval_status='pending'`.
 
-### 1.3 Post-Approval Editing Invalidation
-- When an already-approved visit (`approval_status='approved'`) is edited by a representative:
-  - Approval is immediately revoked: `approval_status = 'pending'`.
-  - The flag `waiting_for_reapproval = True` is set.
-  - Previous `ApprovalAuditLog` records are preserved, and a new audit record is appended.
-  - The visit cannot be started until a manager re-approves it.
+### 1.3 In-Progress Visit Editing & Smart Reapproval
+- **Status Locking**: Visits that have ended (`status == 'finished'`) are strictly locked from modification to preserve audit integrity and historical records.
+- **In-Progress Editing**: Visits in progress (`status in ['planned', 'draft', 'started']`) may be edited by authorized users.
+- **Smart Reapproval Triggering**:
+  - When an already-approved visit (`approval_status='approved'`) is edited by a representative and critical fields change (`date`, `contact`, `template`, `owner`, `doubled`, `questionnaire_answers`, or `detailed_products`):
+    - Approval is immediately revoked: `approval_status = 'pending'`.
+    - The flag `waiting_for_reapproval = True` is set.
+    - Previous `ApprovalAuditLog` records are preserved, and an `edited_reapproval_required` log is appended.
+    - The visit cannot proceed to execution until an authorized manager re-approves it.
+  - When edited by an authorized manager/supervisor, approval is retained (`approval_status='approved'`) and an `edited_by_manager` entry is recorded in `ApprovalAuditLog`.
 
-### 1.4 Scheduled Time & Quick Actions
+### 1.4 Visit Start Workflow & Questionnaire Stages
+- **Separation of Stages**:
+  - `start_only`: Check-in questions answered when starting the visit (e.g. site open status, arrival observations).
+  - `end_only` / `all`: Completion questions answered when documenting and concluding the visit (e.g. detailing outcome, objections, sample delivery).
+- **Check-In Validation**:
+  - Required `start_only` questions are validated server-side during the `start_visit` mutation.
+  - Successful start transitions the visit to `status = 'started'`, sets `started_at`, and populates `visit.questionnaire_answers`.
+- **Elimination of Duplicate Start**:
+  - Once started, the active visit dossier immediately renders the completion form and the "End Visit" (`complete`) action.
+  - The "Start Visit" button is hidden once active, and duplicate start POST requests redirect safely without state degradation.
+
+### 1.5 Scheduled Time & Quick Actions
 - Visits maintain a dedicated `time` (`TimeField`) and localized Arabic 12-hour property `formatted_time`.
 - An inline AJAX modal endpoint (`POST /activities/visits/<pk>/set-time/`) allows adjusting scheduled visit times without a page refresh, audited via `SecurityAuditLog`.
 
-### 1.5 Visit Templates & Mandatory Questions
+### 1.6 Visit Templates & Mandatory Questions
 - **Role Restrictions**: Templates can be restricted to specific roles (`restricted_roles`). Unrestricted templates are available to all authorized roles.
 - **Client-First Filtering**: Available templates dynamically filter based on the selected contact's account type (`is_contact_eligible(contact)`).
 - **Mandatory Completion Validation**: When ending a visit (`can_end_visit`), every required question in the template (including active conditional questions) must have non-empty answers.
+
+---
+
+## 2. Data Integrity, Foreign Key Protection & Unified Deletions
+- **Protected Relations (`ProtectedError`)**: Physical deletion of core entities (Products, Contacts, Areas, Roles) is protected by foreign key constraints. If related records exist (e.g. stock movements, invoices, visits, subareas, users), deletion is prevented and a clear, descriptive Arabic error message is displayed.
+- **Audit Trails & Reversals**: Financial transactions (e.g. `VaultTransaction`) and inventory documents are never hard-deleted; instead, business logic requires financial reversal (`vault_transaction_reverse`) creating an explicit reversing entry and balancing the ledger.
+- **Global Confirmation Standard**: All deletion and reversal actions trigger the unified modal (`showConfirmDeleteModal`) rather than native browser alerts.
 
 ---
 

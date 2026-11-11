@@ -205,13 +205,10 @@
                             {% if tx.is_reversed %}
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">معكوسة</span>
                             {% elif can_reverse and tx.reference_type != 'reversal' %}
-                            <form method="POST" action="{% url 'vault_transaction_reverse' tx.id %}" onsubmit="return confirm('هل أنت متأكد من رغبتك في عكس هذه الحركة النقدية مالياً؟');" class="inline">
-                                {% csrf_token %}
-                                <button type="submit" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 min-h-[32px]" title="عكس هذه الحركة مالياً">
-                                    <span class="material-symbols-outlined text-sm">undo</span>
-                                    <span>عكس</span>
-                                </button>
-                            </form>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'vault_transaction_reverse' tx.id %}', title: 'عكس الحركة النقدية', itemName: '{{ tx.serial_num }}', message: 'هل أنت متأكد من رغبتك في عكس هذه الحركة النقدية رقم <span class=\'font-bold text-slate-800\'>#{{ tx.serial_num }}</span> مالياً؟ سيتم إنشاء قيد عكسي مطابق وموازنة رصيد الخزينة.', submitText: 'نعم، عكس الحركة', submitColor: 'bg-amber-600 hover:bg-amber-700', icon: 'undo', iconColor: 'text-amber-600 bg-amber-50' })" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 min-h-[32px]" title="عكس هذه الحركة مالياً">
+                                <span class="material-symbols-outlined text-sm">undo</span>
+                                <span>عكس</span>
+                            </button>
                             {% else %}
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مقيدة</span>
                             {% endif %}

@@ -308,11 +308,12 @@ def can_start_visit(visit, user):
     return True, ""
 
 
-def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None, force_bypass=False, bypass_reason=''):
+def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None, force_bypass=False, bypass_reason='', checkin_answers=None):
     """
     Executes explicit Start Visit / Check-in transition:
     planned (approved) -> started
     Captures server-side started_at timestamp, applies GPS check-in verification if provided/required,
+    validates and saves check-in questionnaire answers (stage='start_only'),
     and records an audit log entry.
     """
     from django.db import transaction
@@ -324,17 +325,40 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
         if not can_start:
             raise ValidationError(err)
 
+        # Validate check-in questions (stage == 'start_only')
+        saved_answers = dict(visit.questionnaire_answers or {})
+        if checkin_answers:
+            for k, v in checkin_answers.items():
+                if v is not None and v != '':
+                    saved_answers[str(k)] = v
+
+        if visit.template:
+            start_questions = visit.template.get_active_questions().filter(stage='start_only')
+            for q in start_questions:
+                # Conditional check if applicable
+                if q.is_conditional and q.conditional_parent_id:
+                    parent_val = saved_answers.get(str(q.conditional_parent_id), '')
+                    trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                    if str(parent_val).strip().lower() != trigger_val:
+                        continue
+                if q.is_required:
+                    ans = saved_answers.get(str(q.id))
+                    if ans is None or (isinstance(ans, str) and not ans.strip()) or (isinstance(ans, (list, tuple)) and len(ans) == 0):
+                        raise ValidationError(f"سؤال بداية الزيارة '{q.text_ar}' إلزامي لبدء الزيارة.")
+
         # Process GPS check-in if coordinates provided
-        if lat is not None or lng is not None:
+        if lat is not None or lng is not None or photo_file or force_bypass:
             verify_visit_location(
                 visit, user, visit.contact,
                 visit_lat=lat, visit_lng=lng, device_accuracy=accuracy,
-                photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason
+                photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason,
+                stage='create'
             )
 
         status_before = visit.status
         visit.status = 'started'
         visit.started_at = timezone.now()
+        visit.questionnaire_answers = saved_answers
         visit.save()
 
         ip = request.META.get('REMOTE_ADDR') if request else None

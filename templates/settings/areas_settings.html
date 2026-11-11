@@ -47,13 +47,10 @@
                                 <span class="material-symbols-outlined text-base">edit</span>
                                 <span>تعديل</span>
                             </button>
-                            <form method="POST" action="{% url 'area_delete' gov.id %}" onsubmit="return confirm('حذف المنطقة {{ gov.name }}؟');">
-                                {% csrf_token %}
-                                <button type="submit" class="w-full text-right px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2">
-                                    <span class="material-symbols-outlined text-base">delete</span>
-                                    <span>حذف</span>
-                                </button>
-                            </form>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'area_delete' gov.id %}', title: 'حذف المنطقة', itemName: '{{ gov.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف المنطقة <span class=\'font-bold text-slate-800\'>{{ gov.name|escapejs }}</span>؟', relatedText: 'ملاحظة: لا يمكن حذف المنطقة إذا كانت تحتوي على مناطق فرعية أو مندوبين أو جهات اتصال مرتبطة بها.' })" class="w-full text-right px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-base">delete</span>
+                                <span>حذف</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -78,12 +75,9 @@
                     {% for sub in gov.subareas.all %}
                     <div class="p-3 bg-white rounded-lg border border-slate-200 flex items-center justify-between text-xs font-medium text-slate-800 shadow-2xs">
                         <div class="flex items-center gap-2">
-                            <form method="POST" action="{% url 'area_delete' sub.id %}" onsubmit="return confirm('حذف {{ sub.name }}؟');" class="inline">
-                                {% csrf_token %}
-                                <button type="submit" class="text-slate-400 hover:text-red-600 transition-colors" title="حذف">
-                                    <span class="material-symbols-outlined text-sm">delete</span>
-                                </button>
-                            </form>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'area_delete' sub.id %}', title: 'حذف المنطقة الفرعية', itemName: '{{ sub.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف المنطقة الفرعية <span class=\'font-bold text-slate-800\'>{{ sub.name|escapejs }}</span>؟' })" class="text-slate-400 hover:text-red-600 transition-colors" title="حذف">
+                                <span class="material-symbols-outlined text-sm">delete</span>
+                            </button>
                             <button type="button" onclick="openEditAreaModal('{{ sub.id }}', '{{ sub.name }}', '{{ sub.code }}')" class="text-slate-400 hover:text-[#27bebe] transition-colors" title="تعديل">
                                 <span class="material-symbols-outlined text-sm">edit</span>
                             </button>

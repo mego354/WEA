@@ -49,10 +49,13 @@ This document outlines the user interface specifications, front-end architecture
 ```
 
 1. **Desktop**: Fixed right sidebar with collapsible sections, top breadcrumbs, and user menu.
+   - **Centralized Active Navigation**: Inspects `window.location.pathname`, identifies the matching item, applies active teal styling (`bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]`), auto-expands the parent accordion, rotates the chevron icon (`rotate-180`), highlights the parent category button, and smoothly auto-scrolls the active link into view.
+   - **Accordion State Persistence**: User-expanded/collapsed accordions are saved in `localStorage ('wea_sidebar_expanded')` and restored on subsequent page loads.
 2. **Mobile**:
    - Slide-over drawer for secondary links and settings.
    - Fixed bottom navigation bar for high-frequency actions (Home, Visits, Orders, Clients, Profile).
    - Bottom-right Floating Action Button (FAB) triggering a bottom sheet for rapid creation (New Visit, New Order, New Client).
+   - **Mobile Topbar Refresh Button**: Fixed in the header (`lg:hidden min-w-[44px] min-h-[44px]`) next to notifications for instant page reloading on mobile touch devices.
 
 ---
 
@@ -61,7 +64,10 @@ This document outlines the user interface specifications, front-end architecture
 ### Client Filter Drawer (`#customer-drawer`)
 - Filters and selection drawers operate via asynchronous AJAX without full page reloads.
 - **Incremental Batch Loading**: Supports loading clients in 10-item increments (`action=load_contacts`) with deduplication.
-- **State Preservation**: Client selections across previous batches and searches are strictly preserved in JavaScript memory and hidden form inputs.
+- **State & Selection Persistence across Reload**:
+  - Drawer open/closed state (`wea_planned_drawer_open`), selected contact IDs (`wea_planned_selected_ids`), and scheduled date (`wea_planned_bulk_date`) are persisted in `sessionStorage`.
+  - On page refresh or back-navigation, the drawer reopens automatically, selections are restored, and eligible template groups reload without stale or lost data.
+  - Upon successful plan submission, cached session storage entries are cleanly purged.
 - **Pagination (`smart_page_range`)**: Compact pagination showing current, neighbor, first, last, and `'...'` ellipsis.
 
 ---
@@ -81,6 +87,11 @@ This document outlines the user interface specifications, front-end architecture
 
 ## 6. Forms & Inline Modals
 
+- **Unified Deletion Confirmation Modal (`confirm_delete_modal.html`)**:
+  - Global reusable confirmation popup modeled after the Catalog Categories standard.
+  - Replaces all inconsistent native browser `confirm(...)` dialogs across the application.
+  - Displays red warning icon, item identifier, irreversible action warning, optional related-records alert, and double-submit protection.
+  - Supports non-destructive reversals (e.g. treasury reversals, purchase cancellations) with customizable button colors and icons via `showConfirmDeleteModal({ ... })`.
 - **Context-Preserving Modals**: Quick actions (e.g. Set Visit Time, Distance Exception Reason, Void Order) open compact centered modals without navigating away from the list or detail view.
 - **Client-First Template Cascading**: In visit forms, selecting the client automatically queries eligible templates via AJAX, preventing selection of incompatible templates.
 - **Territorial Cascading Dropdowns**: Selecting a Governorate dynamically updates the Brick/Subarea selector with child areas.

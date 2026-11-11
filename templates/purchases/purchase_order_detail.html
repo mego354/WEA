@@ -68,14 +68,11 @@
 
             <!-- Undo Invoice (if settled) -->
             {% if order.status == 'settled' %}
-            <form method="POST" action="{% url 'purchase_order_action' order.id 'undo_invoice' %}">
-                {% csrf_token %}
-                <button type="submit" onclick="return confirm('هل تريد إلغاء فاتورة الحسابات والعودة إلى حالة استلام المخزن؟');"
-                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">attach_money</span>
-                    <span>الغاء الفاتورة</span>
-                </button>
-            </form>
+            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_action' order.id 'undo_invoice' %}', title: 'إلغاء فاتورة الحسابات', itemName: '{{ order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء فاتورة الحسابات لأمر الشراء رقم <span class=\'font-bold text-slate-800\'>#{{ order.serial_num }}</span> والعودة إلى حالة استلام المخزن؟', submitText: 'نعم، إلغاء الفاتورة', submitColor: 'bg-amber-600 hover:bg-amber-700', icon: 'undo', iconColor: 'text-amber-600 bg-amber-50' })"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">attach_money</span>
+                <span>الغاء الفاتورة</span>
+            </button>
             {% elif order.status == 'picked' %}
             <form method="POST" action="{% url 'purchase_order_action' order.id 'invoice' %}">
                 {% csrf_token %}
@@ -155,13 +152,10 @@
                         <span>إنشاء أمر إرجاع</span>
                     </a>
                     <div class="h-px bg-slate-100 my-1"></div>
-                    <form method="POST" action="{% url 'purchase_order_action' order.id 'cancel' %}" onsubmit="return confirm('هل تريد إلغاء أمر الشراء؟');">
-                        {% csrf_token %}
-                        <button type="submit" class="w-full text-right px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-sm">cancel</span>
-                            <span>إلغاء الأمر</span>
-                        </button>
-                    </form>
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_action' order.id 'cancel' %}', title: 'إلغاء أمر الشراء', itemName: '{{ order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء أمر الشراء رقم <span class=\'font-bold text-slate-800\'>#{{ order.serial_num }}</span> نهائياً؟', submitText: 'نعم، إلغاء الأمر', icon: 'cancel' })" class="w-full text-right px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">cancel</span>
+                        <span>إلغاء الأمر</span>
+                    </button>
                 </div>
 
             </div>

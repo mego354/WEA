@@ -185,6 +185,7 @@ class ScopeResolutionService:
 
         # 'brick' or 'own': assigned areas
         assigned_ids = list(user.assigned_areas.values_list('id', flat=True))
+        
         if not assigned_ids:
             return Area.objects.none()
         return Area.objects.filter(

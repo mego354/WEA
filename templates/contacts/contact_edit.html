@@ -318,7 +318,7 @@
                                 <option value="">اختر المنطقة الفرعية...</option>
                                 {% for br in bricks %}
                                     {% if br.parent_id == addr.area_id %}
-                                    <option value="{{ br.id }}" {% if addr.brick_id == br.id or addr.sub_area == br.name %}selected{% endif %}>{{ br.name }}</option>
+                                    <option value="{{ br.id }}" {% if addr.brick_id == br.id or addr.brick.name == br.name %}selected{% endif %}>{{ br.name }}</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>

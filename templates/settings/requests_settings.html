@@ -38,12 +38,9 @@
                     افتراضي
                 </span>
                 {% else %}
-                <form method="POST" action="{% url 'request_type_delete' r.id %}" onsubmit="return confirm('حذف نوع الموافقة {{ r.name }}؟');" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
-                        <span class="material-symbols-outlined text-xl">delete</span>
-                    </button>
-                </form>
+                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'request_type_delete' r.id %}', title: 'حذف نوع الموافقة', itemName: '{{ r.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف نوع الموافقة <span class=\'font-bold text-slate-800\'>{{ r.name|escapejs }}</span>؟' })" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
+                    <span class="material-symbols-outlined text-xl">delete</span>
+                </button>
                 <button type="button" onclick="openEditRequestTypeModal('{{ r.id }}', '{{ r.name }}')" class="text-slate-500 hover:text-[#27bebe] transition-colors" title="تعديل">
                     <span class="material-symbols-outlined text-xl">edit</span>
                 </button>

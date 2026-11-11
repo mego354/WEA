@@ -484,15 +484,12 @@
                                 {% endif %}
                             </div>
                             <!-- Delete action -->
-                            <form method="POST" action="{% url 'contact_delete_address' contact.id addr.id %}" onsubmit="return confirm('حذف هذا العنوان؟');">
-                                {% csrf_token %}
-                                <button type="submit" class="text-slate-400 hover:text-red-500" title="حذف الموقع">
-                                    <span class="material-symbols-outlined text-sm">delete</span>
-                                </button>
-                            </form>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_address' contact.id addr.id %}', title: 'حذف العنوان', itemName: '{{ addr.title|default:'العنوان'|escapejs }}', message: 'هل أنت متأكد من حذف هذا العنوان: <span class=\'font-bold text-slate-800\'>{{ addr.title|default:'العنوان'|escapejs }}</span>؟' })" class="text-slate-400 hover:text-red-500" title="حذف الموقع">
+                                <span class="material-symbols-outlined text-sm">delete</span>
+                            </button>
                         </div>
                         <p class="text-xs text-slate-600">
-                            {% if addr.area %}{{ addr.area.name }} | {% endif %}{{ addr.sub_area }}
+                            {% if addr.area %}{{ addr.area.name }} | {% endif %}{{ addr.brick.name }}
                         </p>
                         {% if addr.street_address %}
                         <p class="text-[11px] text-slate-500 mt-1">{{ addr.street_address }}</p>
@@ -1318,35 +1315,12 @@
     }
 
     function deleteTodoAjax(todoId) {
-        if (!confirm('هل تريد حذف هذه المهمة نهائياً؟')) return;
-        const csrftoken = getCookie('csrftoken');
-        fetch(`/contacts/{{ contact.id }}/todos/${todoId}/delete/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrftoken,
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-            }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'ok') {
-                const row = document.getElementById(`todo-row-${todoId}`);
-                if (row) {
-                    row.style.transition = 'all 0.3s ease';
-                    row.style.opacity = '0';
-                    row.style.transform = 'translateX(20px)';
-                    setTimeout(() => {
-                        row.remove();
-                        const list = document.getElementById('todosListContainer');
-                        if (list && list.querySelectorAll('.todo-item').length === 0) {
-                            list.innerHTML = '<p id="noTodosMsg" class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>';
-                        }
-                    }, 300);
-                }
-            }
-        })
-        .catch(err => console.error('Error deleting todo:', err));
+        showConfirmDeleteModal({
+            action: `/contacts/{{ contact.id }}/todos/${todoId}/delete/`,
+            title: 'حذف المهمة',
+            itemName: '',
+            message: 'هل أنت متأكد من رغبتك في حذف هذه المهمة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.'
+        });
     }
 
     function handleCreateTodo(e) {

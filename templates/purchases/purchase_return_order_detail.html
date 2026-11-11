@@ -64,14 +64,11 @@
             {% endif %}
 
             {% if return_order.status == 'pending' or return_order.status == 'approved' %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'cancel' %}">
-                {% csrf_token %}
-                <button type="submit" onclick="return confirm('هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع؟');"
-                        class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">close</span>
-                    <span>إلغاء</span>
-                </button>
-            </form>
+            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء أمر الإرجاع', itemName: '{{ return_order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع رقم <span class=\'font-bold text-slate-800\'>#{{ return_order.serial_num }}</span> نهائياً؟', submitText: 'نعم، إلغاء أمر الإرجاع', icon: 'cancel' })"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">close</span>
+                <span>إلغاء</span>
+            </button>
             {% endif %}
 
             <a href="{% url 'purchase_return_order_print' return_order.id %}" target="_blank"

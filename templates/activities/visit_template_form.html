@@ -386,12 +386,9 @@
                         <span class="material-symbols-outlined text-lg">edit</span>
                     </button>
 
-                    <form method="POST" action="{% url 'template_question_delete' q.id %}" onsubmit="return confirm('هل أنت متأكد من حذف هذا السؤال؟');" class="inline">
-                        {% csrf_token %}
-                        <button type="submit" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف السؤال">
-                            <span class="material-symbols-outlined text-lg">delete</span>
-                        </button>
-                    </form>
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'template_question_delete' q.id %}', title: 'حذف السؤال', itemName: '{{ q.text_ar|escapejs }}', message: 'هل أنت متأكد من حذف هذا السؤال: <span class=\'font-bold text-slate-800\'>{{ q.text_ar|escapejs }}</span>؟' })" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف السؤال">
+                        <span class="material-symbols-outlined text-lg">delete</span>
+                    </button>
                 </div>
             </div>
             {% endfor %}
