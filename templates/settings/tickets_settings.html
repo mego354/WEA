@@ -38,12 +38,9 @@
                     افتراضي
                 </span>
                 {% else %}
-                <form method="POST" action="{% url 'ticket_delete' t.id %}" onsubmit="return confirm('حذف نوع المهمة {{ t.name }}؟');" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
-                        <span class="material-symbols-outlined text-xl">delete</span>
-                    </button>
-                </form>
+                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'ticket_delete' t.id %}', title: 'حذف نوع المهمة', itemName: '{{ t.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف نوع المهمة <span class=\'font-bold text-slate-800\'>{{ t.name|escapejs }}</span>؟' })" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
+                    <span class="material-symbols-outlined text-xl">delete</span>
+                </button>
                 <button type="button" onclick="openEditTicketModal('{{ t.id }}', '{{ t.name }}')" class="text-slate-500 hover:text-[#27bebe] transition-colors" title="تعديل">
                     <span class="material-symbols-outlined text-xl">edit</span>
                 </button>

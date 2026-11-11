@@ -32,12 +32,9 @@
         <div class="p-4 rounded-xl flex items-center justify-between shadow-2xs hover:shadow-xs transition-all border border-teal-200/50" style="background-color: #e6f7f7;">
             <!-- Left: Actions Delete, Edit -->
             <div class="flex items-center gap-3">
-                <form method="POST" action="{% url 'agreement_type_delete' a.id %}" onsubmit="return confirm('حذف نوع الاتفاقية {{ a.name }}؟');" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
-                        <span class="material-symbols-outlined text-xl">delete</span>
-                    </button>
-                </form>
+                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agreement_type_delete' a.id %}', title: 'حذف نوع الاتفاقية', itemName: '{{ a.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف نوع الاتفاقية <span class=\'font-bold text-slate-800\'>{{ a.name|escapejs }}</span>؟' })" class="text-rose-500 hover:text-rose-700 transition-colors" title="حذف">
+                    <span class="material-symbols-outlined text-xl">delete</span>
+                </button>
                 <button type="button" onclick="openEditAgreementModal('{{ a.id }}', '{{ a.name }}')" class="text-slate-500 hover:text-[#27bebe] transition-colors" title="تعديل">
                     <span class="material-symbols-outlined text-xl">edit</span>
                 </button>

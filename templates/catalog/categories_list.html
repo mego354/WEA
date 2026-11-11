@@ -209,9 +209,12 @@ function openEditCategoryModal(id, name, code, desc) {
     openModal('edit-cat-modal');
 }
 function openDeleteCategoryModal(id, name) {
-    document.getElementById('delete-cat-form').action = `/catalog/categories/${id}/delete/`;
-    document.getElementById('delete-cat-name').textContent = `"${name}"`;
-    openModal('delete-cat-modal');
+    showConfirmDeleteModal({
+        action: `/catalog/categories/${id}/delete/`,
+        title: 'تأكيد حذف التصنيف',
+        itemName: name,
+        message: `هل أنت متأكد من رغبتك في حذف التصنيف <span class="font-bold text-slate-800">"${name}"</span>؟ لا يمكن التراجع عن هذا الإجراء.`
+    });
 }
 </script>
 {% endblock %}

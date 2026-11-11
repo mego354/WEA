@@ -1,7 +1,105 @@
 {% extends 'layouts/base.html' %}
 {% load humanize static %}
 
-{% block title %}زيارة #{{ visit.serial_num }} - Bricks Rep{% endblock %}
+{% block title %}زيارة #{{ visit.serial_num }} - Bricks Rep<!-- START VISIT / CHECK-IN MODAL (stage='start_only' questions + GPS) -->
+<div id="start-visit-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2.5 text-[#27bebe]">
+                <span class="material-symbols-outlined text-2xl">play_circle</span>
+                <div>
+                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور (Check-in)</h3>
+                    <p class="text-[11px] text-slate-500">التحقق من الموقع واستكمال أسئلة الحضور لتفعيل الزيارة</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeStartVisitModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" id="start-visit-form" onsubmit="handleStartVisitSubmit(event)" class="space-y-4 text-xs">
+            {% csrf_token %}
+            <input type="hidden" name="latitude" id="start-modal-latitude" value="">
+            <input type="hidden" name="longitude" id="start-modal-longitude" value="">
+            <input type="hidden" name="device_accuracy" id="start-modal-accuracy" value="">
+
+            <!-- Client & Geofence Quick Overview -->
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                <div>
+                    <span class="text-slate-400 text-[10px] block">العميل</span>
+                    <strong class="text-slate-800 text-xs">{{ visit.contact.name }}</strong>
+                </div>
+                <div class="text-left">
+                    <span class="text-slate-400 text-[10px] block">الحد الأقصى للمسافة</span>
+                    <strong class="text-[#1a8b8b] text-xs font-mono">{{ allowed_distance }} متر</strong>
+                </div>
+            </div>
+
+            <!-- GPS Live Status in Modal -->
+            <div class="p-3 rounded-xl bg-teal-50/60 border border-teal-200 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-teal-600 animate-pulse">my_location</span>
+                    <span id="start-modal-gps-text" class="text-xs font-bold text-teal-900">جاري التقاط إحداثيات الموقع...</span>
+                </div>
+                <button type="button" onclick="acquireStartCoordinates()" class="p-1 text-teal-700 hover:bg-teal-100 rounded-lg transition-colors" title="إعادة الالتقاط">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                </button>
+            </div>
+
+            {% if start_questions %}
+            <!-- Check-in Questions (stage == 'start_only') -->
+            <div class="space-y-3.5 pt-2 border-t border-slate-100">
+                <h4 class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">quiz</span>
+                    <span>أسئلة بداية الزيارة الإلزامية *</span>
+                </h4>
+                {% for q in start_questions %}
+                <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-800">
+                        {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500 font-bold">*</span>{% endif %}
+                    </label>
+
+                    {% if q.question_type == 'single_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="radio" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" {% if q.is_required %}required{% endif %} class="text-[#27bebe] focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'multiple_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'textarea' %}
+                    <textarea name="question_{{ q.id }}" rows="2" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white"></textarea>
+                    {% else %}
+                    <input type="text" name="question_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeStartVisitModal()" class="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition-colors">
+                    إلغاء
+                </button>
+                <button type="submit" id="start-modal-submit-btn" class="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white font-bold rounded-xl shadow-md text-xs transition-all flex items-center gap-1.5 min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">play_arrow</span>
+                    <span>تأكيد وبدء الزيارة الآن</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -33,6 +131,104 @@
         100% { transform: scale(0.95); opacity: 0.8; }
     }
 </style>
+<!-- START VISIT / CHECK-IN MODAL (stage='start_only' questions + GPS) -->
+<div id="start-visit-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2.5 text-[#27bebe]">
+                <span class="material-symbols-outlined text-2xl">play_circle</span>
+                <div>
+                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور (Check-in)</h3>
+                    <p class="text-[11px] text-slate-500">التحقق من الموقع واستكمال أسئلة الحضور لتفعيل الزيارة</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeStartVisitModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" id="start-visit-form" onsubmit="handleStartVisitSubmit(event)" class="space-y-4 text-xs">
+            {% csrf_token %}
+            <input type="hidden" name="latitude" id="start-modal-latitude" value="">
+            <input type="hidden" name="longitude" id="start-modal-longitude" value="">
+            <input type="hidden" name="device_accuracy" id="start-modal-accuracy" value="">
+
+            <!-- Client & Geofence Quick Overview -->
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                <div>
+                    <span class="text-slate-400 text-[10px] block">العميل</span>
+                    <strong class="text-slate-800 text-xs">{{ visit.contact.name }}</strong>
+                </div>
+                <div class="text-left">
+                    <span class="text-slate-400 text-[10px] block">الحد الأقصى للمسافة</span>
+                    <strong class="text-[#1a8b8b] text-xs font-mono">{{ allowed_distance }} متر</strong>
+                </div>
+            </div>
+
+            <!-- GPS Live Status in Modal -->
+            <div class="p-3 rounded-xl bg-teal-50/60 border border-teal-200 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-teal-600 animate-pulse">my_location</span>
+                    <span id="start-modal-gps-text" class="text-xs font-bold text-teal-900">جاري التقاط إحداثيات الموقع...</span>
+                </div>
+                <button type="button" onclick="acquireStartCoordinates()" class="p-1 text-teal-700 hover:bg-teal-100 rounded-lg transition-colors" title="إعادة الالتقاط">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                </button>
+            </div>
+
+            {% if start_questions %}
+            <!-- Check-in Questions (stage == 'start_only') -->
+            <div class="space-y-3.5 pt-2 border-t border-slate-100">
+                <h4 class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">quiz</span>
+                    <span>أسئلة بداية الزيارة الإلزامية *</span>
+                </h4>
+                {% for q in start_questions %}
+                <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-800">
+                        {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500 font-bold">*</span>{% endif %}
+                    </label>
+
+                    {% if q.question_type == 'single_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="radio" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" {% if q.is_required %}required{% endif %} class="text-[#27bebe] focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'multiple_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'textarea' %}
+                    <textarea name="question_{{ q.id }}" rows="2" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white"></textarea>
+                    {% else %}
+                    <input type="text" name="question_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeStartVisitModal()" class="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition-colors">
+                    إلغاء
+                </button>
+                <button type="submit" id="start-modal-submit-btn" class="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white font-bold rounded-xl shadow-md text-xs transition-all flex items-center gap-1.5 min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">play_arrow</span>
+                    <span>تأكيد وبدء الزيارة الآن</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -110,15 +306,12 @@
                 </button>
             {% endif %}
 
-            <!-- Start Visit Button (planned + approved only) -->
+            <!-- Start Visit Action (planned + approved only) -->
             {% if can_start_visit %}
-            <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" class="inline">
-                {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
-                    <span class="material-symbols-outlined text-base">play_circle</span>
-                    <span>بدء الزيارة الآن</span>
-                </button>
-            </form>
+            <button type="button" onclick="openStartVisitModal()" class="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">play_circle</span>
+                <span>بدء الزيارة الآن</span>
+            </button>
             {% endif %}
 
             <!-- Send to Agenda Action (Requires Approval First) -->
@@ -147,10 +340,10 @@
             </form>
             {% endif %}
 
-            {% if visit.status == 'finished' %}
+            {% if visit.status != 'finished' %}
             <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
-                <span>تعديل الملاحظات</span>
+                <span>تعديل بيانات الزيارة</span>
             </a>
             {% endif %}
         </div>
@@ -277,13 +470,10 @@
             </div>
         </div>
         {% if can_start_visit %}
-        <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" class="inline shrink-0">
-            {% csrf_token %}
-            <button type="submit" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white text-teal-700 hover:bg-white/90 text-sm font-bold rounded-xl shadow-md transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-base">play_circle</span>
-                <span>بدء الزيارة الآن</span>
-            </button>
-        </form>
+        <button type="button" onclick="openStartVisitModal()" class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white text-teal-700 hover:bg-white/90 text-sm font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+            <span class="material-symbols-outlined text-base">play_circle</span>
+            <span>بدء الزيارة الآن</span>
+        </button>
         {% endif %}
     </div>
     {% endif %}
@@ -387,13 +577,10 @@
 
                 {% if can_start_visit %}
                 <div class="pt-2">
-                    <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
-                            <span class="material-symbols-outlined text-base">play_circle</span>
-                            <span>بدء الزيارة وتسجيل الحضور الآن</span>
-                        </button>
-                    </form>
+                    <button type="button" onclick="openStartVisitModal()" class="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md transition-all min-h-[44px]">
+                        <span class="material-symbols-outlined text-base">play_circle</span>
+                        <span>بدء الزيارة وتسجيل الحضور الآن</span>
+                    </button>
                 </div>
                 {% endif %}
             </div>
@@ -408,8 +595,31 @@
                 <input type="hidden" name="device_accuracy" id="form-accuracy" value="{{ visit.device_accuracy|default:'' }}">
                 <input type="hidden" name="detailed_products_submitted" value="1">
 
+                <!-- Check-in Questions Already Answered Summary -->
+                {% if start_questions %}
+                <div class="bg-sky-50/70 border border-sky-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between border-b border-sky-200/80 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sky-600 text-lg">check_circle</span>
+                            <h3 class="text-xs font-bold text-sky-950">بيانات وإجابات بداية الزيارة (Check-in)</h3>
+                        </div>
+                        <span class="text-[10px] font-bold bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full border border-sky-200">تم التوثيق عند البدء</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {% for q in start_questions %}
+                        <div class="bg-white p-3 rounded-xl border border-sky-100 space-y-1">
+                            <span class="text-[11px] text-slate-500 font-medium block">{{ q.text_ar }}</span>
+                            <span class="font-bold text-slate-800 text-xs">
+                                {% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.answer|default:'-' }}{% endif %}{% endfor %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Template Questions Card -->
-                {% if all_questions %}
+                {% if completion_questions|default:all_questions %}
                 <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                         <div class="flex items-center gap-2">
@@ -420,12 +630,12 @@
                             </div>
                         </div>
                         <span class="text-xs px-2.5 py-0.5 rounded-full bg-teal-50 text-[#27bebe] font-bold border border-teal-200">
-                            {{ all_questions|length }} سؤال
+                            {{ completion_questions|default:all_questions|length }} سؤال
                         </span>
                     </div>
 
                     <div class="space-y-5" id="questions-container">
-                        {% for q in all_questions %}
+                        {% for q in completion_questions|default:all_questions %}
                         <div class="question-block p-4 rounded-xl border border-slate-200/90 bg-slate-50/50 space-y-2.5 transition-all"
                              id="question-block-{{ q.id }}"
                              data-question-id="{{ q.id }}"
@@ -784,7 +994,7 @@
                         </div>
 
                     <!-- Cancel Visit -->
-                    <button type="submit" name="action" value="cancel" onclick="return confirm('هل أنت متأكد من إلغاء هذه الزيارة نهائياً؟')"
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_action' visit.pk 'cancel' %}', title: 'إلغاء الزيارة', itemName: '{{ visit.serial_num }}', message: 'هل أنت متأكد من إلغاء هذه الزيارة رقم <span class=\'font-bold text-slate-800\'>#{{ visit.serial_num }}</span> نهائياً؟ لا يمكن استئنافها بعد الإلغاء.', submitText: 'نعم، إلغاء الزيارة', icon: 'cancel' })"
                             class="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors">
                         <span class="material-symbols-outlined text-base">cancel</span>
                         <span>إلغاء الزيارة</span>
@@ -1658,6 +1868,60 @@ async function submitVisitTimeAjax(e) {
     }
 }
 
+function openStartVisitModal() {
+    const modal = document.getElementById('start-visit-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        acquireStartCoordinates();
+    }
+}
+
+function closeStartVisitModal() {
+    const modal = document.getElementById('start-visit-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function acquireStartCoordinates() {
+    const gpsText = document.getElementById('start-modal-gps-text');
+    if (!navigator.geolocation) {
+        if (gpsText) gpsText.textContent = 'GPS غير مدعوم في المتصفح';
+        return;
+    }
+    if (gpsText) gpsText.textContent = 'جاري التقاط إحداثيات الموقع...';
+    navigator.geolocation.getCurrentPosition(
+        function(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const acc = Math.round(pos.coords.accuracy || 0);
+            const latInp = document.getElementById('start-modal-latitude');
+            const lngInp = document.getElementById('start-modal-longitude');
+            const accInp = document.getElementById('start-modal-accuracy');
+            if (latInp) latInp.value = lat;
+            if (lngInp) lngInp.value = lng;
+            if (accInp) accInp.value = acc;
+            if (gpsText) {
+                gpsText.textContent = `تم التقاط الموقع بدقة (±${acc}م) ✓`;
+                gpsText.className = 'text-xs font-bold text-emerald-800';
+            }
+        },
+        function(err) {
+            if (gpsText) {
+                gpsText.textContent = 'تعذر التقاط الموقع الجغرافي تلقائياً';
+                gpsText.className = 'text-xs font-bold text-amber-800';
+            }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function handleStartVisitSubmit(e) {
+    const btn = document.getElementById('start-modal-submit-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined text-base animate-spin">refresh</span> <span>جاري تفعيل الزيارة...</span>`;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     evaluateConditionalQuestions();
     evaluateRequiredQuestions();
@@ -1794,6 +2058,104 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="submit" id="time-modal-save-btn" class="px-4 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5">
                     <span class="material-symbols-outlined text-sm">check</span>
                     <span>حفظ الوقت</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- START VISIT / CHECK-IN MODAL (stage='start_only' questions + GPS) -->
+<div id="start-visit-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2.5 text-[#27bebe]">
+                <span class="material-symbols-outlined text-2xl">play_circle</span>
+                <div>
+                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور (Check-in)</h3>
+                    <p class="text-[11px] text-slate-500">التحقق من الموقع واستكمال أسئلة الحضور لتفعيل الزيارة</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeStartVisitModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'visit_action' visit.pk 'start' %}" id="start-visit-form" onsubmit="handleStartVisitSubmit(event)" class="space-y-4 text-xs">
+            {% csrf_token %}
+            <input type="hidden" name="latitude" id="start-modal-latitude" value="">
+            <input type="hidden" name="longitude" id="start-modal-longitude" value="">
+            <input type="hidden" name="device_accuracy" id="start-modal-accuracy" value="">
+
+            <!-- Client & Geofence Quick Overview -->
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                <div>
+                    <span class="text-slate-400 text-[10px] block">العميل</span>
+                    <strong class="text-slate-800 text-xs">{{ visit.contact.name }}</strong>
+                </div>
+                <div class="text-left">
+                    <span class="text-slate-400 text-[10px] block">الحد الأقصى للمسافة</span>
+                    <strong class="text-[#1a8b8b] text-xs font-mono">{{ allowed_distance }} متر</strong>
+                </div>
+            </div>
+
+            <!-- GPS Live Status in Modal -->
+            <div class="p-3 rounded-xl bg-teal-50/60 border border-teal-200 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-teal-600 animate-pulse">my_location</span>
+                    <span id="start-modal-gps-text" class="text-xs font-bold text-teal-900">جاري التقاط إحداثيات الموقع...</span>
+                </div>
+                <button type="button" onclick="acquireStartCoordinates()" class="p-1 text-teal-700 hover:bg-teal-100 rounded-lg transition-colors" title="إعادة الالتقاط">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                </button>
+            </div>
+
+            {% if start_questions %}
+            <!-- Check-in Questions (stage == 'start_only') -->
+            <div class="space-y-3.5 pt-2 border-t border-slate-100">
+                <h4 class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">quiz</span>
+                    <span>أسئلة بداية الزيارة الإلزامية *</span>
+                </h4>
+                {% for q in start_questions %}
+                <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-800">
+                        {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500 font-bold">*</span>{% endif %}
+                    </label>
+
+                    {% if q.question_type == 'single_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="radio" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" {% if q.is_required %}required{% endif %} class="text-[#27bebe] focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'multiple_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]">
+                            <span>{{ opt.text_ar }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'textarea' %}
+                    <textarea name="question_{{ q.id }}" rows="2" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white"></textarea>
+                    {% else %}
+                    <input type="text" name="question_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeStartVisitModal()" class="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition-colors">
+                    إلغاء
+                </button>
+                <button type="submit" id="start-modal-submit-btn" class="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-[#27bebe] hover:from-teal-600 hover:to-[#20a3a3] text-white font-bold rounded-xl shadow-md text-xs transition-all flex items-center gap-1.5 min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">play_arrow</span>
+                    <span>تأكيد وبدء الزيارة الآن</span>
                 </button>
             </div>
         </form>

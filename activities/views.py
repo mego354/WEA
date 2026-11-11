@@ -1732,11 +1732,16 @@ def visit_detail(request, pk):
     # GET Request: prepare structured questionnaire answers and questions
     questionnaire_responses = []
     all_questions = []
+    start_questions = []
+    completion_questions = []
     if visit.template:
+        active_qs = list(visit.template.get_active_questions())
         if visit.status == 'started':
-            all_questions = list(visit.template.get_active_questions())
+            all_questions = active_qs
         else:
             all_questions = list(visit.template.questions.all().order_by('order', 'id'))
+        start_questions = [q for q in active_qs if q.stage == 'start_only']
+        completion_questions = [q for q in active_qs if q.stage in ['all', 'end_only']]
         answers = visit.questionnaire_answers or {}
         for q in all_questions:
             ans = answers.get(str(q.id))
@@ -1782,6 +1787,8 @@ def visit_detail(request, pk):
         'visit': visit,
         'questionnaire_responses': questionnaire_responses,
         'all_questions': all_questions,
+        'start_questions': start_questions,
+        'completion_questions': completion_questions,
         'products': products,
         'suggested_product_ids': suggested_product_ids,
         'supports_detailing': supports_detailing,
@@ -2231,17 +2238,26 @@ def visit_create(request):
 @require_permission('activities:visits/edit')
 def visit_edit(request, pk):
     """
-    Edit visit feedback, template answers, and detailed products.
+    Edit visit details while visit has not ended (status != 'finished').
+    Ended visits remain strictly uneditable.
     Enforces Post-Approval Editing Reapproval Rules (Section 5.A).
     """
     visit = get_object_or_404(Visit, pk=pk)
     if not can_user_access_object(request.user, visit, 'edit'):
         return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
 
+    # Strict restriction: Ended / Finished visits CANNOT be edited
+    if visit.status == 'finished':
+        messages.error(request, "لا يمكن تعديل بيانات الزيارة بعد اكتمالها وإنهائها نهائياً.")
+        return redirect('visit_detail', pk=visit.pk)
+
     if request.method == 'POST':
         prev_approval_status = visit.approval_status
         prev_values = {
+            'contact_id': visit.contact_id,
+            'template_id': visit.template_id,
             'date': str(visit.date),
+            'owner_id': visit.owner_id,
             'feedback': visit.feedback or '',
             'visit_outcome': visit.visit_outcome or '',
             'is_successful': visit.is_successful,
@@ -2293,36 +2309,56 @@ def visit_edit(request, pk):
                     visit.visit_outcome = visit_outcome
                     visit.is_successful = (visit_outcome == 'successful')
 
-                # Post-Approval Editing Rule (Section 5.A):
-                # If a visit was already approved and a lower-level user (Representative) edits it,
-                # automatically invalidate the previous approval and require manager reapproval.
+                # Post-Approval Editing Rule:
+                # Identify if approval-relevant fields changed
+                critical_fields_changed = False
+                if str(visit.date) != prev_values['date']:
+                    critical_fields_changed = True
+                elif visit.contact_id != prev_values['contact_id']:
+                    critical_fields_changed = True
+                elif visit.template_id != prev_values['template_id']:
+                    critical_fields_changed = True
+                elif visit.owner_id != prev_values['owner_id']:
+                    critical_fields_changed = True
+                elif visit.doubled != prev_values['doubled']:
+                    critical_fields_changed = True
+                elif visit.questionnaire_answers != prev_values['questionnaire_answers']:
+                    critical_fields_changed = True
+
                 was_approved = (prev_approval_status == 'approved')
-                is_lower_user = not is_manager_or_higher(request.user)
+                user_has_approval_authority = can_manage_approvals(request.user) and can_user_access_object(request.user, visit, 'approve')
                 reapproval_triggered = False
 
-                if was_approved and is_lower_user:
+                # Handle product detailing only if supported
+                detailed_product_ids = []
+                if template and template.is_product_detailing_supported():
+                    detailed_ids_raw = request.POST.getlist('detailed_products')
+                    if detailed_ids_raw:
+                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+                        allowed_ids = eligible_ids | historical_ids
+                        detailed_product_ids = [int(pid) for pid in detailed_ids_raw if str(pid).isdigit() and int(pid) in allowed_ids]
+                        visit.detailed_products.set(detailed_product_ids)
+                    elif 'detailed_products_submitted' in request.POST:
+                        visit.detailed_products.clear()
+                else:
+                    visit.detailed_products.clear()
+
+                if set(detailed_product_ids) != set(prev_values['detailed_products']):
+                    critical_fields_changed = True
+
+                if was_approved and not user_has_approval_authority and critical_fields_changed:
                     visit.approval_status = 'pending'
                     visit.waiting_for_reapproval = True
                     reapproval_triggered = True
 
                 visit.save()
 
-                # Handle product detailing only if supported
-                if template and template.is_product_detailing_supported():
-                    detailed_product_ids = request.POST.getlist('detailed_products')
-                    if detailed_product_ids:
-                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
-                        allowed_ids = eligible_ids | historical_ids
-                        valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
-                        visit.detailed_products.set(valid_ids)
-                    elif 'detailed_products_submitted' in request.POST:
-                        visit.detailed_products.clear()
-                else:
-                    visit.detailed_products.clear()
-
                 new_values = {
+                    'contact_id': visit.contact_id,
+                    'template_id': visit.template_id,
                     'date': str(visit.date),
+                    'owner_id': visit.owner_id,
                     'feedback': visit.feedback or '',
                     'visit_outcome': visit.visit_outcome or '',
                     'is_successful': visit.is_successful,
@@ -2357,9 +2393,21 @@ def visit_edit(request, pk):
                     )
                     messages.warning(
                         request,
-                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديل الزيارة بعد اعتمادها، تم تحويل حالتها إلى (بانتظار إعادة الاعتماد) من المدير."
+                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديل بيانات جوهرية بعد اعتمادها، تم تحويل حالتها إلى (بانتظار إعادة الاعتماد) من المدير."
                     )
                 else:
+                    audit_action = 'edited_by_manager' if user_has_approval_authority else 'edited'
+                    if user_has_approval_authority and was_approved:
+                        ApprovalAuditLog.objects.create(
+                            record_type='visit',
+                            visit=visit,
+                            action='edited_by_manager',
+                            actor=request.user,
+                            status_before=prev_approval_status,
+                            status_after=visit.approval_status,
+                            reason='تعديل بيانات الزيارة بواسطة مدير/مشرف معتمد',
+                            ip_address=request.META.get('REMOTE_ADDR')
+                        )
                     AuditLogService.log(
                         action='update',
                         action_type='VISIT_UPDATED',
@@ -2371,10 +2419,14 @@ def visit_edit(request, pk):
                         previous_values=prev_values,
                         new_values=new_values
                     )
-                    messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num}.")
+                    messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num} بنجاح.")
 
             return redirect('visit_detail', pk=visit.pk)
     else:
+        # GET request: Ended visits cannot be opened for editing
+        if visit.status == 'finished':
+            messages.error(request, "لا يمكن تعديل بيانات الزيارة بعد اكتمالها وإنهائها نهائياً.")
+            return redirect('visit_detail', pk=visit.pk)
         form = VisitForm(instance=visit, user=request.user)
 
     eligible_products = Product.get_eligible_for_visits()
@@ -2539,7 +2591,37 @@ def visit_action(request, pk, action):
         return redirect('visit_detail', pk=visit.pk)
 
     if action == 'start':
+        if visit.status == 'started':
+            msg = f"الزيارة #{visit.serial_num} جارية بالفعل وقيد التوثيق."
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'status': 'started'})
+            messages.info(request, msg)
+            return get_redirect()
+
+        if visit.status == 'finished':
+            msg = "لا يمكن بدء زيارة منتهية بالفعل."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return get_redirect()
+
         can_bypass_gps = getattr(request.user, 'can_bypass_location', False) or request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+
+        # Collect check-in questions (stage == 'start_only')
+        checkin_answers = {}
+        if visit.template:
+            for q in visit.template.get_active_questions().filter(stage='start_only'):
+                field_name = f'question_{q.id}'
+                val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                if isinstance(val, list) and len(val) == 1:
+                    val = val[0]
+                elif isinstance(val, list) and len(val) == 0:
+                    val = ''
+                if q.question_type == 'multiple_choice':
+                    val = request.POST.getlist(field_name)
+                if val:
+                    checkin_answers[str(q.id)] = val
+
         try:
             start_visit(
                 visit, request.user, request=request,
@@ -2548,14 +2630,15 @@ def visit_action(request, pk, action):
                 accuracy=request.POST.get('device_accuracy') or request.GET.get('device_accuracy'),
                 photo_file=request.FILES.get('location_photo'),
                 force_bypass=bool(request.POST.get('force_bypass_location') == '1' and can_bypass_gps),
-                bypass_reason=request.POST.get('bypass_reason', '')
+                bypass_reason=request.POST.get('bypass_reason', ''),
+                checkin_answers=checkin_answers
             )
-            msg = f"تم بدء الزيارة #{visit.serial_num} بنجاح. يمكنك الآن الإجابة على الاستبيان وإنهاء الزيارة."
+            msg = f"تم بدء الزيارة #{visit.serial_num} بنجاح. يمكنك الآن استكمال الاستبيان والإنهاء."
             if is_ajax:
                 return JsonResponse({'success': True, 'message': msg, 'status': 'started'})
             messages.success(request, msg)
         except ValidationError as e:
-            msg = e.message if hasattr(e, 'message') else str(e)
+            msg = e.message if hasattr(e, 'message') else (e.messages[0] if hasattr(e, 'messages') and e.messages else str(e))
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=400)
             messages.error(request, msg)

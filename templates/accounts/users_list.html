@@ -201,14 +201,11 @@
                                 </a>
                                 {% endif %}
 
-                                <form method="POST" action="{% url 'user_toggle_status' u.pk %}" class="inline">
-                                    {% csrf_token %}
-                                    <button type="submit" onclick="return confirm('هل أنت متأكد من تغيير حالة تفعيل المستخدم {{ u.name }}؟');"
-                                            class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
-                                            title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
-                                        <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
-                                    </button>
-                                </form>
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'user_toggle_status' u.pk %}', title: '{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}', itemName: '{{ u.name|escapejs }}', message: 'هل أنت متأكد من تغيير حالة تفعيل المستخدم <span class=\'font-bold text-slate-800\'>{{ u.name|escapejs }}</span>؟', submitText: 'تأكيد التغيير', submitColor: '{% if u.is_active %}bg-red-600 hover:bg-red-700{% else %}bg-emerald-600 hover:bg-emerald-700{% endif %}', icon: '{% if u.is_active %}person_off{% else %}how_to_reg{% endif %}', iconColor: '{% if u.is_active %}text-red-600 bg-red-50{% else %}text-emerald-600 bg-emerald-50{% endif %}' })"
+                                        class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
+                                        title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
+                                    <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
+                                </button>
 
                                 {% if request.user.is_superuser or request.user.is_super_admin %}
                                 <a href="{% url 'user_toggle_bypass_location' u.pk %}"

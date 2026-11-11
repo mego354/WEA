@@ -1,0 +1,159 @@
+<!-- GLOBAL UNIFIED DELETE / ACTION CONFIRMATION MODAL (Matching Catalog Categories Popup Standard) -->
+<div id="global-confirm-delete-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[100] p-4 transition-all duration-200">
+    <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden p-6 text-center text-xs animate-in fade-in zoom-in duration-150">
+        <!-- Warning / Action Icon -->
+        <div id="global-delete-icon-wrapper" class="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3">
+            <span id="global-delete-icon" class="material-symbols-outlined text-2xl">warning</span>
+        </div>
+
+        <!-- Title -->
+        <h3 id="global-delete-title" class="font-bold text-slate-900 text-base mb-2">تأكيد الحذف</h3>
+
+        <!-- Description / Message -->
+        <p id="global-delete-desc" class="text-slate-500 mb-4 leading-relaxed">
+            هل أنت متأكد من رغبتك في حذف <span id="global-delete-item-name" class="font-bold text-slate-800"></span>؟ لا يمكن التراجع عن هذا الإجراء.
+        </p>
+
+        <!-- Optional Related Records Alert -->
+        <div id="global-delete-related-alert" class="hidden mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] text-right space-y-1">
+            <div class="flex items-center gap-1 font-bold">
+                <span class="material-symbols-outlined text-sm">info</span>
+                <span>تنبيه ارتباطات السجل</span>
+            </div>
+            <p id="global-delete-related-text" class="text-slate-600"></p>
+        </div>
+
+        <!-- Action Form -->
+        <form id="global-delete-form" method="POST" action="" class="flex items-center justify-center gap-3">
+            {% csrf_token %}
+            <div id="global-delete-extra-inputs"></div>
+            <button type="button" onclick="closeConfirmDeleteModal()" class="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 min-h-[40px] flex-1 transition-colors">
+                إلغاء
+            </button>
+            <button type="submit" id="global-delete-submit-btn" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-xs transition-colors min-h-[40px] flex-1 flex items-center justify-center gap-1.5">
+                <span id="global-delete-submit-text">نعم، حذف</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showConfirmDeleteModal({
+    action,
+    title = 'تأكيد الحذف',
+    itemName = '',
+    message = '',
+    relatedText = '',
+    submitText = 'نعم، حذف',
+    submitColor = 'bg-red-600 hover:bg-red-700',
+    icon = 'warning',
+    iconColor = 'text-red-600 bg-red-50',
+    extraInputs = {}
+}) {
+    const modal = document.getElementById('global-confirm-delete-modal');
+    if (!modal) return;
+
+    const form = document.getElementById('global-delete-form');
+    if (form) form.action = action;
+
+    const titleEl = document.getElementById('global-delete-title');
+    if (titleEl) titleEl.textContent = title;
+
+    const itemEl = document.getElementById('global-delete-item-name');
+    if (itemEl) {
+        if (itemName) {
+            itemEl.textContent = `"${itemName}"`;
+            itemEl.classList.remove('hidden');
+        } else {
+            itemEl.textContent = '';
+            itemEl.classList.add('hidden');
+        }
+    }
+
+    const descEl = document.getElementById('global-delete-desc');
+    if (descEl) {
+        if (message) {
+            descEl.innerHTML = message;
+        } else {
+            descEl.innerHTML = `هل أنت متأكد من رغبتك في حذف <span class="font-bold text-slate-800">${itemName ? `"${itemName}"` : 'هذا العنصر'}</span>؟ لا يمكن التراجع عن هذا الإجراء.`;
+        }
+    }
+
+    const alertEl = document.getElementById('global-delete-related-alert');
+    const alertTextEl = document.getElementById('global-delete-related-text');
+    if (alertEl && alertTextEl) {
+        if (relatedText) {
+            alertTextEl.textContent = relatedText;
+            alertEl.classList.remove('hidden');
+        } else {
+            alertEl.classList.add('hidden');
+        }
+    }
+
+    const iconWrapper = document.getElementById('global-delete-icon-wrapper');
+    const iconEl = document.getElementById('global-delete-icon');
+    if (iconWrapper && iconEl) {
+        iconWrapper.className = `w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${iconColor}`;
+        iconEl.textContent = icon;
+    }
+
+    const submitBtn = document.getElementById('global-delete-submit-btn');
+    const submitTextEl = document.getElementById('global-delete-submit-text');
+    if (submitBtn) {
+        submitBtn.className = `px-5 py-2.5 ${submitColor} text-white font-bold rounded-xl shadow-xs transition-colors min-h-[40px] flex-1 flex items-center justify-center gap-1.5`;
+        submitBtn.disabled = false;
+    }
+    if (submitTextEl) submitTextEl.textContent = submitText;
+
+    const extraContainer = document.getElementById('global-delete-extra-inputs');
+    if (extraContainer) {
+        extraContainer.innerHTML = '';
+        for (const [k, v] of Object.entries(extraInputs)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = k;
+            input.value = v;
+            extraContainer.appendChild(input);
+        }
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeConfirmDeleteModal() {
+    const modal = document.getElementById('global-confirm-delete-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Double-submit protection & Esc key listener
+document.addEventListener('DOMContentLoaded', () => {
+    const delForm = document.getElementById('global-delete-form');
+    if (delForm) {
+        delForm.addEventListener('submit', function() {
+            const btn = document.getElementById('global-delete-submit-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+                const textEl = document.getElementById('global-delete-submit-text');
+                if (textEl) textEl.textContent = 'جاري التنفيذ...';
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeConfirmDeleteModal();
+        }
+    });
+
+    const modal = document.getElementById('global-confirm-delete-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeConfirmDeleteModal();
+            }
+        });
+    }
+});
+</script>
+

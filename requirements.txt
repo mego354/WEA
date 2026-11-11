@@ -1,0 +1,39 @@
+# WEA Pharma ERP — Pinned Production Dependencies
+# Target: Python 3.12 / 3.13
+
+# Core Django Framework
+Django==4.2.13
+asgiref==3.8.1
+sqlparse==0.5.3
+
+# Excel Processing & Import/Export
+openpyxl==3.1.5
+et-xmlfile==2.0.0
+
+# Data Validation, Parsing & Migration
+pandas==2.2.3
+numpy==2.2.6
+python-dateutil==2.9.0.post0
+six==1.17.0
+
+# Image Evidence & Geotagging
+Pillow==10.4.0
+
+# Localization & Timezones
+pytz==2025.2
+tzdata==2025.2
+
+# Database Drivers
+PyMySQL==1.1.1
+
+# HTTP Clients & Utilities
+requests==2.32.3
+urllib3==2.6.2
+certifi==2025.11.12
+idna==2.10
+charset-normalizer==3.4.2
+
+# Static Assets & Production WSGI
+whitenoise==6.7.0
+gunicorn==21.2.0
+

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q, Count
+from django.db.models import Q, Count, ProtectedError
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from .models import Product, ProductCategory, ProductVolumeDiscountTier, ProductPriceList
@@ -304,9 +304,13 @@ def product_delete(request, pk):
     if request.method == 'POST':
         name = product.name
         code = product.sku_code
-        product.delete()
-        messages.success(request, f"تم حذف المنتج '{name}' ({code}) بنجاح.")
-        return redirect('products_list')
+        try:
+            product.delete()
+            messages.success(request, f"تم حذف المنتج '{name}' ({code}) بنجاح.")
+            return redirect('products_list')
+        except ProtectedError:
+            messages.error(request, f"لا يمكن حذف المنتج '{name}' ({code}) لوجود حركات مخزنية أو فواتير أو طلبيات مرتبطة به.")
+            return redirect('product_detail', pk=pk)
     return redirect('product_detail', pk=pk)
 
 

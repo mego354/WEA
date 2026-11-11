@@ -2351,7 +2351,7 @@ class VisitManagementImprovementsTestCase(TestCase):
             owner=self.nasr_rep,
             created_by=self.nasr_rep,
             date=today,
-            status='finished',
+            status='started',
             approval_status='pending',
             feedback='الملاحظة الأصلية قبل التعديل',
             questionnaire_answers={str(self.q_note.id): 'إجابة أولية'},
@@ -5329,3 +5329,234 @@ class AgreementWorkflowTests(TestCase):
         self.assertEqual(resp_self_mgr.status_code, 403)
         mgr_agreement.refresh_from_db()
         self.assertEqual(mgr_agreement.status, 'new')
+
+
+class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
+    """
+    Tests for the 6 target areas:
+    - Eliminating duplicate Start Visit step & check-in questions separation (stage='start_only')
+    - Active visit transitions directly to End Visit action
+    - Strict locking of ended visits (status == 'finished')
+    - Smart reapproval rules (rep edits revoke approval, manager edits retain approval)
+    """
+
+    def setUp(self):
+        from master_data.models import Area
+        from accounts.models import Role
+        from django.contrib.auth.models import Permission
+
+        self.cairo_gov = Area.objects.create(name='محافظة القاهرة', code='CAI_IMPR')
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='NASR_IMPR', parent=self.cairo_gov)
+
+        self.rep_role = Role.objects.create(name='rep_impr', display_name='مندوب دعاية تجريبي', is_rep=True)
+        self.mgr_role = Role.objects.create(name='mgr_impr', display_name='مدير منطقة تجريبي', is_area_manager=True)
+
+        rep_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
+                'activities:visits/edit', 'module:activities', 'module:contacts'
+            ]
+        )
+        mgr_perms = Permission.objects.filter(
+            codename__in=[
+                'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
+                'activities:visits/edit', 'activities:visits/approve', 'module:activities', 'module:contacts'
+            ]
+        )
+        self.rep_role.permissions.set(rep_perms)
+        self.mgr_role.permissions.set(mgr_perms)
+
+        self.rep = User.objects.create_user(
+            username='rep_impr_user', password='Password123!', role=self.rep_role, bypass_location_verification=True
+        )
+        self.manager = User.objects.create_user(
+            username='mgr_impr_user', password='Password123!', role=self.mgr_role, bypass_location_verification=True
+        )
+        self.rep.assigned_areas.add(self.nasr_city)
+        self.manager.assigned_areas.add(self.cairo_gov)
+
+        self.customer = Contact.objects.create(
+            name='صيدلية الاختبارات المتقدمة', area=self.nasr_city, status='customer'
+        )
+
+        self.template = VisitTemplate.objects.create(
+            name='قالب التحسينات الشامل'
+        )
+        self.q_start_req = VisitTemplateQuestion.objects.create(
+            template=self.template,
+            text_ar='سؤال بداية الزيارة الإلزامي: هل الموقع مفتوح؟',
+            question_type='single_select',
+            stage='start_only',
+            options=['نعم', 'لا'],
+            is_required=True,
+            order=1
+        )
+        self.q_start_opt = VisitTemplateQuestion.objects.create(
+            template=self.template,
+            text_ar='ملاحظة عند الوصول',
+            question_type='text',
+            stage='start_only',
+            is_required=False,
+            order=2
+        )
+        self.q_end_req = VisitTemplateQuestion.objects.create(
+            template=self.template,
+            text_ar='سؤال إنهاء الزيارة: نتيجة المقابلة',
+            question_type='text',
+            stage='end_only',
+            is_required=True,
+            order=3
+        )
+
+    def test_start_visit_with_checkin_questions_and_duplicate_prevention(self):
+        """
+        Verify:
+        1. Starting visit validates required check-in questions (stage='start_only').
+        2. Starting visit saves answers in visit.questionnaire_answers.
+        3. Starting visit changes status to 'started'.
+        4. Attempting to start an already started visit does not repeat start or error out.
+        5. Active visit dossier shows completion questions directly and does NOT render start button.
+        """
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.customer,
+            template=self.template,
+            owner=self.rep,
+            created_by=self.rep,
+            date=today,
+            status='planned',
+            approval_status='approved',
+            location_verified=True,
+            verification_status='verified'
+        )
+
+        self.client.force_login(self.rep)
+
+        # 1. Start without answering required start_only question -> rejected
+        res_fail = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {})
+        self.assertEqual(res_fail.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'planned')
+
+        # 2. Start with required answer -> succeeds
+        res_ok = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
+            f'question_{self.q_start_req.id}': 'نعم',
+            f'question_{self.q_start_opt.id}': 'وصلت في الموعد'
+        })
+        self.assertEqual(res_ok.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_req.id)), 'نعم')
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_opt.id)), 'وصلت في الموعد')
+
+        # 3. Repeat start attempt on active visit -> safely redirects with info, does NOT crash or duplicate
+        res_repeat = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {})
+        self.assertEqual(res_repeat.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        # 4. GET visit_detail for active visit
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_detail.status_code, 200)
+        content = res_detail.content.decode('utf-8')
+        # Shows completion questions and End Visit action
+        self.assertIn('إنهاء وتوثيق الزيارة', content)
+        self.assertIn(self.q_end_req.text_ar, content)
+        # Does NOT have open start visit button
+        self.assertNotIn('onclick="openStartVisitModal()"', content)
+
+    def test_ended_visit_cannot_be_edited(self):
+        """Ended / Finished visits are strictly locked from editing."""
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.customer,
+            template=self.template,
+            owner=self.rep,
+            created_by=self.rep,
+            date=today,
+            status='finished',
+            approval_status='approved',
+            feedback='التقرير النهائي قبل الإغلاق'
+        )
+
+        self.client.force_login(self.rep)
+        # Attempt to GET edit view
+        res_get = self.client.get(reverse('visit_edit', args=[visit.pk]))
+        self.assertEqual(res_get.status_code, 302)
+
+        # Attempt to POST edit view
+        res_post = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.customer.id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'محاولة تعديل مرفوضة'
+        })
+        self.assertEqual(res_post.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.feedback, 'التقرير النهائي قبل الإغلاق')
+
+    def test_in_progress_visit_smart_reapproval_rules(self):
+        """
+        When active visit is approved:
+        - Rep editing critical fields revokes approval (waiting_for_reapproval=True).
+        - Manager editing preserves approval (edited_by_manager logged).
+        """
+        from activities.models import ApprovalAuditLog
+
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.customer,
+            template=self.template,
+            owner=self.rep,
+            created_by=self.rep,
+            date=today,
+            status='started',
+            approval_status='approved',
+            waiting_for_reapproval=False,
+            feedback='ملاحظة مبدئية',
+            questionnaire_answers={str(self.q_start_req.id): 'نعم'}
+        )
+
+        # 1. Rep edits critical fields -> approval revoked
+        self.client.force_login(self.rep)
+        res_rep_edit = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.customer.id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'تعديل المندوب للملاحظات',
+            f'question_{self.q_start_req.id}': 'لا'
+        })
+        self.assertEqual(res_rep_edit.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertTrue(visit.waiting_for_reapproval)
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_req.id)), 'لا')
+
+        # 2. Manager reapproves
+        self.client.force_login(self.manager)
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
+            'approval_notes': 'تمت الموافقة على تعديل المندوب'
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertFalse(visit.waiting_for_reapproval)
+
+        # 3. Manager edits critical fields -> approval retained, logged as edited_by_manager
+        res_mgr_edit = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.customer.id,
+            'template': self.template.id,
+            'owner': self.rep.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'تعديل المدير الإداري',
+            f'question_{self.q_start_req.id}': 'نعم'
+        })
+        self.assertEqual(res_mgr_edit.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+        self.assertFalse(visit.waiting_for_reapproval)
+        self.assertEqual(visit.feedback, 'تعديل المدير الإداري')
+        self.assertTrue(
+            ApprovalAuditLog.objects.filter(visit=visit, action='edited_by_manager', actor=self.manager).exists()
+        )
+

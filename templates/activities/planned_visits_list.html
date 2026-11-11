@@ -139,12 +139,12 @@
                                 {% else %}
                                 <a href="{% url 'planned_visit_item_execute' it.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
                                     <span class="material-symbols-outlined text-sm">directions_walk</span>
-                                    <span>بدء الزيارة</span>
+                                    <span>تنفيذ الزيارة</span>
                                 </a>
                                 {% endif %}
-                                <a href="{% url 'planned_visit_item_delete' it.pk %}" onclick="return confirm('حذف الزيارة المخططة؟');" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
                                     <span class="material-symbols-outlined text-base">delete</span>
-                                </a>
+                                </button>
                                 {% endif %}
                             </div>
                         </div>
@@ -440,16 +440,19 @@ function toggleDrawer() {
     if (!drawer) return;
 
     const isMobile = window.innerWidth < 1024;
+    let isOpen = false;
     if (isMobile) {
         const isClosed = drawer.classList.contains('translate-x-full');
         if (isClosed) {
             drawer.classList.remove('translate-x-full');
             if (backdrop) backdrop.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
+            isOpen = true;
         } else {
             drawer.classList.add('translate-x-full');
             if (backdrop) backdrop.classList.add('hidden');
             document.body.classList.remove('overflow-hidden');
+            isOpen = false;
         }
     } else {
         if (drawer && container) {
@@ -457,12 +460,15 @@ function toggleDrawer() {
             if (drawer.classList.contains('hidden')) {
                 container.classList.remove('lg:col-span-3');
                 container.classList.add('lg:col-span-4');
+                isOpen = false;
             } else {
                 container.classList.remove('lg:col-span-4');
                 container.classList.add('lg:col-span-3');
+                isOpen = true;
             }
         }
     }
+    sessionStorage.setItem('wea_planned_drawer_open', isOpen ? 'true' : 'false');
 }
 
 // Requirement 2: Activate bulk planning directly using existing left-side drawer
@@ -496,6 +502,9 @@ function activateBulkPlanningForDate(dateStr) {
         }
     }
 
+    sessionStorage.setItem('wea_planned_drawer_open', 'true');
+    sessionStorage.setItem('wea_planned_bulk_date', dateStr);
+
     const dateInput = document.getElementById('drawer-bulk-date');
     if (dateInput) {
         dateInput.value = dateStr;
@@ -518,6 +527,9 @@ function onBulkDateChange() {
         alert('لا يمكن اختيار تاريخ سابق. تم ضبط التاريخ على تاريخ اليوم.');
         dateInput.value = todayStr;
     }
+    if (dateInput) {
+        sessionStorage.setItem('wea_planned_bulk_date', dateInput.value);
+    }
     validateDrawerBulkSubmit();
 }
 
@@ -532,6 +544,7 @@ function handleClientCheckboxToggle(checkbox) {
     } else {
         selectedContactIds.delete(id);
     }
+    sessionStorage.setItem('wea_planned_selected_ids', JSON.stringify(Array.from(selectedContactIds)));
     updateDrawerSelectionState();
 }
 
@@ -545,6 +558,7 @@ function selectAllVisibleClients(selectState) {
             selectedContactIds.delete(id);
         }
     });
+    sessionStorage.setItem('wea_planned_selected_ids', JSON.stringify(Array.from(selectedContactIds)));
     updateDrawerSelectionState();
 }
 
@@ -977,6 +991,9 @@ async function submitBulkPlanFromDrawer() {
         });
         const data = await resp.json();
         if (data.success) {
+            sessionStorage.removeItem('wea_planned_selected_ids');
+            sessionStorage.removeItem('wea_planned_bulk_date');
+            sessionStorage.removeItem('wea_planned_drawer_open');
             window.location.hash = `day-${dateVal}`;
             window.location.reload();
         } else {
@@ -990,8 +1007,49 @@ async function submitBulkPlanFromDrawer() {
     }
 }
 
-// Auto-scroll and highlight target day card when page loads with a hash (e.g. #day-YYYY-MM-DD)
+// Auto-scroll, restore drawer state, and highlight target day card when page loads
 window.addEventListener('DOMContentLoaded', () => {
+    // 1. Restore bulk date from sessionStorage if valid
+    const savedBulkDate = sessionStorage.getItem('wea_planned_bulk_date');
+    if (savedBulkDate && savedBulkDate >= todayStr) {
+        const dateInput = document.getElementById('drawer-bulk-date');
+        if (dateInput) dateInput.value = savedBulkDate;
+    }
+
+    // 2. Restore selected contact IDs from sessionStorage
+    try {
+        const savedIds = JSON.parse(sessionStorage.getItem('wea_planned_selected_ids') || '[]');
+        if (Array.isArray(savedIds) && savedIds.length > 0) {
+            savedIds.forEach(id => selectedContactIds.add(String(id)));
+        }
+    } catch (e) {}
+
+    // 3. Restore drawer open state if previously opened
+    const isDrawerSavedOpen = sessionStorage.getItem('wea_planned_drawer_open');
+    if (isDrawerSavedOpen === 'true') {
+        const isMobile = window.innerWidth < 1024;
+        const drawer = document.getElementById('customer-drawer');
+        const container = document.getElementById('timeline-container');
+        const backdrop = document.getElementById('customer-drawer-backdrop');
+        if (isMobile) {
+            if (drawer) {
+                drawer.classList.remove('translate-x-full');
+                if (backdrop) backdrop.classList.remove('hidden');
+            }
+        } else {
+            if (drawer && drawer.classList.contains('hidden')) {
+                drawer.classList.remove('hidden');
+                if (container) {
+                    container.classList.remove('lg:col-span-4');
+                    container.classList.add('lg:col-span-3');
+                }
+            }
+        }
+    }
+
+    // Sync drawer UI and templates if items restored
+    updateDrawerSelectionState();
+
     const mainAreaEl = document.getElementById('filter_main_area');
     if (mainAreaEl && mainAreaEl.value) {
         onMainAreaFilterChange(mainAreaEl.value);

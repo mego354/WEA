@@ -325,12 +325,9 @@
 
                 <div class="flex items-center gap-2 shrink-0">
                     <span class="text-[11px] text-slate-400 font-mono">{{ todo.created_at|date:"h:i A" }}</span>
-                    <form method="POST" action="{% url 'agenda_todo_delete' todo.id %}" onsubmit="return confirm('هل تريد حذف هذه المهمة؟');">
-                        {% csrf_token %}
-                        <button type="submit" class="p-1.5 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
-                            <span class="material-symbols-outlined text-base">delete</span>
-                        </button>
-                    </form>
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agenda_todo_delete' todo.id %}', title: 'حذف المهمة', itemName: '{{ todo.title|escapejs }}', message: 'هل تريد حذف المهمة <span class=\'font-bold text-slate-800\'>{{ todo.title|escapejs }}</span> نهائياً؟' })" class="p-1.5 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
                 </div>
             </div>
             {% endfor %}
