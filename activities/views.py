@@ -566,20 +566,42 @@ def planned_visits_list(request):
     )
     contacts_qs = base_contacts_qs
 
-    # Parse multi-select areas and bricks (Requirement I)
+    # Parse multi-select areas and bricks (Requirement I & Additional Requirement A)
     raw_main_areas = request.GET.getlist('main_area') or request.GET.getlist('main_area[]')
-    main_area_ids = []
+    submitted_main_area_ids = []
     for ma in raw_main_areas:
         for p in str(ma).split(','):
             if p.strip().isdigit():
-                main_area_ids.append(int(p.strip()))
+                submitted_main_area_ids.append(int(p.strip()))
 
     raw_bricks = request.GET.getlist('brick') or request.GET.getlist('brick[]') or request.GET.getlist('area') or request.GET.getlist('area[]')
-    brick_ids = []
+    submitted_brick_ids = []
     for br in raw_bricks:
         for p in str(br).split(','):
             if p.strip().isdigit():
-                brick_ids.append(int(p.strip()))
+                submitted_brick_ids.append(int(p.strip()))
+
+    # Security & Scope Validation: Reject forged, unrelated, or unauthorized IDs
+    if is_super:
+        auth_main_areas_qs = Area.objects.filter(parent__isnull=True)
+        auth_bricks_qs = Area.objects.filter(parent__isnull=False).select_related('parent')
+    else:
+        auth_main_areas_qs = get_user_main_areas(request.user)
+        auth_bricks_qs = get_user_managed_areas(request.user).filter(parent__isnull=False).select_related('parent')
+
+    auth_main_area_ids = set(auth_main_areas_qs.values_list('id', flat=True))
+    auth_brick_map = dict(auth_bricks_qs.values_list('id', 'parent_id'))
+
+    # Reject unauthorized main area IDs
+    main_area_ids = [aid for aid in submitted_main_area_ids if aid in auth_main_area_ids]
+
+    # Reject unauthorized brick IDs, and verify every selected brick belongs to one of the selected areas
+    brick_ids = []
+    for bid in submitted_brick_ids:
+        if bid in auth_brick_map:
+            p_id = auth_brick_map[bid]
+            if not main_area_ids or p_id in main_area_ids:
+                brick_ids.append(bid)
 
     main_area_filter = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
     area_filter = str(brick_ids[0]) if len(brick_ids) == 1 else ''
@@ -671,23 +693,26 @@ def planned_visits_list(request):
     initial_contacts = list(contacts_qs.order_by('name')[:10])
     has_more_clients = total_clients_count > 10
 
-    # Geographical areas scoped to user
-    if is_super:
-        areas = Area.objects.select_related('parent').all().order_by('name')
-        main_areas = Area.objects.filter(parent__isnull=True).order_by('name')
-        bricks = Area.objects.filter(parent__isnull=False).select_related('parent').order_by('name')
-    else:
-        managed_areas = get_user_managed_areas(request.user)
-        root_areas = get_user_main_areas(request.user)
-        areas = managed_areas.select_related('parent').order_by('name')
-        main_areas = root_areas.order_by('name')
-        bricks = managed_areas.filter(parent__isnull=False).select_related('parent').order_by('name')
+    # Initial chips for already selected items
+    selected_main_areas_chips = []
+    if main_area_ids:
+        selected_main_areas_chips = list(Area.objects.filter(id__in=main_area_ids).values('id', 'name', 'code'))
+
+    selected_bricks_chips = []
+    if brick_ids:
+        selected_bricks_chips = [
+            {
+                'id': b.id,
+                'name': b.name,
+                'code': b.code or '',
+                'parent_id': b.parent_id,
+                'parent_name': b.parent.name if b.parent else ''
+            }
+            for b in Area.objects.filter(id__in=brick_ids).select_related('parent')
+        ]
 
     # Templates eligible for current user's role
     visit_templates = [t for t in VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles').order_by('name') if t.is_user_eligible(request.user)]
-
-    # If main areas selected, filter available bricks to those belonging to selected areas
-    available_bricks = bricks.filter(parent_id__in=main_area_ids) if main_area_ids else bricks
 
     context = {
         'selected_rep': selected_rep,
@@ -700,10 +725,6 @@ def planned_visits_list(request):
         'drawer_contacts': initial_contacts,
         'total_clients_count': total_clients_count,
         'has_more_clients': has_more_clients,
-        'areas': areas,
-        'main_areas': main_areas,
-        'bricks': available_bricks,
-        'all_scoped_bricks': bricks,
         'account_types': ACCOUNT_TYPES,
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
@@ -712,6 +733,8 @@ def planned_visits_list(request):
         'selected_area': area_filter,
         'selected_main_areas': [str(x) for x in main_area_ids],
         'selected_bricks': [str(x) for x in brick_ids],
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
         'selected_account_type': account_type_filter,
         'selected_customer_category': category_filter,
         'selected_specialty': specialty_filter,
@@ -719,6 +742,82 @@ def planned_visits_list(request):
         'scheduled_contacts_json': json.dumps(scheduled_contacts_by_date),
     }
     return render(request, 'activities/planned_visits_list.html', context)
+
+
+@require_permission(['activities:planned/list', 'activities:planned/manage', 'activities:visits/create', 'activities:visits/list'])
+def planned_visits_search_areas_api(request):
+    """
+    Searchable autocomplete endpoint for Main Areas (Governorates) in Planned Visits (Requirement A).
+    Enforces authentication and user organizational scope.
+    Returns maximum 10 suggestions matching query 'q'.
+    Returns empty list if query is empty or less than 1 character.
+    """
+    q = (request.GET.get('q') or '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+
+    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    if is_super:
+        qs = Area.objects.filter(parent__isnull=True)
+    else:
+        qs = get_user_main_areas(request.user)
+
+    matches = qs.filter(
+        Q(name__icontains=q) | Q(code__icontains=q)
+    ).order_by('name')[:10]
+
+    results = [{'id': a.id, 'name': a.name, 'code': a.code or ''} for a in matches]
+    return JsonResponse({'results': results})
+
+
+@require_permission(['activities:planned/list', 'activities:planned/manage', 'activities:visits/create', 'activities:visits/list'])
+def planned_visits_search_bricks_api(request):
+    """
+    Searchable autocomplete endpoint for Bricks in Planned Visits (Requirement A).
+    Enforces authentication and user organizational scope.
+    Strictly filters within Bricks belonging to the selected Main Areas.
+    Returns maximum 10 suggestions matching query 'q'.
+    Returns empty list if query is empty or if no parent areas are specified.
+    """
+    q = (request.GET.get('q') or '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+
+    raw_main_areas = request.GET.getlist('main_area') or request.GET.getlist('main_area[]')
+    main_area_ids = []
+    for ma in raw_main_areas:
+        for p in str(ma).split(','):
+            if p.strip().isdigit():
+                main_area_ids.append(int(p.strip()))
+
+    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
+    if is_super:
+        qs = Area.objects.filter(parent__isnull=False).select_related('parent')
+        auth_main_areas = Area.objects.filter(parent__isnull=True).values_list('id', flat=True)
+    else:
+        qs = get_user_managed_areas(request.user).filter(parent__isnull=False).select_related('parent')
+        auth_main_areas = get_user_main_areas(request.user).values_list('id', flat=True)
+
+    # If main area IDs provided, constrain strictly to authorized main areas
+    if main_area_ids:
+        valid_main_ids = [aid for aid in main_area_ids if aid in auth_main_areas]
+        qs = qs.filter(parent_id__in=valid_main_ids)
+    else:
+        # Per requirement: "Search only within Bricks belonging to the selected Areas."
+        return JsonResponse({'results': [], 'message': 'يرجى اختيار منطقة رئيسية أولاً.'})
+
+    matches = qs.filter(
+        Q(name__icontains=q) | Q(code__icontains=q)
+    ).order_by('name')[:10]
+
+    results = [{
+        'id': b.id,
+        'name': b.name,
+        'code': b.code or '',
+        'parent_id': b.parent_id,
+        'parent_name': b.parent.name if b.parent else ''
+    } for b in matches]
+    return JsonResponse({'results': results})
 
 
 @require_permission(['activities:visits/create', 'activities:visits/list', 'activities:planned/list', 'settings:visitsTemplates/manage'])

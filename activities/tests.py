@@ -5635,3 +5635,167 @@ class PlannedVisitsMultiAreaFilteringTests(TestCase):
         self.assertIn('صيدلية سموحة الإسكندرية', returned_names)
         self.assertNotIn('صيدلية مدينة نصر الحديثة', returned_names)
 
+
+
+class PlannedVisitsSearchableMultiSelectTests(TestCase):
+    """
+    Test suite for Additional Requirement A:
+    Searchable autocomplete multi-select for Planned Visits Area and Brick controls.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.manager_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_MANAGER,
+            defaults={'display_name': 'مدير', 'is_system': True, 'is_active': True}
+        )
+        self.rep_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_MEDICAL_REP,
+            defaults={'display_name': 'مندوب دعاية', 'is_system': True, 'is_active': True}
+        )
+
+        self.admin = User.objects.create_superuser(
+            username='admin_autocomplete',
+            email='admin_auto@wea.com',
+            password='TestPassword123!',
+            role=self.superadmin_role
+        )
+
+        self.cairo = Area.objects.create(name='محافظة القاهرة', code='GOV-CAI-AUTO', area_type='governorate')
+        self.giza = Area.objects.create(name='محافظة الجيزة', code='GOV-GIZ-AUTO', area_type='governorate')
+        self.alex = Area.objects.create(name='محافظة الإسكندرية', code='GOV-ALX-AUTO', area_type='governorate')
+
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='BRK-NASR-AUTO', parent=self.cairo, area_type='subarea')
+        self.maadi = Area.objects.create(name='المعادي', code='BRK-MAA-AUTO', parent=self.cairo, area_type='subarea')
+        self.dokki = Area.objects.create(name='الدقي', code='BRK-DOK-AUTO', parent=self.giza, area_type='subarea')
+        self.smouha = Area.objects.create(name='سموحة', code='BRK-SMO-AUTO', parent=self.alex, area_type='subarea')
+
+        # Manager assigned to Cairo only
+        self.cairo_manager = User.objects.create_user(
+            username='mgr_cairo_auto',
+            email='mgr_cairo_auto@wea.com',
+            password='TestPassword123!',
+            role=self.manager_role,
+        )
+        self.cairo_manager.assigned_areas.add(self.cairo)
+
+    def test_search_areas_api_requires_auth(self):
+        url = reverse('planned_visits_search_areas_api') + '?q=القاهرة'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_areas_api_empty_query(self):
+        self.client.force_login(self.admin)
+        url = reverse('planned_visits_search_areas_api')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data.get('results'), [])
+
+    def test_search_areas_api_search_and_scoping(self):
+        # SuperAdmin can search any area
+        self.client.force_login(self.admin)
+        url = reverse('planned_visits_search_areas_api') + '?q=الجيزة'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        results = data.get('results', [])
+        ids = [r['id'] for r in results]
+        self.assertIn(self.giza.id, ids)
+
+        # Cairo Manager searching for Giza receives empty list (scoped to Cairo only)
+        self.client.force_login(self.cairo_manager)
+        res_mgr = self.client.get(url)
+        self.assertEqual(res_mgr.status_code, 200)
+        mgr_data = res_mgr.json()
+        mgr_ids = [r['id'] for r in mgr_data.get('results', [])]
+        self.assertNotIn(self.giza.id, mgr_ids)
+
+        # Cairo Manager searching for Cairo receives Cairo
+        url_cai = reverse('planned_visits_search_areas_api') + '?q=القاهرة'
+        res_mgr_cai = self.client.get(url_cai)
+        self.assertEqual(res_mgr_cai.status_code, 200)
+        cai_ids = [r['id'] for r in res_mgr_cai.json().get('results', [])]
+        self.assertIn(self.cairo.id, cai_ids)
+
+    def test_search_bricks_api_requires_auth(self):
+        url = reverse('planned_visits_search_bricks_api') + f'?q=نصر&main_area={self.cairo.id}'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_bricks_api_empty_query_or_no_main_area(self):
+        self.client.force_login(self.admin)
+        # Empty query
+        url = reverse('planned_visits_search_bricks_api') + f'?main_area={self.cairo.id}'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json().get('results'), [])
+
+        # No main area provided
+        url_no_area = reverse('planned_visits_search_bricks_api') + '?q=نصر'
+        res_no_area = self.client.get(url_no_area)
+        self.assertEqual(res_no_area.status_code, 200)
+        self.assertEqual(res_no_area.json().get('results'), [])
+        self.assertIn('يرجى اختيار منطقه', res_no_area.json().get('message', '').replace('ة', 'ه'))
+
+    def test_search_bricks_api_strictly_filters_by_selected_main_area(self):
+        self.client.force_login(self.admin)
+        # Searching for 'د' with Cairo selected should NOT return Dokki (Giza)
+        url = reverse('planned_visits_search_bricks_api') + f'?q=الدقي&main_area={self.cairo.id}'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        results = res.json().get('results', [])
+        ids = [r['id'] for r in results]
+        self.assertNotIn(self.dokki.id, ids)
+
+        # Searching for 'الدقي' with Giza selected should return Dokki
+        url_giza = reverse('planned_visits_search_bricks_api') + f'?q=الدقي&main_area={self.giza.id}'
+        res_giza = self.client.get(url_giza)
+        self.assertEqual(res_giza.status_code, 200)
+        results_giza = res_giza.json().get('results', [])
+        ids_giza = [r['id'] for r in results_giza]
+        self.assertIn(self.dokki.id, ids_giza)
+
+        # Searching with multiple main areas (Cairo + Giza)
+        url_multi = reverse('planned_visits_search_bricks_api') + f'?q=م&main_area={self.cairo.id}&main_area={self.giza.id}'
+        res_multi = self.client.get(url_multi)
+        self.assertEqual(res_multi.status_code, 200)
+        results_multi = res_multi.json().get('results', [])
+        names_multi = [r['name'] for r in results_multi]
+        self.assertIn('مدينة نصر', names_multi)
+        self.assertNotIn('سموحة', names_multi)  # Smouha is in Alex
+
+    def test_planned_visits_list_server_side_validation(self):
+        # Cairo manager cannot use Giza main_area ID or Giza brick ID
+        self.client.force_login(self.cairo_manager)
+        # Pass forged Giza main area and Giza brick
+        url = reverse('planned_visits_list') + f'?main_area={self.giza.id}&area={self.dokki.id}'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        chips_areas = res.context.get('selected_main_areas_chips', [])
+        chips_bricks = res.context.get('selected_bricks_chips', [])
+        # Forged Giza and Dokki must be rejected by server-side validation
+        self.assertEqual(len(chips_areas), 0)
+        self.assertEqual(len(chips_bricks), 0)
+
+        # Valid Cairo main area and Nasr City brick are accepted
+        url_valid = reverse('planned_visits_list') + f'?main_area={self.cairo.id}&area={self.nasr_city.id}'
+        res_valid = self.client.get(url_valid)
+        self.assertEqual(res_valid.status_code, 200)
+        valid_area_ids = [c['id'] for c in res_valid.context.get('selected_main_areas_chips', [])]
+        valid_brick_ids = [c['id'] for c in res_valid.context.get('selected_bricks_chips', [])]
+        self.assertIn(self.cairo.id, valid_area_ids)
+        self.assertIn(self.nasr_city.id, valid_brick_ids)
+
+        # When a brick does NOT belong to the selected main area, it is rejected
+        self.client.force_login(self.admin)
+        url_mismatch = reverse('planned_visits_list') + f'?main_area={self.cairo.id}&area={self.dokki.id}'
+        res_mismatch = self.client.get(url_mismatch)
+        self.assertEqual(res_mismatch.status_code, 200)
+        mismatch_brick_ids = [c['id'] for c in res_mismatch.context.get('selected_bricks_chips', [])]
+        # Dokki belongs to Giza, not Cairo, so it must be stripped
+        self.assertNotIn(self.dokki.id, mismatch_brick_ids)
