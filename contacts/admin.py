@@ -2,8 +2,14 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     Contact, ContactAddress, ContactComment,
-    ContactAttachment, ContactTodo, ContactActivity
+    ContactAttachment, ContactTodo, ContactActivity, ContactCommunicationMethod
 )
+
+
+class ContactCommunicationMethodInline(admin.TabularInline):
+    model = ContactCommunicationMethod
+    extra = 1
+    fields = ('method_type', 'value', 'label', 'is_primary')
 
 
 class ContactAddressInline(admin.TabularInline):
@@ -35,7 +41,7 @@ class ContactAdmin(admin.ModelAdmin):
     list_filter = ('contact_type', 'is_customer', 'is_supplier', 'status', 'area', 'brick', 'account_type', 'is_kol')
     search_fields = ('name', 'serial_num', 'code', 'mobile', 'phone', 'email', 'tax_id', 'contact_person')
     filter_horizontal = ('assigned_team',)
-    inlines = [ContactAddressInline, ContactCommentInline, ContactTodoInline]
+    inlines = [ContactCommunicationMethodInline, ContactAddressInline, ContactCommentInline, ContactTodoInline]
     date_hierarchy = 'created_at'
     actions = ['mark_active', 'mark_inactive']
 
@@ -141,3 +147,10 @@ class ContactActivityAdmin(admin.ModelAdmin):
     list_display = ('title', 'contact', 'activity_type', 'performed_by', 'start_time', 'created_at')
     list_filter = ('activity_type', 'created_at')
     search_fields = ('title', 'contact__name', 'notes')
+
+
+@admin.register(ContactCommunicationMethod)
+class ContactCommunicationMethodAdmin(admin.ModelAdmin):
+    list_display = ('contact', 'method_type', 'value', 'label', 'is_primary', 'created_at')
+    list_filter = ('method_type', 'is_primary')
+    search_fields = ('value', 'label', 'contact__name')

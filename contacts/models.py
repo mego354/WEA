@@ -23,7 +23,7 @@ class Contact(models.Model):
     
     # Business Relations
     is_supplier = models.BooleanField(default=False, db_index=True, verbose_name="مورد")
-    is_customer = models.BooleanField(default=False, db_index=True, verbose_name="عميل")
+    is_customer = models.BooleanField(default=True, db_index=True, verbose_name="عميل")
     is_other = models.BooleanField(default=False, verbose_name="أخرى")
 
     # Customer Specific Fields (when is_customer=True)
@@ -60,7 +60,7 @@ class Contact(models.Model):
     credit_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="حد الائتمان (ج.م)")
     credit_period_days = models.PositiveIntegerField(default=30, verbose_name="فترة الائتمان (أيام)")
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='lead', verbose_name="الحالة")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='customer', verbose_name="الحالة")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     custom_values = models.JSONField(default=dict, blank=True, verbose_name="القيم المخصصة")
 
@@ -355,3 +355,51 @@ class ContactActivity(models.Model):
         verbose_name = "نشاط"
         verbose_name_plural = "الأنشطة"
         ordering = ['-created_at']
+
+
+class ContactCommunicationMethod(models.Model):
+    COMMUNICATION_TYPES = [
+        ('mobile', 'موبايل'),
+        ('phone', 'هاتف أرضي'),
+        ('whatsapp', 'واتساب'),
+        ('email', 'بريد إلكتروني'),
+        ('fax', 'فاكس'),
+        ('website', 'موقع إلكتروني'),
+        ('other', 'أخرى'),
+    ]
+
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="communication_methods", verbose_name="جهة الاتصال")
+    method_type = models.CharField(max_length=20, choices=COMMUNICATION_TYPES, default='mobile', verbose_name="نوع وسيلة الاتصال")
+    value = models.CharField(max_length=150, verbose_name="القيمة / الرقم")
+    label = models.CharField(max_length=100, blank=True, verbose_name="المسمى / الوصف (اختياري)")
+    is_primary = models.BooleanField(default=False, verbose_name="وسيلة رئيسية")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        verbose_name = "وسيلة اتصال"
+        verbose_name_plural = "طرق الاتصال"
+        ordering = ['-is_primary', 'id']
+
+    def __str__(self):
+        lbl = f" ({self.label})" if self.label else ""
+        return f"{self.get_method_type_display()}: {self.value}{lbl}"
+
+    def save(self, *args, **kwargs):
+        if self.is_primary and self.contact_id:
+            ContactCommunicationMethod.objects.filter(
+                contact_id=self.contact_id,
+                method_type=self.method_type,
+                is_primary=True
+            ).exclude(pk=self.pk).update(is_primary=False)
+        super().save(*args, **kwargs)
+        # Sync to Contact model scalar fields if primary
+        if self.is_primary and self.contact_id:
+            if self.method_type == 'mobile':
+                Contact.objects.filter(pk=self.contact_id).update(mobile=self.value)
+            elif self.method_type == 'phone':
+                Contact.objects.filter(pk=self.contact_id).update(phone=self.value)
+            elif self.method_type == 'email':
+                Contact.objects.filter(pk=self.contact_id).update(email=self.value)
+            elif self.method_type == 'website':
+                Contact.objects.filter(pk=self.contact_id).update(website=self.value)
+

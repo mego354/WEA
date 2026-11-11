@@ -267,6 +267,88 @@
             </div>
         </div>
 
+        <!-- SECTION: طرق الاتصال -->
+        <div class="card-container">
+            <div class="flex items-center justify-between mb-4">
+                <div class="form-section-title mb-0">
+                    <span class="material-symbols-outlined text-brand-500 text-xl">contact_phone</span>
+                    <span>طرق الاتصال</span>
+                </div>
+                <button type="button" onclick="addNewCommRow()" class="inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>أضف وسيلة اتصال</span>
+                </button>
+            </div>
+
+            <div id="comm-methods-container" class="space-y-3">
+                {% for comm in communication_methods %}
+                <div class="comm-method-row flex flex-wrap md:flex-nowrap items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div class="w-full md:w-48 shrink-0">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">نوع الوسيلة</label>
+                        <select name="comm_method_type[]" class="mat-like-select text-xs">
+                            <option value="mobile" {% if comm.method_type == 'mobile' %}selected{% endif %}>جوال</option>
+                            <option value="phone" {% if comm.method_type == 'phone' %}selected{% endif %}>هاتف أرضي</option>
+                            <option value="email" {% if comm.method_type == 'email' %}selected{% endif %}>بريد إلكتروني</option>
+                            <option value="whatsapp" {% if comm.method_type == 'whatsapp' %}selected{% endif %}>واتساب</option>
+                            <option value="website" {% if comm.method_type == 'website' %}selected{% endif %}>موقع إلكتروني</option>
+                            <option value="other" {% if comm.method_type == 'other' %}selected{% endif %}>أخرى</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">القيمة (الرقم / البريد / الرابط) <span class="text-rose-500">*</span></label>
+                        <input type="text" name="comm_value[]" value="{{ comm.value }}" required placeholder="أدخل القيمة" class="mat-like-input text-xs dir-ltr text-right">
+                    </div>
+                    <div class="w-full md:w-56 shrink-0">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">تسمية توضيحية (اختياري)</label>
+                        <input type="text" name="comm_label[]" value="{{ comm.label|default:'' }}" placeholder="مثال: موبايل العمل" class="mat-like-input text-xs">
+                    </div>
+                    <div class="flex items-center gap-2 pt-5 shrink-0">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                            <input type="checkbox" name="comm_is_primary[]" value="{{ forloop.counter0 }}" {% if comm.is_primary %}checked{% endif %} class="rounded text-brand-500">
+                            <span>رئيسي</span>
+                        </label>
+                        <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                {% if contact.mobile %}
+                <div class="comm-method-row flex flex-wrap md:flex-nowrap items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div class="w-full md:w-48 shrink-0">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">نوع الوسيلة</label>
+                        <select name="comm_method_type[]" class="mat-like-select text-xs">
+                            <option value="mobile" selected>جوال</option>
+                            <option value="phone">هاتف أرضي</option>
+                            <option value="email">بريد إلكتروني</option>
+                            <option value="whatsapp">واتساب</option>
+                            <option value="website">موقع إلكتروني</option>
+                            <option value="other">أخرى</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">القيمة <span class="text-rose-500">*</span></label>
+                        <input type="text" name="comm_value[]" value="{{ contact.mobile }}" required placeholder="أدخل القيمة" class="mat-like-input text-xs dir-ltr text-right">
+                    </div>
+                    <div class="w-full md:w-56 shrink-0">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">تسمية توضيحية</label>
+                        <input type="text" name="comm_label[]" value="الموبايل الرئيسي" placeholder="مثال: موبايل العمل" class="mat-like-input text-xs">
+                    </div>
+                    <div class="flex items-center gap-2 pt-5 shrink-0">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                            <input type="checkbox" name="comm_is_primary[]" value="0" checked class="rounded text-brand-500">
+                            <span>رئيسي</span>
+                        </label>
+                        <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
         <!-- SECTION 2: العناوين -->
         <div class="card-container">
             <div class="flex items-center justify-between mb-4">
@@ -453,76 +535,7 @@
             </div>
         </div>
 
-        {% if formatted_custom_fields %}
-        <!-- SECTION 4: الحقول المخصصة (Custom Fields) -->
-        <div class="card-container">
-            <div class="form-section-title">
-                <span class="material-symbols-outlined text-brand-500 text-xl">extension</span>
-                <span>الحقول المخصصة</span>
-            </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {% for item in formatted_custom_fields %}
-                <div class="{% if item.setting.field_type == 'textarea' %}md:col-span-2{% endif %}">
-                    <label class="custom-input-label" for="custom_{{ item.setting.field_key }}">
-                        {{ item.setting.display_name }}
-                        {% if item.setting.is_required %}<span class="required-star">*</span>{% endif %}
-                    </label>
-
-                    {% if item.setting.field_type == 'textarea' %}
-                    <textarea name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}" rows="3"
-                              class="mat-like-input h-auto py-2.5 resize-none"
-                              placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>{{ item.value|default:'' }}</textarea>
-
-                    {% elif item.setting.field_type == 'number' %}
-                    <input type="number" step="any" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
-                           value="{{ item.value|default:''|unlocalize }}" class="mat-like-input font-mono" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
-
-                    {% elif item.setting.field_type == 'date' %}
-                    <input type="date" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
-                           value="{{ item.value|default:'' }}" class="mat-like-input" {% if item.setting.is_required %}required{% endif %}>
-
-                    {% elif item.setting.field_type == 'boolean' %}
-                    <div class="flex items-center gap-2 h-[48px]">
-                        <input type="checkbox" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
-                               {% if item.value %}checked{% endif %} class="w-5 h-5 rounded text-brand-500 border-slate-300">
-                        <span class="text-xs text-slate-600 font-semibold">{{ item.setting.help_text|default:"نعم / مفعل" }}</span>
-                    </div>
-
-                    {% elif item.setting.field_type == 'single_choice' %}
-                    <select name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}" class="mat-like-select" {% if item.setting.is_required %}required{% endif %}>
-                        <option value="">اختر...</option>
-                        {% for choice in item.setting.choices %}
-                        <option value="{{ choice }}" {% if choice == item.value %}selected{% endif %}>{{ choice }}</option>
-                        {% endfor %}
-                    </select>
-
-                    {% elif item.setting.field_type == 'multi_choice' %}
-                    <div class="p-3 border border-slate-200 rounded-lg bg-slate-50/50 flex flex-wrap gap-4">
-                        {% for choice in item.setting.choices %}
-                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-700">
-                            <input type="checkbox" name="custom_{{ item.setting.field_key }}[]" value="{{ choice }}"
-                                   {% if item.value and choice in item.value %}checked{% endif %} class="rounded text-brand-500">
-                            <span>{{ choice }}</span>
-                        </label>
-                        {% empty %}
-                        <span class="text-xs text-slate-400">لا توجد خيارات محددة</span>
-                        {% endfor %}
-                    </div>
-
-                    {% else %}
-                    <input type="text" name="custom_{{ item.setting.field_key }}" id="custom_{{ item.setting.field_key }}"
-                           value="{{ item.value|default:'' }}" class="mat-like-input" placeholder="{{ item.setting.help_text }}" {% if item.setting.is_required %}required{% endif %}>
-                    {% endif %}
-
-                    {% if item.setting.help_text and item.setting.field_type != 'boolean' and item.setting.field_type != 'textarea' %}
-                    <span class="text-[11px] text-slate-400 mt-1 block">{{ item.setting.help_text }}</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
 
         <!-- Form Actions Footer -->
         <div class="flex items-center justify-end gap-4 mt-8">
@@ -635,8 +648,118 @@
         attachSubareaListener(card);
     }
 
+    function addNewCommRow() {
+        const container = document.getElementById('comm-methods-container');
+        const count = container.querySelectorAll('.comm-method-row').length;
+        const row = document.createElement('div');
+        row.className = 'comm-method-row flex flex-wrap md:flex-nowrap items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50';
+        row.innerHTML = `
+            <div class="w-full md:w-48 shrink-0">
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">نوع الوسيلة</label>
+                <select name="comm_method_type[]" class="mat-like-select text-xs">
+                    <option value="mobile">جوال</option>
+                    <option value="phone">هاتف أرضي</option>
+                    <option value="email">بريد إلكتروني</option>
+                    <option value="whatsapp">واتساب</option>
+                    <option value="website">موقع إلكتروني</option>
+                    <option value="other">أخرى</option>
+                </select>
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">القيمة <span class="text-rose-500">*</span></label>
+                <input type="text" name="comm_value[]" required placeholder="أدخل القيمة" class="mat-like-input text-xs dir-ltr text-right">
+            </div>
+            <div class="w-full md:w-56 shrink-0">
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">تسمية توضيحية</label>
+                <input type="text" name="comm_label[]" placeholder="مثال: موبايل العمل" class="mat-like-input text-xs">
+            </div>
+            <div class="flex items-center gap-2 pt-5 shrink-0">
+                <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                    <input type="checkbox" name="comm_is_primary[]" value="${count}" class="rounded text-brand-500">
+                    <span>رئيسي</span>
+                </label>
+                <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.address-card').forEach(attachSubareaListener);
+
+        // --- GPS / Location Search Auto-fill ---
+        window.addEventListener('erp:location-selected', function (e) {
+            const detail = e.detail;
+            if (!detail) return;
+
+            const firstCard = document.querySelector('.address-card');
+            if (!firstCard) return;
+
+            const areaSelect = firstCard.querySelector('.area-select') || firstCard.querySelector('select[name="address_area[]"]');
+            const subareaSelect = firstCard.querySelector('.subarea-select') || firstCard.querySelector('select[name="address_sub_area[]"]');
+            const streetInput = firstCard.querySelector('input[name="address_street[]"]') || document.getElementById('primary_address_street');
+
+            if (streetInput && (!streetInput.value.trim() || streetInput.value === detail.display_name)) {
+                const parts = [];
+                if (detail.road) parts.push(detail.road);
+                if (detail.suburb && detail.suburb !== detail.road) parts.push(detail.suburb);
+                if (parts.length > 0) {
+                    streetInput.value = parts.join('، ');
+                }
+            }
+
+            if (areaSelect) {
+                const state = (detail.state || detail.city || '').toLowerCase();
+                const disp = (detail.display_name || '').toLowerCase();
+                let matchedAreaId = null;
+
+                for (let i = 0; i < areaSelect.options.length; i++) {
+                    const opt = areaSelect.options[i];
+                    const optText = opt.textContent.trim().toLowerCase();
+                    if (!opt.value) continue;
+                    if (state.includes(optText) || disp.includes(optText) || optText.includes(state)) {
+                        matchedAreaId = opt.value;
+                        areaSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+
+                if (matchedAreaId && subareaSelect) {
+                    subareaSelect.disabled = true;
+                    subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
+                    fetch(`/contacts/api/subareas/?area_id=${matchedAreaId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.subareas && data.subareas.length > 0) {
+                                subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة الفرعية...</option>' +
+                                    data.subareas.map(sub => `<option value="${sub.id}">${sub.name}</option>`).join('');
+                                subareaSelect.disabled = false;
+
+                                const subSearch = (detail.suburb || detail.city || detail.road || '').toLowerCase();
+                                if (subSearch) {
+                                    for (let j = 0; j < subareaSelect.options.length; j++) {
+                                        const subOpt = subareaSelect.options[j];
+                                        const subText = subOpt.textContent.trim().toLowerCase();
+                                        if (subSearch.includes(subText) || disp.includes(subText) || subText.includes(subSearch)) {
+                                            subareaSelect.selectedIndex = j;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else {
+                                subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                                subareaSelect.disabled = false;
+                            }
+                        })
+                        .catch(() => {
+                            subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                            subareaSelect.disabled = false;
+                        });
+                }
+            }
+        });
     });
 </script>
 {% endblock %}

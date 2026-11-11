@@ -26,4 +26,9 @@ urlpatterns = [
     path('<int:pk>/attachments/upload/', views.contact_upload_attachment, name='contact_upload_attachment'),
     path('<int:pk>/addresses/add/', views.contact_add_address, name='contact_add_address'),
     path('<int:pk>/addresses/<int:address_id>/delete/', views.contact_delete_address, name='contact_delete_address'),
+
+    # Communication Methods CRUD
+    path('<int:pk>/communications/add/', views.contact_add_communication_method, name='contact_add_communication_method'),
+    path('<int:pk>/communications/<int:method_id>/edit/', views.contact_edit_communication_method, name='contact_edit_communication_method'),
+    path('<int:pk>/communications/<int:method_id>/delete/', views.contact_delete_communication_method, name='contact_delete_communication_method'),
 ]

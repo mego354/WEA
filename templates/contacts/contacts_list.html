@@ -635,10 +635,15 @@
             </select>
         </div>
 
-        <!-- المنطقة (Subarea) -->
+        <!-- المنطقة الفرعية / البريك (Subarea / Brick) -->
         <div>
-            <label class="mat-like-label">المنطقة الفرعية</label>
-            <input type="text" name="sub_area" value="{{ current_sub_area }}" placeholder="اسم المنطقة الفرعية..." class="mat-like-control">
+            <label class="mat-like-label">المنطقة الفرعية / Brick</label>
+            <select name="brick_id" id="drawer_brick_id" class="mat-like-control">
+                <option value="">الكل</option>
+                {% for b in scoped_bricks %}
+                <option value="{{ b.id }}" {% if current_brick_id == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <!-- حالة العميل -->
@@ -646,9 +651,8 @@
             <label class="mat-like-label">حالة العميل</label>
             <select name="status" class="mat-like-control">
                 <option value="all" {% if current_status == 'all' %}selected{% endif %}>الكل</option>
-                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>Customer</option>
-                <option value="lead" {% if current_status == 'lead' %}selected{% endif %}>Lead</option>
-                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>Inactive</option>
+                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>عميل نشط (Customer)</option>
+                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>غير نشط (Inactive)</option>
             </select>
         </div>
 
@@ -909,6 +913,31 @@
                 if (countBadge) countBadge.className = 'kanban-tab-count px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-700';
             }
         });
+    }
+
+    function loadDrawerSubareas(areaId) {
+        const brickSelect = document.getElementById('drawer_brick_id');
+        if (!brickSelect) return;
+        if (!areaId) {
+            brickSelect.innerHTML = '<option value="">الكل</option>';
+            return;
+        }
+        brickSelect.innerHTML = '<option value="">جاري التحميل...</option>';
+        fetch(`/contacts/api/subareas/?area_id=${areaId}`)
+            .then(res => res.json())
+            .then(data => {
+                let html = '<option value="">الكل</option>';
+                if (data.subareas && data.subareas.length > 0) {
+                    data.subareas.forEach(sub => {
+                        html += `<option value="${sub.id}">${sub.name}</option>`;
+                    });
+                }
+                brickSelect.innerHTML = html;
+            })
+            .catch(err => {
+                console.error(err);
+                brickSelect.innerHTML = '<option value="">الكل</option>';
+            });
     }
 </script>
 {% endblock %}
