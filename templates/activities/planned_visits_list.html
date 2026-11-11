@@ -42,10 +42,10 @@
             </div>
 
             <!-- Customer Filter Drawer Toggle -->
-            <button type="button" onclick="toggleDrawer()" id="drawer-toggle-btn" class="inline-flex items-center gap-1.5 px-3 py-2 {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %} text-xs font-bold rounded-xl transition-all shadow-xs relative">
-                <span id="drawer-toggle-icon" class="material-symbols-outlined text-base {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}text-[#27bebe]{% endif %}">filter_list</span>
+            <button type="button" onclick="toggleDrawer()" id="drawer-toggle-btn" class="inline-flex items-center gap-1.5 px-3 py-2 {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %} text-xs font-bold rounded-xl transition-all shadow-xs relative">
+                <span id="drawer-toggle-icon" class="material-symbols-outlined text-base {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}text-[#27bebe]{% endif %}">filter_list</span>
                 <span>تنقية العملاء</span>
-                <span id="drawer-active-filter-badge" class="{% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category %}{% else %}hidden{% endif %} flex items-center gap-1">
+                <span id="drawer-active-filter-badge" class="{% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}{% else %}hidden{% endif %} flex items-center gap-1">
                     <span class="w-2 h-2 rounded-full bg-[#27bebe] animate-pulse"></span>
                     <span id="drawer-active-filter-text" class="text-[10px] bg-[#27bebe] text-white px-1.5 py-0.5 rounded-full font-bold">نشط</span>
                 </span>
@@ -215,26 +215,62 @@
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">المنطقة الرئيسية (المحافظات - اختيار متعدد)</label>
-                    <div class="border border-slate-200 rounded-xl p-2 max-h-28 overflow-y-auto bg-slate-50/50 space-y-1 text-xs" id="main_area_checkboxes">
-                        {% for ma in main_areas %}
-                        <label class="flex items-center gap-2 p-1 rounded hover:bg-white cursor-pointer text-slate-700">
-                            <input type="checkbox" name="main_area" value="{{ ma.id }}" onchange="onMainAreaCheckboxChange()" {% if ma.id|stringformat:"s" in selected_main_areas %}checked{% endif %} class="rounded text-[#27bebe] focus:ring-[#27bebe]">
-                            <span class="text-xs">{{ ma.name }}</span>
-                        </label>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">المنطقة الرئيسية (المحافظات - اختيار متعدد)</label>
+                    <!-- Chips Container -->
+                    <div id="selected_main_areas_chips" class="flex flex-wrap gap-1.5 mb-1.5 empty:hidden">
+                        {% for ma in selected_main_areas_chips %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs" data-area-id="{{ ma.id }}">
+                            <input type="hidden" name="main_area" value="{{ ma.id }}">
+                            <span>{{ ma.name }}</span>
+                            <button type="button" onclick="removeAreaChip('{{ ma.id }}')" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+                                <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                            </button>
+                        </span>
                         {% endfor %}
+                    </div>
+                    <!-- Autocomplete Search Input -->
+                    <div class="relative" id="main_area_search_container">
+                        <div class="relative">
+                            <input type="text"
+                                   id="search_main_area_input"
+                                   placeholder="ابحث عن محافظة/منطقة رئيسية..."
+                                   autocomplete="off"
+                                   class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 pe-8 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-colors">
+                            <span id="main_area_search_spinner" class="material-symbols-outlined text-xs text-[#27bebe] animate-spin absolute end-2.5 top-2 hidden">progress_activity</span>
+                            <span id="main_area_search_icon" class="material-symbols-outlined text-xs text-slate-400 absolute end-2.5 top-2 pointer-events-none">search</span>
+                        </div>
+                        <div id="search_main_area_dropdown" class="absolute z-30 start-0 end-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto hidden text-xs divide-y divide-slate-100">
+                        </div>
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">الخط الجغرافي / المنطقة الفرعية (Bricks - اختيار متعدد)</label>
-                    <div class="border border-slate-200 rounded-xl p-2 max-h-32 overflow-y-auto bg-slate-50/50 space-y-1 text-xs" id="brick_checkboxes">
-                        {% for b in bricks %}
-                        <label class="brick-checkbox-label flex items-center gap-2 p-1 rounded hover:bg-white cursor-pointer text-slate-700" data-parent-id="{{ b.parent_id }}" data-brick-id="{{ b.id }}">
-                            <input type="checkbox" name="area" value="{{ b.id }}" onchange="applyDrawerFilterAjax(event)" {% if b.id|stringformat:"s" in selected_bricks %}checked{% endif %} class="rounded text-[#27bebe] focus:ring-[#27bebe]">
-                            <span class="text-xs">{{ b.name }} {% if b.parent %}<span class="text-[10px] text-slate-400">({{ b.parent.name }})</span>{% endif %}</span>
-                        </label>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">الخط الجغرافي / المنطقة الفرعية (Bricks - اختيار متعدد)</label>
+                    <!-- Chips Container -->
+                    <div id="selected_bricks_chips" class="flex flex-wrap gap-1.5 mb-1.5 empty:hidden">
+                        {% for b in selected_bricks_chips %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs" data-brick-id="{{ b.id }}" data-parent-id="{{ b.parent_id }}">
+                            <input type="hidden" name="area" value="{{ b.id }}">
+                            <span>{{ b.name }}{% if b.parent_name %} <span class="text-[10px] text-teal-600 font-normal">({{ b.parent_name }})</span>{% endif %}</span>
+                            <button type="button" onclick="removeBrickChip('{{ b.id }}')" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+                                <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                            </button>
+                        </span>
                         {% endfor %}
+                    </div>
+                    <!-- Autocomplete Search Input -->
+                    <div class="relative" id="brick_search_container">
+                        <div class="relative">
+                            <input type="text"
+                                   id="search_brick_input"
+                                   placeholder="ابحث في خطوط المناطق المحددة..."
+                                   autocomplete="off"
+                                   class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 pe-8 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-colors">
+                            <span id="brick_search_spinner" class="material-symbols-outlined text-xs text-[#27bebe] animate-spin absolute end-2.5 top-2 hidden">progress_activity</span>
+                            <span id="brick_search_icon" class="material-symbols-outlined text-xs text-slate-400 absolute end-2.5 top-2 pointer-events-none">search</span>
+                        </div>
+                        <div id="search_brick_dropdown" class="absolute z-30 start-0 end-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto hidden text-xs divide-y divide-slate-100">
+                        </div>
                     </div>
                 </div>
 
@@ -384,44 +420,313 @@ const contactAccountTypeMap = new Map([
 let templateDebounceTimer = null;
 let drawerSearchDebounceTimer = null;
 
-const allBricksData = [
-    {% for b in bricks %}
-    {
-        id: "{{ b.id }}",
-        name: "{{ b.name|escapejs }}",
-        parentId: "{{ b.parent_id|default:'' }}",
-        parentName: "{{ b.parent.name|default:''|escapejs }}"
-    },
-    {% endfor %}
-];
+// Searchable Autocomplete Multi-Select for Main Areas & Bricks (Requirement A)
+let mainAreaSearchDebounceTimer = null;
+let brickSearchDebounceTimer = null;
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function getSelectedMainAreaIds() {
+    return Array.from(document.querySelectorAll('#selected_main_areas_chips input[name="main_area"]')).map(el => el.value);
+}
+
+function getSelectedBrickIds() {
+    return Array.from(document.querySelectorAll('#selected_bricks_chips input[name="area"]')).map(el => el.value);
+}
+
+function addAreaChip(id, name) {
+    id = String(id);
+    const existing = document.querySelector(`#selected_main_areas_chips [data-area-id="${id}"]`);
+    if (existing) return;
+
+    const chipsContainer = document.getElementById('selected_main_areas_chips');
+    if (!chipsContainer) return;
+
+    const chip = document.createElement('span');
+    chip.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs';
+    chip.setAttribute('data-area-id', id);
+    chip.innerHTML = `
+        <input type="hidden" name="main_area" value="${id}">
+        <span>${escapeHtml(name)}</span>
+        <button type="button" onclick="removeAreaChip('${id}')" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+            <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+        </button>
+    `;
+    chipsContainer.appendChild(chip);
+
+    const input = document.getElementById('search_main_area_input');
+    if (input) input.value = '';
+    closeAreaDropdown();
+    applyDrawerFilterAjax();
+}
+
+function removeAreaChip(id) {
+    id = String(id);
+    const chip = document.querySelector(`#selected_main_areas_chips [data-area-id="${id}"]`);
+    if (chip) chip.remove();
+
+    // Per Requirement: Clear invalid selected Bricks when their parent Area is removed
+    document.querySelectorAll(`#selected_bricks_chips [data-parent-id="${id}"]`).forEach(bChip => {
+        bChip.remove();
+    });
+
+    applyDrawerFilterAjax();
+}
+
+function addBrickChip(id, name, parentId, parentName) {
+    id = String(id);
+    const existing = document.querySelector(`#selected_bricks_chips [data-brick-id="${id}"]`);
+    if (existing) return;
+
+    const chipsContainer = document.getElementById('selected_bricks_chips');
+    if (!chipsContainer) return;
+
+    const chip = document.createElement('span');
+    chip.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs';
+    chip.setAttribute('data-brick-id', id);
+    chip.setAttribute('data-parent-id', parentId || '');
+    chip.innerHTML = `
+        <input type="hidden" name="area" value="${id}">
+        <span>${escapeHtml(name)}${parentName ? ` <span class="text-[10px] text-teal-600 font-normal">(${escapeHtml(parentName)})</span>` : ''}</span>
+        <button type="button" onclick="removeBrickChip('${id}')" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+            <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+        </button>
+    `;
+    chipsContainer.appendChild(chip);
+
+    const input = document.getElementById('search_brick_input');
+    if (input) input.value = '';
+    closeBrickDropdown();
+    applyDrawerFilterAjax();
+}
+
+function removeBrickChip(id) {
+    id = String(id);
+    const chip = document.querySelector(`#selected_bricks_chips [data-brick-id="${id}"]`);
+    if (chip) chip.remove();
+    applyDrawerFilterAjax();
+}
+
+function closeAreaDropdown() {
+    const dd = document.getElementById('search_main_area_dropdown');
+    if (dd) {
+        dd.classList.add('hidden');
+        dd.innerHTML = '';
+    }
+}
+
+function closeBrickDropdown() {
+    const dd = document.getElementById('search_brick_dropdown');
+    if (dd) {
+        dd.classList.add('hidden');
+        dd.innerHTML = '';
+    }
+}
+
+function onMainAreaSearchInput() {
+    clearTimeout(mainAreaSearchDebounceTimer);
+    const input = document.getElementById('search_main_area_input');
+    const spinner = document.getElementById('main_area_search_spinner');
+    const icon = document.getElementById('main_area_search_icon');
+    const dropdown = document.getElementById('search_main_area_dropdown');
+    if (!input || !dropdown) return;
+
+    const query = input.value.trim();
+    if (!query) {
+        closeAreaDropdown();
+        if (spinner) spinner.classList.add('hidden');
+        if (icon) icon.classList.remove('hidden');
+        return;
+    }
+
+    if (spinner) spinner.classList.remove('hidden');
+    if (icon) icon.classList.add('hidden');
+
+    mainAreaSearchDebounceTimer = setTimeout(async () => {
+        try {
+            const resp = await fetch(`{% url 'planned_visits_search_areas_api' %}?q=${encodeURIComponent(query)}`);
+            const data = await resp.json();
+            const results = data.results || [];
+            const selectedIds = new Set(getSelectedMainAreaIds());
+            const filteredResults = results.filter(r => !selectedIds.has(String(r.id)));
+
+            dropdown.innerHTML = '';
+
+            if (filteredResults.length === 0) {
+                dropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">لا توجد نتائج مطابقة لـ "${escapeHtml(query)}"</div>`;
+            } else {
+                filteredResults.forEach(r => {
+                    const row = document.createElement('div');
+                    row.className = 'area-suggestion-item px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors';
+                    row.setAttribute('data-id', r.id);
+                    row.setAttribute('data-name', r.name);
+                    row.innerHTML = `
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-xs text-teal-600">location_city</span>
+                            <span class="font-medium text-xs">${escapeHtml(r.name)}</span>
+                        </div>
+                        ${r.code ? `<span class="text-[10px] text-slate-400 font-mono">${escapeHtml(r.code)}</span>` : ''}
+                    `;
+                    row.addEventListener('click', () => {
+                        addAreaChip(r.id, r.name);
+                    });
+                    dropdown.appendChild(row);
+                });
+            }
+            dropdown.classList.remove('hidden');
+        } catch (err) {
+            console.error('Error searching main areas:', err);
+            dropdown.innerHTML = '<div class="p-2.5 text-center text-rose-500 text-xs">حدث خطأ أثناء البحث.</div>';
+            dropdown.classList.remove('hidden');
+        } finally {
+            if (spinner) spinner.classList.add('hidden');
+            if (icon) icon.classList.remove('hidden');
+        }
+    }, 280);
+}
+
+function onBrickSearchInput() {
+    clearTimeout(brickSearchDebounceTimer);
+    const input = document.getElementById('search_brick_input');
+    const spinner = document.getElementById('brick_search_spinner');
+    const icon = document.getElementById('brick_search_icon');
+    const dropdown = document.getElementById('search_brick_dropdown');
+    if (!input || !dropdown) return;
+
+    const selectedAreaIds = getSelectedMainAreaIds();
+    if (selectedAreaIds.length === 0) {
+        dropdown.innerHTML = `
+            <div class="p-2.5 text-center text-amber-700 bg-amber-50/60 text-xs font-medium flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-sm text-amber-600">info</span>
+                <span>يرجى اختيار منطقة رئيسية (محافظة) أولاً للبحث في خطوطها الجغرافية.</span>
+            </div>
+        `;
+        dropdown.classList.remove('hidden');
+        if (spinner) spinner.classList.add('hidden');
+        if (icon) icon.classList.remove('hidden');
+        return;
+    }
+
+    const query = input.value.trim();
+    if (!query) {
+        closeBrickDropdown();
+        if (spinner) spinner.classList.add('hidden');
+        if (icon) icon.classList.remove('hidden');
+        return;
+    }
+
+    if (spinner) spinner.classList.remove('hidden');
+    if (icon) icon.classList.add('hidden');
+
+    brickSearchDebounceTimer = setTimeout(async () => {
+        try {
+            const params = new URLSearchParams();
+            params.append('q', query);
+            selectedAreaIds.forEach(aid => params.append('main_area', aid));
+
+            const resp = await fetch(`{% url 'planned_visits_search_bricks_api' %}?${params.toString()}`);
+            const data = await resp.json();
+            const results = data.results || [];
+            const selectedBrickIds = new Set(getSelectedBrickIds());
+            const filteredResults = results.filter(r => !selectedBrickIds.has(String(r.id)));
+
+            dropdown.innerHTML = '';
+
+            if (filteredResults.length === 0) {
+                dropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">لا توجد خطوط جغرافية مطابقة لـ "${escapeHtml(query)}" في المناطق المحددة.</div>`;
+            } else {
+                filteredResults.forEach(r => {
+                    const row = document.createElement('div');
+                    row.className = 'brick-suggestion-item px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors';
+                    row.setAttribute('data-id', r.id);
+                    row.setAttribute('data-name', r.name);
+                    row.setAttribute('data-parent-id', r.parent_id || '');
+                    row.setAttribute('data-parent-name', r.parent_name || '');
+                    row.innerHTML = `
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-xs text-teal-600">navigation</span>
+                                <span class="font-medium text-xs block truncate">${escapeHtml(r.name)}</span>
+                            </div>
+                            ${r.parent_name ? `<span class="text-[10px] text-slate-400 block ps-4">المنطقة: ${escapeHtml(r.parent_name)}</span>` : ''}
+                        </div>
+                        ${r.code ? `<span class="text-[10px] text-slate-400 font-mono ms-2">${escapeHtml(r.code)}</span>` : ''}
+                    `;
+                    row.addEventListener('click', () => {
+                        addBrickChip(r.id, r.name, r.parent_id, r.parent_name);
+                    });
+                    dropdown.appendChild(row);
+                });
+            }
+            dropdown.classList.remove('hidden');
+        } catch (err) {
+            console.error('Error searching bricks:', err);
+            dropdown.innerHTML = '<div class="p-2.5 text-center text-rose-500 text-xs">حدث خطأ أثناء البحث.</div>';
+            dropdown.classList.remove('hidden');
+        } finally {
+            if (spinner) spinner.classList.add('hidden');
+            if (icon) icon.classList.remove('hidden');
+        }
+    }, 280);
+}
+
+function handleSearchKeydown(e, itemClass) {
+    const dropdown = e.target.closest('.relative')?.querySelector('[id$="_dropdown"]');
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll(`.${itemClass}`);
+    if (items.length === 0) return;
+
+    let highlighted = -1;
+    items.forEach((it, idx) => {
+        if (it.classList.contains('bg-teal-100/80')) highlighted = idx;
+    });
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlighted = (highlighted + 1) % items.length;
+        items.forEach((it, idx) => {
+            if (idx === highlighted) {
+                it.classList.add('bg-teal-100/80');
+                it.scrollIntoView({ block: 'nearest' });
+            } else {
+                it.classList.remove('bg-teal-100/80');
+            }
+        });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlighted = (highlighted - 1 + items.length) % items.length;
+        items.forEach((it, idx) => {
+            if (idx === highlighted) {
+                it.classList.add('bg-teal-100/80');
+                it.scrollIntoView({ block: 'nearest' });
+            } else {
+                it.classList.remove('bg-teal-100/80');
+            }
+        });
+    } else if (e.key === 'Enter') {
+        if (highlighted >= 0 && items[highlighted]) {
+            e.preventDefault();
+            items[highlighted].click();
+        }
+    } else if (e.key === 'Escape') {
+        dropdown.classList.add('hidden');
+    }
+}
 
 function onDrawerSearchInput(e) {
     if (drawerSearchDebounceTimer) clearTimeout(drawerSearchDebounceTimer);
     drawerSearchDebounceTimer = setTimeout(() => {
         applyDrawerFilterAjax(e);
     }, 300);
-}
-
-function onMainAreaCheckboxChange() {
-    const checkedAreas = Array.from(document.querySelectorAll('input[name="main_area"]:checked')).map(cb => cb.value);
-    const brickLabels = document.querySelectorAll('.brick-checkbox-label');
-
-    brickLabels.forEach(lbl => {
-        const parentId = lbl.getAttribute('data-parent-id');
-        if (checkedAreas.length === 0 || checkedAreas.includes(parentId)) {
-            lbl.classList.remove('hidden');
-        } else {
-            lbl.classList.add('hidden');
-            const cb = lbl.querySelector('input[name="area"]');
-            if (cb) cb.checked = false;
-        }
-    });
-
-    applyDrawerFilterAjax();
-}
-
-function onMainAreaFilterChange(mainAreaId) {
-    onMainAreaCheckboxChange();
 }
 
 function toggleDayAccordion(bodyId) {
@@ -752,8 +1057,8 @@ function updateActiveFilterBadge() {
     const search = document.getElementById('filter_contact_search')?.value?.trim();
     const accType = document.getElementById('filter_account_type')?.value?.trim();
     const cat = document.getElementById('filter_customer_category')?.value?.trim();
-    const mainAreasCount = document.querySelectorAll('input[name="main_area"]:checked').length;
-    const areasCount = document.querySelectorAll('input[name="area"]:checked').length;
+    const mainAreasCount = document.querySelectorAll('#selected_main_areas_chips input[name="main_area"]').length;
+    const areasCount = document.querySelectorAll('#selected_bricks_chips input[name="area"]').length;
 
     let activeCount = 0;
     if (search) activeCount++;
@@ -843,7 +1148,16 @@ function resetDrawerFilters() {
         form.querySelectorAll('select').forEach(s => s.value = '');
         form.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
     }
-    document.querySelectorAll('.brick-checkbox-label').forEach(lbl => lbl.classList.remove('hidden'));
+    const areaChips = document.getElementById('selected_main_areas_chips');
+    if (areaChips) areaChips.innerHTML = '';
+    const brickChips = document.getElementById('selected_bricks_chips');
+    if (brickChips) brickChips.innerHTML = '';
+    const areaSearch = document.getElementById('search_main_area_input');
+    if (areaSearch) areaSearch.value = '';
+    const brickSearch = document.getElementById('search_brick_input');
+    if (brickSearch) brickSearch.value = '';
+    closeAreaDropdown();
+    closeBrickDropdown();
     applyDrawerFilterAjax();
 }
 
@@ -1049,16 +1363,32 @@ window.addEventListener('DOMContentLoaded', () => {
     // Sync drawer UI and templates if items restored
     updateDrawerSelectionState();
 
-    const checkedAreas = Array.from(document.querySelectorAll('input[name="main_area"]:checked')).map(cb => cb.value);
-    if (checkedAreas.length > 0) {
-        const brickLabels = document.querySelectorAll('.brick-checkbox-label');
-        brickLabels.forEach(lbl => {
-            const parentId = lbl.getAttribute('data-parent-id');
-            if (!checkedAreas.includes(parentId)) {
-                lbl.classList.add('hidden');
+    const mainAreaInput = document.getElementById('search_main_area_input');
+    if (mainAreaInput) {
+        mainAreaInput.addEventListener('input', onMainAreaSearchInput);
+        mainAreaInput.addEventListener('keydown', (e) => handleSearchKeydown(e, 'area-suggestion-item'));
+    }
+    const brickInput = document.getElementById('search_brick_input');
+    if (brickInput) {
+        brickInput.addEventListener('input', onBrickSearchInput);
+        brickInput.addEventListener('keydown', (e) => handleSearchKeydown(e, 'brick-suggestion-item'));
+        brickInput.addEventListener('focus', () => {
+            if (getSelectedMainAreaIds().length === 0) {
+                onBrickSearchInput();
             }
         });
     }
+
+    document.addEventListener('click', (e) => {
+        const areaCont = document.getElementById('main_area_search_container');
+        if (areaCont && !areaCont.contains(e.target)) {
+            closeAreaDropdown();
+        }
+        const brickCont = document.getElementById('brick_search_container');
+        if (brickCont && !brickCont.contains(e.target)) {
+            closeBrickDropdown();
+        }
+    });
 
     if (window.location.hash) {
         const targetDay = document.querySelector(window.location.hash);

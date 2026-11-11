@@ -23,6 +23,8 @@ urlpatterns = [
 
     # Planned Visits
     path('planned-visits/', views.planned_visits_list, name='planned_visits_list'),
+    path('planned-visits/api/search-areas/', views.planned_visits_search_areas_api, name='planned_visits_search_areas_api'),
+    path('planned-visits/api/search-bricks/', views.planned_visits_search_bricks_api, name='planned_visits_search_bricks_api'),
     path('planned-visits/add-item/', views.planned_visit_add_item, name='planned_visit_add_item'),
     path('planned-visits/bulk-add/', views.planned_visits_bulk_add, name='planned_visits_bulk_add'),
     path('planned-visits/export/', views.planned_visits_export, name='planned_visits_export'),
