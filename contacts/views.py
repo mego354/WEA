@@ -6,8 +6,11 @@ from django.contrib import messages
 from django.db.models import Q, ProtectedError
 from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
-from .models import Contact, ContactAddress, ContactComment, ContactAttachment, ContactTodo, ContactActivity
-from master_data.models import Area, ContactFieldSetting
+from .models import (
+    Contact, ContactAddress, ContactComment, ContactAttachment,
+    ContactTodo, ContactActivity, ContactCommunicationMethod
+)
+from master_data.models import Area
 from accounts.services import AuditLogService
 from datetime import datetime, time
 from django.utils import timezone
@@ -52,7 +55,7 @@ def contacts_list(request):
             qs = qs.exclude(status='inactive')
             active_filters_count += 1
     else:
-        if show_inactive == 'no':
+        if show_inactive == 'no' and status != 'inactive':
             qs = qs.exclude(status='inactive')
             active_filters_count += 1
         elif show_inactive == 'yes':
@@ -237,14 +240,26 @@ def contacts_list(request):
 
     from accounts.scope_service import ScopeResolutionService
     governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
+    scoped_bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
+    if area_id:
+        available_bricks = scoped_bricks.filter(parent_id=area_id)
+    else:
+        available_bricks = scoped_bricks
 
-    # Dedicated real scoped statistics cards
-    scoped_all = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
+    # Dedicated real scoped statistics cards - strictly respecting active filters (Requirement F)
+    # Evaluated on full filtered queryset (qs) before pagination slicing
+    filtered_contacts_count = qs.count()
+    filtered_customers_count = qs.filter(is_customer=True).count()
+    filtered_suppliers_count = qs.filter(is_supplier=True).count()
     stats = {
-        'total_contacts': scoped_all.count(),
-        'total_customers': scoped_all.filter(is_customer=True, status='active').count(),
-        'total_leads': scoped_all.filter(is_customer=True, status='lead').count(),
-        'total_suppliers': scoped_all.filter(is_supplier=True).count(),
+        'total_contacts': filtered_contacts_count,
+        'total_customers': filtered_customers_count,
+        'total_leads': filtered_customers_count,
+        'total_suppliers': filtered_suppliers_count,
+        'total': filtered_contacts_count,
+        'customers': filtered_customers_count,
+        'leads': filtered_customers_count,
+        'suppliers': filtered_suppliers_count,
     }
     context = {
         'contacts': page_obj.object_list,
@@ -259,6 +274,8 @@ def contacts_list(request):
         'search_query': search,
         'current_area_id': area_id,
         'current_sub_area': sub_area,
+        'current_brick_id': brick_id,
+        'bricks': available_bricks,
         'current_contact_type': contact_type,
         'current_category': category,
         'current_specialty': specialty,
@@ -282,7 +299,7 @@ def contacts_list(request):
 def contact_detail(request, pk):
     contact = get_object_or_404(
         Contact.objects.select_related('area', 'created_by', 'parent_org')
-        .prefetch_related('addresses__area', 'assigned_team', 'branches'),
+        .prefetch_related('addresses__area', 'assigned_team', 'branches', 'communication_methods'),
         pk=pk
     )
     if not can_user_access_object(request.user, contact, 'view'):
@@ -302,24 +319,7 @@ def contact_detail(request, pk):
     # Top 5 recent timeline activities for overview
     recent_timeline = activities[:5]
     total_timeline_count = activities.count()
-
-    # Active custom fields configured in Contacts UDF
-    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
-    formatted_custom_fields = []
-    custom_vals = contact.custom_values or {}
-    for setting in custom_field_settings:
-        val = custom_vals.get(setting.field_key)
-        if setting.field_type == 'boolean':
-            display_val = 'نعم' if val else ('لا' if val is False else '-')
-        elif setting.field_type == 'multi_choice':
-            display_val = ', '.join(val) if isinstance(val, list) and val else '-'
-        else:
-            display_val = str(val) if val not in [None, ''] else '-'
-        formatted_custom_fields.append({
-            'setting': setting,
-            'value': val,
-            'display_value': display_val,
-        })
+    communication_methods = contact.communication_methods.all()
 
     # Transactions & accounting relationships
     sales_orders = []
@@ -343,14 +343,13 @@ def contact_detail(request, pk):
         'contact': contact,
         'active_tab': active_tab,
         'addresses': addresses,
+        'communication_methods': communication_methods,
         'comments': comments,
         'attachments': attachments,
         'todos': todos,
         'activities': activities,
         'recent_timeline': recent_timeline,
         'total_timeline_count': total_timeline_count,
-        'custom_field_settings': custom_field_settings,
-        'formatted_custom_fields': formatted_custom_fields,
         'sales_orders': sales_orders,
         'collections': collections,
         'purchase_orders': purchase_orders,
@@ -458,12 +457,12 @@ def contact_create(request):
             except Exception:
                 lat_val, lng_val = None, None
 
-        # Status: Requirement 3 - newly created contact MUST default to Lead, not Customer
+        # Status: Newly created contact defaults to Customer (Requirement E)
         status_input = (request.POST.get('status') or '').strip().lower()
-        if status_input in ['lead', 'customer', 'active', 'inactive']:
+        if status_input in ['customer', 'active', 'inactive']:
             status_val = status_input
         else:
-            status_val = 'lead'
+            status_val = 'customer'
 
         # Area & Brick resolution
         area_id = request.POST.get('area_id') or request.POST.get('area')
@@ -493,7 +492,7 @@ def contact_create(request):
                 messages.error(request, "لا يمكنك إنشاء جهة اتصال خارج نطاق منطقتك الجغرافية المصرح بها.")
                 return render_create_form(request, errors={'area': 'خارج النطاق الجغرافي المصرح به'})
 
-        custom_values = extract_custom_values_from_post(request.POST)
+        custom_values = {}
 
         contact = Contact.objects.create(
             name=name,
@@ -646,8 +645,6 @@ def render_create_form(request, errors=None):
     governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
     bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
 
-    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
-
     context = {
         'governorates': governorates,
         'bricks': bricks,
@@ -655,7 +652,6 @@ def render_create_form(request, errors=None):
         'specialties': SPECIALTIES,
         'account_types': ACCOUNT_TYPES,
         'country_codes': COUNTRY_CODES,
-        'custom_field_settings': custom_field_settings,
         'errors': errors or {}
     }
     return render(request, 'contacts/contact_create.html', context)
@@ -779,8 +775,30 @@ def contact_edit(request, pk):
                 contact.brick = contact.area
             contact.area = contact.area.parent
 
-        contact.custom_values = extract_custom_values_from_post(request.POST)
         contact.save()
+
+        # Update communication methods if submitted in edit form
+        comm_types = request.POST.getlist('comm_method_type[]')
+        comm_values = request.POST.getlist('comm_value[]')
+        comm_labels = request.POST.getlist('comm_label[]')
+        comm_primaries = request.POST.getlist('comm_is_primary[]')
+
+        if comm_values:
+            contact.communication_methods.all().delete()
+            for idx, c_val in enumerate(comm_values):
+                c_val = str(c_val).strip()
+                if not c_val:
+                    continue
+                c_type = comm_types[idx].strip().lower() if idx < len(comm_types) else 'mobile'
+                c_label = comm_labels[idx].strip() if idx < len(comm_labels) else ''
+                c_prim = (str(idx) in comm_primaries) or ('1' in comm_primaries and idx == 0)
+                ContactCommunicationMethod.objects.create(
+                    contact=contact,
+                    method_type=c_type,
+                    value=c_val,
+                    label=c_label,
+                    is_primary=bool(c_prim)
+                )
 
         # Update addresses: delete removed and re-create / update
         address_titles = request.POST.getlist('address_title[]')
@@ -909,15 +927,6 @@ def render_edit_form(request, contact, errors=None):
     governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts')
     bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts')
 
-    custom_field_settings = ContactFieldSetting.objects.filter(is_active=True).order_by('section', 'order')
-    formatted_custom_fields = []
-    custom_vals = contact.custom_values or {}
-    for setting in custom_field_settings:
-        formatted_custom_fields.append({
-            'setting': setting,
-            'value': custom_vals.get(setting.field_key),
-        })
-
     # Split mobile into country code & number
     mobile_parts = contact.mobile.split(' ', 1) if contact.mobile else ['', '']
     mobile_code = mobile_parts[0] if len(mobile_parts) > 1 and mobile_parts[0].startswith('+') else '+20'
@@ -930,6 +939,7 @@ def render_edit_form(request, contact, errors=None):
     context = {
         'contact': contact,
         'addresses': contact.addresses.all(),
+        'communication_methods': contact.communication_methods.all(),
         'governorates': governorates,
         'bricks': bricks,
         'customer_categories': CUSTOMER_CATEGORIES,
@@ -940,8 +950,6 @@ def render_edit_form(request, contact, errors=None):
         'mobile_num': mobile_num,
         'phone_code': phone_code,
         'phone_num': phone_num,
-        'custom_field_settings': custom_field_settings,
-        'formatted_custom_fields': formatted_custom_fields,
         'errors': errors or {}
     }
     return render(request, 'contacts/contact_edit.html', context)
@@ -1358,6 +1366,176 @@ def contact_delete_address(request, pk, address_id):
     return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
 
 
+@require_permission('contacts:contacts/edit')
+def contact_add_communication_method(request, pk):
+    contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك إضافة وسيلة اتصال لهذه الجهة.")
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    if request.method == 'POST':
+        method_type = request.POST.get('method_type', 'mobile').strip().lower()
+        value = request.POST.get('value', '').strip()
+        label = request.POST.get('label', '').strip()
+        is_primary = request.POST.get('is_primary') in ['on', '1', 'true', True]
+
+        if not value:
+            msg = "قيمة وسيلة الاتصال مطلوبة (الرقم أو البريد أو الرابط)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+        # Duplicate check
+        if ContactCommunicationMethod.objects.filter(contact=contact, method_type=method_type, value=value).exists():
+            msg = "وسيلة الاتصال هذه مسجلة بالفعل لجهة الاتصال هذه."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.warning(request, msg)
+            return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+        method = ContactCommunicationMethod.objects.create(
+            contact=contact,
+            method_type=method_type,
+            value=value,
+            label=label,
+            is_primary=is_primary
+        )
+
+        AuditLogService.log(
+            action='create',
+            module='contacts',
+            user=request.user,
+            record_id=method.id,
+            record_name=f"وسيلة اتصال: {method.get_method_type_display()} - {value}",
+            new_values={'contact_id': contact.id, 'method_type': method_type, 'value': value, 'is_primary': is_primary},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        ContactActivity.objects.create(
+            contact=contact,
+            activity_type='update',
+            title=f"إضافة وسيلة اتصال: {method.get_method_type_display()}",
+            notes=f"{value} ({label or 'بدون مسمى'})",
+            performed_by=request.user
+        )
+        msg = "تمت إضافة وسيلة الاتصال بنجاح."
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'method': {
+                    'id': method.id,
+                    'method_type': method.method_type,
+                    'type_display': method.get_method_type_display(),
+                    'value': method.value,
+                    'label': method.label,
+                    'is_primary': method.is_primary,
+                }
+            })
+        messages.success(request, msg)
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+
+@require_permission('contacts:contacts/edit')
+def contact_edit_communication_method(request, pk, method_id):
+    contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تعديل وسيلة اتصال لهذه الجهة.")
+
+    method = get_object_or_404(ContactCommunicationMethod, pk=method_id, contact=contact)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    if request.method == 'POST':
+        method_type = request.POST.get('method_type', method.method_type).strip().lower()
+        value = request.POST.get('value', '').strip()
+        label = request.POST.get('label', '').strip()
+        is_primary = request.POST.get('is_primary') in ['on', '1', 'true', True]
+
+        if not value:
+            msg = "قيمة وسيلة الاتصال مطلوبة."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+        # Duplicate check excluding self
+        if ContactCommunicationMethod.objects.filter(contact=contact, method_type=method_type, value=value).exclude(pk=method.pk).exists():
+            msg = "وسيلة اتصال أخرى مسجلة بنفس القيمة والنوع."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.warning(request, msg)
+            return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+        prev_val = {'method_type': method.method_type, 'value': method.value, 'label': method.label, 'is_primary': method.is_primary}
+
+        method.method_type = method_type
+        method.value = value
+        method.label = label
+        method.is_primary = is_primary
+        method.save()
+
+        AuditLogService.log(
+            action='update',
+            module='contacts',
+            user=request.user,
+            record_id=method.id,
+            record_name=f"تعديل وسيلة اتصال: {method.get_method_type_display()} - {value}",
+            previous_values=prev_val,
+            new_values={'method_type': method_type, 'value': value, 'label': label, 'is_primary': is_primary},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        msg = "تم تعديل وسيلة الاتصال بنجاح."
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'method': {
+                    'id': method.id,
+                    'method_type': method.method_type,
+                    'type_display': method.get_method_type_display(),
+                    'value': method.value,
+                    'label': method.label,
+                    'is_primary': method.is_primary,
+                }
+            })
+        messages.success(request, msg)
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+
+@require_permission('contacts:contacts/edit')
+def contact_delete_communication_method(request, pk, method_id):
+    contact = get_object_or_404(Contact, pk=pk)
+    if not can_user_access_object(request.user, contact, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك حذف وسيلة اتصال لهذه الجهة.")
+
+    method = get_object_or_404(ContactCommunicationMethod, pk=method_id, contact=contact)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    if request.method == 'POST':
+        m_id = method.id
+        m_display = str(method)
+        method.delete()
+
+        AuditLogService.log(
+            action='delete',
+            module='contacts',
+            user=request.user,
+            record_id=m_id,
+            record_name=f"حذف وسيلة اتصال: {m_display}",
+            previous_values={'contact_id': contact.id, 'display': m_display},
+            ip_address=AuditLogService.get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
+        msg = "تم حذف وسيلة الاتصال بنجاح."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+    return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=overview")
+
+
 from master_data.excel_utils import (
     export_to_excel_response,
     generate_excel_template_response,
@@ -1689,6 +1867,15 @@ def contacts_import(request):
                                     CustomerAccount.get_or_create_for_customer(new_contact)
                                 if is_supplier:
                                     VendorAccount.get_or_create_for_supplier(new_contact)
+
+                                if mobile:
+                                    ContactCommunicationMethod.objects.create(
+                                        contact=new_contact, method_type='mobile', value=mobile, label='الموبايل الرئيسي', is_primary=True
+                                    )
+                                if r.get('phone'):
+                                    ContactCommunicationMethod.objects.create(
+                                        contact=new_contact, method_type='phone', value=r.get('phone'), label='الهاتف الأرضي', is_primary=True
+                                    )
 
                                 created_count += 1
                             else:

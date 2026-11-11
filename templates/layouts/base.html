@@ -168,6 +168,54 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+        /* Centralized Global Page Loading Progress & Non-blocking Indicator (Requirement A) */
+        #global-top-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #27bebe 0%, #1fa8a8 50%, #2dd4bf 100%);
+            z-index: 99999;
+            transform: translateX(-100%);
+            transition: transform 0.25s ease-out, opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #global-top-progress.loading {
+            transform: translateX(-20%);
+            transition: transform 3.5s cubic-bezier(0.1, 0.5, 0.1, 1);
+        }
+        #global-top-progress.finished {
+            transform: translateX(0%);
+            opacity: 0;
+            transition: transform 0.15s ease-out, opacity 0.35s ease 0.15s;
+        }
+        #global-page-spinner {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 1.5rem;
+            z-index: 99998;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(15, 23, 42, 0.88);
+            color: #ffffff;
+            padding: 0.5rem 0.875rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(0.75rem);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        #global-page-spinner.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
     </style>
 
     <!-- Leaflet Maps CSS & JS -->
@@ -177,6 +225,13 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Global Progress Bar & Non-blocking Async Indicator -->
+    <div id="global-top-progress" class="loading"></div>
+    <div id="global-page-spinner" role="status" aria-live="polite">
+        <span class="material-symbols-outlined text-sm text-[#27bebe] animate-spin">progress_activity</span>
+        <span id="global-spinner-text">جاري المعالجة...</span>
+    </div>
 
     <!-- SIDEBAR BACKDROP OVERLAY -->
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden transition-opacity duration-300 lg:hidden"></div>
@@ -828,6 +883,79 @@
         function closeUnplannedVisitModal() {
             closeCustomerSelectionModal();
         }
+
+        // Global Loading Manager (Requirement A)
+        (function() {
+            const topBar = document.getElementById('global-top-progress');
+            const spinner = document.getElementById('global-page-spinner');
+            const spinnerText = document.getElementById('global-spinner-text');
+            let activeRequests = 0;
+            let hideTimeout = null;
+
+            function finishPageLoading() {
+                if (topBar) {
+                    topBar.classList.remove('loading');
+                    topBar.classList.add('finished');
+                }
+            }
+
+            window.showGlobalLoading = function(text) {
+                activeRequests++;
+                if (spinnerText && text) spinnerText.textContent = text;
+                if (spinner) spinner.classList.add('active');
+                if (topBar) {
+                    topBar.classList.remove('finished');
+                    topBar.classList.add('loading');
+                }
+                clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => {
+                    window.hideGlobalLoading(true);
+                }, 8000);
+            };
+
+            window.hideGlobalLoading = function(force) {
+                if (force) activeRequests = 0;
+                else activeRequests = Math.max(0, activeRequests - 1);
+
+                if (activeRequests === 0) {
+                    if (spinner) spinner.classList.remove('active');
+                    if (topBar) {
+                        topBar.classList.remove('loading');
+                        topBar.classList.add('finished');
+                    }
+                }
+            };
+
+            if (document.readyState === 'complete') {
+                finishPageLoading();
+            } else {
+                window.addEventListener('load', finishPageLoading);
+                document.addEventListener('DOMContentLoaded', finishPageLoading);
+                setTimeout(finishPageLoading, 2000);
+            }
+
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('a');
+                if (link && link.href && !link.target && !link.href.startsWith('javascript:') && !link.href.includes('#') && !link.hasAttribute('download')) {
+                    if (link.href.startsWith(window.location.origin)) {
+                        if (topBar) {
+                            topBar.classList.remove('finished');
+                            topBar.classList.add('loading');
+                        }
+                    }
+                }
+            });
+
+            document.addEventListener('submit', function(e) {
+                const form = e.target;
+                if (form && !form.hasAttribute('data-no-loader')) {
+                    if (topBar) {
+                        topBar.classList.remove('finished');
+                        topBar.classList.add('loading');
+                    }
+                }
+            });
+        })();
     </script>
     <!-- Reusable Table Column Manager -->
     <script src="{% static 'js/table_column_manager.js' %}"></script>

@@ -566,31 +566,43 @@ def planned_visits_list(request):
     )
     contacts_qs = base_contacts_qs
 
-    main_area_filter = (request.GET.get('main_area') or '').strip()
-    area_filter = (request.GET.get('brick') or request.GET.get('area') or '').strip()
+    # Parse multi-select areas and bricks (Requirement I)
+    raw_main_areas = request.GET.getlist('main_area') or request.GET.getlist('main_area[]')
+    main_area_ids = []
+    for ma in raw_main_areas:
+        for p in str(ma).split(','):
+            if p.strip().isdigit():
+                main_area_ids.append(int(p.strip()))
+
+    raw_bricks = request.GET.getlist('brick') or request.GET.getlist('brick[]') or request.GET.getlist('area') or request.GET.getlist('area[]')
+    brick_ids = []
+    for br in raw_bricks:
+        for p in str(br).split(','):
+            if p.strip().isdigit():
+                brick_ids.append(int(p.strip()))
+
+    main_area_filter = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    area_filter = str(brick_ids[0]) if len(brick_ids) == 1 else ''
+
     account_type_filter = (request.GET.get('account_type') or '').strip()
     category_filter = (request.GET.get('customer_category') or '').strip()
     specialty_filter = (request.GET.get('specialty') or '').strip()
     search_contact = (request.GET.get('contact_search') or '').strip()
 
-    if main_area_filter and main_area_filter.isdigit():
-        ma_id = int(main_area_filter)
+    if main_area_ids:
         contacts_qs = contacts_qs.filter(
-            Q(area_id=ma_id) |
-            Q(area__parent_id=ma_id) |
-            Q(brick_id=ma_id) |
-            Q(brick__parent_id=ma_id) |
-            Q(addresses__area_id=ma_id) |
-            Q(addresses__brick__parent_id=ma_id)
+            Q(area_id__in=main_area_ids) |
+            Q(area__parent_id__in=main_area_ids) |
+            Q(brick_id__in=main_area_ids) |
+            Q(brick__parent_id__in=main_area_ids) |
+            Q(addresses__area_id__in=main_area_ids) |
+            Q(addresses__brick__parent_id__in=main_area_ids)
         ).distinct()
 
-    if area_filter and area_filter.isdigit():
-        b_id = int(area_filter)
+    if brick_ids:
         contacts_qs = contacts_qs.filter(
-            Q(brick_id=b_id) |
-            Q(area_id=b_id) |
-            Q(addresses__brick_id=b_id) |
-            Q(addresses__area_id=b_id)
+            Q(brick_id__in=brick_ids) |
+            Q(addresses__brick_id__in=brick_ids)
         ).distinct()
 
     if account_type_filter:
@@ -674,6 +686,9 @@ def planned_visits_list(request):
     # Templates eligible for current user's role
     visit_templates = [t for t in VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles').order_by('name') if t.is_user_eligible(request.user)]
 
+    # If main areas selected, filter available bricks to those belonging to selected areas
+    available_bricks = bricks.filter(parent_id__in=main_area_ids) if main_area_ids else bricks
+
     context = {
         'selected_rep': selected_rep,
         'all_reps': all_reps,
@@ -687,13 +702,16 @@ def planned_visits_list(request):
         'has_more_clients': has_more_clients,
         'areas': areas,
         'main_areas': main_areas,
-        'bricks': bricks,
+        'bricks': available_bricks,
+        'all_scoped_bricks': bricks,
         'account_types': ACCOUNT_TYPES,
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
         'visit_templates': visit_templates,
         'selected_main_area': main_area_filter,
         'selected_area': area_filter,
+        'selected_main_areas': [str(x) for x in main_area_ids],
+        'selected_bricks': [str(x) for x in brick_ids],
         'selected_account_type': account_type_filter,
         'selected_customer_category': category_filter,
         'selected_specialty': specialty_filter,

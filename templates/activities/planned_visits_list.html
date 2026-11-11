@@ -215,23 +215,27 @@
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">المنطقة الرئيسية (المحافظة)</label>
-                    <select name="main_area" id="filter_main_area" onchange="onMainAreaFilterChange(this.value); applyDrawerFilterAjax(event);" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
-                        <option value="">جميع المناطق الرئيسية</option>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">المنطقة الرئيسية (المحافظات - اختيار متعدد)</label>
+                    <div class="border border-slate-200 rounded-xl p-2 max-h-28 overflow-y-auto bg-slate-50/50 space-y-1 text-xs" id="main_area_checkboxes">
                         {% for ma in main_areas %}
-                        <option value="{{ ma.id }}" {% if selected_main_area == ma.id|stringformat:"s" %}selected{% endif %}>{{ ma.name }}</option>
+                        <label class="flex items-center gap-2 p-1 rounded hover:bg-white cursor-pointer text-slate-700">
+                            <input type="checkbox" name="main_area" value="{{ ma.id }}" onchange="onMainAreaCheckboxChange()" {% if ma.id|stringformat:"s" in selected_main_areas %}checked{% endif %} class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                            <span class="text-xs">{{ ma.name }}</span>
+                        </label>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">الخط الجغرافي / المنطقة الفرعية (Brick)</label>
-                    <select name="area" id="filter_area" onchange="applyDrawerFilterAjax(event)" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
-                        <option value="">جميع الخطوط (Bricks)</option>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">الخط الجغرافي / المنطقة الفرعية (Bricks - اختيار متعدد)</label>
+                    <div class="border border-slate-200 rounded-xl p-2 max-h-32 overflow-y-auto bg-slate-50/50 space-y-1 text-xs" id="brick_checkboxes">
                         {% for b in bricks %}
-                        <option value="{{ b.id }}" data-parent-id="{{ b.parent_id }}" {% if selected_area == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}{% if not selected_main_area and b.parent %} ({{ b.parent.name }}){% endif %}</option>
+                        <label class="brick-checkbox-label flex items-center gap-2 p-1 rounded hover:bg-white cursor-pointer text-slate-700" data-parent-id="{{ b.parent_id }}" data-brick-id="{{ b.id }}">
+                            <input type="checkbox" name="area" value="{{ b.id }}" onchange="applyDrawerFilterAjax(event)" {% if b.id|stringformat:"s" in selected_bricks %}checked{% endif %} class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                            <span class="text-xs">{{ b.name }} {% if b.parent %}<span class="text-[10px] text-slate-400">({{ b.parent.name }})</span>{% endif %}</span>
+                        </label>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
 
                 <div>
@@ -398,32 +402,26 @@ function onDrawerSearchInput(e) {
     }, 300);
 }
 
-function onMainAreaFilterChange(mainAreaId) {
-    const brickSelect = document.getElementById('filter_area');
-    if (!brickSelect) return;
-    const currentVal = String(brickSelect.value || '');
+function onMainAreaCheckboxChange() {
+    const checkedAreas = Array.from(document.querySelectorAll('input[name="main_area"]:checked')).map(cb => cb.value);
+    const brickLabels = document.querySelectorAll('.brick-checkbox-label');
 
-    // Rebuild options dynamically for reliable cross-browser rendering
-    brickSelect.innerHTML = '<option value="">جميع الخطوط (Bricks)</option>';
-    let selectedStillValid = false;
-
-    allBricksData.forEach(b => {
-        if (!mainAreaId || String(b.parentId) === String(mainAreaId)) {
-            const opt = document.createElement('option');
-            opt.value = b.id;
-            opt.textContent = (!mainAreaId && b.parentName) ? `${b.name} (${b.parentName})` : b.name;
-            opt.setAttribute('data-parent-id', b.parentId);
-            if (String(b.id) === currentVal) {
-                opt.selected = true;
-                selectedStillValid = true;
-            }
-            brickSelect.appendChild(opt);
+    brickLabels.forEach(lbl => {
+        const parentId = lbl.getAttribute('data-parent-id');
+        if (checkedAreas.length === 0 || checkedAreas.includes(parentId)) {
+            lbl.classList.remove('hidden');
+        } else {
+            lbl.classList.add('hidden');
+            const cb = lbl.querySelector('input[name="area"]');
+            if (cb) cb.checked = false;
         }
     });
 
-    if (!selectedStillValid && brickSelect.value) {
-        brickSelect.value = '';
-    }
+    applyDrawerFilterAjax();
+}
+
+function onMainAreaFilterChange(mainAreaId) {
+    onMainAreaCheckboxChange();
 }
 
 function toggleDayAccordion(bodyId) {
@@ -738,7 +736,7 @@ function getActiveFilterParams() {
         const formData = new FormData(form);
         for (const [key, value] of formData.entries()) {
             if (value && String(value).trim() !== '') {
-                params.set(key, String(value).trim());
+                params.append(key, String(value).trim());
             }
         }
     }
@@ -753,16 +751,16 @@ function updateActiveFilterBadge() {
 
     const search = document.getElementById('filter_contact_search')?.value?.trim();
     const accType = document.getElementById('filter_account_type')?.value?.trim();
-    const mainArea = document.getElementById('filter_main_area')?.value?.trim();
-    const area = document.getElementById('filter_area')?.value?.trim();
     const cat = document.getElementById('filter_customer_category')?.value?.trim();
+    const mainAreasCount = document.querySelectorAll('input[name="main_area"]:checked').length;
+    const areasCount = document.querySelectorAll('input[name="area"]:checked').length;
 
     let activeCount = 0;
     if (search) activeCount++;
     if (accType) activeCount++;
-    if (mainArea) activeCount++;
-    if (area) activeCount++;
     if (cat) activeCount++;
+    if (mainAreasCount > 0) activeCount += mainAreasCount;
+    if (areasCount > 0) activeCount += areasCount;
 
     if (activeCount > 0) {
         if (toggleBtn) {
@@ -843,8 +841,9 @@ function resetDrawerFilters() {
     if (form) {
         form.querySelectorAll('input[type="text"]').forEach(i => i.value = '');
         form.querySelectorAll('select').forEach(s => s.value = '');
+        form.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
     }
-    onMainAreaFilterChange('');
+    document.querySelectorAll('.brick-checkbox-label').forEach(lbl => lbl.classList.remove('hidden'));
     applyDrawerFilterAjax();
 }
 
@@ -1050,9 +1049,15 @@ window.addEventListener('DOMContentLoaded', () => {
     // Sync drawer UI and templates if items restored
     updateDrawerSelectionState();
 
-    const mainAreaEl = document.getElementById('filter_main_area');
-    if (mainAreaEl && mainAreaEl.value) {
-        onMainAreaFilterChange(mainAreaEl.value);
+    const checkedAreas = Array.from(document.querySelectorAll('input[name="main_area"]:checked')).map(cb => cb.value);
+    if (checkedAreas.length > 0) {
+        const brickLabels = document.querySelectorAll('.brick-checkbox-label');
+        brickLabels.forEach(lbl => {
+            const parentId = lbl.getAttribute('data-parent-id');
+            if (!checkedAreas.includes(parentId)) {
+                lbl.classList.add('hidden');
+            }
+        });
     }
 
     if (window.location.hash) {

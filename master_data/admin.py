@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from .models import (
     Area, CompanyProfile, LocationSettings, SalesSettings,
     PurchaseSettings, ExpenseType, TicketType, ApprovalRequestType,
-    AgreementType, ContactFieldSetting, DataSyncConfig
+    AgreementType, DataSyncConfig
 )
 
 
@@ -132,14 +132,6 @@ class AgreementTypeAdmin(admin.ModelAdmin):
     list_display = ('name', 'is_active')
     list_filter = ('is_active',)
     search_fields = ('name',)
-
-
-@admin.register(ContactFieldSetting)
-class ContactFieldSettingAdmin(admin.ModelAdmin):
-    list_display = ('field_key', 'display_name', 'section', 'is_required', 'is_locked', 'is_filterable', 'order')
-    list_filter = ('section', 'is_required', 'is_locked', 'is_filterable')
-    search_fields = ('field_key', 'display_name')
-    ordering = ('section', 'order')
 
 
 @admin.register(DataSyncConfig)

@@ -43,21 +43,55 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Method**: `GET`
 - **Permission**: `@require_permission('contacts:contacts/list')`
 - **Query Parameters**:
-  - `governorate_id` (integer, required): ID of the parent governorate.
+  - `area_id` or `governorate_id` (integer, required): ID of the parent governorate.
 - **Response Format**:
   ```json
-  [
-    {
-      "id": 12,
-      "name": "حي الدقي",
-      "code": "DOKKI-01"
-    },
-    {
-      "id": 15,
-      "name": "حي المهندسين",
-      "code": "MOHAND-01"
-    }
-  ]
+  {
+    "success": true,
+    "subareas": [
+      {
+        "id": 12,
+        "name": "حي الدقي",
+        "code": "DOKKI-01"
+      }
+    ]
+  }
+  ```
+
+### 2.3 Contact Communication Methods CRUD
+- **Add**: `POST /contacts/<pk>/communication-methods/add/`
+  - Body: `method_type` (mobile, phone, email, whatsapp, website, other), `value`, `label`, `is_primary`.
+  - AJAX response: `{"success": true, "method": {...}}`.
+- **Edit**: `POST /contacts/<pk>/communication-methods/<method_id>/edit/`
+  - Body: `method_type`, `value`, `label`, `is_primary`.
+  - AJAX response: `{"success": true, "method": {...}}`.
+- **Delete**: `POST /contacts/<pk>/communication-methods/<method_id>/delete/`
+  - AJAX response: `{"success": true, "deleted_id": ...}`.
+
+### 2.4 Egyptian Geocoding Search Proxy (`geocoding_search_api`)
+- **URL**: `/api/geocoding/search/`
+- **Method**: `GET`
+- **Permission**: Login required (`@login_required`)
+- **Query Parameters**:
+  - `q` (string, required): Location or area search term.
+- **Response Format**:
+  ```json
+  {
+    "results": [
+      {
+        "lat": 30.0444,
+        "lon": 31.2357,
+        "display_name": "الدقي، محافظة الجيزة، مصر",
+        "address": {
+          "road": "شارع مصدق",
+          "suburb": "الدقي",
+          "city": "الجيزة",
+          "state": "محافظة الجيزة",
+          "country": "مصر"
+        }
+      }
+    ]
+  }
   ```
 
 ---

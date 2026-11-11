@@ -892,6 +892,39 @@ class EgyptAreasTests(TestCase):
         self.assertEqual(cairo_in_ctx.subareas_count, 2)
 
 
+class EgyptGeocodingSearchTests(TestCase):
+    """Verifies Egyptian geocoding scoped to Egypt and local Area fallback."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_superuser(
+            username='admin_geocoding',
+            email='admin_geo@wea.com',
+            password='Password123!'
+        )
+        self.client.force_login(self.user)
+        self.gov = Area.objects.create(name='محافظة الجيزة', code='GIZ-01', area_type='governorate')
+        self.brick = Area.objects.create(name='الدقي', code='DOK-01', parent=self.gov, area_type='subarea')
+
+    def test_geocoding_search_api_requires_auth(self):
+        anon_client = Client()
+        res = anon_client.get(reverse('geocoding_search_api') + '?q=الدقي')
+        self.assertEqual(res.status_code, 302)
+
+    def test_geocoding_search_api_local_fallback(self):
+        from unittest.mock import patch
+        with patch('urllib.request.urlopen', side_effect=Exception("Network down")):
+            res = self.client.get(reverse('geocoding_search_api') + '?q=الدقي')
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertIn('results', data)
+            self.assertTrue(len(data['results']) > 0)
+            self.assertTrue(any('الدقي' in r['display_name'] for r in data['results']))
+            first_result = data['results'][0]
+            self.assertEqual(first_result['address']['suburb'], 'الدقي')
+            self.assertEqual(first_result['address']['state'], 'محافظة الجيزة')
+
+
 class PaginationUtilsTests(TestCase):
     """Verifies queryset pagination, page sizes, bounds checking, and fallbacks."""
 

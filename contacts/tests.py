@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from contacts.models import (
-    Contact, ContactAddress, ContactComment, ContactTodo, ContactActivity
+    Contact, ContactAddress, ContactComment, ContactTodo, ContactActivity, ContactCommunicationMethod
 )
 from master_data.models import Area, ContactFieldSetting
 from accounts.models import Role
@@ -46,8 +46,8 @@ class ContactModelAndLifecycleTests(TestCase):
         self.assertIn(contact.name, contact.display_tag)
         self.assertEqual(contact.status_label, 'Customer')
 
-    def test_default_contact_classification_is_lead(self):
-        """Newly created contact via contact_create defaults to status='lead'."""
+    def test_default_contact_classification_is_customer(self):
+        """Newly created contact via contact_create defaults to status='customer' and is_customer=True."""
         client = Client()
         client.force_login(self.user)
         res = client.post(reverse('contact_create'), {
@@ -60,7 +60,7 @@ class ContactModelAndLifecycleTests(TestCase):
         self.assertEqual(res.status_code, 302)
         new_contact = Contact.objects.filter(name='صيدلية المستقبل الجديدة').first()
         self.assertIsNotNone(new_contact)
-        self.assertEqual(new_contact.status, 'lead')
+        self.assertEqual(new_contact.status, 'customer')
         self.assertTrue(new_contact.is_customer)
 
     def test_contact_coordinates_saved_and_persisted_on_edit(self):
@@ -351,21 +351,14 @@ class ContactUdfTodosTimelineTests(TestCase):
             created_by=self.admin_user
         )
 
-    def test_contact_custom_fields_in_detail_view(self):
+    def test_contact_custom_fields_removed_from_detail_view(self):
+        """Req B: formatted_custom_fields is removed from contact detail overview context."""
         res = self.client.get(reverse('contact_detail', kwargs={'pk': self.contact.id}))
         self.assertEqual(res.status_code, 200)
-        self.assertIn('formatted_custom_fields', res.context)
+        self.assertNotIn('formatted_custom_fields', res.context)
 
-        fields = res.context['formatted_custom_fields']
-        lic_field = next(f for f in fields if f['setting'].field_key == 'license_number')
-        self.assertEqual(lic_field['value'], 'LIC-998877')
-        self.assertEqual(lic_field['display_value'], 'LIC-998877')
-
-        vip_field = next(f for f in fields if f['setting'].field_key == 'is_vip_customer')
-        self.assertEqual(vip_field['value'], True)
-        self.assertEqual(vip_field['display_value'], 'نعم')
-
-    def test_contact_create_with_custom_fields(self):
+    def test_contact_create_ignores_custom_fields(self):
+        """Req B: contact_create no longer binds custom fields."""
         post_data = {
             'name': 'مركز الأمل الطبي',
             'contact_type': 'organization',
@@ -374,21 +367,16 @@ class ContactUdfTodosTimelineTests(TestCase):
             'mobile_number': '01011223344',
             'area_id': self.cairo.id,
             'custom_license_number': 'LIC-112233',
-            'custom_is_vip_customer': 'on',
-            'custom_annual_capacity': '1250',
-            'custom_payment_terms_choice': 'أجل 30 يوم',
         }
         res = self.client.post(reverse('contact_create'), data=post_data)
         self.assertEqual(res.status_code, 302)
 
         new_contact = Contact.objects.filter(name='مركز الأمل الطبي').first()
         self.assertIsNotNone(new_contact)
-        self.assertEqual(new_contact.custom_values.get('license_number'), 'LIC-112233')
-        self.assertEqual(new_contact.custom_values.get('is_vip_customer'), True)
-        self.assertEqual(new_contact.custom_values.get('annual_capacity'), 1250)
-        self.assertEqual(new_contact.custom_values.get('payment_terms_choice'), 'أجل 30 يوم')
+        self.assertEqual(new_contact.custom_values, {})
 
-    def test_contact_edit_with_custom_fields(self):
+    def test_contact_edit_ignores_custom_fields(self):
+        """Req B: contact_edit no longer processes custom field inputs."""
         post_data = {
             'name': 'صيدلية الشفاء التجريبية المحدثة',
             'contact_type': 'organization',
@@ -396,17 +384,13 @@ class ContactUdfTodosTimelineTests(TestCase):
             'mobile_country_code': '+20',
             'mobile_number': '01099887766',
             'custom_license_number': 'LIC-UPDATED-001',
-            'custom_is_vip_customer': 'on',
-            'custom_annual_capacity': '800',
-            'custom_payment_terms_choice': 'أجل 60 يوم',
         }
         res = self.client.post(reverse('contact_edit', kwargs={'pk': self.contact.id}), data=post_data)
         self.assertEqual(res.status_code, 302)
 
         self.contact.refresh_from_db()
         self.assertEqual(self.contact.name, 'صيدلية الشفاء التجريبية المحدثة')
-        self.assertEqual(self.contact.custom_values.get('license_number'), 'LIC-UPDATED-001')
-        self.assertEqual(self.contact.custom_values.get('annual_capacity'), 800)
+        self.assertNotEqual(self.contact.custom_values.get('license_number'), 'LIC-UPDATED-001')
 
     def test_contact_todos_no_blank_page_and_ajax_support(self):
         res = self.client.post(
@@ -532,3 +516,143 @@ class ContactAPITests(TestCase):
         self.assertIn('subareas', rep_data)
         rep_subarea_names = [s['name'] for s in rep_data['subareas']]
         self.assertIn('حي الدقي', rep_subarea_names)
+
+
+class ContactCommunicationMethodAndStatsTests(TestCase):
+    """Verifies communication methods CRUD, primary sync, and active filter stats."""
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.user = User.objects.create_superuser(
+            username='admin_comm_tests',
+            email='admin_comm@wea.com',
+            password='TestPassword123!',
+            role=self.superadmin_role
+        )
+        self.client.force_login(self.user)
+
+        self.gov = Area.objects.create(code='CAI-TEST', name='القاهرة', area_type='governorate')
+        self.brick = Area.objects.create(code='NASR-TEST', name='مدينة نصر', parent=self.gov, area_type='subarea')
+
+        self.contact = Contact.objects.create(
+            name='مستشفى السلام التخصصي',
+            contact_type='organization',
+            is_customer=True,
+            status='customer',
+            mobile='01012345678',
+            area=self.gov,
+            brick=self.brick,
+            created_by=self.user
+        )
+
+    def test_add_communication_method_ajax_and_form(self):
+        # 1. AJAX POST
+        res_ajax = self.client.post(
+            reverse('contact_add_communication_method', kwargs={'pk': self.contact.id}),
+            {
+                'method_type': 'whatsapp',
+                'value': '01099998888',
+                'label': 'واتساب المبيعات',
+                'is_primary': 'on'
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_ajax.status_code, 200)
+        data = res_ajax.json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(self.contact.communication_methods.filter(method_type='whatsapp').count(), 1)
+
+        # 2. Duplicate prevention
+        res_dup = self.client.post(
+            reverse('contact_add_communication_method', kwargs={'pk': self.contact.id}),
+            {
+                'method_type': 'whatsapp',
+                'value': '01099998888',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_dup.status_code, 400)
+
+    def test_edit_communication_method_and_primary_sync(self):
+        comm = ContactCommunicationMethod.objects.create(
+            contact=self.contact,
+            method_type='mobile',
+            value='01155554444',
+            label='رقم بديل',
+            is_primary=False
+        )
+
+        res = self.client.post(
+            reverse('contact_edit_communication_method', kwargs={'pk': self.contact.id, 'method_id': comm.id}),
+            {
+                'method_type': 'mobile',
+                'value': '01155554444',
+                'label': 'الموبايل الأساسي',
+                'is_primary': 'on'
+            }
+        )
+        self.assertEqual(res.status_code, 302)
+        comm.refresh_from_db()
+        self.assertTrue(comm.is_primary)
+        self.contact.refresh_from_db()
+        self.assertEqual(self.contact.mobile, '01155554444')
+
+    def test_delete_communication_method(self):
+        comm = ContactCommunicationMethod.objects.create(
+            contact=self.contact,
+            method_type='email',
+            value='info@alsalam.com',
+            is_primary=False
+        )
+        self.assertEqual(self.contact.communication_methods.filter(id=comm.id).count(), 1)
+
+        res = self.client.post(
+            reverse('contact_delete_communication_method', kwargs={'pk': self.contact.id, 'method_id': comm.id})
+        )
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(self.contact.communication_methods.filter(id=comm.id).count(), 0)
+
+    def test_contacts_list_stats_respects_active_filters(self):
+        # Create second contact with customer status
+        c2 = Contact.objects.create(
+            name='صيدلية الوفاء الحديثة',
+            contact_type='organization',
+            is_customer=True,
+            status='customer',
+            area=self.gov,
+            created_by=self.user
+        )
+        # Create third contact with inactive status
+        c3 = Contact.objects.create(
+            name='صيدلية مغلقة',
+            contact_type='person',
+            is_customer=True,
+            status='inactive',
+            area=self.gov,
+            created_by=self.user
+        )
+
+        # 1. Without filter: total=2 active contacts (inactive excluded by default)
+        res_all = self.client.get(reverse('contacts_list'))
+        self.assertEqual(res_all.status_code, 200)
+        stats_all = res_all.context['stats']
+        self.assertEqual(stats_all['total'], 2)
+        self.assertEqual(stats_all['customers'], 2)
+
+        # 2. Filter by search="السلام": total=1
+        res_filtered = self.client.get(reverse('contacts_list') + '?search=السلام')
+        self.assertEqual(res_filtered.status_code, 200)
+        stats_filt = res_filtered.context['stats']
+        self.assertEqual(stats_filt['total'], 1)
+        self.assertEqual(stats_filt['customers'], 1)
+
+        # 3. Filter by status="inactive": total=1 (c3 only), customers=1 (c3 is an inactive customer)
+        res_inactive = self.client.get(reverse('contacts_list') + '?status=inactive')
+        self.assertEqual(res_inactive.status_code, 200)
+        stats_inact = res_inactive.context['stats']
+        self.assertEqual(stats_inact['total'], 1)
+        self.assertEqual(stats_inact['customers'], 1)

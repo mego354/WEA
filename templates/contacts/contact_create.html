@@ -575,78 +575,6 @@
         </div>
 
         <!-- ========================================== -->
-        <!-- SECTION 4: الحقول المخصصة (Custom Fields)  -->
-        <!-- ========================================== -->
-        {% if custom_field_settings %}
-        <div class="card-container mb-8">
-            <div class="form-section-title">
-                <span class="material-symbols-outlined text-brand-500 text-xl">extension</span>
-                <span>الحقول المخصصة</span>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {% for setting in custom_field_settings %}
-                <div class="{% if setting.field_type == 'textarea' %}md:col-span-2{% endif %}">
-                    <label class="custom-input-label" for="custom_{{ setting.field_key }}">
-                        {{ setting.display_name }}
-                        {% if setting.is_required %}<span class="required-star">*</span>{% endif %}
-                    </label>
-
-                    {% if setting.field_type == 'textarea' %}
-                    <textarea name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}" rows="3"
-                              class="mat-like-input h-auto py-2.5 resize-none"
-                              placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}></textarea>
-
-                    {% elif setting.field_type == 'number' %}
-                    <input type="number" step="any" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
-                           class="mat-like-input font-mono" placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}>
-
-                    {% elif setting.field_type == 'date' %}
-                    <input type="date" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
-                           class="mat-like-input" {% if setting.is_required %}required{% endif %}>
-
-                    {% elif setting.field_type == 'boolean' %}
-                    <div class="flex items-center gap-2 h-[48px]">
-                        <input type="checkbox" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
-                               class="w-5 h-5 rounded text-brand-500 border-slate-300">
-                        <span class="text-xs text-slate-600 font-semibold">{{ setting.help_text|default:"نعم / مفعل" }}</span>
-                    </div>
-
-                    {% elif setting.field_type == 'single_choice' %}
-                    <select name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}" class="mat-like-select" {% if setting.is_required %}required{% endif %}>
-                        <option value="">اختر...</option>
-                        {% for choice in setting.choices %}
-                        <option value="{{ choice }}">{{ choice }}</option>
-                        {% endfor %}
-                    </select>
-
-                    {% elif setting.field_type == 'multi_choice' %}
-                    <div class="p-3 border border-slate-200 rounded-lg bg-slate-50/50 flex flex-wrap gap-4">
-                        {% for choice in setting.choices %}
-                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-700">
-                            <input type="checkbox" name="custom_{{ setting.field_key }}[]" value="{{ choice }}" class="rounded text-brand-500">
-                            <span>{{ choice }}</span>
-                        </label>
-                        {% empty %}
-                        <span class="text-xs text-slate-400">لا توجد خيارات محددة</span>
-                        {% endfor %}
-                    </div>
-
-                    {% else %}
-                    <input type="text" name="custom_{{ setting.field_key }}" id="custom_{{ setting.field_key }}"
-                           class="mat-like-input" placeholder="{{ setting.help_text }}" {% if setting.is_required %}required{% endif %}>
-                    {% endif %}
-
-                    {% if setting.help_text and setting.field_type != 'boolean' and setting.field_type != 'textarea' %}
-                    <span class="text-[11px] text-slate-400 mt-1 block">{{ setting.help_text }}</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- ========================================== -->
         <!-- FOOTER ACTIONS: حفظ & الغاء                  -->
         <!-- ========================================== -->
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
@@ -998,6 +926,78 @@
                 if (firstError) {
                     firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     firstError.focus();
+                }
+            }
+        });
+
+        // --- 5. GPS / Location Search Auto-fill ---
+        window.addEventListener('erp:location-selected', function (e) {
+            const detail = e.detail;
+            if (!detail) return;
+
+            const firstCard = document.querySelector('.address-card');
+            if (!firstCard) return;
+
+            const areaSelect = firstCard.querySelector('.area-select') || firstCard.querySelector('select[name="address_area[]"]');
+            const subareaSelect = firstCard.querySelector('.subarea-select') || firstCard.querySelector('select[name="address_sub_area[]"]');
+            const streetInput = firstCard.querySelector('input[name="address_street[]"]') || document.getElementById('primary_address_street');
+
+            if (streetInput && (!streetInput.value.trim() || streetInput.value === detail.display_name)) {
+                const parts = [];
+                if (detail.road) parts.push(detail.road);
+                if (detail.suburb && detail.suburb !== detail.road) parts.push(detail.suburb);
+                if (parts.length > 0) {
+                    streetInput.value = parts.join('، ');
+                }
+            }
+
+            if (areaSelect) {
+                const state = (detail.state || detail.city || '').toLowerCase();
+                const disp = (detail.display_name || '').toLowerCase();
+                let matchedAreaId = null;
+
+                for (let i = 0; i < areaSelect.options.length; i++) {
+                    const opt = areaSelect.options[i];
+                    const optText = opt.textContent.trim().toLowerCase();
+                    if (!opt.value) continue;
+                    if (state.includes(optText) || disp.includes(optText) || optText.includes(state)) {
+                        matchedAreaId = opt.value;
+                        areaSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+
+                if (matchedAreaId && subareaSelect) {
+                    subareaSelect.disabled = true;
+                    subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
+                    fetch(`/contacts/api/subareas/?area_id=${matchedAreaId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.subareas && data.subareas.length > 0) {
+                                subareaSelect.innerHTML = '<option value="" disabled selected>اختر المنطقة الفرعية...</option>' +
+                                    data.subareas.map(sub => `<option value="${sub.id}">${sub.name}</option>`).join('');
+                                subareaSelect.disabled = false;
+
+                                const subSearch = (detail.suburb || detail.city || detail.road || '').toLowerCase();
+                                if (subSearch) {
+                                    for (let j = 0; j < subareaSelect.options.length; j++) {
+                                        const subOpt = subareaSelect.options[j];
+                                        const subText = subOpt.textContent.trim().toLowerCase();
+                                        if (subSearch.includes(subText) || disp.includes(subText) || subText.includes(subSearch)) {
+                                            subareaSelect.selectedIndex = j;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else {
+                                subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                                subareaSelect.disabled = false;
+                            }
+                        })
+                        .catch(() => {
+                            subareaSelect.innerHTML = '<option value="المركز الرئيسي" selected>المركز الرئيسي</option>';
+                            subareaSelect.disabled = false;
+                        });
                 }
             }
         });

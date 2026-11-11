@@ -5560,3 +5560,78 @@ class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
             ApprovalAuditLog.objects.filter(visit=visit, action='edited_by_manager', actor=self.manager).exists()
         )
 
+
+class PlannedVisitsMultiAreaFilteringTests(TestCase):
+    """Verifies planned visits bulk planning drawer multi-area and multi-brick filtering."""
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.admin = User.objects.create_superuser(
+            username='admin_multi_area',
+            email='admin_multi@wea.com',
+            password='TestPassword123!',
+            role=self.superadmin_role
+        )
+        self.client.force_login(self.admin)
+
+        self.cairo = Area.objects.create(name='محافظة القاهرة', code='GOV-CAI-M', area_type='governorate')
+        self.giza = Area.objects.create(name='محافظة الجيزة', code='GOV-GIZ-M', area_type='governorate')
+        self.alex = Area.objects.create(name='محافظة الإسكندرية', code='GOV-ALX-M', area_type='governorate')
+
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='BRK-NASR-M', parent=self.cairo, area_type='subarea')
+        self.dokki = Area.objects.create(name='الدقي', code='BRK-DOK-M', parent=self.giza, area_type='subarea')
+        self.smouha = Area.objects.create(name='سموحة', code='BRK-SMO-M', parent=self.alex, area_type='subarea')
+
+        self.c1 = Contact.objects.create(
+            name='صيدلية مدينة نصر الحديثة',
+            is_customer=True,
+            status='customer',
+            area=self.cairo,
+            brick=self.nasr_city,
+            created_by=self.admin
+        )
+        self.c2 = Contact.objects.create(
+            name='صيدلية الدقي المركزية',
+            is_customer=True,
+            status='customer',
+            area=self.giza,
+            brick=self.dokki,
+            created_by=self.admin
+        )
+        self.c3 = Contact.objects.create(
+            name='صيدلية سموحة الإسكندرية',
+            is_customer=True,
+            status='customer',
+            area=self.alex,
+            brick=self.smouha,
+            created_by=self.admin
+        )
+
+    def test_multi_main_area_drawer_filter(self):
+        # Query with both Cairo and Giza (excluding Alex)
+        url = reverse('planned_visits_list') + f'?action=load_contacts&main_area={self.cairo.id}&main_area={self.giza.id}'
+        res = self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data.get('success'))
+        returned_names = [c['name'] for c in data['contacts']]
+        self.assertIn('صيدلية مدينة نصر الحديثة', returned_names)
+        self.assertIn('صيدلية الدقي المركزية', returned_names)
+        self.assertNotIn('صيدلية سموحة الإسكندرية', returned_names)
+
+    def test_multi_brick_drawer_filter(self):
+        # Query with Dokki and Smouha bricks
+        url = reverse('planned_visits_list') + f'?action=load_contacts&area={self.dokki.id}&area={self.smouha.id}'
+        res = self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data.get('success'))
+        returned_names = [c['name'] for c in data['contacts']]
+        self.assertIn('صيدلية الدقي المركزية', returned_names)
+        self.assertIn('صيدلية سموحة الإسكندرية', returned_names)
+        self.assertNotIn('صيدلية مدينة نصر الحديثة', returned_names)
+

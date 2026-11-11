@@ -231,6 +231,20 @@
                 if (addressEl && !addressEl.value.trim()) {
                     addressEl.value = data.display_name.split(",").slice(0, 2).join(", ");
                 }
+                const addrObj = data.address || {};
+                window.dispatchEvent(new CustomEvent('erp:location-selected', {
+                    detail: {
+                        pickerId: pickerId,
+                        lat: Number(lat),
+                        lng: Number(lng),
+                        display_name: data.display_name || '',
+                        road: addrObj.road || addrObj.street || '',
+                        suburb: addrObj.suburb || addrObj.neighbourhood || addrObj.city_district || addrObj.quarter || '',
+                        city: addrObj.city || addrObj.town || addrObj.village || '',
+                        state: addrObj.state || addrObj.governorate || '',
+                        raw: data
+                    }
+                }));
             }
         })
         .catch(error => console.warn("Reverse geocoding unavailable:", error))
@@ -360,6 +374,20 @@
             if (addressEl && !addressEl.value.trim()) {
                 addressEl.value = String(item.display_name || "").split(",").slice(0, 2).join(", ");
             }
+            const addrObj = item.address || {};
+            window.dispatchEvent(new CustomEvent('erp:location-selected', {
+                detail: {
+                    pickerId: pickerId,
+                    lat: lat,
+                    lng: lng,
+                    display_name: item.display_name || '',
+                    road: addrObj.road || addrObj.street || '',
+                    suburb: addrObj.suburb || addrObj.neighbourhood || addrObj.city_district || addrObj.quarter || '',
+                    city: addrObj.city || addrObj.town || addrObj.village || '',
+                    state: addrObj.state || addrObj.governorate || '',
+                    raw: item
+                }
+            }));
         });
         searchResults.appendChild(row);
     }

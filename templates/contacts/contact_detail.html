@@ -394,23 +394,7 @@
                 </div>
             </div>
 
-            {% if formatted_custom_fields %}
-            <!-- الحقول المخصصة (Custom Fields) -->
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="erp-accordion-header" onclick="toggleAccordion('sec-custom-fields')">
-                    <span>الحقول المخصصة</span>
-                    <span id="icon-sec-custom-fields" class="material-symbols-outlined text-slate-400">expand_less</span>
-                </div>
-                <div id="sec-custom-fields" class="divide-y divide-slate-50">
-                    {% for f in formatted_custom_fields %}
-                    <div class="erp-detail-row">
-                        <span class="erp-detail-label">{{ f.setting.display_name }}</span>
-                        <span class="erp-detail-val {% if f.setting.field_type == 'boolean' and f.value %}text-emerald-600 font-bold{% endif %}">{{ f.display_value }}</span>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
+
 
             <!-- 3. حساب العميل / حساب المورد -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -498,13 +482,6 @@
                     {% empty %}
                     <p class="text-xs text-slate-400 text-center py-2">لا توجد عناوين مسجلة</p>
                     {% endfor %}
-
-                    <div class="pt-1 text-center">
-                        <button type="button" onclick="openAddAddressModal()" class="inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
-                            <span class="material-symbols-outlined text-sm">add</span>
-                            <span>اضف عنوان جديد</span>
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -541,12 +518,81 @@
 
             <!-- 6. طرق الاتصال -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="erp-accordion-header" onclick="toggleAccordion('sec-comms')">
-                    <span>طرق الاتصال</span>
+                <div class="erp-accordion-header flex items-center justify-between" onclick="toggleAccordion('sec-comms')">
+                    <div class="flex items-center gap-1.5">
+                        <span>طرق الاتصال</span>
+                        {% if communication_methods %}
+                        <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">{{ communication_methods|length }}</span>
+                        {% endif %}
+                    </div>
                     <span id="icon-sec-comms" class="material-symbols-outlined text-slate-400">expand_less</span>
                 </div>
-                <div id="sec-comms" class="p-4 text-center text-xs text-slate-400">
-                    لا يوجد طرق اتصال
+                <div id="sec-comms" class="p-3 space-y-2">
+                    {% for comm in communication_methods %}
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="w-7 h-7 rounded-lg bg-teal-50 text-[#27bebe] flex items-center justify-center shrink-0">
+                                {% if comm.method_type == 'mobile' %}
+                                <span class="material-symbols-outlined text-base">smartphone</span>
+                                {% elif comm.method_type == 'phone' %}
+                                <span class="material-symbols-outlined text-base">call</span>
+                                {% elif comm.method_type == 'email' %}
+                                <span class="material-symbols-outlined text-base">mail</span>
+                                {% elif comm.method_type == 'whatsapp' %}
+                                <span class="material-symbols-outlined text-base">chat</span>
+                                {% elif comm.method_type == 'website' %}
+                                <span class="material-symbols-outlined text-base">language</span>
+                                {% else %}
+                                <span class="material-symbols-outlined text-base">contact_support</span>
+                                {% endif %}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-bold text-slate-800">{{ comm.get_method_type_display }}</span>
+                                    {% if comm.label %}
+                                    <span class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">({{ comm.label }})</span>
+                                    {% endif %}
+                                    {% if comm.is_primary %}
+                                    <span class="inline-flex items-center gap-0.5 text-[9px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                        <span class="material-symbols-outlined text-[10px]">check</span>
+                                        <span>رئيسي</span>
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-xs font-medium text-slate-600 truncate mt-0.5 dir-ltr text-right">
+                                    {% if comm.method_type == 'email' %}
+                                    <a href="mailto:{{ comm.value }}" class="text-brand-600 hover:underline">{{ comm.value }}</a>
+                                    {% elif comm.method_type == 'mobile' or comm.method_type == 'phone' %}
+                                    <a href="tel:{{ comm.value }}" class="text-brand-600 hover:underline">{{ comm.value }}</a>
+                                    {% elif comm.method_type == 'whatsapp' %}
+                                    <a href="https://wa.me/{{ comm.value }}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">{{ comm.value }}</a>
+                                    {% elif comm.method_type == 'website' %}
+                                    <a href="{{ comm.value }}" target="_blank" rel="noopener" class="text-brand-600 hover:underline">{{ comm.value }}</a>
+                                    {% else %}
+                                    <span>{{ comm.value }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0 mr-2">
+                            <button type="button" onclick="openEditCommModal({{ comm.id }}, '{{ comm.method_type }}', '{{ comm.value|escapejs }}', '{{ comm.label|default:''|escapejs }}', {{ comm.is_primary|yesno:'true,false' }})" class="p-1 text-slate-400 hover:text-brand-600 rounded" title="تعديل">
+                                <span class="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_communication_method' contact.id comm.id %}', title: 'حذف وسيلة الاتصال', itemName: '{{ comm.value|escapejs }}', message: 'هل أنت متأكد من حذف وسيلة الاتصال: <span class=\'font-bold text-slate-800\'>{{ comm.get_method_type_display }} ({{ comm.value|escapejs }})</span>؟' })" class="p-1 text-slate-400 hover:text-red-500 rounded" title="حذف">
+                                <span class="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-slate-400 text-center py-2">لا يوجد طرق اتصال مسجلة</p>
+                    {% endfor %}
+
+                    <div class="pt-2 text-center border-t border-slate-100">
+                        <button type="button" onclick="openAddCommModal()" class="inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
+                            <span class="material-symbols-outlined text-sm">add</span>
+                            <span>إضافة وسيلة اتصال</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -978,47 +1024,43 @@
 
 </div>
 
-<!-- MODAL: ADD ADDRESS -->
-<div id="addAddressModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+<!-- MODAL: ADD / EDIT COMMUNICATION METHOD -->
+<div id="commModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-            <h3 class="font-bold text-slate-800 text-base">إضافة عنوان جديد</h3>
-            <button type="button" onclick="closeAddAddressModal()" class="text-slate-400 hover:text-slate-600">
+            <h3 id="commModalTitle" class="font-bold text-slate-800 text-base">إضافة وسيلة اتصال</h3>
+            <button type="button" onclick="closeCommModal()" class="text-slate-400 hover:text-slate-600">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
-        <form method="POST" action="{% url 'contact_add_address' contact.id %}" class="space-y-4">
+        <form id="commModalForm" method="POST" action="{% url 'contact_add_communication_method' contact.id %}" class="space-y-4">
             {% csrf_token %}
             <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">اسم العنوان (مثل: المقر الرئيسي)</label>
-                <input type="text" name="title" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">المنطقة الرئيسية</label>
-                    <select name="area_id" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
-                        <option value="">اختر...</option>
-                        {% for gov in governorates %}
-                        <option value="{{ gov.id }}">{{ gov.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">المنطقة الفرعية</label>
-                    <input type="text" name="sub_area" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
-                </div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">نوع وسيلة الاتصال <span class="text-red-500">*</span></label>
+                <select name="method_type" id="modal_comm_type" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500">
+                    <option value="mobile">جوال</option>
+                    <option value="phone">هاتف أرضي</option>
+                    <option value="email">بريد إلكتروني</option>
+                    <option value="whatsapp">واتساب</option>
+                    <option value="website">موقع إلكتروني</option>
+                    <option value="other">أخرى</option>
+                </select>
             </div>
             <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">العنوان التفصيلي</label>
-                <textarea name="street_address" rows="2" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg"></textarea>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">القيمة (الرقم / البريد / الرابط) <span class="text-red-500">*</span></label>
+                <input type="text" name="value" id="modal_comm_value" required class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500" placeholder="مثال: 01012345678 أو user@example.com">
             </div>
-            <div class="flex items-center gap-2">
-                <input type="checkbox" name="is_main" id="modal_is_main" class="rounded text-brand-500">
-                <label for="modal_is_main" class="text-xs text-slate-700 font-medium">تعيين كعنوان رئيسي</label>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">تسمية توضيحية (اختياري)</label>
+                <input type="text" name="label" id="modal_comm_label" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-brand-500" placeholder="مثال: هاتف الإدارة، موبايل العمل">
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+                <input type="checkbox" name="is_primary" id="modal_comm_is_primary" class="rounded text-brand-500 focus:ring-brand-500">
+                <label for="modal_comm_is_primary" class="text-xs text-slate-700 font-medium">تعيين كوسيلة اتصال رئيسية لهذا النوع</label>
             </div>
             <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-                <button type="button" onclick="closeAddAddressModal()" class="erp-btn-outline">إلغاء</button>
-                <button type="submit" class="erp-btn-teal">حفظ العنوان</button>
+                <button type="button" onclick="closeCommModal()" class="erp-btn-outline">إلغاء</button>
+                <button type="submit" id="commModalSubmitBtn" class="erp-btn-teal">حفظ وسيلة الاتصال</button>
             </div>
         </form>
     </div>
@@ -1148,11 +1190,34 @@
         document.getElementById('headerActionsMenu').classList.toggle('hidden');
     }
 
-    function openAddAddressModal() {
-        document.getElementById('addAddressModal').classList.remove('hidden');
+    const addCommUrl = "{% url 'contact_add_communication_method' contact.id %}";
+
+    function openAddCommModal() {
+        document.getElementById('commModalTitle').innerText = 'إضافة وسيلة اتصال';
+        document.getElementById('commModalSubmitBtn').innerText = 'حفظ وسيلة الاتصال';
+        const form = document.getElementById('commModalForm');
+        form.action = addCommUrl;
+        document.getElementById('modal_comm_type').value = 'mobile';
+        document.getElementById('modal_comm_value').value = '';
+        document.getElementById('modal_comm_label').value = '';
+        document.getElementById('modal_comm_is_primary').checked = false;
+        document.getElementById('commModal').classList.remove('hidden');
     }
-    function closeAddAddressModal() {
-        document.getElementById('addAddressModal').classList.add('hidden');
+
+    function openEditCommModal(id, type, value, label, isPrimary) {
+        document.getElementById('commModalTitle').innerText = 'تعديل وسيلة الاتصال';
+        document.getElementById('commModalSubmitBtn').innerText = 'تحديث التعديلات';
+        const form = document.getElementById('commModalForm');
+        form.action = `/contacts/{{ contact.id }}/communication-methods/${id}/edit/`;
+        document.getElementById('modal_comm_type').value = type;
+        document.getElementById('modal_comm_value').value = value;
+        document.getElementById('modal_comm_label').value = label || '';
+        document.getElementById('modal_comm_is_primary').checked = !!isPrimary;
+        document.getElementById('commModal').classList.remove('hidden');
+    }
+
+    function closeCommModal() {
+        document.getElementById('commModal').classList.add('hidden');
     }
 
     function openDeleteModal() {
@@ -1404,8 +1469,8 @@
         if (e.target.id === 'contactMapModal') {
             closeContactMapModal();
         }
-        if (e.target.id === 'addAddressModal') {
-            closeAddAddressModal();
+        if (e.target.id === 'commModal') {
+            closeCommModal();
         }
     });
 
@@ -1414,7 +1479,7 @@
             closeTimelineModal();
             closeDeleteModal();
             closeContactMapModal();
-            closeAddAddressModal();
+            closeCommModal();
         }
     });
 
