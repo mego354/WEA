@@ -5694,7 +5694,10 @@ class PlannedVisitsSearchableMultiSelectTests(TestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertEqual(data.get('results'), [])
+        ids = [r['id'] for r in data.get('results', [])]
+        self.assertIn(self.cairo.id, ids)
+        self.assertIn(self.giza.id, ids)
+        self.assertIn(self.alex.id, ids)
 
     def test_search_areas_api_search_and_scoping(self):
         # SuperAdmin can search any area
@@ -5729,18 +5732,31 @@ class PlannedVisitsSearchableMultiSelectTests(TestCase):
 
     def test_search_bricks_api_empty_query_or_no_main_area(self):
         self.client.force_login(self.admin)
-        # Empty query
+        # Empty query with main_area immediately displays all child bricks of that main area
         url = reverse('planned_visits_search_bricks_api') + f'?main_area={self.cairo.id}'
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json().get('results'), [])
+        ids = [r['id'] for r in res.json().get('results', [])]
+        self.assertIn(self.nasr_city.id, ids)
+        self.assertIn(self.maadi.id, ids)
+        self.assertNotIn(self.dokki.id, ids)
 
-        # No main area provided
-        url_no_area = reverse('planned_visits_search_bricks_api') + '?q=نصر'
+        # No main area provided -> returns all authorized bricks (still respecting user scope)
+        url_no_area = reverse('planned_visits_search_bricks_api')
         res_no_area = self.client.get(url_no_area)
         self.assertEqual(res_no_area.status_code, 200)
-        self.assertEqual(res_no_area.json().get('results'), [])
-        self.assertIn('يرجى اختيار منطقه', res_no_area.json().get('message', '').replace('ة', 'ه'))
+        no_area_ids = [r['id'] for r in res_no_area.json().get('results', [])]
+        self.assertIn(self.nasr_city.id, no_area_ids)
+        self.assertIn(self.dokki.id, no_area_ids)
+
+        # Cairo Manager with no main_area selected gets Cairo bricks ONLY (never Giza)
+        self.client.force_login(self.cairo_manager)
+        res_mgr_no_area = self.client.get(url_no_area)
+        self.assertEqual(res_mgr_no_area.status_code, 200)
+        mgr_ids = [r['id'] for r in res_mgr_no_area.json().get('results', [])]
+        self.assertIn(self.nasr_city.id, mgr_ids)
+        self.assertIn(self.maadi.id, mgr_ids)
+        self.assertNotIn(self.dokki.id, mgr_ids)
 
     def test_search_bricks_api_strictly_filters_by_selected_main_area(self):
         self.client.force_login(self.admin)
@@ -5799,3 +5815,265 @@ class PlannedVisitsSearchableMultiSelectTests(TestCase):
         mismatch_brick_ids = [c['id'] for c in res_mismatch.context.get('selected_bricks_chips', [])]
         # Dokki belongs to Giza, not Cairo, so it must be stripped
         self.assertNotIn(self.dokki.id, mismatch_brick_ids)
+
+
+class ComprehensiveRequirementsAtoJTests(TestCase):
+    """End-to-end verification for Requirements A, C, D, E, F, G, H, I, J, L in activities."""
+
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+        self.client = Client()
+        self.rep_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_REP,
+            defaults={'display_name': 'مندوب', 'is_sales_team': True, 'is_rep': True}
+        )
+        self.manager_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_MANAGER,
+            defaults={'display_name': 'مدير', 'is_manager_role': True, 'is_area_manager': True}
+        )
+        self.cairo = Area.objects.create(name='القاهرة الشامل', code='GOV-CAI-REQ', area_type='governorate')
+        self.giza = Area.objects.create(name='الجيزة الشامل', code='GOV-GIZ-REQ', area_type='governorate')
+        self.nasr = Area.objects.create(name='مدينة نصر', code='BRK-NAS-REQ', parent=self.cairo, area_type='subarea')
+        self.maadi = Area.objects.create(name='المعادي', code='BRK-MAA-REQ', parent=self.cairo, area_type='subarea')
+        self.dokki = Area.objects.create(name='الدقي', code='BRK-DOK-REQ', parent=self.giza, area_type='subarea')
+
+        self.rep_nasr = User.objects.create_user(
+            username='rep_nasr_req', email='rep_nasr_req@wea.com', password='TestPassword123!', role=self.rep_role
+        )
+        self.rep_nasr.assigned_areas.add(self.nasr)
+
+        # Grant rep erroneous visits/approve bit to prove Requirement G blocks unauthorized auto-approval
+        approve_perm = Permission.objects.filter(codename='activities:visits/approve').first()
+        if approve_perm:
+            self.rep_nasr.user_permissions.add(approve_perm)
+            self.rep_nasr.has_custom_permissions = False
+
+        self.mgr_cairo = User.objects.create_user(
+            username='mgr_cairo_req', email='mgr_cairo_req@wea.com', password='TestPassword123!', role=self.manager_role
+        )
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+
+        self.mgr_giza = User.objects.create_user(
+            username='mgr_giza_req', email='mgr_giza_req@wea.com', password='TestPassword123!', role=self.manager_role
+        )
+        self.mgr_giza.assigned_areas.add(self.giza)
+
+        self.loc_settings = LocationSettings.get_settings()
+        self.loc_settings.require_manager_approval_for_visits = True
+        self.loc_settings.verify_visits = False
+        self.loc_settings.verify_unplanned_visit_distance = False
+        self.loc_settings.save()
+
+        self.template = VisitTemplate.objects.create(name='General Visit', display_name_ar='زيارة عامة', active=True)
+        self.q_note = VisitTemplateQuestion.objects.create(
+            template=self.template, text_ar='خطة العمل', question_type='single_choice',
+            options=[{'text_ar': 'نعم', 'value': 'نعم'}, {'text_ar': 'لا', 'value': 'لا'}], is_required=False
+        )
+
+        # Create 14 contacts in Nasr City (>10 initial page) + 1 in Maadi + 1 in Dokki
+        self.nasr_contacts = [
+            Contact.objects.create(
+                name=f'عميل نصر {i:02d}', is_customer=True, status='customer', account_type='Pharmacy',
+                area=self.cairo, brick=self.nasr, created_by=self.mgr_cairo
+            )
+            for i in range(1, 15)
+        ]
+        self.maadi_contact = Contact.objects.create(
+            name='عميل المعادي', is_customer=True, status='customer', account_type='Pharmacy',
+            area=self.cairo, brick=self.maadi, created_by=self.mgr_cairo
+        )
+        self.dokki_contact = Contact.objects.create(
+            name='عميل الدقي', is_customer=True, status='customer', account_type='Pharmacy',
+            area=self.giza, brick=self.dokki, created_by=self.mgr_giza
+        )
+
+    def test_req_a_and_l_global_loader_and_referrer_policy(self):
+        self.client.force_login(self.mgr_cairo)
+        res = self.client.get(reverse('visits_list'))
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode('utf-8')
+        self.assertIn('id="global-page-loader"', html)
+        self.assertIn('window.ERPLoader', html)
+        self.assertEqual(res.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+
+    def test_req_c_rep_brick_isolation_in_planned_visits_bricks_api(self):
+        self.client.force_login(self.rep_nasr)
+        # Rep without main_area selected gets ONLY Nasr City (not sibling Maadi!)
+        res = self.client.get(reverse('planned_visits_search_bricks_api'))
+        self.assertEqual(res.status_code, 200)
+        ids = [r['id'] for r in res.json().get('results', [])]
+        self.assertIn(self.nasr.id, ids)
+        self.assertNotIn(self.maadi.id, ids)
+        self.assertNotIn(self.dokki.id, ids)
+
+        # Even if rep selects parent Cairo main_area, Maadi must remain excluded
+        res2 = self.client.get(reverse('planned_visits_search_bricks_api') + f'?main_area={self.cairo.id}')
+        ids2 = [r['id'] for r in res2.json().get('results', [])]
+        self.assertEqual(ids2, [self.nasr.id])
+
+    def test_req_e_and_f_select_all_and_direct_bulk_visit_creation(self):
+        self.client.force_login(self.rep_nasr)
+        # 1. Select All IDs returns all 14 Nasr City contacts across pagination (>10)
+        res_all = self.client.get(
+            reverse('planned_visits_list') + '?action=select_all_ids',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_all.status_code, 200)
+        all_data = res_all.json()
+        self.assertTrue(all_data['success'])
+        self.assertEqual(all_data['total_count'], 14)
+        returned_ids = {c['id'] for c in all_data['contacts']}
+        self.assertNotIn(self.maadi_contact.id, returned_ids)
+        self.assertNotIn(self.dokki_contact.id, returned_ids)
+
+        # 2. show_all=1 loads all 14 in one request
+        res_show = self.client.get(
+            reverse('planned_visits_list') + '?action=load_contacts&show_all=1&offset=0',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_show.status_code, 200)
+        self.assertEqual(len(res_show.json()['contacts']), 14)
+
+        # 3. Direct bulk planned visit creation creates BOTH PlannedVisitItem AND linked Visit(status='planned', is_planned=True)
+        tomorrow = (timezone.now().date() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        bulk_res = self.client.post(reverse('planned_visits_bulk_add'), {
+            'assignee_id': self.rep_nasr.id,
+            'date': tomorrow,
+            'template_id': self.template.id,
+            'contact_ids': [c.id for c in self.nasr_contacts[:3]],
+            'notes': 'خطة مجمعة مباشرة',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(bulk_res.status_code, 200)
+        bjson = bulk_res.json()
+        self.assertTrue(bjson['success'])
+        self.assertEqual(bjson['created_count'], 3)
+        self.assertEqual(len(bjson['created_visit_ids']), 3)
+
+        visits = Visit.objects.filter(id__in=bjson['created_visit_ids'])
+        self.assertEqual(visits.count(), 3)
+        for v in visits:
+            self.assertTrue(v.is_planned)
+            self.assertEqual(v.status, 'planned')
+            self.assertEqual(v.approval_status, 'pending')
+            self.assertIsNotNone(PlannedVisitItem.objects.filter(visit=v).first())
+
+        # Duplicate submission on same date must be rejected
+        dup_res = self.client.post(reverse('planned_visits_bulk_add'), {
+            'assignee_id': self.rep_nasr.id,
+            'date': tomorrow,
+            'template_id': self.template.id,
+            'contact_ids': [self.nasr_contacts[0].id],
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(dup_res.status_code, 400)
+
+    def test_req_g_unplanned_visit_pending_even_if_rep_has_approve_perm(self):
+        self.client.force_login(self.rep_nasr)
+        today_str = timezone.now().date().strftime('%Y-%m-%d')
+        res = self.client.post(reverse('visit_create'), {
+            'contact': self.nasr_contacts[0].id,
+            'template': self.template.id,
+            'date': today_str,
+            'feedback': 'زيارة غير مخططة',
+        })
+        self.assertEqual(res.status_code, 302)
+        visit = Visit.objects.filter(contact=self.nasr_contacts[0], owner=self.rep_nasr, is_planned=False).first()
+        self.assertIsNotNone(visit)
+        self.assertEqual(visit.approval_status, 'pending')
+
+        # Rep must still be blocked from approving it via visit_action
+        approve_res = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'approve']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(approve_res.status_code, 403)
+
+    def test_req_h_visit_edit_get_and_pending_reset_and_detail_modal(self):
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', approval_status='approved',
+            questionnaire_answers={str(self.q_note.id): 'نعم'}
+        )
+        # Detail HTML should contain start-visit-modal only once (not inside <title>/<head>)
+        self.client.force_login(self.rep_nasr)
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        detail_html = detail_res.content.decode('utf-8')
+        self.assertEqual(detail_html.count('id="start-visit-modal"'), 1)
+
+        # Edit GET renders cleanly with saved_answers_json and today_str
+        edit_get = self.client.get(reverse('visit_edit', args=[visit.pk]))
+        self.assertEqual(edit_get.status_code, 200)
+        edit_html = edit_get.content.decode('utf-8')
+        self.assertIn('<option value="نعم">نعم</option>', edit_html)
+        self.assertNotIn("{'text_ar':", edit_html)
+
+        # Editing only feedback by unauthorized rep still triggers pending reapproval!
+        edit_post = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.nasr_contacts[0].id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'تعديل ملاحظة فقط',
+        })
+        self.assertEqual(edit_post.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertTrue(visit.waiting_for_reapproval)
+
+        # Editing a disapproved visit by rep resets to pending
+        visit.approval_status = 'disapproved'
+        visit.save(update_fields=['approval_status'])
+        self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.nasr_contacts[0].id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'تصحيح بعد الرفض',
+        })
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertTrue(ApprovalAuditLog.objects.filter(visit=visit, action='resubmitted').exists())
+
+    def test_req_i_planned_visit_cross_area_isolation(self):
+        tomorrow = timezone.now().date() + datetime.timedelta(days=1)
+        pday = PlannedVisitDay.objects.create(assignee=self.rep_nasr, date=tomorrow, created_by=self.rep_nasr)
+        pitem = PlannedVisitItem.objects.create(plan_day=pday, order=1, contact=self.nasr_contacts[0], template=self.template)
+
+        # Giza manager must NOT be allowed to execute or delete Cairo planned visit item
+        self.client.force_login(self.mgr_giza)
+        exec_res = self.client.get(reverse('planned_visit_item_execute', args=[pitem.pk]))
+        self.assertEqual(exec_res.status_code, 403)
+        del_res = self.client.post(reverse('planned_visit_item_delete', args=[pitem.pk]))
+        self.assertEqual(del_res.status_code, 403)
+        self.assertTrue(PlannedVisitItem.objects.filter(pk=pitem.pk).exists())
+
+        # Export under Giza manager must NOT contain Cairo rep's item
+        exp_res = self.client.get(reverse('planned_visits_export'))
+        self.assertEqual(exp_res.status_code, 200)
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(exp_res.content))
+        rows = list(wb.active.iter_rows(values_only=True))
+        self.assertEqual(len(rows), 1)  # Header row only
+
+    def test_req_j_visits_and_agreements_stats_respect_filters(self):
+        today = timezone.now().date()
+        Visit.objects.create(
+            contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', is_planned=True, approval_status='approved'
+        )
+        Visit.objects.create(
+            contact=self.nasr_contacts[1], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', is_planned=False, approval_status='pending'
+        )
+        # Unrelated Giza visit should NEVER pollute Cairo manager stats
+        Visit.objects.create(
+            contact=self.dokki_contact, template=self.template, owner=self.mgr_giza,
+            created_by=self.mgr_giza, date=today, status='planned', is_planned=True, approval_status='approved'
+        )
+        self.client.force_login(self.mgr_cairo)
+        res = self.client.get(reverse('visits_list') + '?plan_type=unplanned')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['planned_count'], 0)
+        self.assertEqual(res.context['unplanned_count'], 1)
+        self.assertEqual(res.context['pending_count'], 1)
+        self.assertEqual(res.context['approved_count'], 0)
+

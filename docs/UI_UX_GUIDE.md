@@ -61,14 +61,15 @@ This document outlines the user interface specifications, front-end architecture
 
 ## 4. Drawers & Filter Preservation
 
-### Client Filter Drawer (`#customer-drawer`)
-- Filters and selection drawers operate via asynchronous AJAX without full page reloads.
-- **Incremental Batch Loading**: Supports loading clients in 10-item increments (`action=load_contacts`) with deduplication.
+### Client Filter Drawer & Shared Area/Brick Multiselect
+- **Centralized Global Loader (`window.ERPLoader`)**: Renders a centered full-viewport spinner overlay covering underlying content during full-page navigations and async fetch/filter/bulk operations, with `try/finally` error cleanup and bfcache `pageshow` recovery. Fast keystroke typeaheads opt out via `X-Skip-Global-Loader`.
+- **Shared Area/Brick Multiselect (`area_brick_multiselect.html` / `area_brick_multiselect.js`)**: Shared across Bulk Planned Visits and Contacts List. Opens immediately on focus/click to display authorized options, optionally filters via typing, preserves multi-selection chips, and clears orphaned bricks when a parent area is removed.
+- **Display All & Select All Results**: Supports loading all matching clients in one action (`show_all=1`) and selecting all matching filtered results across pages (`action=select_all_ids`) with clear full-selection vs individual-count indicators.
 - **State & Selection Persistence across Reload**:
   - Drawer open/closed state (`wea_planned_drawer_open`), selected contact IDs (`wea_planned_selected_ids`), and scheduled date (`wea_planned_bulk_date`) are persisted in `sessionStorage`.
-  - On page refresh or back-navigation, the drawer reopens automatically, selections are restored, and eligible template groups reload without stale or lost data.
   - Upon successful plan submission, cached session storage entries are cleanly purged.
 - **Pagination (`smart_page_range`)**: Compact pagination showing current, neighbor, first, last, and `'...'` ellipsis.
+- **List Statistics Cards**: Always computed from the active filtered, scoped queryset on every list page (`contacts`, `visits`, `agreements`, `sales`, `purchases`, `inventory`, `treasury`, `catalog`, `accounts`).
 
 ---
 

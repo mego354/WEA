@@ -67,11 +67,17 @@ def products_list(request):
     # Safe bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
+    prod_agg = qs.aggregate(
+        total_products=Count('id'),
+        sellable_products=Count('id', filter=Q(sellable=True)),
+        unsellable_products=Count('id', filter=Q(sellable=False)),
+        categories_count=Count('category', distinct=True),
+    )
     stats = {
-        'total_products': Product.objects.count(),
-        'sellable_products': Product.objects.filter(sellable=True).count(),
-        'unsellable_products': Product.objects.filter(sellable=False).count(),
-        'categories_count': categories.count(),
+        'total_products': prod_agg['total_products'] or 0,
+        'sellable_products': prod_agg['sellable_products'] or 0,
+        'unsellable_products': prod_agg['unsellable_products'] or 0,
+        'categories_count': prod_agg['categories_count'] or 0,
     }
 
     context = {

@@ -1,7 +1,7 @@
 import csv
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Permission
@@ -243,11 +243,15 @@ def users_list(request):
     hierarchical_areas = get_hierarchical_areas(request.user)
     areas = Area.objects.all().order_by('name')
 
-    base_scoped_qs = get_scoped_queryset(User.objects.all(), request.user, 'user')
+    users_agg = users_qs.aggregate(
+        total_users=Count('id', distinct=True),
+        active_users=Count('id', filter=Q(is_active=True), distinct=True),
+        inactive_users=Count('id', filter=Q(is_active=False), distinct=True),
+    )
     stats = {
-        'total_users': base_scoped_qs.count(),
-        'active_users': base_scoped_qs.filter(is_active=True).count(),
-        'inactive_users': base_scoped_qs.filter(is_active=False).count(),
+        'total_users': users_agg['total_users'] or 0,
+        'active_users': users_agg['active_users'] or 0,
+        'inactive_users': users_agg['inactive_users'] or 0,
         'roles_count': roles.count(),
     }
 

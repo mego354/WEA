@@ -94,6 +94,18 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
   }
   ```
 
+### 2.5 Scoped Area & Brick Multiselect APIs
+- **Contacts Areas / Bricks**:
+  - `GET /contacts/api/areas/?q=...` (`contacts_search_areas_api`)
+  - `GET /contacts/api/bricks/?q=...&main_area=...` (`contacts_search_bricks_api`)
+- **Planned Visits Areas / Bricks**:
+  - `GET /planned-visits/api/areas/?q=...` (`planned_visits_search_areas_api`)
+  - `GET /planned-visits/api/bricks/?q=...&main_area=...` (`planned_visits_search_bricks_api`)
+- **Behavior**:
+  - Opening either multiselect with empty `q` immediately returns authorized choices up to safe limits.
+  - Passing `main_area` restricts Bricks to children within selected Main Areas (still strictly intersected with user scope).
+  - Without `main_area`, returns all Bricks within the user's authorized scope without expanding a rep's brick to sibling bricks in the same governorate.
+
 ---
 
 ## 3. Activities & Visits Endpoints
@@ -129,6 +141,11 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
   }
   ```
 
+### 3.3 Planned Visits Selection & Bulk Creation
+- `GET /planned-visits/?action=select_all_ids` (with active filters): returns `{ "success": true, "total_count": N, "contacts": [{"id": 1, "account_type": "..."}] }` across all filtered scoped results.
+- `GET /planned-visits/?action=load_contacts&show_all=1`: returns all matching scoped contacts in one batch for "عرض جميع العملاء المؤهلين".
+- `POST /planned-visits/bulk-add/`: atomically creates `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records, returning `created_visit_ids`.
+
 ---
 
 ## 4. Settings & Operational Endpoints
@@ -163,4 +180,3 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
     "message": "تم اعتماد طلب الشراء بنجاح"
   }
   ```
-

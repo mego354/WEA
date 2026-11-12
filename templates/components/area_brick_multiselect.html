@@ -1,0 +1,76 @@
+{% load static %}
+<!-- Shared Reusable Area & Brick Multiselect Component (Requirements C & D) -->
+<div class="space-y-3">
+    <!-- Main Areas (Governorates) Multiselect -->
+    <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1">المنطقة الرئيسية (اختيار متعدد)</label>
+        <div id="{{ component_id }}_selected_main_areas_chips" class="flex flex-wrap gap-1.5 mb-1.5 empty:hidden">
+            {% for ma in selected_areas %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs" data-area-id="{{ ma.id }}">
+                <input type="hidden" name="{{ area_field_name|default:'main_area' }}" value="{{ ma.id }}">
+                <span>{{ ma.name }}</span>
+                <button type="button" data-remove-area="{{ ma.id }}" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+                    <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                </button>
+            </span>
+            {% endfor %}
+        </div>
+        <div class="relative" id="{{ component_id }}_main_area_search_container">
+            <div class="relative">
+                <input type="text"
+                       id="{{ component_id }}_search_main_area_input"
+                       placeholder="اضغط لعرض المناطق أو اكتب للبحث..."
+                       autocomplete="off"
+                       class="w-full min-h-[38px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 pe-8 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-colors cursor-pointer">
+                <span id="{{ component_id }}_main_area_spinner" class="material-symbols-outlined text-xs text-[#27bebe] animate-spin absolute end-2.5 top-2.5 hidden">progress_activity</span>
+                <span id="{{ component_id }}_main_area_icon" class="material-symbols-outlined text-sm text-slate-400 absolute end-2.5 top-2.5 pointer-events-none">expand_more</span>
+            </div>
+            <div id="{{ component_id }}_search_main_area_dropdown" class="absolute z-40 start-0 end-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto hidden text-xs divide-y divide-slate-100"></div>
+        </div>
+    </div>
+
+    <!-- Bricks (Subareas) Multiselect -->
+    <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1">الخط الجغرافي / Brick (اختيار متعدد)</label>
+        <div id="{{ component_id }}_selected_bricks_chips" class="flex flex-wrap gap-1.5 mb-1.5 empty:hidden">
+            {% for b in selected_bricks %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs" data-brick-id="{{ b.id }}" data-parent-id="{{ b.parent_id|default:'' }}">
+                <input type="hidden" name="{{ brick_field_name|default:'area' }}" value="{{ b.id }}">
+                <span>{{ b.name }}{% if b.parent_name %} <span class="text-[10px] text-teal-600 font-normal">({{ b.parent_name }})</span>{% endif %}</span>
+                <button type="button" data-remove-brick="{{ b.id }}" class="text-teal-500 hover:text-rose-600 focus:outline-hidden inline-flex items-center" title="إزالة">
+                    <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                </button>
+            </span>
+            {% endfor %}
+        </div>
+        <div class="relative" id="{{ component_id }}_brick_search_container">
+            <div class="relative">
+                <input type="text"
+                       id="{{ component_id }}_search_brick_input"
+                       placeholder="اضغط لعرض الخطوط أو اكتب للبحث..."
+                       autocomplete="off"
+                       class="w-full min-h-[38px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 pe-8 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-colors cursor-pointer">
+                <span id="{{ component_id }}_brick_spinner" class="material-symbols-outlined text-xs text-[#27bebe] animate-spin absolute end-2.5 top-2.5 hidden">progress_activity</span>
+                <span id="{{ component_id }}_brick_icon" class="material-symbols-outlined text-sm text-slate-400 absolute end-2.5 top-2.5 pointer-events-none">expand_more</span>
+            </div>
+            <div id="{{ component_id }}_search_brick_dropdown" class="absolute z-40 start-0 end-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto hidden text-xs divide-y divide-slate-100"></div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/area_brick_multiselect.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.initAreaBrickMultiselect) {
+        window.initAreaBrickMultiselect({
+            componentId: "{{ component_id|escapejs }}",
+            areaFieldName: "{{ area_field_name|default:'main_area'|escapejs }}",
+            brickFieldName: "{{ brick_field_name|default:'area'|escapejs }}",
+            areasApiUrl: "{{ areas_api_url|escapejs }}",
+            bricksApiUrl: "{{ bricks_api_url|escapejs }}",
+            onChangeCallback: "{{ on_change_callback|default:''|escapejs }}"
+        });
+    }
+});
+</script>
+

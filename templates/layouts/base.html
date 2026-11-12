@@ -169,7 +169,7 @@
             background: #94a3b8;
         }
 
-        /* Centralized Global Page Loading Progress & Non-blocking Indicator (Requirement A) */
+        /* Centralized Global Page & Async Loading System (Requirement A) */
         #global-top-progress {
             position: fixed;
             top: 0;
@@ -177,7 +177,7 @@
             right: 0;
             height: 3px;
             background: linear-gradient(90deg, #27bebe 0%, #1fa8a8 50%, #2dd4bf 100%);
-            z-index: 99999;
+            z-index: 100000;
             transform: translateX(-100%);
             transition: transform 0.25s ease-out, opacity 0.3s ease;
             pointer-events: none;
@@ -189,32 +189,64 @@
         #global-top-progress.finished {
             transform: translateX(0%);
             opacity: 0;
-            transition: transform 0.15s ease-out, opacity 0.35s ease 0.15s;
+            transition: transform 0.15s ease-out, opacity 0.3s ease 0.1s;
         }
-        #global-page-spinner {
+        #global-page-loader {
             position: fixed;
-            bottom: 1.5rem;
-            left: 1.5rem;
-            z-index: 99998;
+            inset: 0;
+            z-index: 99999;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            background: rgba(15, 23, 42, 0.88);
-            color: #ffffff;
-            padding: 0.5rem 0.875rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(4px);
+            justify-content: center;
+            padding: 1.5rem;
+            background: rgba(248, 250, 252, 0.96);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             opacity: 0;
+            visibility: hidden;
             pointer-events: none;
-            transform: translateY(0.75rem);
-            transition: opacity 0.2s ease, transform 0.2s ease;
+            transition: opacity 0.18s ease, visibility 0.18s ease;
         }
-        #global-page-spinner.active {
+        #global-page-loader.active {
             opacity: 1;
-            transform: translateY(0);
+            visibility: visible;
+            pointer-events: all;
+        }
+        #global-page-loader .erp-loader-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            min-width: 11rem;
+            max-width: 18rem;
+            padding: 1.25rem 1.5rem;
+            border-radius: 1rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+            text-align: center;
+        }
+        #global-page-loader .erp-loader-ring {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 9999px;
+            border: 3px solid #ccfbf1;
+            border-top-color: #27bebe;
+            animation: erp-spin 0.75s linear infinite;
+        }
+        #global-page-loader .erp-loader-label {
+            font-size: 0.8125rem;
+            font-weight: 700;
+            color: #334155;
+            font-family: 'Cairo', system-ui, sans-serif;
+            margin: 0;
+        }
+        @keyframes erp-spin {
+            to { transform: rotate(360deg); }
+        }
+        body.erp-loading-lock {
+            overflow: hidden !important;
         }
     </style>
 
@@ -224,13 +256,15 @@
 
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+<body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white erp-loading-lock">
 
-    <!-- Global Progress Bar & Non-blocking Async Indicator -->
+    <!-- Centralized Global Viewport Loading Overlay & Top Progress Bar (Requirement A) -->
     <div id="global-top-progress" class="loading"></div>
-    <div id="global-page-spinner" role="status" aria-live="polite">
-        <span class="material-symbols-outlined text-sm text-[#27bebe] animate-spin">progress_activity</span>
-        <span id="global-spinner-text">جاري المعالجة...</span>
+    <div id="global-page-loader" class="active" role="status" aria-live="polite" aria-busy="true">
+        <div class="erp-loader-card">
+            <div class="erp-loader-ring" aria-hidden="true"></div>
+            <p id="global-loader-text" class="erp-loader-label">جاري التحميل...</p>
+        </div>
     </div>
 
     <!-- SIDEBAR BACKDROP OVERLAY -->
@@ -884,76 +918,204 @@
             closeCustomerSelectionModal();
         }
 
-        // Global Loading Manager (Requirement A)
+        // Centralized Global Loading Manager (Requirement A)
         (function() {
             const topBar = document.getElementById('global-top-progress');
-            const spinner = document.getElementById('global-page-spinner');
-            const spinnerText = document.getElementById('global-spinner-text');
-            let activeRequests = 0;
-            let hideTimeout = null;
+            const overlay = document.getElementById('global-page-loader');
+            const loaderText = document.getElementById('global-loader-text');
+            const DEFAULT_TEXT = 'جاري التحميل...';
 
-            function finishPageLoading() {
-                if (topBar) {
-                    topBar.classList.remove('loading');
-                    topBar.classList.add('finished');
-                }
+            let pageReady = document.readyState === 'complete';
+            let activeNavigation = false;
+            let activeAsyncCount = 0;
+            let showTimer = null;
+            let safetyTimer = null;
+
+            function setText(text) {
+                if (loaderText) loaderText.textContent = text || DEFAULT_TEXT;
             }
 
-            window.showGlobalLoading = function(text) {
-                activeRequests++;
-                if (spinnerText && text) spinnerText.textContent = text;
-                if (spinner) spinner.classList.add('active');
+            function render(immediate) {
+                const needsOverlay = !pageReady || activeNavigation || activeAsyncCount > 0;
+                const needsTopBar = !pageReady || activeNavigation || activeAsyncCount > 0;
+
                 if (topBar) {
-                    topBar.classList.remove('finished');
-                    topBar.classList.add('loading');
-                }
-                clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(() => {
-                    window.hideGlobalLoading(true);
-                }, 8000);
-            };
-
-            window.hideGlobalLoading = function(force) {
-                if (force) activeRequests = 0;
-                else activeRequests = Math.max(0, activeRequests - 1);
-
-                if (activeRequests === 0) {
-                    if (spinner) spinner.classList.remove('active');
-                    if (topBar) {
+                    if (needsTopBar) {
+                        topBar.classList.remove('finished');
+                        topBar.classList.add('loading');
+                    } else {
                         topBar.classList.remove('loading');
                         topBar.classList.add('finished');
                     }
                 }
-            };
 
-            if (document.readyState === 'complete') {
-                finishPageLoading();
-            } else {
-                window.addEventListener('load', finishPageLoading);
-                document.addEventListener('DOMContentLoaded', finishPageLoading);
-                setTimeout(finishPageLoading, 2000);
+                clearTimeout(showTimer);
+                if (!overlay) return;
+
+                if (!needsOverlay) {
+                    overlay.classList.remove('active');
+                    overlay.setAttribute('aria-busy', 'false');
+                    document.body.classList.remove('erp-loading-lock');
+                    clearTimeout(safetyTimer);
+                    safetyTimer = null;
+                    return;
+                }
+
+                const activate = () => {
+                    if (!(!pageReady || activeNavigation || activeAsyncCount > 0)) return;
+                    overlay.classList.add('active');
+                    overlay.setAttribute('aria-busy', 'true');
+                    document.body.classList.add('erp-loading-lock');
+                    clearTimeout(safetyTimer);
+                    // Failsafe so the UI never deadlocks permanently if a request/CDN stalls
+                    safetyTimer = setTimeout(() => {
+                        window.ERPLoader.reset();
+                    }, 30000);
+                };
+
+                if (immediate || !pageReady || activeNavigation) {
+                    activate();
+                } else {
+                    // Anti-flicker delay for short async requests (<120ms)
+                    showTimer = setTimeout(activate, 120);
+                }
             }
 
-            document.addEventListener('click', function(e) {
-                const link = e.target.closest('a');
-                if (link && link.href && !link.target && !link.href.startsWith('javascript:') && !link.href.includes('#') && !link.hasAttribute('download')) {
-                    if (link.href.startsWith(window.location.origin)) {
-                        if (topBar) {
-                            topBar.classList.remove('finished');
-                            topBar.classList.add('loading');
-                        }
+            window.ERPLoader = {
+                beginAsync(text, immediate) {
+                    activeAsyncCount += 1;
+                    if (text) setText(text);
+                    render(Boolean(immediate));
+                    return () => window.ERPLoader.endAsync();
+                },
+                endAsync() {
+                    activeAsyncCount = Math.max(0, activeAsyncCount - 1);
+                    if (activeAsyncCount === 0 && !activeNavigation && pageReady) {
+                        setText(DEFAULT_TEXT);
                     }
+                    render(false);
+                },
+                beginNavigation(text) {
+                    activeNavigation = true;
+                    setText(text || DEFAULT_TEXT);
+                    render(true);
+                },
+                reset() {
+                    pageReady = true;
+                    activeNavigation = false;
+                    activeAsyncCount = 0;
+                    clearTimeout(showTimer);
+                    clearTimeout(safetyTimer);
+                    setText(DEFAULT_TEXT);
+                    render(false);
+                },
+                async wrap(promiseOrFn, text, immediate) {
+                    const done = window.ERPLoader.beginAsync(text, immediate);
+                    try {
+                        const result = typeof promiseOrFn === 'function' ? promiseOrFn() : promiseOrFn;
+                        return await result;
+                    } finally {
+                        done();
+                    }
+                }
+            };
+
+            // Backward-compatible global helpers
+            window.showGlobalLoading = function(text) {
+                window.ERPLoader.beginAsync(text || 'جاري المعالجة...', true);
+            };
+            window.hideGlobalLoading = function(force) {
+                if (force) window.ERPLoader.reset();
+                else window.ERPLoader.endAsync();
+            };
+
+            // Initial page readiness lifecycle
+            if (pageReady) {
+                render(false);
+            } else {
+                const markPageReady = () => {
+                    pageReady = true;
+                    activeNavigation = false;
+                    render(false);
+                };
+                window.addEventListener('load', markPageReady, { once: true });
+                // Ensure DOM readiness plus short grace period won't hang if external CDN fails
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(() => {
+                        if (!pageReady) markPageReady();
+                    }, 4000);
+                }, { once: true });
+            }
+
+            // Recover cleanly when navigating via Back/Forward cache (bfcache)
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted || document.readyState === 'complete') {
+                    window.ERPLoader.reset();
                 }
             });
 
+            // Intercept same-origin fetch requests cleanly with ref-counting & guaranteed error cleanup
+            if (window.fetch) {
+                const nativeFetch = window.fetch.bind(window);
+                window.fetch = function(input, init) {
+                    let urlStr = '';
+                    let skip = false;
+                    try {
+                        urlStr = typeof input === 'string' ? input : (input && input.url) || '';
+                        if (init && init.skipGlobalLoader) skip = true;
+                        if (init && init.headers) {
+                            const h = init.headers;
+                            if (typeof h.get === 'function' && h.get('X-Skip-Global-Loader')) skip = true;
+                            else if (h['X-Skip-Global-Loader']) skip = true;
+                        }
+                        if (!skip && urlStr) {
+                            const parsed = new URL(urlStr, window.location.origin);
+                            if (parsed.origin !== window.location.origin) {
+                                skip = true;
+                            }
+                        }
+                    } catch (_) {
+                        skip = true;
+                    }
+
+                    if (skip) {
+                        return nativeFetch(input, init);
+                    }
+
+                    const done = window.ERPLoader.beginAsync('جاري تحميل البيانات...', false);
+                    return nativeFetch(input, init).finally(() => {
+                        done();
+                    });
+                };
+            }
+
+            // Full-page internal link navigation
+            document.addEventListener('click', function(e) {
+                if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                const link = e.target.closest('a');
+                if (!link || !link.href) return;
+                if (link.target && link.target !== '_self') return;
+                if (link.hasAttribute('download') || link.hasAttribute('data-no-loader')) return;
+                const rawHref = link.getAttribute('href') || '';
+                if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+                if (/(\/export\/|[?&]export=|[?&]download=)/i.test(link.href)) return;
+                if (link.href.startsWith(window.location.origin)) {
+                    const targetUrl = new URL(link.href);
+                    if (targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search && targetUrl.hash) {
+                        return;
+                    }
+                    window.ERPLoader.beginNavigation('جاري التحميل...');
+                }
+            });
+
+            // Standard full-page form submissions (bubble phase respects AJAX e.preventDefault())
             document.addEventListener('submit', function(e) {
                 const form = e.target;
-                if (form && !form.hasAttribute('data-no-loader')) {
-                    if (topBar) {
-                        topBar.classList.remove('finished');
-                        topBar.classList.add('loading');
-                    }
-                }
+                if (e.defaultPrevented || !form || form.hasAttribute('data-no-loader')) return;
+                if (form.target && form.target !== '_self') return;
+                const action = form.getAttribute('action') || '';
+                if (/(\/export\/|[?&]export=)/i.test(action)) return;
+                window.ERPLoader.beginNavigation('جاري حفظ البيانات...');
             });
         })();
     </script>

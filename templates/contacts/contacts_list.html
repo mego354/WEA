@@ -160,7 +160,7 @@
             </a>
 
             <!-- Export Button -->
-            <a href="{% url 'contacts_export' %}?relation={{ current_relation }}&search={{ search_query }}" class="erp-btn-teal inline-flex items-center gap-1.5 text-xs font-bold" title="تصدير إلى Excel (.xlsx)">
+            <a href="{% url 'contacts_export' %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="erp-btn-teal inline-flex items-center gap-1.5 text-xs font-bold" title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base">file_download</span>
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
@@ -624,27 +624,10 @@
             </select>
         </div>
 
-        <!-- المنطقة الرئيسية (Governorate) -->
-        <div>
-            <label class="mat-like-label">المنطقة الرئيسية</label>
-            <select name="area_id" id="drawer_area_id" onchange="loadDrawerSubareas(this.value)" class="mat-like-control">
-                <option value="">الكل</option>
-                {% for gov in governorates %}
-                <option value="{{ gov.id }}" {% if current_area_id == gov.id|stringformat:"s" %}selected{% endif %}>{{ gov.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <!-- المنطقة الفرعية / البريك (Subarea / Brick) -->
-        <div>
-            <label class="mat-like-label">المنطقة الفرعية / Brick</label>
-            <select name="brick_id" id="drawer_brick_id" class="mat-like-control">
-                <option value="">الكل</option>
-                {% for b in scoped_bricks %}
-                <option value="{{ b.id }}" {% if current_brick_id == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <!-- المناطق الرئيسية والخطوط الجغرافية (اختيار متعدد مشترك) -->
+        {% url 'contacts_search_areas_api' as contacts_areas_url %}
+        {% url 'contacts_search_bricks_api' as contacts_bricks_url %}
+        {% include 'components/area_brick_multiselect.html' with component_id='contacts_filter' area_field_name='area_id' brick_field_name='brick_id' areas_api_url=contacts_areas_url bricks_api_url=contacts_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
 
         <!-- حالة العميل -->
         <div>
@@ -913,31 +896,6 @@
                 if (countBadge) countBadge.className = 'kanban-tab-count px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-700';
             }
         });
-    }
-
-    function loadDrawerSubareas(areaId) {
-        const brickSelect = document.getElementById('drawer_brick_id');
-        if (!brickSelect) return;
-        if (!areaId) {
-            brickSelect.innerHTML = '<option value="">الكل</option>';
-            return;
-        }
-        brickSelect.innerHTML = '<option value="">جاري التحميل...</option>';
-        fetch(`/contacts/api/subareas/?area_id=${areaId}`)
-            .then(res => res.json())
-            .then(data => {
-                let html = '<option value="">الكل</option>';
-                if (data.subareas && data.subareas.length > 0) {
-                    data.subareas.forEach(sub => {
-                        html += `<option value="${sub.id}">${sub.name}</option>`;
-                    });
-                }
-                brickSelect.innerHTML = html;
-            })
-            .catch(err => {
-                console.error(err);
-                brickSelect.innerHTML = '<option value="">الكل</option>';
-            });
     }
 </script>
 {% endblock %}

@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from master_data.pagination_utils import paginate_queryset
 from django.db import transaction
-from django.db.models import Q, Sum, Count
+from django.db.models import Q, Sum, Count, Max
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse, FileResponse, Http404, HttpResponseForbidden
 from django.contrib.auth import get_user_model
@@ -56,9 +56,55 @@ def can_manage_approvals(user, module_type='visits'):
         return False
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
+    role = getattr(user, 'role', None)
+    if role and getattr(role, 'is_super', False):
+        return True
     if module_type == 'agreements':
         return has_perm_or_admin(user, 'activities:agreements/approve')
     return has_perm_or_admin(user, 'activities:visits/approve')
+
+
+def can_user_approve_contact_visit(user, contact=None, module_type='visits', visit_owner=None):
+    """
+    Verify supervisory approval authority combining permission, regional manage scope
+    ('area' or 'all'), and target contact/area isolation. Users with 'own' or 'brick'
+    manage scope (representatives) can never self-approve or bypass visit approval.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
+        return True
+    role = getattr(user, 'role', None)
+    if role and getattr(role, 'is_super', False):
+        return True
+    if not can_manage_approvals(user, module_type):
+        return False
+
+    from accounts.scope_service import ScopeResolutionService
+    manage_scope = ScopeResolutionService.get_user_scope(user, 'activities', 'manage')
+    if manage_scope == 'all':
+        return True
+    if manage_scope != 'area':
+        return False
+
+    if visit_owner is not None and visit_owner != user:
+        if not get_user_managed_representatives(user).filter(pk=visit_owner.pk).exists():
+            return False
+    if contact is not None:
+        return can_user_access_contact_for_visit(user, contact)
+    return True
+
+
+def resolve_visit_creation_approval(user, contact, is_planned, location_settings, visit_owner=None):
+    """
+    Centralized approval resolution for newly created visits (both unplanned and planned).
+    Returns (approval_status, approved_by, approved_at).
+    """
+    if not location_settings.require_manager_approval_for_visits:
+        return 'approved', user, timezone.now()
+    if can_user_approve_contact_visit(user, contact=contact, module_type='visits', visit_owner=visit_owner):
+        return 'approved', user, timezone.now()
+    return 'pending', None, None
 
 
 def can_manage_templates(user):
@@ -177,12 +223,17 @@ def agreements_list(request):
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
     contacts = Contact.objects.all().order_by('name')[:50]
 
-    base_scoped_agreements = get_scoped_queryset(Agreement.objects.all(), request.user, 'agreement')
+    agreements_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_amount=Sum('amount'),
+        approved_count=Count('id', filter=Q(status='approved')),
+        pending_count=Count('id', filter=Q(status='new')),
+    )
     agreements_stats = {
-        'total_count': base_scoped_agreements.count(),
-        'total_amount': base_scoped_agreements.aggregate(s=Sum('amount'))['s'] or Decimal('0.00'),
-        'approved_count': base_scoped_agreements.filter(status='approved').count(),
-        'pending_count': base_scoped_agreements.filter(status='new').count(),
+        'total_count': agreements_agg['total_count'] or 0,
+        'total_amount': agreements_agg['total_amount'] or Decimal('0.00'),
+        'approved_count': agreements_agg['approved_count'] or 0,
+        'pending_count': agreements_agg['pending_count'] or 0,
     }
 
     context = {
@@ -586,8 +637,8 @@ def planned_visits_list(request):
         auth_main_areas_qs = Area.objects.filter(parent__isnull=True)
         auth_bricks_qs = Area.objects.filter(parent__isnull=False).select_related('parent')
     else:
-        auth_main_areas_qs = get_user_main_areas(request.user)
-        auth_bricks_qs = get_user_managed_areas(request.user).filter(parent__isnull=False).select_related('parent')
+        auth_main_areas_qs = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
+        auth_bricks_qs = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'activities')
 
     auth_main_area_ids = set(auth_main_areas_qs.values_list('id', flat=True))
     auth_brick_map = dict(auth_bricks_qs.values_list('id', 'parent_id'))
@@ -641,19 +692,35 @@ def planned_visits_list(request):
             Q(mobile__icontains=search_contact)
         ).distinct()
 
-    # AJAX Incremental Client Loader (Requirement 2: Performance & See More)
+    # AJAX "Select All Results" IDs endpoint (Requirement E)
+    if (request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json') and request.GET.get('action') == 'select_all_ids':
+        all_rows = list(contacts_qs.order_by('name').values('id', 'account_type'))
+        return JsonResponse({
+            'success': True,
+            'total_count': len(all_rows),
+            'contacts': [
+                {'id': r['id'], 'account_type': (r['account_type'] or 'عميل')}
+                for r in all_rows
+            ],
+        })
+
+    # AJAX Incremental / Display-All Client Loader (Requirements 2 & E)
     if (request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json') and request.GET.get('action') == 'load_contacts':
+        show_all = request.GET.get('show_all') in ('1', 'true', 'True') or request.GET.get('limit') == 'all'
         try:
             offset = max(0, int(request.GET.get('offset', 0)))
         except (ValueError, TypeError):
             offset = 0
-        try:
-            limit = max(1, min(50, int(request.GET.get('limit', 10))))
-        except (ValueError, TypeError):
-            limit = 10
-
         total_count = contacts_qs.count()
-        batch = list(contacts_qs.order_by('name')[offset:offset+limit])
+        if show_all:
+            batch = list(contacts_qs.order_by('name')[offset:])
+            limit = len(batch)
+        else:
+            try:
+                limit = max(1, min(100, int(request.GET.get('limit', 10))))
+            except (ValueError, TypeError):
+                limit = 10
+            batch = list(contacts_qs.order_by('name')[offset:offset+limit])
         items_data = []
         for c in batch:
             brick_name = c.brick.name if c.brick else ''
@@ -747,25 +814,23 @@ def planned_visits_list(request):
 @require_permission(['activities:planned/list', 'activities:planned/manage', 'activities:visits/create', 'activities:visits/list'])
 def planned_visits_search_areas_api(request):
     """
-    Searchable autocomplete endpoint for Main Areas (Governorates) in Planned Visits (Requirement A).
-    Enforces authentication and user organizational scope.
-    Returns maximum 10 suggestions matching query 'q'.
-    Returns empty list if query is empty or less than 1 character.
+    Multiselect autocomplete endpoint for Main Areas (Governorates) (Requirements C & D).
+    Immediately returns available authorized options on open (even when q is empty),
+    and filters suggestions when search query q is entered.
     """
     q = (request.GET.get('q') or '').strip()
-    if not q:
-        return JsonResponse({'results': []})
 
+    from accounts.scope_service import ScopeResolutionService
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     if is_super:
-        qs = Area.objects.filter(parent__isnull=True)
+        qs = Area.objects.filter(parent__isnull=True).order_by('name')
     else:
-        qs = get_user_main_areas(request.user)
+        qs = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
 
-    matches = qs.filter(
-        Q(name__icontains=q) | Q(code__icontains=q)
-    ).order_by('name')[:10]
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(code__icontains=q))
 
+    matches = qs.order_by('name')[:100]
     results = [{'id': a.id, 'name': a.name, 'code': a.code or ''} for a in matches]
     return JsonResponse({'results': results})
 
@@ -773,15 +838,14 @@ def planned_visits_search_areas_api(request):
 @require_permission(['activities:planned/list', 'activities:planned/manage', 'activities:visits/create', 'activities:visits/list'])
 def planned_visits_search_bricks_api(request):
     """
-    Searchable autocomplete endpoint for Bricks in Planned Visits (Requirement A).
-    Enforces authentication and user organizational scope.
-    Strictly filters within Bricks belonging to the selected Main Areas.
-    Returns maximum 10 suggestions matching query 'q'.
-    Returns empty list if query is empty or if no parent areas are specified.
+    Multiselect autocomplete endpoint for Bricks (Requirements C & D).
+    Enforces strict authorized scope via ScopeResolutionService:
+    - Immediately displays available authorized options even when search query q is empty.
+    - If Main Areas are selected, restricts bricks strictly to children of those areas (within user's authorized scope).
+    - If no Main Area is selected, returns all bricks available within user's authorized scope
+      (never expanding a representative's brick scope to sibling bricks in the same governorate).
     """
     q = (request.GET.get('q') or '').strip()
-    if not q:
-        return JsonResponse({'results': []})
 
     raw_main_areas = request.GET.getlist('main_area') or request.GET.getlist('main_area[]')
     main_area_ids = []
@@ -790,26 +854,26 @@ def planned_visits_search_bricks_api(request):
             if p.strip().isdigit():
                 main_area_ids.append(int(p.strip()))
 
+    from accounts.scope_service import ScopeResolutionService
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     if is_super:
         qs = Area.objects.filter(parent__isnull=False).select_related('parent')
-        auth_main_areas = Area.objects.filter(parent__isnull=True).values_list('id', flat=True)
+        auth_main_areas = set(Area.objects.filter(parent__isnull=True).values_list('id', flat=True))
     else:
-        qs = get_user_managed_areas(request.user).filter(parent__isnull=False).select_related('parent')
-        auth_main_areas = get_user_main_areas(request.user).values_list('id', flat=True)
+        qs = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'activities')
+        auth_main_areas = set(ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities').values_list('id', flat=True))
 
-    # If main area IDs provided, constrain strictly to authorized main areas
     if main_area_ids:
         valid_main_ids = [aid for aid in main_area_ids if aid in auth_main_areas]
-        qs = qs.filter(parent_id__in=valid_main_ids)
-    else:
-        # Per requirement: "Search only within Bricks belonging to the selected Areas."
-        return JsonResponse({'results': [], 'message': 'يرجى اختيار منطقة رئيسية أولاً.'})
+        if valid_main_ids:
+            qs = qs.filter(parent_id__in=valid_main_ids)
+        else:
+            return JsonResponse({'results': []})
 
-    matches = qs.filter(
-        Q(name__icontains=q) | Q(code__icontains=q)
-    ).order_by('name')[:10]
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(code__icontains=q))
 
+    matches = qs.order_by('name')[:150]
     results = [{
         'id': b.id,
         'name': b.name,
@@ -1212,6 +1276,9 @@ def planned_visits_bulk_add(request):
             messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
+    from master_data.models import LocationSettings
+    location_settings = LocationSettings.get_settings()
+
     with transaction.atomic():
         plan_day, _ = PlannedVisitDay.objects.get_or_create(
             assignee=assignee,
@@ -1221,8 +1288,19 @@ def planned_visits_bulk_add(request):
         existing_contact_ids = set(
             PlannedVisitItem.objects.filter(plan_day=plan_day).values_list('contact_id', flat=True)
         )
+        existing_visit_contact_ids = set(
+            Visit.objects.filter(
+                owner=assignee,
+                date=target_date,
+                contact_id__in=contact_ids
+            ).exclude(status='cancelled').values_list('contact_id', flat=True)
+        )
+        blocked_duplicate_ids = existing_contact_ids | existing_visit_contact_ids
+
         current_order = plan_day.items.count()
+        next_serial = (Visit.objects.aggregate(m=Max('serial_num'))['m'] or 1000)
         created_items = []
+        created_visit_ids = []
         skipped_duplicates = []
         skipped_ineligible = []
 
@@ -1232,20 +1310,56 @@ def planned_visits_bulk_add(request):
             c = contacts_by_id.get(cid)
             if not c:
                 continue
-            if cid in existing_contact_ids:
+            if cid in blocked_duplicate_ids:
                 skipped_duplicates.append(c.name)
                 continue
             item_template = templates_cache.get(client_template_map.get(cid))
             current_order += 1
+            next_serial += 1
+
+            approval_status, approved_by, approved_at = resolve_visit_creation_approval(
+                request.user, c, True, location_settings, visit_owner=assignee
+            )
+            visit = Visit.objects.create(
+                serial_num=next_serial,
+                contact=c,
+                template=item_template,
+                date=target_date,
+                status='planned',
+                is_planned=True,
+                approval_status=approval_status,
+                approved_by=approved_by,
+                approved_at=approved_at,
+                allowed_distance=location_settings.get_effective_tolerance(item_template),
+                owner=assignee,
+                created_by=request.user,
+                feedback=notes,
+                location_verified=True,
+                verification_status='verified',
+                location_status='زيارة مخططة (بانتظار بدء التنفيذ)',
+            )
             item = PlannedVisitItem.objects.create(
                 plan_day=plan_day,
                 order=current_order,
                 contact=c,
                 template=item_template,
-                notes=notes
+                notes=notes,
+                visit=visit,
+                is_executed=False,
+            )
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='created',
+                actor=request.user,
+                status_before='',
+                status_after=visit.approval_status,
+                reason=f"إنشاء زيارة مخططة جماعية للعميل {c.name}",
+                ip_address=request.META.get('REMOTE_ADDR')
             )
             created_items.append(item)
-            existing_contact_ids.add(cid)
+            created_visit_ids.append(visit.id)
+            blocked_duplicate_ids.add(cid)
 
         if created_items:
             AuditLogService.log(
@@ -1255,23 +1369,25 @@ def planned_visits_bulk_add(request):
                 user=request.user,
                 request=request,
                 record_id=plan_day.id,
-                object_repr=f"Bulk Planned Visits ({len(created_items)} items on {date_str} for {assignee.username})",
+                object_repr=f"Bulk Planned Visits ({len(created_items)} visits on {date_str} for {assignee.username})",
                 new_values={
                     'date': date_str,
                     'assignee_id': assignee.id,
                     'template_ids': list(needed_template_ids),
                     'created_count': len(created_items),
+                    'created_visit_ids': created_visit_ids,
                     'skipped_duplicates_count': len(skipped_duplicates),
                     'contact_ids': [it.contact_id for it in created_items],
                 }
             )
 
     if not created_items and skipped_duplicates:
-        msg = f"جميع العملاء المحددين ({len(skipped_duplicates)}) مضافون بالفعل لخطة يوم {date_str}."
+        msg = f"جميع العملاء المحددين ({len(skipped_duplicates)}) لديهم زيارات مضافة بالفعل في يوم {date_str}."
         if is_ajax:
             return JsonResponse({
                 'success': False,
                 'created_count': 0,
+                'created_visit_ids': [],
                 'skipped_duplicates_count': len(skipped_duplicates),
                 'message': msg
             }, status=400)
@@ -1279,10 +1395,10 @@ def planned_visits_bulk_add(request):
     elif not created_items and skipped_ineligible:
         msg = f"تعذر إضافة العملاء المحددين لعدم توافق نوع حساباتهم مع القالب المختار."
         if is_ajax:
-            return JsonResponse({'success': False, 'created_count': 0, 'message': msg}, status=400)
+            return JsonResponse({'success': False, 'created_count': 0, 'created_visit_ids': [], 'message': msg}, status=400)
         messages.error(request, msg)
     else:
-        msg = f"تم إنشاء خطة يوم {date_str} بنجاح لـ ({len(created_items)}) عميل."
+        msg = f"تم إنشاء ({len(created_items)}) زيارة مخططة ليوم {date_str} بنجاح."
         if skipped_duplicates:
             msg += f" (تم تخطي {len(skipped_duplicates)} عميل مكرر في نفس اليوم)."
         if skipped_ineligible:
@@ -1291,6 +1407,7 @@ def planned_visits_bulk_add(request):
             return JsonResponse({
                 'success': True,
                 'created_count': len(created_items),
+                'created_visit_ids': created_visit_ids,
                 'skipped_duplicates_count': len(skipped_duplicates),
                 'message': msg
             })
@@ -1301,22 +1418,31 @@ def planned_visits_bulk_add(request):
 
 @require_permission('activities:planned/manage')
 def planned_visit_item_delete(request, pk):
-    """Remove a planned visit item."""
-    item = get_object_or_404(PlannedVisitItem, pk=pk)
-    is_owner = (item.plan_day.assignee == request.user)
-    from accounts.scope_service import ScopeResolutionService
-    can_override = (
-        request.user.is_superuser or
-        getattr(request.user, 'is_super_admin', False) or
-        has_perm_or_admin(request.user, 'activities:planned/manage') or
-        ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
-    )
-    if not (is_owner or can_override):
-        return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب آخر.")
+    """Remove a planned visit item (and its unstarted linked visit if any)."""
+    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'visit'), pk=pk)
+    if not can_user_access_object(request.user, item, 'manage'):
+        return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب أو منطقة خارج نطاقك.")
+
+    if item.visit and item.visit.status in ('started', 'finished'):
+        messages.error(request, f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها بدأت أو انتهت بالفعل.")
+        return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{item.plan_day.date.strftime('%Y-%m-%d')}")
 
     contact_name = item.contact.name
     date_str = item.plan_day.date.strftime('%Y-%m-%d')
-    item.delete()
+    with transaction.atomic():
+        linked_visit = item.visit
+        item.delete()
+        if linked_visit and linked_visit.status == 'planned':
+            linked_visit.delete()
+        AuditLogService.log(
+            action='delete',
+            action_type='PLANNED_VISIT_ITEM_DELETED',
+            module='activities',
+            user=request.user,
+            request=request,
+            record_id=pk,
+            object_repr=f"PlannedVisitItem #{pk} ({contact_name} - {date_str})",
+        )
     messages.success(request, f"تم حذف الزيارة المخططة للعميل {contact_name}.")
     return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
@@ -1324,44 +1450,38 @@ def planned_visit_item_delete(request, pk):
 @require_permission('activities:visits/create')
 def planned_visit_item_execute(request, pk):
     """
-    Route planned visit execution into the canonical visit registration workflow
-    with prefilled customer, template, and plan day context.
+    Route planned visit item into its linked Visit detail (when directly created)
+    or into visit creation fallback for legacy unlinked items.
     """
-    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'template'), pk=pk)
-    
-    # Permission check: only assigned rep or manager/superuser can execute
-    is_owner = (item.plan_day.assignee == request.user)
-    can_override = (
-        request.user.is_superuser or
-        getattr(request.user, 'is_super_admin', False) or
-        has_perm_or_admin(request.user, 'activities:planned/manage')
-    )
-    if not (is_owner or can_override):
-        return render_forbidden_response(request, "غير مصرح لك بتنفيذ خطة زيارة تابعة لمندوب آخر.")
+    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'template', 'visit'), pk=pk)
 
-    if item.is_executed and item.visit:
-        messages.info(request, f"تم تنفيذ هذه الزيارة المخططة مسبقاً (زيارة #{item.visit.serial_num}).")
+    if not can_user_access_object(request.user, item, 'manage'):
+        return render_forbidden_response(request, "غير مصرح لك بتنفيذ خطة زيارة تابعة لمندوب أو منطقة خارج نطاقك.")
+
+    if item.visit:
         return redirect('visit_detail', pk=item.visit.pk)
 
     template_param = f"&template_id={item.template.id}" if item.template else ""
     return redirect(f"/visits/create/?contact_id={item.contact.id}&planned_item_id={item.pk}{template_param}")
 
 
-
 @require_permission('activities:planned/export')
 def planned_visits_export(request):
-    """Export planned visits list to Excel."""
-    items = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact__area', 'template', 'visit').all().order_by('plan_day__date', 'order')
+    """Export planned visits list to Excel strictly within user's authorized scope and active filters."""
+    items = PlannedVisitItem.objects.select_related(
+        'plan_day__assignee', 'contact__area', 'contact__brick', 'template', 'visit'
+    ).all().order_by('plan_day__date', 'order')
+    items = get_scoped_queryset(items, request.user, 'plannedvisititem')
 
-    from accounts.scope_service import ScopeResolutionService
-    can_view_all = (
-        request.user.is_superuser or
-        getattr(request.user, 'is_super_admin', False) or
-        has_perm_or_admin(request.user, 'activities:planned/manage') or
-        ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
-    )
-    if not can_view_all:
-        items = items.filter(plan_day__assignee=request.user)
+    assignee_id = request.GET.get('assignee', '').strip()
+    if assignee_id.isdigit():
+        items = items.filter(plan_day__assignee_id=int(assignee_id))
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    if date_from:
+        items = items.filter(plan_day__date__gte=date_from)
+    if date_to:
+        items = items.filter(plan_day__date__lte=date_to)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1485,10 +1605,16 @@ def visits_list(request):
     contacts = Contact.objects.all().order_by('name')[:50]
     templates = VisitTemplate.objects.filter(active=True)
 
-    approved_count = qs.filter(approval_status='approved').count()
-    pending_count = qs.filter(approval_status='pending').count()
-    planned_count = Visit.objects.filter(is_planned=True).count()
-    unplanned_count = Visit.objects.filter(is_planned=False).count()
+    visits_agg = qs.aggregate(
+        approved_count=Count('id', filter=Q(approval_status='approved')),
+        pending_count=Count('id', filter=Q(approval_status='pending')),
+        planned_count=Count('id', filter=Q(is_planned=True)),
+        unplanned_count=Count('id', filter=Q(is_planned=False)),
+    )
+    approved_count = visits_agg['approved_count'] or 0
+    pending_count = visits_agg['pending_count'] or 0
+    planned_count = visits_agg['planned_count'] or 0
+    unplanned_count = visits_agg['unplanned_count'] or 0
 
     context = {
         'page_obj': page_obj,
@@ -2091,12 +2217,9 @@ def visit_create(request):
                         visit.started_at = None
                         visit.allowed_distance = location_settings.get_effective_tolerance(template)
 
-                        if not location_settings.require_manager_approval_for_visits or has_perm_or_admin(request.user, 'activities:visits/approve'):
-                            visit.approval_status = 'approved'
-                            visit.approved_by = request.user
-                            visit.approved_at = timezone.now()
-                        else:
-                            visit.approval_status = 'pending'
+                        visit.approval_status, visit.approved_by, visit.approved_at = resolve_visit_creation_approval(
+                            request.user, contact, is_planned_visit, location_settings, visit_owner=owner
+                        )
 
                         lat = request.POST.get('latitude') or request.POST.get('lat')
                         lng = request.POST.get('longitude') or request.POST.get('lng')
@@ -2443,8 +2566,12 @@ def visit_edit(request, pk):
                     critical_fields_changed = True
 
                 was_approved = (prev_approval_status == 'approved')
-                user_has_approval_authority = can_manage_approvals(request.user) and can_user_access_object(request.user, visit, 'approve')
+                user_has_approval_authority = (
+                    can_user_approve_contact_visit(request.user, visit.contact) and
+                    can_user_access_object(request.user, visit, 'approve')
+                )
                 reapproval_triggered = False
+                resubmitted_from_rejected = False
 
                 # Handle product detailing only if supported
                 detailed_product_ids = []
@@ -2464,10 +2591,20 @@ def visit_edit(request, pk):
                 if set(detailed_product_ids) != set(prev_values['detailed_products']):
                     critical_fields_changed = True
 
-                if was_approved and not user_has_approval_authority and critical_fields_changed:
-                    visit.approval_status = 'pending'
-                    visit.waiting_for_reapproval = True
-                    reapproval_triggered = True
+                # Requirement H: Editing an existing visit by an unauthorized user
+                # must always reset/set its approval status to pending approval.
+                if not user_has_approval_authority:
+                    if was_approved:
+                        visit.approval_status = 'pending'
+                        visit.waiting_for_reapproval = True
+                        reapproval_triggered = True
+                    else:
+                        if prev_approval_status in ('disapproved', 'rejected'):
+                            resubmitted_from_rejected = True
+                        visit.approval_status = 'pending'
+                        visit.waiting_for_reapproval = False
+                        visit.approved_by = None
+                        visit.approved_at = None
 
                 visit.save()
 
@@ -2510,10 +2647,9 @@ def visit_edit(request, pk):
                     )
                     messages.warning(
                         request,
-                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديل بيانات جوهرية بعد اعتمادها، تم تحويل حالتها إلى (بانتظار إعادة الاعتماد) من المدير."
+                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديلها بدون صلاحية اعتماد، تم تحويل حالتها إلى (قيد الاعتماد) من المدير."
                     )
                 else:
-                    audit_action = 'edited_by_manager' if user_has_approval_authority else 'edited'
                     if user_has_approval_authority and was_approved:
                         ApprovalAuditLog.objects.create(
                             record_type='visit',
@@ -2523,6 +2659,17 @@ def visit_edit(request, pk):
                             status_before=prev_approval_status,
                             status_after=visit.approval_status,
                             reason='تعديل بيانات الزيارة بواسطة مدير/مشرف معتمد',
+                            ip_address=request.META.get('REMOTE_ADDR')
+                        )
+                    elif resubmitted_from_rejected:
+                        ApprovalAuditLog.objects.create(
+                            record_type='visit',
+                            visit=visit,
+                            action='resubmitted',
+                            actor=request.user,
+                            status_before=prev_approval_status,
+                            status_after='pending',
+                            reason='تعديل زيارة مرفوضة وإعادة إرسالها للاعتماد',
                             ip_address=request.META.get('REMOTE_ADDR')
                         )
                     AuditLogService.log(
@@ -2539,6 +2686,8 @@ def visit_edit(request, pk):
                     messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num} بنجاح.")
 
             return redirect('visit_detail', pk=visit.pk)
+        else:
+            messages.error(request, "تعذر حفظ التعديلات. يرجى مراجعة الحقول المطلوبة والتأكد من صحتها.")
     else:
         # GET request: Ended visits cannot be opened for editing
         if visit.status == 'finished':
@@ -2566,11 +2715,16 @@ def visit_edit(request, pk):
         'templates': templates,
         'selected_contact': selected_contact,
         'saved_answers': saved_answers,
+        'saved_answers_json': json.dumps(saved_answers),
         'saved_detailed_products': saved_detailed_products,
         'can_bypass_gps': can_bypass_gps,
         'is_lower_user': not is_manager_or_higher(request.user),
         'verify_visits_enabled': location_settings.verify_visits,
+        'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
+        'default_tolerance': location_settings.tolerance,
+        'allow_template_distance_override': location_settings.allow_template_distance_override,
         'gps_tolerance': visit.effective_allowed_distance,
+        'today_str': timezone.now().date().strftime('%Y-%m-%d'),
         'title': f'تعديل الزيارة #{visit.serial_num}'
     })
 
@@ -2802,14 +2956,7 @@ def visit_action(request, pk, action):
         return get_redirect()
 
     elif action in ('approve', 'disapprove', 'reject'):
-        if not can_manage_approvals(request.user):
-            msg = "عذراً، لا تملك صلاحية اعتماد أو رفض الزيارات (خاص بالمدراء والمشرفين)."
-            if is_ajax:
-                return JsonResponse({'success': False, 'message': msg}, status=403)
-            messages.error(request, msg)
-            return get_redirect()
-
-        if not can_user_access_object(request.user, visit, action):
+        if not can_user_approve_contact_visit(request.user, visit.contact) or not can_user_access_object(request.user, visit, action):
             msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو المندوب العادي لا يمكنه اعتماد زيارته الخاصة)."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
@@ -2950,11 +3097,7 @@ def visit_action(request, pk, action):
         messages.success(request, msg)
 
     elif action in ('change_status', 'manage_status'):
-        if not can_manage_approvals(request.user):
-            msg = "عذراً، لا تملك صلاحية تغيير حالة أو اعتماد الزيارات (خاص بالمدراء والمشرفين)."
-            return render_forbidden_response(request, msg)
-
-        if not can_user_access_object(request.user, visit, 'approve'):
+        if not can_user_approve_contact_visit(request.user, visit.contact) or not can_user_access_object(request.user, visit, 'approve'):
             msg = "غير مصرح لك بتغيير حالة هذه الزيارة (خارج نطاق مسؤوليتك الإقليمية أو لا يمكن للمندوب اعتماد زيارته الخاصة)."
             return render_forbidden_response(request, msg)
 

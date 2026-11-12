@@ -133,15 +133,19 @@ class VisitForm(forms.ModelForm):
 
             self.fields['owner'].required = False
             if not is_manager:
-                # Lock representative assignment to current user
-                self.fields['owner'].queryset = UserModel.objects.filter(pk=user.pk)
-                self.fields['owner'].initial = user
+                # Lock representative assignment on create; preserve existing owner on edit
+                locked_owner = self.instance.owner if (self.instance and self.instance.pk and self.instance.owner_id) else user
+                self.fields['owner'].queryset = UserModel.objects.filter(pk=locked_owner.pk)
+                self.fields['owner'].initial = locked_owner
                 self.fields['owner'].disabled = True
             else:
                 managed_reps = get_user_managed_representatives(user)
                 managed_rep_ids = list(managed_reps.values_list('pk', flat=True))
-                self.fields['owner'].queryset = UserModel.objects.filter(pk__in=managed_rep_ids + [user.pk]).order_by('first_name', 'username')
-                self.fields['owner'].initial = user
+                allowed_owner_ids = set(managed_rep_ids) | {user.pk}
+                if self.instance and self.instance.pk and self.instance.owner_id:
+                    allowed_owner_ids.add(self.instance.owner_id)
+                self.fields['owner'].queryset = UserModel.objects.filter(pk__in=allowed_owner_ids).order_by('first_name', 'username')
+                self.fields['owner'].initial = self.instance.owner if (self.instance and self.instance.pk and self.instance.owner_id) else user
         else:
             self.is_manager = False
             self.fields['contact'].queryset = base_qs.order_by('name')
@@ -161,12 +165,15 @@ class VisitForm(forms.ModelForm):
         user = self.user
         is_editing = bool(self.instance and self.instance.pk)
 
-        # Business Rule (Requirement 4.B & 6): Non-managers are locked to themselves; default to current user
+        # Business Rule (Requirement 4.B & 6): Non-managers cannot reassign owner
         is_manager = getattr(self, 'is_manager', False)
-        if not is_manager and user and user.is_authenticated:
-            cleaned_data['owner'] = user
+        if not is_manager:
+            if is_editing and self.instance.owner_id:
+                cleaned_data['owner'] = self.instance.owner
+            elif user and user.is_authenticated:
+                cleaned_data['owner'] = user
         elif not cleaned_data.get('owner') and user and user.is_authenticated:
-            cleaned_data['owner'] = user
+            cleaned_data['owner'] = self.instance.owner if (is_editing and self.instance.owner_id) else user
 
         # Determine Visit Type: Planned vs Unplanned
         # Planned visits must ONLY be created via bulk planned-visits workflow and executed via planned_item_id.

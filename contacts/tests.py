@@ -656,3 +656,129 @@ class ContactCommunicationMethodAndStatsTests(TestCase):
         stats_inact = res_inactive.context['stats']
         self.assertEqual(stats_inact['total'], 1)
         self.assertEqual(stats_inact['customers'], 1)
+
+
+class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
+    """Verifies Requirements B, D, J, K in contacts."""
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام', 'is_super': True, 'is_system': True, 'is_active': True}
+        )
+        self.rep_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_REP,
+            defaults={'display_name': 'مندوب', 'is_sales_team': True, 'is_rep': True}
+        )
+        self.admin = User.objects.create_superuser(
+            username='admin_cnt_req', email='admin_cnt@wea.com', password='TestPassword123!', role=self.superadmin_role
+        )
+        self.cairo = Area.objects.create(code='GOV-CAI-CNT', name='القاهرة الكبرى', area_type='governorate')
+        self.nasr = Area.objects.create(code='BRK-NAS-CNT', name='مدينة نصر', parent=self.cairo, area_type='subarea')
+        self.maadi = Area.objects.create(code='BRK-MAA-CNT', name='المعادي', parent=self.cairo, area_type='subarea')
+        self.giza = Area.objects.create(code='GOV-GIZ-CNT', name='الجيزة الكبرى', area_type='governorate')
+        self.dokki = Area.objects.create(code='BRK-DOK-CNT', name='الدقي', parent=self.giza, area_type='subarea')
+
+        self.rep_nasr = User.objects.create_user(
+            username='rep_nasr_cnt', email='rep_nasr_cnt@wea.com', password='TestPassword123!', role=self.rep_role
+        )
+        self.rep_nasr.assigned_areas.add(self.nasr)
+
+        self.parent_org = Contact.objects.create(
+            name='مجموعة الشفاء الأم', contact_type='organization', is_customer=True, status='active',
+            area=self.cairo, brick=self.nasr, created_by=self.admin
+        )
+
+    def test_contact_edit_prepopulates_area_brick_and_all_fields_without_address_row(self):
+        # Contact created directly with area+brick but NO ContactAddress row (e.g. Excel import)
+        contact = Contact.objects.create(
+            name='صيدلية الاستيراد', contact_type='organization', is_customer=True, status='active',
+            customer_category='A+', specialty='صيدلية مجتمعية', account_type='Pharmacy',
+            mobile='+20 1011223344', email='imp@test.com', area=self.cairo, brick=self.nasr,
+            parent_org=self.parent_org, is_kol=True, credit_limit=Decimal('15000.00'),
+            credit_period_days=45, created_by=self.admin
+        )
+        self.client.force_login(self.admin)
+        res = self.client.get(reverse('contact_edit', kwargs={'pk': contact.pk}))
+        self.assertEqual(res.status_code, 200)
+        entries = res.context['address_entries']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['effective_area_id'], self.cairo.id)
+        self.assertEqual(entries[0]['effective_brick_id'], self.nasr.id)
+        html = res.content.decode('utf-8')
+        self.assertIn(f'<option value="{self.cairo.id}" selected>', html)
+        self.assertIn(f'<option value="{self.nasr.id}" selected>', html)
+        self.assertIn('<option value="active" selected>', html)
+        self.assertIn(f'<option value="{self.parent_org.id}" selected>', html)
+
+        # Updating brick via edit form synchronizes contact.brick and contact.area
+        post_res = self.client.post(reverse('contact_edit', kwargs={'pk': contact.pk}), {
+            'contact_type': 'organization',
+            'status': 'customer',
+            'relations': ['عميل'],
+            'name': 'صيدلية الاستيراد',
+            'parent_org': str(self.parent_org.id),
+            'address_title[]': ['الفرع الرئيسي'],
+            'address_area[]': [str(self.cairo.id)],
+            'address_sub_area[]': [str(self.maadi.id)],
+            'address_street[]': ['شارع النصر 10'],
+            'address_is_main_flag[]': ['1'],
+        })
+        self.assertEqual(post_res.status_code, 302)
+        contact.refresh_from_db()
+        self.assertEqual(contact.area, self.cairo)
+        self.assertEqual(contact.brick, self.maadi)
+        self.assertEqual(contact.status, 'customer')
+        self.assertEqual(contact.parent_org, self.parent_org)
+
+    def test_contact_gps_persists_with_arabic_numerals_and_multiple_cards(self):
+        self.client.force_login(self.admin)
+        # Simulate multiple cards + Arabic numerals coordinate entry
+        res = self.client.post(reverse('contact_create'), {
+            'contact_type': 'organization',
+            'relations': ['عميل'],
+            'status': 'customer',
+            'customer_category': 'A',
+            'specialty': 'صيدلية',
+            'account_type': 'Pharmacy',
+            'name': 'عيادة الإحداثيات',
+            'address_title[]': ['الرئيسي', 'الفرعي'],
+            'address_area[]': [str(self.cairo.id), str(self.giza.id)],
+            'address_sub_area[]': [str(self.nasr.id), str(self.dokki.id)],
+            'address_street[]': ['شارع 1', 'شارع 2'],
+            'address_is_main_flag[]': ['1', '0'],
+            'latitude': ['٣٠.٠٥٤٣٢١٠'],
+            'longitude': ['٣١.٣٤١٢٣٤٥'],
+        })
+        self.assertEqual(res.status_code, 302)
+        created = Contact.objects.get(name='عيادة الإحداثيات')
+        self.assertTrue(created.has_saved_location)
+        self.assertAlmostEqual(float(created.latitude), 30.054321, places=5)
+        self.assertAlmostEqual(float(created.longitude), 31.3412345, places=5)
+
+    def test_contacts_multiselect_apis_and_multi_filter_list_and_export(self):
+        c1 = Contact.objects.create(name='عميل نصر', is_customer=True, status='customer', area=self.cairo, brick=self.nasr, created_by=self.admin)
+        c2 = Contact.objects.create(name='عميل الدقي', is_customer=True, status='customer', area=self.giza, brick=self.dokki, created_by=self.admin)
+
+        self.client.force_login(self.rep_nasr)
+        # Empty q immediately returns authorized area/brick only
+        r_areas = self.client.get(reverse('contacts_search_areas_api'))
+        self.assertEqual(r_areas.status_code, 200)
+        self.assertEqual([x['id'] for x in r_areas.json()['results']], [self.cairo.id])
+
+        r_bricks = self.client.get(reverse('contacts_search_bricks_api'))
+        self.assertEqual(r_bricks.status_code, 200)
+        self.assertEqual([x['id'] for x in r_bricks.json()['results']], [self.nasr.id])
+
+        # SuperAdmin filters contacts list + export by multiple areas/bricks
+        self.client.force_login(self.admin)
+        res_multi = self.client.get(reverse('contacts_list') + f'?area_id={self.cairo.id}&area_id={self.giza.id}&brick_id={self.nasr.id}')
+        self.assertEqual(res_multi.status_code, 200)
+        self.assertEqual(res_multi.context['stats']['total_contacts'], 2)  # self.parent_org + c1 in Nasr City
+        listed_ids = {c.id for c in res_multi.context['contacts']}
+        self.assertIn(c1.id, listed_ids)
+        self.assertNotIn(c2.id, listed_ids)
+        exp_multi = self.client.get(reverse('contacts_export') + f'?brick_id={self.nasr.id}')
+        self.assertEqual(exp_multi.status_code, 200)
+

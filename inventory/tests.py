@@ -392,3 +392,15 @@ class ProductTransferWorkflowTests(TestCase):
                 items_data=items_data
             )
         self.assertIn("غير كافٍ للكمية المطلوبة", str(ctx.exception))
+
+    def test_inventory_and_warehouses_list_stats_respect_filters(self):
+        admin = User.objects.create_superuser(username='inv_stats_adm', email='inv_s@wea.com', password='TestPassword123!')
+        self.client.force_login(admin)
+        res_stock = self.client.get(reverse('inventory_stock_list') + '?search=NONEXISTENT_SKU')
+        self.assertEqual(res_stock.status_code, 200)
+        self.assertEqual(res_stock.context['stats']['total_items'], 0)
+
+        res_wh = self.client.get(reverse('warehouses_list') + '?search=NONEXISTENT_WH')
+        self.assertEqual(res_wh.status_code, 200)
+        self.assertEqual(res_wh.context['stats']['total_warehouses'], 0)
+
