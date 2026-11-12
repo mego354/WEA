@@ -562,4 +562,19 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
             )
         self.assertIn('يتجاوز الرصيد المستحق', str(ctx.exception))
 
+    def test_purchase_list_stats_respect_active_filters(self):
+        PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 5, 'unit_price': Decimal('40.00')}],
+            user=self.accountant
+        )
+        self.client.force_login(self.superadmin)
+        res = self.client.get(reverse('purchase_orders_list') + '?search=NO_SUCH_PO_999')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['stats']['total_orders'], 0)
+        self.assertEqual(res.context['stats']['total_value'], Decimal('0.00'))
+
+
 

@@ -297,3 +297,13 @@ class CatalogModelsAndViewsTestCase(TestCase):
         self.assertContains(detail_resp, '15,00%')
         self.assertTrue(p.volume_discounts.filter(discount_percentage=Decimal('15.00')).exists())
 
+    def test_products_list_stats_respect_filters(self):
+        res_all = self.client.get(reverse('products_list'))
+        self.assertEqual(res_all.status_code, 200)
+        self.assertEqual(res_all.context['stats']['total_products'], 1)
+
+        res_none = self.client.get(reverse('products_list') + '?search=NONEXISTENT_PROD_XYZ')
+        self.assertEqual(res_none.status_code, 200)
+        self.assertEqual(res_none.context['stats']['total_products'], 0)
+
+

@@ -105,9 +105,9 @@ erDiagram
    - Workflow state: `planned` → `started` → `finished`.
    - Approval state: `pending` → `approved` / `disapproved`.
    - Unplanned visits created directly via `/visits/create/` (`is_planned=False`).
-   - Planned visits created via bulk daily agenda scheduling (`/planned-visits/`) with `is_planned=True`.
+   - Planned visits generated directly by bulk daily planning (`/planned-visits/bulk-add/`) creating linked `PlannedVisitItem` and `Visit(is_planned=True, status='planned')` records atomically, with fallback execution support for legacy unlinked items.
    - Stores scheduled `time` (`TimeField`) and localized 12-hour formatted representation.
-   - GPS coordinates with distance verification against client address within configurable tolerance.
+   - GPS coordinates with distance verification against client address within configurable tolerance; OpenStreetMap Leaflet tile rendering with `SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'` and automatic fallback tiles.
 
 5. **SalesOrder (`sales.SalesOrder`)**:
    - Multi-stage pipeline: `pending` → `manager_approval` → `preparing` → `delivered` → `invoiced`.

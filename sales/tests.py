@@ -469,3 +469,40 @@ class SalesCollectionAndTerritoryScopingTests(TestCase):
         self.client.force_login(self.manager_cairo)
         resp = self.client.get(reverse('sales_order_detail', args=[cairo_order.pk]))
         self.assertEqual(resp.status_code, 200)
+
+    def test_sales_list_stats_respect_active_filters(self):
+        SalesOrderService.create_order(
+            customer=self.customer,
+            source_warehouse=self.rep_cairo_warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 2, 'unit_price': Decimal('50.00')}],
+            user=self.rep_cairo
+        )
+        SalesOrderService.create_order(
+            customer=self.customer,
+            source_warehouse=self.rep_cairo_warehouse,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 4, 'unit_price': Decimal('50.00')}],
+            user=self.rep_cairo
+        )
+        CollectionService.record_collection(
+            customer=self.customer,
+            vault=self.main_vault,
+            amount=Decimal('120.00'),
+            user=self.rep_cairo
+        )
+        self.client.force_login(self.manager_cairo)
+        res_filtered = self.client.get(reverse('sales_orders_list') + '?search=NOT_FOUND_XYZ')
+        self.assertEqual(res_filtered.status_code, 200)
+        self.assertEqual(res_filtered.context['stats']['total_orders'], 0)
+        self.assertEqual(res_filtered.context['stats']['total_value'], Decimal('0.00'))
+
+        res_col_filt = self.client.get(reverse('collections_list') + '?search=NOT_FOUND_XYZ')
+        self.assertEqual(res_col_filt.status_code, 200)
+        self.assertEqual(res_col_filt.context['stats']['total_count'], 0)
+        self.assertEqual(res_col_filt.context['stats']['total_amount'], Decimal('0.00'))
+
+        res_cust_filt = self.client.get(reverse('sales_customers_list') + '?search=NOT_FOUND_XYZ')
+        self.assertEqual(res_cust_filt.status_code, 200)
+        self.assertEqual(res_cust_filt.context['stats']['total_customers'], 0)
+

@@ -47,9 +47,8 @@ def inventory_stock_list(request):
     # Scoped warehouses available for filter dropdown
     warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
 
-    # Real scoped statistics
-    base_scoped = get_scoped_queryset(InventoryStock.objects.all(), request.user, 'inventorystock')
-    stock_aggregates = base_scoped.aggregate(
+    # Real scoped statistics matching active filters
+    stock_aggregates = qs.aggregate(
         total_items=Count('id'),
         total_qty_on_hand=Sum('qty_on_hand'),
         total_qty_reserved=Sum('qty_reserved'),
@@ -58,11 +57,11 @@ def inventory_stock_list(request):
     tot_reserved = stock_aggregates['total_qty_reserved'] or Decimal('0.00')
     tot_available = max(Decimal('0.00'), tot_on_hand - tot_reserved)
 
-    total_cost_val = base_scoped.annotate(
+    total_cost_val = qs.annotate(
         val=ExpressionWrapper(F('qty_on_hand') * F('product_cost'), output_field=DecimalField(max_digits=14, decimal_places=2))
     ).aggregate(tot=Sum('val'))['tot'] or Decimal('0.00')
 
-    low_stock_count = base_scoped.annotate(
+    low_stock_count = qs.annotate(
         avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
     ).filter(avail__lte=5).count()
 
@@ -166,13 +165,18 @@ def warehouses_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
-    # Dedicated real scoped statistics cards
-    scoped_all = get_scoped_queryset(Warehouse.objects.all(), request.user, 'warehouse')
+    # Dedicated real scoped statistics cards matching active filters
+    wh_agg = qs.aggregate(
+        total_warehouses=Count('id'),
+        main_warehouses=Count('id', filter=Q(is_main=True)),
+        rep_warehouses=Count('id', filter=Q(assigned_user__isnull=False)),
+        active_warehouses=Count('id', filter=Q(is_active=True)),
+    )
     stats = {
-        'total_warehouses': scoped_all.count(),
-        'main_warehouses': scoped_all.filter(is_main=True).count(),
-        'rep_warehouses': scoped_all.filter(assigned_user__isnull=False).count(),
-        'active_warehouses': scoped_all.filter(is_active=True).count(),
+        'total_warehouses': wh_agg['total_warehouses'] or 0,
+        'main_warehouses': wh_agg['main_warehouses'] or 0,
+        'rep_warehouses': wh_agg['rep_warehouses'] or 0,
+        'active_warehouses': wh_agg['active_warehouses'] or 0,
     }
 
     context = {

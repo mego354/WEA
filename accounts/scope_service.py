@@ -15,6 +15,7 @@ class ScopeResolutionService:
         'contactactivity': 'contacts',
         'visit': 'activities',
         'plannedvisitday': 'activities',
+        'plannedvisititem': 'activities',
         'agreement': 'activities',
         'visittemplate': 'activities',
         'salesorder': 'sales',
@@ -370,11 +371,42 @@ class ScopeResolutionService:
                     (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
                 ).distinct()
 
-        # 2. Activities: PlannedVisitDay
+        # 2. Activities: PlannedVisitDay & PlannedVisitItem
         elif m_name == 'plannedvisitday':
             if scope == 'own':
                 return queryset.filter(assignee=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(assignee=user) | Q(assignee__assigned_areas__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.filter(assignee=user)
+                return queryset.filter(assignee__in=managed_subordinates).distinct()
             return queryset.filter(assignee__in=managed_subordinates).distinct()
+
+        elif m_name == 'plannedvisititem':
+            if scope == 'own':
+                return queryset.filter(plan_day__assignee=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(plan_day__assignee=user) |
+                    Q(plan_day__assignee__assigned_areas__in=user_bricks)
+                ).filter(
+                    Q(contact__brick__in=user_bricks) |
+                    Q(contact__area__in=user_bricks) |
+                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.filter(plan_day__assignee=user)
+                return queryset.filter(
+                    Q(plan_day__assignee__in=managed_subordinates)
+                ).filter(
+                    Q(contact__brick__in=managed_areas) |
+                    Q(contact__area__in=managed_areas) |
+                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                ).distinct()
 
         # 3. Activities: Agreement
         elif m_name == 'agreement':
@@ -714,7 +746,7 @@ class ScopeResolutionService:
                 main_areas = cls.get_user_main_areas(user)
                 return Area.objects.filter(parent__in=main_areas, is_company_area=False).select_related('parent').order_by('name')
             else:
-                return cls.get_user_bricks(user).order_by('name')
+                return cls.get_user_bricks(user).filter(parent__isnull=False, is_company_area=False).select_related('parent').order_by('name')
 
         elif target_choice_type == 'customers':
             return cls.get_scoped_queryset(

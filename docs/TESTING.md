@@ -10,17 +10,17 @@ The test suite is structured following a strict rule: **exactly one primary test
 
 ```text
 ERP/
-├── accounts/tests.py        # 104 tests (RBAC, Scopes, Audit, Provisioning, Scoped Querysets)
-├── activities/tests.py      # 114 tests (Visits, Templates, GPS, Agenda, Approvals, Agreements)
-├── catalog/tests.py         #  16 tests (Products, Categories, Discounts, Packaging)
-├── contacts/tests.py        #  21 tests (Contacts, UDF, Todos, Timeline, Subareas API)
-├── inventory/tests.py       #  14 tests (Warehouses, Stock, Lots, Transfers, Memos)
-├── master_data/tests.py     #  51 tests (Areas, Dashboard Stats, Settings, Pagination, Filters)
-├── purchases/tests.py       #  19 tests (Purchase Orders, Receiving, Supplier Payments)
-├── sales/tests.py           #  12 tests (Sales Orders, Collections, Rep Scoping)
-└── treasury/tests.py        #  20 tests (Vaults, Cash Transactions, Deposit/Withdraw Auth)
+├── accounts/tests.py        # 105 tests (RBAC, Scopes, Audit, Provisioning, Scoped Querysets, List Stats)
+├── activities/tests.py      # 133 tests (Visits, Bulk Direct Creation, Area/Brick Multiselect, Reapproval, GPS, Agreements)
+├── catalog/tests.py         #  17 tests (Products, Categories, Discounts, Packaging, Filtered Stats)
+├── contacts/tests.py        #  28 tests (Contacts, Edit Prepopulation, GPS Persistence, Multiselect APIs, Stats)
+├── inventory/tests.py       #  15 tests (Warehouses, Stock, Lots, Transfers, Memos, Filtered Stats)
+├── master_data/tests.py     #  56 tests (Areas, Dashboard Stats, Settings, Pagination, Filters)
+├── purchases/tests.py       #  20 tests (Purchase Orders, Receiving, Supplier Payments, Filtered Stats)
+├── sales/tests.py           #  13 tests (Sales Orders, Collections, Rep Scoping, Filtered Stats)
+└── treasury/tests.py        #  21 tests (Vaults, Cash Transactions, Deposit/Withdraw Auth, Filtered Stats)
 ---------------------------------------------------------------------------------
-Total: 9 Consolidated Test Files, 371 Total Behavioral Tests (100% Passing)
+Total: 9 Consolidated Test Files, 408 Total Behavioral Tests (Passing)
 ```
 
 ---

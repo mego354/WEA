@@ -288,27 +288,42 @@
             attributionControl: true
         }).setView(center, hasSaved ? 16 : 12);
 
-        // Use the standard OpenStreetMap tile endpoint; it does not require an API key.
-        // Keep visible attribution and respect the provider's tile usage policy.
+        // Use the standard OpenStreetMap tile endpoint with automatic CartoDB fallback
+        // if OSM blocks tiles or experiences network failures on desktop clients.
+        const primaryUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+        const fallbackUrl = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+        let usingFallback = false;
+
         const tileLayer = window.L.tileLayer(
-            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            primaryUrl,
             {
                 maxZoom: 19,
+                referrerPolicy: "strict-origin-when-cross-origin",
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
             }
         ).addTo(leafletMap);
 
         // Tile failures are different from Leaflet initialization failures.
-        // Show a useful message only when tile requests actually fail.
+        // Switch automatically to fallback provider before showing an error overlay.
         let tileErrors = 0;
         let tileLoads = 0;
+        let fallbackErrors = 0;
         tileLayer.on("tileload", () => {
             tileLoads += 1;
             if (tileLoads > 0) hideMapError();
         });
         tileLayer.on("tileerror", () => {
             tileErrors += 1;
-            if (tileErrors >= 3 && tileLoads === 0 && errorOverlay) {
+            if (!usingFallback && tileErrors >= 3 && tileLoads === 0) {
+                usingFallback = true;
+                tileLayer.options.subdomains = ["a", "b", "c", "d"];
+                tileLayer.setUrl(fallbackUrl);
+                return;
+            }
+            if (usingFallback) {
+                fallbackErrors += 1;
+            }
+            if (usingFallback && fallbackErrors >= 3 && tileLoads === 0 && errorOverlay) {
                 const message = errorOverlay.querySelector("p.text-xs");
                 if (message) {
                     message.textContent = "تعذر تحميل صور الخريطة من مزود الخرائط. تحقق من اتصال الإنترنت أو جرّب شبكة أخرى؛ ما زال بإمكانك تحديد الإحداثيات يدوياً.";
@@ -483,16 +498,47 @@
         });
     }
 
+    const normalizeNumericStr = raw => {
+        if (raw === null || raw === undefined) return "";
+        return String(raw)
+            .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+            .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+            .replace(/،/g, ".")
+            .trim();
+    };
+
+    const syncManualToInputs = (moveMap = false) => {
+        if (!manualLat || !manualLng) return false;
+        const latStr = normalizeNumericStr(manualLat.value);
+        const lngStr = normalizeNumericStr(manualLng.value);
+        if (latStr === "" || lngStr === "") return false;
+        const lat = Number(latStr);
+        const lng = Number(lngStr);
+        if (!validCoordinates(lat, lng)) return false;
+        updatePosition(lat, lng, "تم تعيين الإحداثيات يدوياً", false);
+        if (moveMap && leafletMap) leafletMap.setView([lat, lng], 16);
+        return true;
+    };
+
+    if (manualLat && manualLng && canEdit) {
+        manualLat.addEventListener("input", () => syncManualToInputs(true));
+        manualLng.addEventListener("input", () => syncManualToInputs(true));
+        const parentForm = manualLat.closest("form");
+        if (parentForm) {
+            parentForm.addEventListener("submit", () => {
+                if (manualDrawer && !manualDrawer.classList.contains("hidden")) {
+                    syncManualToInputs(false);
+                }
+            });
+        }
+    }
+
     if (applyManualBtn && canEdit) {
         applyManualBtn.addEventListener("click", () => {
-            const lat = Number(manualLat.value);
-            const lng = Number(manualLng.value);
-            if (manualLat.value.trim() === "" || manualLng.value.trim() === "" || !validCoordinates(lat, lng)) {
+            if (!syncManualToInputs(true)) {
                 alert("يرجى إدخال خط عرض وخط طول صحيحين.");
                 return;
             }
-            updatePosition(lat, lng, "تم تعيين الإحداثيات يدوياً", true);
-            if (leafletMap) leafletMap.setView([lat, lng], 16);
             manualDrawer.classList.add("hidden");
         });
     }

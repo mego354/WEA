@@ -35,17 +35,6 @@ def vendor_payments_list(request):
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by', 'purchase_order').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vendorpayment')
 
-    # Dedicated, real scoped statistics cards calculations (calculated before page-specific filter narrowing)
-    scoped_all = get_scoped_queryset(VendorPayment.objects.all(), request.user, 'vendorpayment')
-    now = timezone.now()
-    stats = {
-        'total_count': scoped_all.count(),
-        'total_amount': scoped_all.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-        'month_amount': scoped_all.filter(payment_date__year=now.year, payment_date__month=now.month).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-        'cash_amount': scoped_all.filter(payment_method='cash').aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-        'bank_amount': scoped_all.filter(payment_method__in=['cheque', 'bank_transfer']).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-    }
-
     active_filters = []
 
     if supplier_id:
@@ -71,6 +60,22 @@ def vendor_payments_list(request):
             Q(notes__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    now = timezone.now()
+    vp_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_amount=Sum('amount'),
+        month_amount=Sum('amount', filter=Q(payment_date__year=now.year, payment_date__month=now.month)),
+        cash_amount=Sum('amount', filter=Q(payment_method='cash')),
+        bank_amount=Sum('amount', filter=Q(payment_method__in=['cheque', 'bank_transfer'])),
+    )
+    stats = {
+        'total_count': vp_agg['total_count'] or 0,
+        'total_amount': vp_agg['total_amount'] or Decimal('0.00'),
+        'month_amount': vp_agg['month_amount'] or Decimal('0.00'),
+        'cash_amount': vp_agg['cash_amount'] or Decimal('0.00'),
+        'bank_amount': vp_agg['bank_amount'] or Decimal('0.00'),
+    }
 
     suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
     vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
@@ -201,14 +206,6 @@ def accounting_vendors_list(request):
     scoped_suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact')
     qs = qs.filter(supplier__in=scoped_suppliers)
 
-    # Real scoped statistics cards
-    stats = {
-        'total_suppliers': qs.count(),
-        'total_payable': qs.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00'),
-        'total_overdue': qs.aggregate(total=Sum('overdue_balance'))['total'] or Decimal('0.00'),
-        'total_credit_limit': qs.aggregate(total=Sum('credit_limit'))['total'] or Decimal('0.00'),
-    }
-
     active_filters = []
     if search:
         qs = qs.filter(
@@ -216,6 +213,19 @@ def accounting_vendors_list(request):
             Q(supplier__code__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    v_agg = qs.aggregate(
+        total_suppliers=Count('id'),
+        total_payable=Sum('current_balance'),
+        total_overdue=Sum('overdue_balance'),
+        total_credit_limit=Sum('credit_limit'),
+    )
+    stats = {
+        'total_suppliers': v_agg['total_suppliers'] or 0,
+        'total_payable': v_agg['total_payable'] or Decimal('0.00'),
+        'total_overdue': v_agg['total_overdue'] or Decimal('0.00'),
+        'total_credit_limit': v_agg['total_credit_limit'] or Decimal('0.00'),
+    }
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -243,16 +253,6 @@ def vendor_transactions_list(request):
     scoped_suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact')
     qs = qs.filter(account__supplier__in=scoped_suppliers)
 
-    # Real scoped statistics cards
-    total_credit = qs.aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
-    total_debit = qs.aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
-    stats = {
-        'total_count': qs.count(),
-        'total_credit': total_credit,
-        'total_debit': total_debit,
-        'net_balance': total_credit - total_debit,
-    }
-
     active_filters = []
 
     if vendor_id:
@@ -267,6 +267,20 @@ def vendor_transactions_list(request):
             Q(account__supplier__name__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    vtx_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_credit=Sum('credit'),
+        total_debit=Sum('debit'),
+    )
+    total_credit = vtx_agg['total_credit'] or Decimal('0.00')
+    total_debit = vtx_agg['total_debit'] or Decimal('0.00')
+    stats = {
+        'total_count': vtx_agg['total_count'] or 0,
+        'total_credit': total_credit,
+        'total_debit': total_debit,
+        'net_balance': total_credit - total_debit,
+    }
 
     suppliers = scoped_suppliers.order_by('name')
 
@@ -295,16 +309,6 @@ def vaults_list(request):
     qs = Vault.objects.select_related('assigned_user').order_by('serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vault')
 
-    # Dedicated Real Scoped Statistics Cards
-    stats_qs = qs
-    stats = {
-        'total_vaults': stats_qs.count(),
-        'active_vaults': stats_qs.filter(is_active=True).count(),
-        'total_balance': stats_qs.filter(is_active=True).aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00'),
-        'cash_balance': stats_qs.filter(is_active=True, vault_type='cash').aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00'),
-        'bank_balance': stats_qs.filter(is_active=True, vault_type='bank').aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00'),
-    }
-
     active_filters = []
     if search:
         qs = qs.filter(
@@ -312,6 +316,22 @@ def vaults_list(request):
             Q(serial_num__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    # Dedicated Real Scoped Statistics Cards matching active filters
+    vlt_agg = qs.aggregate(
+        total_vaults=Count('id'),
+        active_vaults=Count('id', filter=Q(is_active=True)),
+        total_balance=Sum('current_balance', filter=Q(is_active=True)),
+        cash_balance=Sum('current_balance', filter=Q(is_active=True, vault_type='cash')),
+        bank_balance=Sum('current_balance', filter=Q(is_active=True, vault_type='bank')),
+    )
+    stats = {
+        'total_vaults': vlt_agg['total_vaults'] or 0,
+        'active_vaults': vlt_agg['active_vaults'] or 0,
+        'total_balance': vlt_agg['total_balance'] or Decimal('0.00'),
+        'cash_balance': vlt_agg['cash_balance'] or Decimal('0.00'),
+        'bank_balance': vlt_agg['bank_balance'] or Decimal('0.00'),
+    }
 
     can_transfer = has_perm_or_admin(request.user, 'treasury:vaults/transfer')
     can_manage = has_perm_or_admin(request.user, 'treasury:vaults/manage')
@@ -385,17 +405,6 @@ def vault_transactions_list(request):
     qs = VaultTransaction.objects.select_related('vault', 'created_by', 'reversal_transaction').order_by('-created_at')
     qs = get_scoped_queryset(qs, request.user, 'vaulttransaction')
 
-    # Dedicated Real Scoped Statistics Cards
-    scoped_all = qs
-    total_inflow = scoped_all.filter(transaction_type='inflow').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-    total_outflow = scoped_all.filter(transaction_type='outflow').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-    stats = {
-        'total_count': scoped_all.count(),
-        'total_inflow': total_inflow,
-        'total_outflow': total_outflow,
-        'net_flow': total_inflow - total_outflow,
-    }
-
     active_filters = []
 
     if vault_id:
@@ -414,6 +423,20 @@ def vault_transactions_list(request):
             Q(vault__name__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    vtx2_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_inflow=Sum('amount', filter=Q(transaction_type='inflow')),
+        total_outflow=Sum('amount', filter=Q(transaction_type='outflow')),
+    )
+    total_inflow = vtx2_agg['total_inflow'] or Decimal('0.00')
+    total_outflow = vtx2_agg['total_outflow'] or Decimal('0.00')
+    stats = {
+        'total_count': vtx2_agg['total_count'] or 0,
+        'total_inflow': total_inflow,
+        'total_outflow': total_outflow,
+        'net_flow': total_inflow - total_outflow,
+    }
 
     vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
     can_reverse = has_perm_or_admin(request.user, 'treasury:transactions/reverse')

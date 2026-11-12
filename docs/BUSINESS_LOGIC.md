@@ -26,8 +26,8 @@ stateDiagram-v2
 
 ### 1.1 Automatic Planned vs. Unplanned Determination
 - **Zero Ambiguity**: Manual selection of planned vs. unplanned visit type has been eliminated.
-- **Unplanned Visits**: Initiated only via `/visits/create/` (e.g. from the global navigation `+` button). The backend automatically sets `is_planned=False`.
-- **Planned Visits**: Generated exclusively via bulk daily planning (`/planned-visits/bulk-add/`). When executed, the representative provides `planned_item_id`, setting `is_planned=True` and linking `item.visit = visit`.
+- **Unplanned Visits**: Initiated only via `/visits/create/` (e.g. from the global navigation `+` button). The backend automatically sets `is_planned=False`. Creators without area-level supervisory approval authority always start visits as `approval_status='pending'` (users with `'own'` or `'brick'` manage scope cannot auto-approve).
+- **Planned Visits**: Generated directly via bulk daily planning (`/planned-visits/bulk-add/`), which atomically creates both the `PlannedVisitItem` and the corresponding `Visit(is_planned=True, status='planned')` linked via `PlannedVisitItem.visit`. Approval status resolves through the centralized `resolve_visit_creation_approval` helper.
 
 ### 1.2 GPS Distance Validation & Geofencing
 - **Configurable Allowed Distance**:
@@ -45,13 +45,11 @@ stateDiagram-v2
 ### 1.3 In-Progress Visit Editing & Smart Reapproval
 - **Status Locking**: Visits that have ended (`status == 'finished'`) are strictly locked from modification to preserve audit integrity and historical records.
 - **In-Progress Editing**: Visits in progress (`status in ['planned', 'draft', 'started']`) may be edited by authorized users.
-- **Smart Reapproval Triggering**:
-  - When an already-approved visit (`approval_status='approved'`) is edited by a representative and critical fields change (`date`, `contact`, `template`, `owner`, `doubled`, `questionnaire_answers`, or `detailed_products`):
-    - Approval is immediately revoked: `approval_status = 'pending'`.
-    - The flag `waiting_for_reapproval = True` is set.
-    - Previous `ApprovalAuditLog` records are preserved, and an `edited_reapproval_required` log is appended.
-    - The visit cannot proceed to execution until an authorized manager re-approves it.
-  - When edited by an authorized manager/supervisor, approval is retained (`approval_status='approved'`) and an `edited_by_manager` entry is recorded in `ApprovalAuditLog`.
+- **Unauthorized Editor Pending Reset & Reapproval**:
+  - When an active/unstarted visit is edited by a user without supervisory approval authority over that visit's region:
+    - Previously approved visits transition to `approval_status = 'pending'`, `waiting_for_reapproval = True`, preserve prior `ApprovalAuditLog` history, and append an `edited_reapproval_required` log.
+    - Previously pending or disapproved visits remain/reset to `approval_status = 'pending'` (`waiting_for_reapproval = False`), recording `resubmitted` when transitioning from `disapproved`, and clearing `approved_by`/`approved_at`.
+  - When edited by an authorized manager/supervisor within area scope, existing `approved` status is retained and an `edited_by_manager` entry is recorded in `ApprovalAuditLog`.
 
 ### 1.4 Visit Start Workflow & Questionnaire Stages
 - **Separation of Stages**:

@@ -158,7 +158,7 @@
                 <span>معلومات اساسية</span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
                 <!-- النوع -->
                 <div>
                     <label class="custom-input-label" for="contact_type">
@@ -167,6 +167,16 @@
                     <select name="contact_type" id="contact_type" class="mat-like-select" required>
                         <option value="organization" {% if contact.contact_type == 'organization' %}selected{% endif %}>مؤسسة</option>
                         <option value="person" {% if contact.contact_type == 'person' %}selected{% endif %}>شخص</option>
+                    </select>
+                </div>
+
+                <!-- الحالة -->
+                <div>
+                    <label class="custom-input-label" for="contact_status">الحالة</label>
+                    <select name="status" id="contact_status" class="mat-like-select">
+                        {% for s_val, s_label in statuses %}
+                        <option value="{{ s_val }}" {% if contact.status == s_val %}selected{% endif %}>{{ s_label }}</option>
+                        {% endfor %}
                     </select>
                 </div>
 
@@ -199,6 +209,9 @@
                     <label class="custom-input-label">تصنيف العميل</label>
                     <select name="customer_category" class="mat-like-select bg-white">
                         <option value="">اختر...</option>
+                        {% if contact.customer_category and contact.customer_category not in customer_categories %}
+                        <option value="{{ contact.customer_category }}" selected>{{ contact.customer_category }}</option>
+                        {% endif %}
                         {% for cat in customer_categories %}
                         <option value="{{ cat }}" {% if contact.customer_category == cat %}selected{% endif %}>{{ cat }}</option>
                         {% endfor %}
@@ -210,6 +223,9 @@
                     <label class="custom-input-label">التخصص</label>
                     <select name="specialty" class="mat-like-select bg-white">
                         <option value="">اختر التخصص...</option>
+                        {% if contact.specialty and contact.specialty not in specialties %}
+                        <option value="{{ contact.specialty }}" selected>{{ contact.specialty }}</option>
+                        {% endif %}
                         {% for spec in specialties %}
                         <option value="{{ spec }}" {% if contact.specialty == spec %}selected{% endif %}>{{ spec }}</option>
                         {% endfor %}
@@ -221,6 +237,9 @@
                     <label class="custom-input-label">نوع الاكونت</label>
                     <select name="account_type" class="mat-like-select bg-white">
                         <option value="">اختر نوع الاكونت...</option>
+                        {% if contact.account_type and contact.account_type not in account_types %}
+                        <option value="{{ contact.account_type }}" selected>{{ contact.account_type }}</option>
+                        {% endif %}
                         {% for at in account_types %}
                         <option value="{{ at }}" {% if contact.account_type == at %}selected{% endif %}>{{ at }}</option>
                         {% endfor %}
@@ -228,13 +247,24 @@
                 </div>
             </div>
 
-            <!-- الاسم -->
-            <div class="mb-5">
-                <label class="custom-input-label" for="name">
-                    الاسم <span class="required-star">*</span>
-                </label>
-                <input type="text" name="name" id="name" value="{{ contact.name }}" required
-                       class="mat-like-input font-bold" placeholder="أدخل اسم جهة الاتصال">
+            <!-- الاسم والمؤسسة التابعة -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                <div>
+                    <label class="custom-input-label" for="name">
+                        الاسم <span class="required-star">*</span>
+                    </label>
+                    <input type="text" name="name" id="name" value="{{ contact.name }}" required
+                           class="mat-like-input font-bold" placeholder="أدخل اسم جهة الاتصال">
+                </div>
+                <div>
+                    <label class="custom-input-label" for="parent_org">المؤسسة التابعة لها (اختياري)</label>
+                    <select name="parent_org" id="parent_org" class="mat-like-select">
+                        <option value="">— بدون مؤسسة تابعة —</option>
+                        {% for org in organizations %}
+                        <option value="{{ org.id }}" {% if contact.parent_org_id == org.id %}selected{% endif %}>{{ org.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
             <!-- Mobile & Phone Numbers -->
@@ -244,6 +274,9 @@
                     <label class="custom-input-label" for="mobile_number">الموبايل</label>
                     <div class="phone-split-container">
                         <select name="mobile_country_code" class="phone-country-select">
+                            {% if mobile_code and not mobile_code_known %}
+                            <option value="{{ mobile_code }}" selected>{{ mobile_code }}</option>
+                            {% endif %}
                             {% for c in country_codes %}
                             <option value="{{ c.code }}" {% if mobile_code == c.code %}selected{% endif %}>{{ c.flag }} {{ c.code }}</option>
                             {% endfor %}
@@ -257,6 +290,9 @@
                     <label class="custom-input-label" for="phone_number">التليفون</label>
                     <div class="phone-split-container">
                         <select name="phone_country_code" class="phone-country-select">
+                            {% if phone_code and not phone_code_known %}
+                            <option value="{{ phone_code }}" selected>{{ phone_code }}</option>
+                            {% endif %}
                             {% for c in country_codes %}
                             <option value="{{ c.code }}" {% if phone_code == c.code %}selected{% endif %}>{{ c.flag }} {{ c.code }}</option>
                             {% endfor %}
@@ -363,7 +399,7 @@
             </div>
 
             <div id="addresses-container">
-                {% for addr in addresses %}
+                {% for addr in address_entries %}
                 <div class="address-card {% if addr.is_main %}is-main-card{% endif %}" id="addr-card-{{ forloop.counter }}">
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-2">
@@ -387,7 +423,7 @@
                             <select name="address_area[]" class="mat-like-select area-select">
                                 <option value="">اختر المنطقة...</option>
                                 {% for gov in governorates %}
-                                <option value="{{ gov.id }}" {% if addr.area_id == gov.id %}selected{% endif %}>{{ gov.name }}</option>
+                                <option value="{{ gov.id }}" {% if addr.effective_area_id == gov.id %}selected{% endif %}>{{ gov.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -396,13 +432,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                         <div>
                             <label class="custom-input-label">المنطقة الفرعية</label>
-                            <select name="address_sub_area[]" class="mat-like-select subarea-select">
+                            <select name="address_sub_area[]" class="mat-like-select subarea-select" {% if not addr.effective_area_id %}disabled{% endif %}>
                                 <option value="">اختر المنطقة الفرعية...</option>
-                                {% for br in bricks %}
-                                    {% if br.parent_id == addr.area_id %}
-                                    <option value="{{ br.id }}" {% if addr.brick_id == br.id or addr.brick.name == br.name %}selected{% endif %}>{{ br.name }}</option>
-                                    {% endif %}
+                                {% for br in addr.available_bricks %}
+                                <option value="{{ br.id }}" {% if addr.effective_brick_id == br.id %}selected{% endif %}>{{ br.name }}</option>
                                 {% endfor %}
+                                {% if addr.sub_area and not addr.effective_brick_id %}
+                                <option value="{{ addr.sub_area }}" selected>{{ addr.sub_area }}</option>
+                                {% endif %}
                             </select>
                         </div>
                         <div>
@@ -412,7 +449,8 @@
                     </div>
 
                     <div class="flex items-center gap-2 pt-1">
-                        <input type="checkbox" name="address_is_main[]" value="1" {% if addr.is_main %}checked{% endif %} class="rounded text-brand-500">
+                        <input type="hidden" name="address_is_main_flag[]" value="{% if addr.is_main %}1{% else %}0{% endif %}" class="is-main-flag">
+                        <input type="checkbox" name="address_is_main[]" value="1" {% if addr.is_main %}checked{% endif %} class="is-main-checkbox rounded text-brand-500">
                         <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
                     </div>
                 </div>
@@ -447,14 +485,15 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2 pt-1">
-                        <input type="checkbox" name="address_is_main[]" value="1" checked class="rounded text-brand-500">
+                        <input type="hidden" name="address_is_main_flag[]" value="1" class="is-main-flag">
+                        <input type="checkbox" name="address_is_main[]" value="1" checked class="is-main-checkbox rounded text-brand-500">
                         <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
                     </div>
                 </div>
-                
                 {% endfor %}
-                <!-- Interactive Map Location Picker (Shared Component) -->
-                <div class="mt-4">
+            </div>
+            <!-- Interactive Map Location Picker (Shared Component) -->
+            <div class="mt-4">
                 <label class="custom-input-label flex items-center gap-1.5 mb-2">
                     <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
                     <span>تعديل وتحديث الموقع الجغرافي (GPS)</span>
@@ -640,7 +679,8 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 pt-1">
-                <input type="checkbox" name="address_is_main[]" value="1" class="rounded text-brand-500">
+                <input type="hidden" name="address_is_main_flag[]" value="0" class="is-main-flag">
+                <input type="checkbox" name="address_is_main[]" value="1" class="is-main-checkbox rounded text-brand-500">
                 <span class="text-xs text-slate-700 font-semibold">تعيين كعنوان رئيسي</span>
             </div>
         `;
@@ -686,8 +726,21 @@
         container.appendChild(row);
     }
 
+    function syncMainAddressFlags() {
+        document.querySelectorAll('.address-card').forEach(card => {
+            const cb = card.querySelector('input[name="address_is_main[]"]');
+            const flag = card.querySelector('input[name="address_is_main_flag[]"]');
+            if (cb && flag) flag.value = cb.checked ? '1' : '0';
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.address-card').forEach(attachSubareaListener);
+
+        const editForm = document.getElementById('contact-edit-form');
+        if (editForm) {
+            editForm.addEventListener('submit', syncMainAddressFlags);
+        }
 
         // --- GPS / Location Search Auto-fill ---
         window.addEventListener('erp:location-selected', function (e) {
@@ -710,7 +763,8 @@
                 }
             }
 
-            if (areaSelect) {
+            // Never overwrite an already-selected Area or Brick when editing coordinates
+            if (areaSelect && !areaSelect.value) {
                 const state = (detail.state || detail.city || '').toLowerCase();
                 const disp = (detail.display_name || '').toLowerCase();
                 let matchedAreaId = null;

@@ -484,3 +484,18 @@ class TreasuryRBACAndStatsTestCase(TestCase):
         self.assertEqual(res_dep.status_code, 403)
         res_wth = self.client.get(reverse('vault_withdraw'))
         self.assertEqual(res_wth.status_code, 403)
+
+    def test_treasury_list_stats_respect_filters(self):
+        self.client.login(username='accountant_tr@wea.com', password='TestPassword123!')
+        res_v = self.client.get(reverse('vaults_list') + '?search=NONEXISTENT_VAULT')
+        self.assertEqual(res_v.status_code, 200)
+        self.assertEqual(res_v.context['stats']['total_vaults'], 0)
+
+        res_tx = self.client.get(reverse('vault_transactions_list') + '?search=NONEXISTENT_TX')
+        self.assertEqual(res_tx.status_code, 200)
+        self.assertEqual(res_tx.context['stats']['total_count'], 0)
+
+        res_vp = self.client.get(reverse('vendor_payments_list') + '?search=NONEXISTENT_VP')
+        self.assertEqual(res_vp.status_code, 200)
+        self.assertEqual(res_vp.context['stats']['total_count'], 0)
+

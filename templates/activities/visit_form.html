@@ -107,13 +107,21 @@
             <input type="hidden" name="planned_item_id" value="{{ planned_item_id }}">
             {% endif %}
 
-            {% if form.non_field_errors %}
+            {% if form.errors %}
             <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-bold space-y-1">
                 {% for err in form.non_field_errors %}
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-base text-rose-600">error</span>
                     <span>{{ err }}</span>
                 </div>
+                {% endfor %}
+                {% for field in form %}
+                    {% if field.errors %}
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-rose-600">error</span>
+                        <span>{{ field.label|default:field.name }}: {{ field.errors.0 }}</span>
+                    </div>
+                    {% endif %}
                 {% endfor %}
             </div>
             {% endif %}
@@ -436,9 +444,35 @@
                     <select name="question_{{ q.id }}" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
                         <option value="">-- اختر --</option>
                         {% for opt in q.options %}
-                        <option value="{{ opt }}">{{ opt }}</option>
+                            {% if opt.text_ar or opt.value %}
+                            <option value="{{ opt.value|default:opt.text_ar }}">{{ opt.text_ar|default:opt.value }}</option>
+                            {% else %}
+                            <option value="{{ opt }}">{{ opt }}</option>
+                            {% endif %}
                         {% endfor %}
                     </select>
+                    {% elif q.question_type == 'multiple_choice' %}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        {% for opt in q.options %}
+                            {% if opt.text_ar or opt.value %}
+                            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer text-xs">
+                                <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                                <span>{{ opt.text_ar|default:opt.value }}</span>
+                            </label>
+                            {% else %}
+                            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer text-xs">
+                                <input type="checkbox" name="question_{{ q.id }}" value="{{ opt }}" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                                <span>{{ opt }}</span>
+                            </label>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% elif q.question_type == 'textarea' %}
+                    <textarea name="question_{{ q.id }}" rows="2" placeholder="أدخل الإجابة..." class="w-full rounded-lg border border-slate-200 p-2.5 text-xs bg-white"></textarea>
+                    {% elif q.question_type == 'number' or q.question_type == 'rating' %}
+                    <input type="number" name="question_{{ q.id }}" value="" placeholder="أدخل الرقم..." class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white font-mono">
+                    {% elif q.question_type == 'date' %}
+                    <input type="date" name="question_{{ q.id }}" value="" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
                     {% else %}
                     <input type="text" name="question_{{ q.id }}" value="" placeholder="أدخل الإجابة..." class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
                     {% endif %}
@@ -498,9 +532,14 @@
     const defaultTolerance = Number("{{ default_tolerance|default:300 }}");
     const todayStr = "{{ today_str|default:'' }}";
     const plannedItemId = "{{ planned_item_id|default:'' }}";
-    const savedAnswers = {{ saved_answers|safe|default:'{}' }};
+    let savedAnswers = {};
+    try {
+        savedAnswers = JSON.parse('{{ saved_answers_json|default:"{}"|escapejs }}');
+    } catch (_) {
+        savedAnswers = {};
+    }
 
-    let currentVisitType = "{% if is_planned_visit or planned_item %}planned{% else %}unplanned{% endif %}";
+    let currentVisitType = "{% if is_planned_visit or planned_item or visit.is_planned %}planned{% else %}unplanned{% endif %}";
     let currentAllowedDistance = Number("{{ gps_tolerance|default:300 }}");
     let currentCustomer = null;
     let currentDeviceCoords = null;
@@ -526,10 +565,25 @@
         if (!isEditMode) {
             acquireDeviceLocation();
             preloadCustomers();
-        } else if (savedAnswers) {
+        } else if (savedAnswers && typeof savedAnswers === 'object') {
             Object.keys(savedAnswers).forEach(function(qId) {
-                const el = document.querySelector(`[name="question_${qId}"]`);
-                if (el) el.value = savedAnswers[qId];
+                const rawVal = savedAnswers[qId];
+                const elements = document.querySelectorAll(`[name="question_${qId}"]`);
+                if (!elements.length) return;
+                if (Array.isArray(rawVal)) {
+                    const strVals = rawVal.map(String);
+                    elements.forEach(el => {
+                        if (el.type === 'checkbox') el.checked = strVals.includes(String(el.value));
+                    });
+                } else {
+                    elements.forEach(el => {
+                        if (el.type === 'checkbox' || el.type === 'radio') {
+                            el.checked = (String(el.value) === String(rawVal));
+                        } else {
+                            el.value = rawVal != null ? String(rawVal) : '';
+                        }
+                    });
+                }
             });
         }
 
@@ -1246,7 +1300,9 @@
         }
 
         try {
-            const res = await fetch(`/api/templates/?contact_id=${c.id}`);
+            const res = await fetch(`/api/templates/?contact_id=${c.id}`, {
+                headers: { 'X-Skip-Global-Loader': '1' }
+            });
             if (res.ok) {
                 const data = await res.json();
                 const eligibleTemplates = data.results || [];
@@ -1324,6 +1380,5 @@
         }
         updateGeofenceCheck();
     }
-</script>
 </script>
 {% endblock %}

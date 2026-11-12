@@ -2913,3 +2913,15 @@ class UserPermissionsGranularControlTestCase(TestCase):
         # Now product create opens 200
         res = self.client.get(reverse('product_create'))
         self.assertEqual(res.status_code, 200)
+
+    def test_users_list_stats_respect_filters_and_admin_registrations(self):
+        from django.contrib import admin as django_admin
+        from accounts.models import UserModuleScope
+        self.assertIn(UserModuleScope, django_admin.site._registry)
+
+        adm = User.objects.create_superuser(username='adm_ustats', email='adm_ustats@wea.com', password='TestPassword123!')
+        self.client.force_login(adm)
+        res = self.client.get(reverse('users_list') + '?q=NONEXISTENT_USER_XYZ')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['stats']['total_users'], 0)
+

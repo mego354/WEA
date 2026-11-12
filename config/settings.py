@@ -100,6 +100,9 @@ LOGIN_URL = '/auth/login/'
 LOGIN_REDIRECT_URL = '/home/'
 LOGOUT_REDIRECT_URL = '/auth/login/'
 
+# Security & Referrer Policy (required so OpenStreetMap/tile providers receive Referer on desktop browsers)
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
 # Google Maps & Geolocation Integration
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 

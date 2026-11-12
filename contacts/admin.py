@@ -47,7 +47,7 @@ class ContactAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('المعلومات الأساسية', {
-            'fields': ('serial_num', 'name', 'contact_type', 'is_customer', 'is_supplier', 'is_other', 'status', 'area', 'brick', 'code')
+            'fields': ('serial_num', 'name', 'contact_type', 'is_customer', 'is_supplier', 'is_other', 'status', 'area', 'brick', 'code', 'location_coords_display')
         }),
         ('بيانات التواصل', {
             'fields': ('mobile', 'phone', 'email', 'website', 'contact_person', 'job_title', 'visit_timing')
@@ -62,7 +62,13 @@ class ContactAdmin(admin.ModelAdmin):
             'fields': ('parent_org', 'assigned_team', 'created_by', 'notes')
         }),
     )
-    readonly_fields = ('serial_num',)
+    readonly_fields = ('serial_num', 'location_coords_display')
+
+    def location_coords_display(self, obj):
+        if obj.latitude is not None and obj.longitude is not None:
+            return f"{obj.latitude}, {obj.longitude}"
+        return "غير محدد"
+    location_coords_display.short_description = "إحداثيات GPS (العنوان الرئيسي)"
 
     def contact_type_badge(self, obj):
         if obj.contact_type == 'organization':
@@ -107,8 +113,8 @@ class ContactAdmin(admin.ModelAdmin):
 
 @admin.register(ContactAddress)
 class ContactAddressAdmin(admin.ModelAdmin):
-    list_display = ('title', 'contact', 'is_main', 'area', 'sub_area', 'latitude', 'longitude')
-    list_filter = ('is_main', 'area')
+    list_display = ('title', 'contact', 'is_main', 'area', 'brick', 'sub_area', 'latitude', 'longitude')
+    list_filter = ('is_main', 'area', 'brick')
     search_fields = ('title', 'contact__name', 'street_address')
 
 

@@ -138,6 +138,13 @@ class RoleAdmin(admin.ModelAdmin):
         queryset.filter(is_system=False).update(is_active=False)
 
 
+@admin.register(UserModuleScope)
+class UserModuleScopeAdmin(admin.ModelAdmin):
+    list_display = ('user', 'module', 'view_scope', 'manage_scope')
+    list_filter = ('module', 'view_scope', 'manage_scope')
+    search_fields = ('user__username', 'user__name', 'module')
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     form = CustomUserChangeForm

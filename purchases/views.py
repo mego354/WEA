@@ -37,15 +37,6 @@ def purchase_orders_list(request):
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
 
-    # Dedicated real scoped statistics cards (excludes cancelled orders from financial values)
-    scoped_active = get_scoped_queryset(PurchaseOrder.objects.exclude(status='cancelled'), request.user, 'purchaseorder')
-    stats = {
-        'total_orders': scoped_active.count(),
-        'total_value': scoped_active.aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
-        'total_pending': scoped_active.filter(status='manager_approval').count(),
-        'total_settled': scoped_active.filter(status='settled').count(),
-    }
-
     active_filters = []
 
     if status_filter != 'all':
@@ -74,6 +65,20 @@ def purchase_orders_list(request):
             Q(supplier__area__name__icontains=search)
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    stats_qs = qs if status_filter == 'cancelled' else qs.exclude(status='cancelled')
+    po_agg = stats_qs.aggregate(
+        total_orders=Count('id'),
+        total_value=Sum('grand_total'),
+        total_pending=Count('id', filter=Q(status='manager_approval')),
+        total_settled=Count('id', filter=Q(status='settled')),
+    )
+    stats = {
+        'total_orders': po_agg['total_orders'] or 0,
+        'total_value': po_agg['total_value'] or Decimal('0.00'),
+        'total_pending': po_agg['total_pending'] or 0,
+        'total_settled': po_agg['total_settled'] or 0,
+    }
 
     suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
 
@@ -622,13 +627,18 @@ def purchase_return_orders_list(request):
 
     suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
 
-    # Scoped real statistics
-    base_scoped = get_scoped_queryset(PurchaseReturnOrder.objects.all(), request.user, 'purchasereturnorder')
+    # Scoped real statistics matching active filters
+    ret_agg = qs.aggregate(
+        total_orders=Count('id'),
+        total_value=Sum('grand_total'),
+        draft_count=Count('id', filter=Q(status='draft')),
+        settled_count=Count('id', filter=Q(status='settled')),
+    )
     return_stats = {
-        'total_orders': base_scoped.count(),
-        'total_value': base_scoped.aggregate(tot=Sum('grand_total'))['tot'] or Decimal('0.00'),
-        'draft_count': base_scoped.filter(status='draft').count(),
-        'settled_count': base_scoped.filter(status='settled').count(),
+        'total_orders': ret_agg['total_orders'] or 0,
+        'total_value': ret_agg['total_value'] or Decimal('0.00'),
+        'draft_count': ret_agg['draft_count'] or 0,
+        'settled_count': ret_agg['settled_count'] or 0,
     }
 
     # Bounded server-side pagination (default 25)

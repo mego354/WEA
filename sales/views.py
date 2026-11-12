@@ -60,13 +60,19 @@ def sales_orders_list(request):
     # Scoped customer filter options (top 50 active)
     customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
 
-    # Dedicated real scoped statistics cards (excludes cancelled/rejected)
-    scoped_all = get_scoped_queryset(SalesOrder.objects.exclude(status='rejected'), request.user, 'salesorder')
+    # Dedicated real scoped statistics cards matching filtered queryset
+    stats_qs = qs if status_filter == 'rejected' else qs.exclude(status='rejected')
+    agg = stats_qs.aggregate(
+        total_orders=Count('id'),
+        total_value=Sum('grand_total'),
+        invoiced_value=Sum('grand_total', filter=Q(status='invoiced')),
+        pending_count=Count('id', filter=Q(status__in=['pending', 'manager_approval'])),
+    )
     stats = {
-        'total_orders': scoped_all.count(),
-        'total_value': scoped_all.aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
-        'invoiced_value': scoped_all.filter(status='invoiced').aggregate(total=Sum('grand_total'))['total'] or Decimal('0.00'),
-        'pending_count': scoped_all.filter(status__in=['pending', 'manager_approval']).count(),
+        'total_orders': agg['total_orders'] or 0,
+        'total_value': agg['total_value'] or Decimal('0.00'),
+        'invoiced_value': agg['invoiced_value'] or Decimal('0.00'),
+        'pending_count': agg['pending_count'] or 0,
     }
 
     context = {
@@ -431,14 +437,19 @@ def collections_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
-    # Dedicated real scoped statistics cards
-    scoped_col = get_scoped_queryset(Collection.objects.all(), request.user, 'collection')
+    # Dedicated real scoped statistics cards matching active filters
     now = timezone.now()
+    col_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_amount=Sum('amount'),
+        month_amount=Sum('amount', filter=Q(collection_date__year=now.year, collection_date__month=now.month)),
+        vaults_count=Count('vault', distinct=True),
+    )
     stats = {
-        'total_count': scoped_col.count(),
-        'total_amount': scoped_col.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-        'month_amount': scoped_col.filter(collection_date__year=now.year, collection_date__month=now.month).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
-        'vaults_count': scoped_col.values('vault').distinct().count(),
+        'total_count': col_agg['total_count'] or 0,
+        'total_amount': col_agg['total_amount'] or Decimal('0.00'),
+        'month_amount': col_agg['month_amount'] or Decimal('0.00'),
+        'vaults_count': col_agg['vaults_count'] or 0,
     }
 
     context = {
@@ -564,13 +575,17 @@ def sales_customers_list(request):
 
     qs = qs.order_by('name')
 
-    # Dedicated scoped statistics
-    base_scoped = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
+    # Dedicated scoped statistics matching active filters
+    cust_agg = qs.aggregate(
+        total_customers=Count('id', distinct=True),
+        active_customers=Count('id', filter=Q(status__in=['active', 'customer']), distinct=True),
+        lead_customers=Count('id', filter=Q(status='lead'), distinct=True),
+    )
     stats = {
-        'total_customers': base_scoped.count(),
-        'active_customers': base_scoped.filter(status__in=['active', 'customer']).count(),
-        'lead_customers': base_scoped.filter(status='lead').count(),
-        'total_receivable': CustomerAccount.objects.filter(customer__in=base_scoped, current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
+        'total_customers': cust_agg['total_customers'] or 0,
+        'active_customers': cust_agg['active_customers'] or 0,
+        'lead_customers': cust_agg['lead_customers'] or 0,
+        'total_receivable': CustomerAccount.objects.filter(customer__in=qs, current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
     }
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
@@ -642,12 +657,17 @@ def accounting_customers_list(request):
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    base_scoped = get_scoped_queryset(CustomerAccount.objects.all(), request.user, 'customeraccount')
+    acc_agg = qs.aggregate(
+        total_customers=Count('id'),
+        total_receivable=Sum('current_balance', filter=Q(current_balance__gt=0)),
+        total_overdue=Sum('overdue_balance', filter=Q(overdue_balance__gt=0)),
+        total_credit_limit=Sum('credit_limit'),
+    )
     account_stats = {
-        'total_customers': base_scoped.count(),
-        'total_receivable': base_scoped.filter(current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
-        'total_overdue': base_scoped.filter(overdue_balance__gt=0).aggregate(tot=Sum('overdue_balance'))['tot'] or Decimal('0.00'),
-        'total_credit_limit': base_scoped.aggregate(tot=Sum('credit_limit'))['tot'] or Decimal('0.00'),
+        'total_customers': acc_agg['total_customers'] or 0,
+        'total_receivable': acc_agg['total_receivable'] or Decimal('0.00'),
+        'total_overdue': acc_agg['total_overdue'] or Decimal('0.00'),
+        'total_credit_limit': acc_agg['total_credit_limit'] or Decimal('0.00'),
     }
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
@@ -693,11 +713,15 @@ def customer_transactions_list(request):
 
     customers = scoped_contacts.filter(is_customer=True).order_by('name')[:50]
 
-    base_scoped_tx = CustomerTransaction.objects.filter(account__customer__in=scoped_contacts)
+    tx_agg = qs.aggregate(
+        total_count=Count('id'),
+        total_debit=Sum('debit'),
+        total_credit=Sum('credit'),
+    )
     tx_stats = {
-        'total_count': base_scoped_tx.count(),
-        'total_debit': base_scoped_tx.aggregate(tot=Sum('debit'))['tot'] or Decimal('0.00'),
-        'total_credit': base_scoped_tx.aggregate(tot=Sum('credit'))['tot'] or Decimal('0.00'),
+        'total_count': tx_agg['total_count'] or 0,
+        'total_debit': tx_agg['total_debit'] or Decimal('0.00'),
+        'total_credit': tx_agg['total_credit'] or Decimal('0.00'),
     }
     tx_stats['net_balance'] = tx_stats['total_debit'] - tx_stats['total_credit']
 

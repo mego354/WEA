@@ -455,19 +455,11 @@
                         <input type="text" name="address_street[]" id="primary_address_street" class="mat-like-input" placeholder="">
                     </div>
 
-                    <!-- Interactive Map Location Picker (Shared Component) -->
-                    <div class="mb-5">
-                        <label class="custom-input-label flex items-center gap-1.5 mb-2">
-                            <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
-                            <span>تحديد الموقع الجغرافي على الخريطة (GPS)</span>
-                        </label>
-                        {% include 'components/location_picker.html' with picker_id='contact_create' lat_name='latitude' lng_name='longitude' initial_lat=30.0444 initial_lng=31.2357 has_saved_location=False address_input_id='primary_address_street' marker_label='موقع جهة الاتصال' map_height='h-80 sm:h-96' %}
-                    </div>
-
                     <!-- Field: تعيين كعنوان رئيسى -->
                     <div class="pt-2 border-t border-slate-100 flex items-center">
+                        <input type="hidden" name="address_is_main_flag[]" value="1" class="is-main-flag">
                         <label class="inline-flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" name="address_is_main[]" value="true" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
+                            <input type="checkbox" name="address_is_main[]" value="true" checked class="is-main-checkbox w-4 h-4 rounded text-brand-500 focus:ring-brand-400 border-slate-300">
                             <span class="text-sm font-semibold text-slate-700">تعيين كعنوان رئيسى</span>
                         </label>
                     </div>
@@ -479,6 +471,15 @@
                 <span class="material-symbols-outlined text-lg">add</span>
                 <span>أضف عنوان</span>
             </button>
+
+            <!-- Interactive Map Location Picker (Shared Component — kept single per contact to avoid duplicate lat/lng inputs) -->
+            <div class="card-container mt-4">
+                <label class="custom-input-label flex items-center gap-1.5 mb-2">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">pin_drop</span>
+                    <span>تحديد الموقع الجغرافي على الخريطة (GPS)</span>
+                </label>
+                {% include 'components/location_picker.html' with picker_id='contact_create' lat_name='latitude' lng_name='longitude' initial_lat=30.0444 initial_lng=31.2357 has_saved_location=False address_input_id='primary_address_street' marker_label='موقع جهة الاتصال' map_height='h-80 sm:h-96' %}
+            </div>
         </div>
 
         <!-- ========================================== -->
@@ -714,59 +715,12 @@
         // --- 4. ADD NEW ADDRESS CARD ---
         const addAddressBtn = document.getElementById('add-address-card-btn');
         const addressWrapper = document.getElementById('address-cards-wrapper');
-        let addressCardSequence = document.querySelectorAll('.address-card').length;
 
-        function initializeClonedLocationPicker(card, suffix) {
-            // Give every cloned picker its own IDs. The shared component's script and
-            // styles also contain the original picker ID, so update those references.
-            const oldPickerId = 'contact_create';
-            const newPickerId = `contact_create_${suffix}`;
-            const oldAddressId = 'primary_address_street';
-            const newAddressId = `primary_address_street_${suffix}`;
-
-            card.querySelectorAll('[id]').forEach(element => {
-                if (element.id === oldAddressId) {
-                    element.id = newAddressId;
-                } else if (element.id.startsWith(oldPickerId)) {
-                    element.id = element.id.replace(oldPickerId, newPickerId);
-                }
-            });
-
-            card.querySelectorAll('label[for]').forEach(label => {
-                if (label.htmlFor === oldAddressId) {
-                    label.htmlFor = newAddressId;
-                } else if (label.htmlFor.startsWith(oldPickerId)) {
-                    label.htmlFor = label.htmlFor.replace(oldPickerId, newPickerId);
-                }
-            });
-
-            // cloneNode() copies Leaflet's generated panes and the initialization flag.
-            // Remove generated map content before re-running the component initializer.
-            const mapElement = card.querySelector(`#${newPickerId}_map`);
-            if (mapElement) {
-                mapElement.innerHTML = '';
-                delete mapElement.dataset.locationPickerInitialized;
-                mapElement.classList.remove('leaflet-container');
-                mapElement.removeAttribute('tabindex');
-                mapElement.querySelectorAll('*').forEach(child => {
-                    child.classList.remove('leaflet-pane', 'leaflet-tile', 'leaflet-marker-icon',
-                        'leaflet-marker-shadow', 'leaflet-control');
-                });
-            }
-
-            // Update the embedded component configuration and CSS selectors.
-            card.querySelectorAll('script').forEach(script => {
-                if (!script.src) {
-                    script.textContent = script.textContent
-                        .replaceAll(oldPickerId, newPickerId)
-                        .replaceAll(oldAddressId, newAddressId);
-                }
-            });
-
-            card.querySelectorAll('style').forEach(style => {
-                style.textContent = style.textContent
-                    .replaceAll(oldPickerId, newPickerId)
-                    .replaceAll(oldAddressId, newAddressId);
+        function syncMainAddressFlags() {
+            document.querySelectorAll('.address-card').forEach(card => {
+                const cb = card.querySelector('input[name="address_is_main[]"]');
+                const flag = card.querySelector('input[name="address_is_main_flag[]"]');
+                if (cb && flag) flag.value = cb.checked ? '1' : '0';
             });
         }
 
@@ -774,19 +728,17 @@
             const firstCard = addressWrapper.querySelector('.address-card');
             if (!firstCard) return;
 
-            addressCardSequence += 1;
-            const suffix = addressCardSequence;
             const newCard = firstCard.cloneNode(true);
-
-            // Reinitialize each cloned map independently. This also fixes duplicate IDs.
-            initializeClonedLocationPicker(newCard, suffix);
 
             newCard.querySelectorAll('input').forEach(input => {
                 if (input.type === 'checkbox') {
                     input.checked = false; // Additional addresses are not main by default.
+                } else if (input.classList.contains('is-main-flag')) {
+                    input.value = '0';
                 } else {
                     input.value = '';
                 }
+                if (input.id) input.removeAttribute('id');
                 input.classList.remove('has-error');
             });
 
@@ -807,19 +759,6 @@
             newCard.querySelectorAll('.has-error').forEach(el => el.classList.remove('has-error'));
 
             addressWrapper.appendChild(newCard);
-
-            // Inline scripts added with cloneNode do not execute automatically. Recreate
-            // them after the card is in the DOM so the picker can find its own elements.
-            newCard.querySelectorAll('script').forEach(oldScript => {
-                const newScript = document.createElement('script');
-                if (oldScript.src) {
-                    newScript.src = oldScript.src;
-                } else {
-                    newScript.textContent = oldScript.textContent;
-                }
-                oldScript.replaceWith(newScript);
-            });
-
             attachSubareaListener(newCard);
         });
 
@@ -831,6 +770,7 @@
         const relationError = document.getElementById('relation-error');
 
         form.addEventListener('submit', function (e) {
+            syncMainAddressFlags();
             let isValid = true;
 
             // 1. Validate Name
@@ -951,7 +891,7 @@
                 }
             }
 
-            if (areaSelect) {
+            if (areaSelect && !areaSelect.value) {
                 const state = (detail.state || detail.city || '').toLowerCase();
                 const disp = (detail.display_name || '').toLowerCase();
                 let matchedAreaId = null;
