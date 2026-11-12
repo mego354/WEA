@@ -102,6 +102,24 @@ def get_item(dictionary, key):
     return None
 
 
+@register.filter(name='stat_number')
+def stat_number_filter(value):
+    """
+    Format numeric statistics cleanly for KPI/stat boxes:
+    rounds decimals to nearest integer for large amounts (>= 100) or up to 1 decimal place
+    for small amounts so the entire number fits comfortably on mobile screens without truncation.
+    """
+    if value is None or value == '':
+        return '0'
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        return str(value)
+    if abs(num) >= 100 or num == int(num):
+        return f"{int(round(num)):,}"
+    return f"{round(num, 1):,}".rstrip('0').rstrip('.')
+
+
 @register.filter(name='has_permission')
 def has_permission_filter(user, perm_codename):
     """

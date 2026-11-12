@@ -1060,20 +1060,26 @@ def role_edit(request, pk):
         role.description = request.POST.get('description', '').strip()
 
         # Update attributes switches
-        role.is_sales_team = request.POST.get('is_sales_team') == 'on'
         role.is_area_manager = request.POST.get('is_area_manager') == 'on'
         role.is_sub_area_manager = request.POST.get('is_sub_area_manager') == 'on'
         role.is_rep = request.POST.get('is_rep') == 'on'
         role.can_hold_vault = request.POST.get('can_hold_vault') == 'on'
-        role.has_sales_targets = request.POST.get('has_sales_targets') == 'on'
-        role.is_contact_manager = request.POST.get('is_contact_manager') == 'on'
-        role.is_main_area_bound = request.POST.get('is_main_area_bound') == 'on'
-        role.is_sub_area_bound = request.POST.get('is_sub_area_bound') == 'on'
+        if 'is_sales_team' in request.POST:
+            role.is_sales_team = request.POST.get('is_sales_team') == 'on'
+        if 'has_sales_targets' in request.POST:
+            role.has_sales_targets = request.POST.get('has_sales_targets') == 'on'
+        if 'is_contact_manager' in request.POST:
+            role.is_contact_manager = request.POST.get('is_contact_manager') == 'on'
+        if 'is_main_area_bound' in request.POST:
+            role.is_main_area_bound = request.POST.get('is_main_area_bound') == 'on'
+        if 'is_sub_area_bound' in request.POST:
+            role.is_sub_area_bound = request.POST.get('is_sub_area_bound') == 'on'
         role.save()
 
-        # Update Tags
-        tag_ids = request.POST.getlist('tags')
-        role.tags.set(tag_ids)
+        # Update Tags if provided
+        if 'tags' in request.POST:
+            tag_ids = request.POST.getlist('tags')
+            role.tags.set(tag_ids)
 
         # Update Permissions
         perm_ids = request.POST.getlist('permissions')

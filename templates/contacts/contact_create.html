@@ -672,7 +672,10 @@
                     subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
                     subareaSelect.disabled = true;
 
-                    fetch(`/contacts/api/subareas/?area_id=${areaId}`)
+                    fetch(`/contacts/api/subareas/?area_id=${areaId}`, {
+                        headers: { 'X-Skip-Global-Loader': '1' },
+                        skipGlobalLoader: true
+                    })
                         .then(res => res.json())
                         .then(data => {
                             if (data.subareas && data.subareas.length > 0) {
@@ -910,7 +913,10 @@
                 if (matchedAreaId && subareaSelect) {
                     subareaSelect.disabled = true;
                     subareaSelect.innerHTML = '<option value="" disabled selected>جاري التحميل...</option>';
-                    fetch(`/contacts/api/subareas/?area_id=${matchedAreaId}`)
+                    fetch(`/contacts/api/subareas/?area_id=${matchedAreaId}`, {
+                        headers: { 'X-Skip-Global-Loader': '1' },
+                        skipGlobalLoader: true
+                    })
                         .then(res => res.json())
                         .then(data => {
                             if (data.subareas && data.subareas.length > 0) {

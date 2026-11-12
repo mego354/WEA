@@ -32,24 +32,33 @@ stateDiagram-v2
 ### 1.2 GPS Distance Validation & Geofencing
 - **Configurable Allowed Distance**:
   - Global default: `LocationSettings.tolerance` (default 300 meters).
+  - Start stage tolerance: `LocationSettings.visit_start_distance_tolerance` (falls back to `tolerance` when not set).
+  - End stage tolerance: `LocationSettings.visit_end_distance_tolerance` (falls back to `tolerance` when not set).
   - Template override: If `LocationSettings.allow_template_distance_override` is enabled and `VisitTemplate.has_special_location_settings=True`, the template's `special_tolerance` takes precedence.
-- **Creation Validation**:
-  - Mandatory for **unplanned** visits (`LocationSettings.verify_unplanned_visit_distance=True`).
-  - **Not enforced** on creation for **planned** visits (since planned visits are scheduled ahead of time).
-- **Completion Validation (End Visit)**:
-  - Mandatory for both planned and unplanned visits (`LocationSettings.verify_end_visit_distance=True`).
-- **Bypass & Exception Handling**:
-  - **SuperAdmins and Managers**: Can directly force-bypass distance restrictions (`verification_status='force_bypassed'`).
-  - **Representatives**: When outside the geofence, reps cannot directly bypass. They must request an exception (`request_distance_exception=1`) with a mandatory text `bypass_reason`. This flags `requires_approval_due_to_distance=True` and marks `approval_status='pending'`.
+- **Stage-Specific Validation (`verify_visit_location`)**:
+  - **Creation (`stage='create'`)**: Mandatory for **unplanned** visits when `LocationSettings.verify_unplanned_visit_distance=True`. **Not enforced** at creation time for **planned** visits (planned visits start with `location_verified=False` and `location_verification_status='not_required'` until field execution).
+  - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user.
+  - **Completion (`stage='end'`)**: Mandatory when ending a visit (`end_visit`) if `LocationSettings.verify_end_visit_distance=True`.
+- **Bypass & Exception Security**:
+  - **Direct Bypass**: Controlled server-side via `LocationSettings.can_user_bypass_without_approval(user, stage)`. Unauthorized users submitting `force_bypass_location=1` are rejected on both form and service layers.
+  - **Representatives / Exception Requests**: When outside the geofence, users without direct bypass permission can only request an exception (`request_distance_exception=1`) with a mandatory `bypass_reason` if `LocationSettings.allow_rep_Bypass_request_with_approval` is enabled; this sets `requires_approval_due_to_distance=True` and `approval_status='pending'`.
 
-### 1.3 In-Progress Visit Editing & Smart Reapproval
-- **Status Locking**: Visits that have ended (`status == 'finished'`) are strictly locked from modification to preserve audit integrity and historical records.
-- **In-Progress Editing**: Visits in progress (`status in ['planned', 'draft', 'started']`) may be edited by authorized users.
-- **Unauthorized Editor Pending Reset & Reapproval**:
-  - When an active/unstarted visit is edited by a user without supervisory approval authority over that visit's region:
-    - Previously approved visits transition to `approval_status = 'pending'`, `waiting_for_reapproval = True`, preserve prior `ApprovalAuditLog` history, and append an `edited_reapproval_required` log.
-    - Previously pending or disapproved visits remain/reset to `approval_status = 'pending'` (`waiting_for_reapproval = False`), recording `resubmitted` when transitioning from `disapproved`, and clearing `approved_by`/`approved_at`.
-  - When edited by an authorized manager/supervisor within area scope, existing `approved` status is retained and an `edited_by_manager` entry is recorded in `ApprovalAuditLog`.
+### 1.3 Separation of Visit Metadata vs. Questionnaire Answers & Unended Visit Deletion
+- **Visit Metadata Editing (`visit_edit` / `POST /visits/<pk>/edit/`)**:
+  - Updates only the visit's own metadata (`contact`, `template`, `date`, `owner`, `doubled`, `is_successful`, `feedback`, `detailed_products`).
+  - Never modifies `VisitTemplate`, its questions, other visits, or `visit.questionnaire_answers`.
+  - Visits that have ended (`status == 'finished'`) are strictly locked from modification.
+  - When edited by a user without supervisory approval authority over that visit's region, previously approved visits reset to `approval_status = 'pending'`, `waiting_for_reapproval = True`, and append an `edited_reapproval_required` log.
+- **Independent Questionnaire Answer Editing (`visit_update_answers` / `POST /visits/<pk>/answers/edit/`)**:
+  - Allowed exclusively for the original creator/owner of the visit (`visit.created_by_id == user.id or visit.owner_id == user.id`) or SuperAdmin while the visit has not ended.
+  - Updates only `visit.questionnaire_answers` for that specific visit without modifying the template, without affecting other visits, and without invalidating `visit.approval_status`.
+  - Records before/after answer diffs in `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`), `ApprovalAuditLog` (`answers_updated`), and the visit timeline (`build_visit_timeline`).
+- **Permission-Controlled Unended Visit Deletion (`visit_delete` / `POST /visits/<pk>/delete/`)**:
+  - Controlled via `LocationSettings.allow_visit_deletion_before_end` and the `activities:visits/delete` permission (`can_delete_unended_visit`).
+  - Only visits that have **not** been ended (`visit.status != 'finished'` and `visit.ended_at is None`) may be deleted. Ended visits cannot be deleted even by users with deletion permission or SuperAdmin.
+  - Every deletion is recorded in `SecurityAuditLog` (`VISIT_DELETED`).
+- **Visit Detail Actions**:
+  - Direct manual status overrides (`change_status` / `manage_status`) are prohibited; visits progress exclusively through `approve`, `disapprove` (only while `approval_status != 'approved'`), `start`, and `complete`.
 
 ### 1.4 Visit Start Workflow & Questionnaire Stages
 - **Separation of Stages**:

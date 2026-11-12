@@ -3964,24 +3964,21 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         self.assertTrue(res_detail.context['can_approve'])
         self.assertFalse(res_detail.context['is_in_agenda'])
 
-        # Manager A changes status to approved and finished
+        # Manager A approves the visit via approve action
         res_change = self.client.post(
-            reverse('visit_action', args=[visit.pk, 'change_status']),
+            reverse('visit_action', args=[visit.pk, 'approve']),
             {
-                'approval_status': 'approved',
-                'visit_status': 'finished',
-                'reason': 'اعتماد وتغيير الحالة من مدير المنطقة'
+                'approval_notes': 'اعتماد من مدير المنطقة'
             }
         )
         self.assertEqual(res_change.status_code, 302)
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'approved')
-        self.assertEqual(visit.status, 'finished')
         self.assertEqual(visit.approved_by, self.manager_a)
         self.assertIsNotNone(visit.approved_at)
 
         # Audit log verification
-        audit = ApprovalAuditLog.objects.filter(visit=visit, action='status_changed').first()
+        audit = ApprovalAuditLog.objects.filter(visit=visit, action='approved').first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.actor, self.manager_a)
 
@@ -3998,13 +3995,12 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
             approval_status='pending'
         )
 
-        # Manager B (Alexandria/Jeddah) attempts to change status of Region A visit
+        # Manager B (Alexandria/Jeddah) attempts to approve Region A visit
         self.client.force_login(self.manager_b)
         res = self.client.post(
-            reverse('visit_action', args=[visit.pk, 'change_status']),
+            reverse('visit_action', args=[visit.pk, 'approve']),
             {
-                'approval_status': 'approved',
-                'visit_status': 'finished',
+                'approval_notes': 'محاولة اعتماد عبر المناطق',
             }
         )
         visit.refresh_from_db()
@@ -4333,8 +4329,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         # Step 3: Area Manager logs in and approves the visit
         self.client.logout()
         self.client.login(username='mgr_cairo', password='Password123!')
-        res_approve = self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
-            'approval_status': 'approved',
+        res_approve = self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
             'approval_notes': 'معتمد من مدير منطقة القاهرة'
         })
         self.assertEqual(res_approve.status_code, 302)
@@ -4411,8 +4406,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         # Manager approves
         self.client.logout()
         self.client.login(username='mgr_cairo', password='Password123!')
-        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
-            'approval_status': 'approved',
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
             'approval_notes': 'اعتماد الزيارة المزدوجة'
         })
         visit.refresh_from_db()
@@ -4481,8 +4475,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         # 3. Manager approves
         self.client.logout()
         self.client.login(username='mgr_cairo', password='Password123!')
-        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
-            'approval_status': 'approved',
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
             'approval_notes': 'معتمد'
         })
         visit.refresh_from_db()
@@ -4550,8 +4543,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         # Manager approves
         self.client.logout()
         self.client.login(username='mgr_cairo', password='Password123!')
-        self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
-            'approval_status': 'approved',
+        self.client.post(reverse('visit_action', args=[visit.pk, 'approve']), {
             'approval_notes': 'موافق على زيارة المحاسب'
         })
         visit.refresh_from_db()
@@ -4716,12 +4708,14 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         })
         visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo).first()
 
-        # Manager Alex tries to approve Cairo visit -> MUST BE 403 FORBIDDEN
+        # Manager Alex tries to approve Cairo visit -> MUST BE 403 FORBIDDEN on AJAX and rejected on form POST
         self.client.logout()
         self.client.login(username='mgr_alex', password='Password123!')
-        res_cross = self.client.post(reverse('visit_action', args=[visit.pk, 'manage_status']), {
-            'approval_status': 'approved',
-        })
+        res_cross = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'approve']),
+            {'approval_notes': 'محاولة اعتماد'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
         self.assertEqual(res_cross.status_code, 403, "Cross-region manager status change must be rejected with 403")
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'pending', "Approval status must remain unchanged")
@@ -5531,6 +5525,13 @@ class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.approval_status, 'pending')
         self.assertTrue(visit.waiting_for_reapproval)
+        # Per Requirement D, visit_edit only updates visit metadata and preserves questionnaire_answers
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_req.id)), 'نعم')
+        res_rep_answers = self.client.post(reverse('visit_update_answers', args=[visit.pk]), {
+            f'question_{self.q_start_req.id}': 'لا'
+        })
+        self.assertEqual(res_rep_answers.status_code, 302)
+        visit.refresh_from_db()
         self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_req.id)), 'لا')
 
         # 2. Manager reapproves
@@ -6001,12 +6002,15 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         detail_html = detail_res.content.decode('utf-8')
         self.assertEqual(detail_html.count('id="start-visit-modal"'), 1)
 
-        # Edit GET renders cleanly with saved_answers_json and today_str
+        # Edit GET renders cleanly for visit metadata (without mixing questionnaire answers)
         edit_get = self.client.get(reverse('visit_edit', args=[visit.pk]))
         self.assertEqual(edit_get.status_code, 200)
         edit_html = edit_get.content.decode('utf-8')
-        self.assertIn('<option value="نعم">نعم</option>', edit_html)
+        self.assertIn('تعديل بيانات الزيارة', edit_html)
         self.assertNotIn("{'text_ar':", edit_html)
+        # Detail page renders questionnaire options cleanly
+        self.assertIn('<option value="نعم"', detail_html)
+        self.assertNotIn("{'text_ar':", detail_html)
 
         # Editing only feedback by unauthorized rep still triggers pending reapproval!
         edit_post = self.client.post(reverse('visit_edit', args=[visit.pk]), {
@@ -6076,4 +6080,300 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         self.assertEqual(res.context['unplanned_count'], 1)
         self.assertEqual(res.context['pending_count'], 1)
         self.assertEqual(res.context['approved_count'], 0)
+
+    def test_phase2_req_a_agenda_removes_unplanned_visit_creation(self):
+        """Agenda (/agenda/) must not display unplanned visit creation actions or modals."""
+        self.client.force_login(self.rep_nasr)
+        res = self.client.get(reverse('agenda'))
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode('utf-8')
+        self.assertNotIn('out-of-plan-modal', html)
+        self.assertNotIn('openOutOfPlanModal', html)
+        self.assertNotIn('quick_contacts', res.context)
+
+    def test_phase2_req_b_visit_deletion_permission_and_unended_enforcement(self):
+        """
+        Visit deletion rules:
+        - Controlled by LocationSettings.allow_visit_deletion_before_end and activities:visits/delete permission.
+        - Only unended visits (status != 'finished' and ended_at is None) can be deleted.
+        - Ended visits cannot be deleted even by users with permission or SuperAdmin.
+        - Deletion is logged in SecurityAuditLog ('VISIT_DELETED').
+        """
+        from accounts.models import Permission as ErpPermission, SecurityAuditLog
+
+        today = timezone.now().date()
+        unended_visit = Visit.objects.create(
+            contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', approval_status='pending'
+        )
+
+        # 1. When allow_visit_deletion_before_end is False -> 403
+        self.loc_settings.allow_visit_deletion_before_end = False
+        self.loc_settings.save()
+        self.client.force_login(self.rep_nasr)
+        res_denied = self.client.post(
+            reverse('visit_delete', args=[unended_visit.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_denied.status_code, 403)
+        self.assertTrue(Visit.objects.filter(pk=unended_visit.pk).exists())
+
+        # 2. Grant activities:visits/delete permission and enable allow_visit_deletion_before_end -> succeeds for unended visit
+        del_perm, _ = ErpPermission.objects.get_or_create(
+            codename='activities:visits/delete',
+            defaults={'name': 'حذف الزيارات غير المنتهية', 'module': 'activities'}
+        )
+        self.rep_role.permissions.add(del_perm)
+        self.loc_settings.allow_visit_deletion_before_end = True
+        self.loc_settings.save()
+
+        res_ok = self.client.post(
+            reverse('visit_delete', args=[unended_visit.pk]),
+            {'reason': 'إلغاء موعد الزيارة قبل التنفيذ'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_ok.status_code, 200)
+        self.assertTrue(res_ok.json()['success'])
+        self.assertFalse(Visit.objects.filter(pk=unended_visit.pk).exists())
+        self.assertTrue(
+            SecurityAuditLog.objects.filter(action_type='VISIT_DELETED', actor=self.rep_nasr).exists()
+        )
+
+        # 3. Ended visit CANNOT be deleted even with permission or by manager
+        ended_visit = Visit.objects.create(
+            contact=self.nasr_contacts[1], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='finished',
+            ended_at=timezone.now(), approval_status='approved'
+        )
+        res_ended = self.client.post(
+            reverse('visit_delete', args=[ended_visit.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_ended.status_code, 400)
+        self.assertTrue(Visit.objects.filter(pk=ended_visit.pk).exists())
+
+        # 4. Cross-area manager cannot delete Cairo visit (IDOR protection)
+        other_unended = Visit.objects.create(
+            contact=self.nasr_contacts[2], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', approval_status='pending'
+        )
+        self.manager_role.permissions.add(del_perm)
+        self.client.force_login(self.mgr_giza)
+        res_idor = self.client.post(
+            reverse('visit_delete', args=[other_unended.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_idor.status_code, 403)
+        self.assertTrue(Visit.objects.filter(pk=other_unended.pk).exists())
+
+    def test_phase2_req_c_visit_detail_actions_removed_change_status_and_approved_reject(self):
+        """
+        Visit Detail Actions:
+        - 'change_status' and 'manage_status' are rejected on the backend and absent from HTML.
+        - 'disapprove'/'reject' is blocked once a visit is already approved and its button is hidden.
+        """
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', approval_status='approved',
+            approved_by=self.mgr_cairo, approved_at=timezone.now()
+        )
+        self.client.force_login(self.mgr_cairo)
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        html = detail_res.content.decode('utf-8')
+        self.assertNotIn('change-status-modal', html)
+        self.assertNotIn('openChangeStatusModal', html)
+        self.assertNotIn('openRejectModal()', html)
+
+        # Backend rejects change_status
+        res_cs = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'change_status']),
+            {'visit_status': 'finished'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_cs.status_code, 400)
+
+        # Backend rejects disapprove on an already approved visit
+        res_dis = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'disapprove']),
+            {'rejection_reason': 'محاولة رفض بعد الاعتماد'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_dis.status_code, 400)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+    def test_phase2_req_d_separate_visit_info_and_questionnaire_answers(self):
+        """
+        Separate Visit Information from Visit Template Answers:
+        1. Editing visit metadata (visit_edit) preserves existing questionnaire_answers and never touches template/other visits.
+        2. Editing questionnaire answers (visit_update_answers) is restricted to creator/owner, updates only that visit's answers,
+           does not invalidate approval_status, and records before/after answer diffs in timeline and audit logs.
+        """
+        from accounts.models import SecurityAuditLog
+        from activities.services import build_visit_timeline
+
+        today = timezone.now().date()
+        visit1 = Visit.objects.create(
+            contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='started', approval_status='approved',
+            questionnaire_answers={str(self.q_note.id): 'نعم'}
+        )
+        visit2 = Visit.objects.create(
+            contact=self.nasr_contacts[1], template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='started', approval_status='approved',
+            questionnaire_answers={str(self.q_note.id): 'نعم'}
+        )
+
+        # 1. Manager (not creator/owner) cannot edit visit1's questionnaire answers
+        self.client.force_login(self.mgr_cairo)
+        res_mgr_ans = self.client.post(
+            reverse('visit_update_answers', args=[visit1.pk]),
+            {f'question_{self.q_note.id}': 'لا'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_mgr_ans.status_code, 403)
+        visit1.refresh_from_db()
+        self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'نعم')
+
+        # 2. Creator/Owner updates visit1's questionnaire answers independently
+        self.client.force_login(self.rep_nasr)
+        res_rep_ans = self.client.post(
+            reverse('visit_update_answers', args=[visit1.pk]),
+            {f'question_{self.q_note.id}': 'لا'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_rep_ans.status_code, 200)
+        self.assertTrue(res_rep_ans.json()['success'])
+        visit1.refresh_from_db()
+        visit2.refresh_from_db()
+        self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'لا')
+        # Approval status is NOT invalidated by answer edits
+        self.assertEqual(visit1.approval_status, 'approved')
+        self.assertFalse(visit1.waiting_for_reapproval)
+        # Other visit using the same template is untouched
+        self.assertEqual(visit2.questionnaire_answers.get(str(self.q_note.id)), 'نعم')
+        # Template question options are untouched
+        self.q_note.refresh_from_db()
+        self.assertEqual(len(self.q_note.options), 2)
+
+        # Audit log & timeline contain before/after values
+        sec_log = SecurityAuditLog.objects.filter(action_type='VISIT_ANSWERS_UPDATED', actor=self.rep_nasr).order_by('-id').first()
+        self.assertIsNotNone(sec_log)
+        self.assertEqual(sec_log.previous_values.get('questionnaire_answers', {}).get(str(self.q_note.id)), 'نعم')
+        self.assertEqual(sec_log.new_values.get('questionnaire_answers', {}).get(str(self.q_note.id)), 'لا')
+
+        timeline = build_visit_timeline(visit1)
+        ans_events = [e for e in timeline if e.get('changes') and any(c['field'] == 'خطة العمل' for c in e['changes'])]
+        self.assertTrue(len(ans_events) >= 1)
+        change_entry = [c for c in ans_events[0]['changes'] if c['field'] == 'خطة العمل'][0]
+        self.assertEqual(change_entry['old'], 'نعم')
+        self.assertEqual(change_entry['new'], 'لا')
+
+        # 3. Editing visit metadata (visit_edit) does NOT overwrite questionnaire_answers
+        self.client.post(reverse('visit_edit', args=[visit1.pk]), {
+            'contact': self.nasr_contacts[0].id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'feedback': 'تحديث ملاحظات الزيارة فقط',
+            f'question_{self.q_note.id}': 'نعم',  # Even if passed in POST, visit_edit ignores questionnaire fields
+        })
+        visit1.refresh_from_db()
+        self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'لا')
+        self.assertEqual(visit1.feedback, 'تحديث ملاحظات الزيارة فقط')
+
+    def test_phase2_req_e_gps_validation_accuracy_and_security(self):
+        """
+        GPS/GBS Validation:
+        - Planned visit start enforces GPS when verify_visits=True (rejects missing or out-of-range coordinates).
+        - Unauthorized user cannot force bypass via force_bypass_location=1.
+        - Authorized user can bypass with a reason, which is audited.
+        """
+        self.loc_settings.verify_visits = True
+        self.loc_settings.tolerance = 200
+        self.loc_settings.roles_can_bypass_distance_creation.clear()
+        self.loc_settings.roles_can_bypass_distance_ending.clear()
+        self.loc_settings.save()
+
+        contact_gps = self.nasr_contacts[0]
+        contact_gps.set_location(30.044400, 31.235700)
+
+        today = timezone.now().date()
+        visit = Visit.objects.create(
+            contact=contact_gps, template=self.template, owner=self.rep_nasr,
+            created_by=self.rep_nasr, date=today, status='planned', is_planned=True,
+            approval_status='approved'
+        )
+
+        self.client.force_login(self.rep_nasr)
+        # 1. Start without GPS coordinates -> blocked (400)
+        res_no_coords = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'start']),
+            {},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_no_coords.status_code, 400)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'planned')
+
+        # 2. Start with out-of-range coordinates (~15 km away) and forged force_bypass_location=1 -> blocked (400)
+        res_far = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'start']),
+            {
+                'latitude': '30.150000',
+                'longitude': '31.350000',
+                'force_bypass_location': '1',
+                'bypass_reason': 'محاولة تجاوز غير مصرح بها',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_far.status_code, 400)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'planned')
+
+        # 3. Start with in-range coordinates (~20m away) -> succeeds
+        res_near = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'start']),
+            {
+                'latitude': '30.044450',
+                'longitude': '31.235750',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_near.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+        self.assertTrue(visit.location_verified)
+
+    def test_phase2_req_g_planned_visits_manager_scope_aggregates_all_subordinates(self):
+        """
+        Planned Visits (/planned-visits/):
+        - Managers see planned visits of all representatives in their main area and subareas by default (is_all_reps_view=True).
+        - Multiple representatives having plans on the same date are aggregated rather than overwriting one another.
+        """
+        rep_maadi = User.objects.create_user(
+            username='rep_maadi_req', email='rep_maadi_req@wea.com', password='TestPassword123!', role=self.rep_role
+        )
+        rep_maadi.assigned_areas.add(self.maadi)
+
+        tomorrow = timezone.now().date() + datetime.timedelta(days=1)
+        pday1 = PlannedVisitDay.objects.create(assignee=self.rep_nasr, date=tomorrow, created_by=self.rep_nasr)
+        item1 = PlannedVisitItem.objects.create(plan_day=pday1, order=1, contact=self.nasr_contacts[0], template=self.template)
+
+        pday2 = PlannedVisitDay.objects.create(assignee=rep_maadi, date=tomorrow, created_by=rep_maadi)
+        item2 = PlannedVisitItem.objects.create(plan_day=pday2, order=1, contact=self.maadi_contact, template=self.template)
+
+        self.client.force_login(self.mgr_cairo)
+        res = self.client.get(reverse('planned_visits_list'))
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.context['is_all_reps_view'])
+
+        # Find tomorrow in days_list and verify both items from Nasr City and Maadi reps are present
+        tomorrow_entry = [d for d in res.context['days_list'] if d['date'] == tomorrow][0]
+        item_ids = {it.id for it in tomorrow_entry['items']}
+        self.assertIn(item1.id, item_ids)
+        self.assertIn(item2.id, item_ids)
+        self.assertEqual(tomorrow_entry['items_count'], 2)
+
 

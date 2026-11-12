@@ -43,7 +43,7 @@
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">warehouse</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_warehouses }}">{{ stats.total_warehouses }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_warehouses|stat_number }}">{{ stats.total_warehouses|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-slate-400 block truncate">مستودع ومركز توزيع</span>
             </div>
         </div>
@@ -55,7 +55,7 @@
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">domain</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-brand-600 font-mono tracking-tight truncate block" title="{{ stats.main_warehouses }}">{{ stats.main_warehouses }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-brand-600 font-mono tracking-tight break-words leading-snug block" title="{{ stats.main_warehouses|stat_number }}">{{ stats.main_warehouses|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block truncate">مستودع مركزي</span>
             </div>
         </div>
@@ -67,7 +67,7 @@
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">local_shipping</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.rep_warehouses }}">{{ stats.rep_warehouses }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.rep_warehouses|stat_number }}">{{ stats.rep_warehouses|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block truncate">مخزن سيارة / مندوب</span>
             </div>
         </div>
@@ -79,7 +79,7 @@
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">verified</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight truncate block" title="{{ stats.active_warehouses }}">{{ stats.active_warehouses }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.active_warehouses|stat_number }}">{{ stats.active_warehouses|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-emerald-600 block truncate">مفعلة وتعمل</span>
             </div>
         </div>

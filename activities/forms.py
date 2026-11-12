@@ -139,7 +139,7 @@ class VisitForm(forms.ModelForm):
                 self.fields['owner'].initial = locked_owner
                 self.fields['owner'].disabled = True
             else:
-                managed_reps = get_user_managed_representatives(user)
+                managed_reps = get_user_managed_representatives(user, module='activities')
                 managed_rep_ids = list(managed_reps.values_list('pk', flat=True))
                 allowed_owner_ids = set(managed_rep_ids) | {user.pk}
                 if self.instance and self.instance.pk and self.instance.owner_id:
@@ -260,12 +260,17 @@ class VisitForm(forms.ModelForm):
             request_exception = str(self.data.get('request_distance_exception', '')).strip().lower() in ('1', 'true', 'on')
             bypass_reason = (self.data.get('bypass_reason') or '').strip()
 
+            if force_bypass and not can_bypass_directly:
+                raise forms.ValidationError(
+                    "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
+                )
+
             if not has_coords:
-                if not can_bypass_directly and not (force_bypass or request_exception):
+                if not can_bypass_directly and not request_exception:
                     raise forms.ValidationError(
                         "تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والمحاولة مجدداً."
                     )
-                if not can_bypass_directly and (force_bypass or request_exception) and not bypass_reason:
+                if not can_bypass_directly and request_exception and not bypass_reason:
                     raise forms.ValidationError(
                         "يرجى توضيح سبب عدم توفر الموقع أو التواجد خارج المسافة المسموح بها لطلب استثناء واعتماد المدير."
                     )
@@ -284,7 +289,7 @@ class VisitForm(forms.ModelForm):
                                 f"المسافة الحالية ({dist:.0f} متر) تتجاوز المسافة المسموح بها ({allowed_dist} متر). يرجى إدخال سبب التجاوز للمتابعة."
                             )
                     else:
-                        if not (force_bypass or request_exception):
+                        if not request_exception:
                             raise forms.ValidationError(
                                 f"أنت خارج النطاق الجغرافي المسموح به للعميل (المسافة الفعلية: {dist:.0f} متر، المسافة المسموح بها: {allowed_dist} متر). "
                                 "يرجى التواجد ضمن النطاق المسموح أو طلب استثناء مع كتابة السبب لاعتماد المدير."

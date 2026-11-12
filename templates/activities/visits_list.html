@@ -59,7 +59,7 @@
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">pin_drop</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ total_count }}">{{ total_count }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ total_count|stat_number }}">{{ total_count|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-slate-400 block truncate">زيارة منفذة</span>
             </div>
         </div>
@@ -72,7 +72,7 @@
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">event_available</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ planned_count }}">{{ planned_count }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ planned_count|stat_number }}">{{ planned_count|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block truncate">ضمن الخطة</span>
             </div>
         </a>
@@ -85,7 +85,7 @@
                 <span class="p-1.5 sm:p-2 bg-purple-50 text-purple-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">explore</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-purple-700 font-mono tracking-tight truncate block" title="{{ unplanned_count }}">{{ unplanned_count }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-purple-700 font-mono tracking-tight break-words leading-snug block" title="{{ unplanned_count|stat_number }}">{{ unplanned_count|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-purple-600 font-semibold block truncate">زيارة حرة</span>
             </div>
         </a>
@@ -99,11 +99,11 @@
             <div class="mt-2 sm:mt-3 flex items-center justify-between gap-2 text-xs min-w-0">
                 <div class="min-w-0 flex-1">
                     <span class="block text-slate-400 text-[10px] sm:text-xs truncate">معتمدة</span>
-                    <strong class="text-emerald-700 font-mono font-bold text-sm sm:text-base truncate block" title="{{ approved_count }}">{{ approved_count }}</strong>
+                    <strong class="text-emerald-700 font-mono font-bold text-sm sm:text-base break-words leading-snug block" title="{{ approved_count|stat_number }}">{{ approved_count|stat_number }}</strong>
                 </div>
                 <div class="border-r border-slate-200 pr-2 min-w-0 flex-1">
                     <span class="block text-slate-400 text-[10px] sm:text-xs truncate">قيد الاعتماد</span>
-                    <strong class="text-amber-700 font-mono font-bold text-sm sm:text-base truncate block" title="{{ pending_count }}">{{ pending_count }}</strong>
+                    <strong class="text-amber-700 font-mono font-bold text-sm sm:text-base break-words leading-snug block" title="{{ pending_count|stat_number }}">{{ pending_count|stat_number }}</strong>
                 </div>
             </div>
         </div>
@@ -276,6 +276,11 @@
                                 <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="عرض التفاصيل">
                                     <span class="material-symbols-outlined text-lg">visibility</span>
                                 </a>
+                                {% if v.user_can_delete %}
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center" title="حذف الزيارة غير المنتهية">
+                                    <span class="material-symbols-outlined text-lg">delete</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -363,6 +368,12 @@
                     <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="رفض الزيارة">
                         <span class="material-symbols-outlined text-sm">cancel</span>
                         <span>رفض</span>
+                    </button>
+                    {% endif %}
+                    {% if v.user_can_delete %}
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors" title="حذف الزيارة غير المنتهية">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                        <span>حذف</span>
                     </button>
                     {% endif %}
                 </div>

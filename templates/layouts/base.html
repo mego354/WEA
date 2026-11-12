@@ -1072,6 +1072,20 @@
                             const parsed = new URL(urlStr, window.location.origin);
                             if (parsed.origin !== window.location.origin) {
                                 skip = true;
+                            } else {
+                                const bgPaths = [
+                                    '/api/geocoding/',
+                                    '/contacts/api/subareas/',
+                                    '/api/subareas/',
+                                    '/contacts/api/search/',
+                                    '/visits/api/check-duplicate/',
+                                    '/planned-visits/api/',
+                                    '/activities/api/templates/',
+                                    '/api/templates/'
+                                ];
+                                if (bgPaths.some(p => parsed.pathname.includes(p))) {
+                                    skip = true;
+                                }
                             }
                         }
                     } catch (_) {

@@ -423,64 +423,6 @@
                 </div>
             </div>
 
-            {% if visit.template %}
-            <div class="space-y-4 pt-4 border-t border-slate-100">
-                <h3 class="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-base text-[#27bebe]">quiz</span>
-                    <span>إجابات استبيان الزيارة ({{ visit.template.display_name_ar }})</span>
-                </h3>
-                {% for q in visit.template.get_active_questions %}
-                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-                    <label class="block text-xs font-bold text-slate-800">
-                        {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500">*</span>{% endif %}
-                    </label>
-                    {% if q.question_type == 'yes_no' %}
-                    <select name="question_{{ q.id }}" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
-                        <option value="">-- اختر --</option>
-                        <option value="Yes">نعم (Yes)</option>
-                        <option value="No">لا (No)</option>
-                    </select>
-                    {% elif q.question_type == 'single_choice' %}
-                    <select name="question_{{ q.id }}" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
-                        <option value="">-- اختر --</option>
-                        {% for opt in q.options %}
-                            {% if opt.text_ar or opt.value %}
-                            <option value="{{ opt.value|default:opt.text_ar }}">{{ opt.text_ar|default:opt.value }}</option>
-                            {% else %}
-                            <option value="{{ opt }}">{{ opt }}</option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    {% elif q.question_type == 'multiple_choice' %}
-                    <div class="flex flex-wrap gap-2 pt-1">
-                        {% for opt in q.options %}
-                            {% if opt.text_ar or opt.value %}
-                            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer text-xs">
-                                <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
-                                <span>{{ opt.text_ar|default:opt.value }}</span>
-                            </label>
-                            {% else %}
-                            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer text-xs">
-                                <input type="checkbox" name="question_{{ q.id }}" value="{{ opt }}" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
-                                <span>{{ opt }}</span>
-                            </label>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                    {% elif q.question_type == 'textarea' %}
-                    <textarea name="question_{{ q.id }}" rows="2" placeholder="أدخل الإجابة..." class="w-full rounded-lg border border-slate-200 p-2.5 text-xs bg-white"></textarea>
-                    {% elif q.question_type == 'number' or q.question_type == 'rating' %}
-                    <input type="number" name="question_{{ q.id }}" value="" placeholder="أدخل الرقم..." class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white font-mono">
-                    {% elif q.question_type == 'date' %}
-                    <input type="date" name="question_{{ q.id }}" value="" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
-                    {% else %}
-                    <input type="text" name="question_{{ q.id }}" value="" placeholder="أدخل الإجابة..." class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
             {% if visit.template and visit.template.is_product_detailing_supported %}
             <div class="space-y-3 pt-4 border-t border-slate-100">
                 <input type="hidden" name="detailed_products_submitted" value="1">
@@ -565,26 +507,6 @@
         if (!isEditMode) {
             acquireDeviceLocation();
             preloadCustomers();
-        } else if (savedAnswers && typeof savedAnswers === 'object') {
-            Object.keys(savedAnswers).forEach(function(qId) {
-                const rawVal = savedAnswers[qId];
-                const elements = document.querySelectorAll(`[name="question_${qId}"]`);
-                if (!elements.length) return;
-                if (Array.isArray(rawVal)) {
-                    const strVals = rawVal.map(String);
-                    elements.forEach(el => {
-                        if (el.type === 'checkbox') el.checked = strVals.includes(String(el.value));
-                    });
-                } else {
-                    elements.forEach(el => {
-                        if (el.type === 'checkbox' || el.type === 'radio') {
-                            el.checked = (String(el.value) === String(rawVal));
-                        } else {
-                            el.value = rawVal != null ? String(rawVal) : '';
-                        }
-                    });
-                }
-            });
         }
 
         loadTemplatesRegistry();

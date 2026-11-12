@@ -36,12 +36,12 @@ def _format_metric_amount(val):
         return '0 جنيه'
     v = float(val)
     if v >= 1_000_000:
-        return f"{v / 1_000_000:.2f}".rstrip('0').rstrip('.') + "M جنيه"
+        return f"{v / 1_000_000:.1f}".rstrip('0').rstrip('.') + "M جنيه"
     if v >= 10_000:
         return f"{v / 1_000:.0f}k جنيه"
     if v >= 1_000:
-        return f"{v / 1_000:.2f}".rstrip('0').rstrip('.') + "k جنيه"
-    return f"{v:.2f}".rstrip('0').rstrip('.') + " جنيه"
+        return f"{v / 1_000:.1f}".rstrip('0').rstrip('.') + "k جنيه"
+    return f"{int(round(v)):,} جنيه"
 
 
 def _build_area_sunburst(queryset, amount_field='grand_total', is_count=False):
@@ -469,7 +469,9 @@ def geofence_settings_api(request):
             'verify_end_visit_distance': loc_settings.verify_end_visit_distance,
             'bypass_reason_mandatory': loc_settings.bypass_reason_mandatory,
             'distance_bypass_requires_approval': loc_settings.distance_bypass_requires_approval,
+            'allow_visit_deletion_before_end': loc_settings.allow_visit_deletion_before_end,
             'can_user_bypass_creation': loc_settings.can_user_bypass_without_approval(request.user, stage='create'),
+            'can_user_bypass_starting': loc_settings.can_user_bypass_without_approval(request.user, stage='start'),
             'can_user_bypass_ending': loc_settings.can_user_bypass_without_approval(request.user, stage='end'),
         }
     })
