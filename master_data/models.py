@@ -99,6 +99,10 @@ class LocationSettings(models.Model):
         default=True,
         verbose_name="طلب موافقة المدير للزيارات لغير المدراء"
     )
+    allow_visit_deletion_before_end = models.BooleanField(
+        default=True,
+        verbose_name="السماح بحذف الزيارات غير المنتهية للمصرح لهم"
+    )
     allow_all_users_to_create_agreements = models.BooleanField(
         default=False,
         verbose_name="السماح لجميع المستخدمين بإنشاء الاتفاقيات"
@@ -189,13 +193,25 @@ class LocationSettings(models.Model):
             return True
         role = getattr(user, 'role', None)
         if role and role.is_active:
-            if stage == 'create':
+            if stage in ('create', 'start'):
                 if self.roles_can_bypass_distance_creation.filter(pk=role.pk).exists():
                     return True
             else:
                 if self.roles_can_bypass_distance_ending.filter(pk=role.pk).exists():
                     return True
         return False
+
+    def can_user_delete_visit(self, user) -> bool:
+        """
+        Check if user is permitted to delete an unended visit under current LocationSettings
+        and RBAC permissions (`activities:visits/delete`).
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if not self.allow_visit_deletion_before_end:
+            return False
+        from accounts.permissions import has_perm_or_admin
+        return has_perm_or_admin(user, 'activities:visits/delete')
 
     def get_eligible_suggested_products(self):
         """Returns suggested products strictly filtered to active, sellable products."""

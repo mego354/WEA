@@ -49,8 +49,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي السندات</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">receipt</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_count }}">{{ stats.total_count }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_count|stat_number }}">{{ stats.total_count|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-slate-400 shrink-0">سند</span>
             </div>
         </div>
@@ -61,8 +61,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المنصرفات</span>
                 <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">payments</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight truncate block" title="{{ stats.total_amount|intcomma }} ج.م">{{ stats.total_amount|intcomma }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_amount|stat_number }} ج.م">{{ stats.total_amount|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-rose-600 font-bold shrink-0">ج.م</span>
             </div>
         </div>
@@ -73,8 +73,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">منصرفات الشهر</span>
                 <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">calendar_month</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight truncate block" title="{{ stats.month_amount|intcomma }} ج.م">{{ stats.month_amount|intcomma }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.month_amount|stat_number }} ج.م">{{ stats.month_amount|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-amber-600 font-bold shrink-0">ج.م</span>
             </div>
         </div>
@@ -88,11 +88,11 @@
             <div class="mt-2 sm:mt-3 flex items-center justify-between text-[11px] sm:text-xs min-w-0 gap-1">
                 <div class="min-w-0 flex-1">
                     <span class="block text-slate-400 text-[10px] truncate">نقدي:</span>
-                    <strong class="text-teal-700 font-mono font-bold truncate block" title="{{ stats.cash_amount|intcomma }} ج.م">{{ stats.cash_amount|intcomma }}</strong>
+                    <strong class="text-teal-700 font-mono font-bold break-words leading-snug block" title="{{ stats.cash_amount|stat_number }} ج.م">{{ stats.cash_amount|stat_number }}</strong>
                 </div>
                 <div class="border-r border-slate-200 pr-2 min-w-0 flex-1">
                     <span class="block text-slate-400 text-[10px] truncate">بنكي:</span>
-                    <strong class="text-blue-700 font-mono font-bold truncate block" title="{{ stats.bank_amount|intcomma }} ج.م">{{ stats.bank_amount|intcomma }}</strong>
+                    <strong class="text-blue-700 font-mono font-bold break-words leading-snug block" title="{{ stats.bank_amount|stat_number }} ج.م">{{ stats.bank_amount|stat_number }}</strong>
                 </div>
             </div>
         </div>

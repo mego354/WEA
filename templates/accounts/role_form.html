@@ -21,7 +21,7 @@
             <h1 class="text-xl sm:text-2xl font-bold text-[#27bebe]">
                 {% if is_create %}إنشاء دور وصلاحيات جديد{% else %}تعديل دور: {{ role.display_name }}{% endif %}
             </h1>
-            <p class="text-xs text-slate-500 mt-1">تحديد المسمى الوظيفي، سمات الدور، والعلامات الوظيفية، ومصفوفة الصلاحيات الهرمية.</p>
+            <p class="text-xs text-slate-500 mt-1">تحديد المسمى الوظيفي، سمات الدور، النطاقات الجغرافية للموديولات، ومصفوفة الصلاحيات الهرمية.</p>
         </div>
         <a href="{% url 'roles_list' %}" class="self-start sm:self-auto px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
             <span class="material-symbols-outlined text-base">arrow_forward</span>
@@ -70,7 +70,7 @@
                 </div>
             </div>
 
-            <!-- Two-Column Toggles matching Reference ERP -->
+            <!-- Two-Column Toggles for Role Hierarchy & Operational Attributes -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 pt-2 border-t border-slate-100">
                 <!-- Right Column Toggles -->
                 <div class="space-y-3">
@@ -81,36 +81,6 @@
                             <span class="text-[10px] text-slate-400">تجاوز كامل لكافة قيود الصلاحيات والتحقق</span>
                         </div>
                         <input type="checkbox" name="is_super" {% if role.is_super %}checked{% endif %} {% if role and role.name == 'SuperAdmin' %}disabled checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- مسئول جهات الاتصال (is_contact_manager) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">مسئول جهات الاتصال</span>
-                            <span class="text-[10px] text-slate-400">إدارة تصنيفات العملاء والموردين</span>
-                        </div>
-                        <input type="checkbox" name="is_contact_manager" {% if role.is_contact_manager %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- تابع لمنطقة رئيسية (is_main_area_bound) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">تابع لمنطقة رئيسية</span>
-                            <span class="text-[10px] text-slate-400">تقييد الرؤية بمحافظة أو منطقة رئيسية</span>
-                        </div>
-                        <input type="checkbox" name="is_main_area_bound" {% if role.is_main_area_bound %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- تابع لمنطقة فرعية (is_sub_area_bound) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">تابع لمنطقة فرعية</span>
-                            <span class="text-[10px] text-slate-400">تقييد الرؤية بقطاع أو منطقة فرعية</span>
-                        </div>
-                        <input type="checkbox" name="is_sub_area_bound" {% if role.is_sub_area_bound %}checked{% endif %} class="sr-only peer">
                         <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                     </label>
 
@@ -137,16 +107,6 @@
 
                 <!-- Left Column Toggles -->
                 <div class="space-y-3">
-                    <!-- فريق المبيعات (is_sales_team) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">فريق المبيعات</span>
-                            <span class="text-[10px] text-slate-400">المشاركة في خطط وزيارات البيع</span>
-                        </div>
-                        <input type="checkbox" name="is_sales_team" {% if role.is_sales_team %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
                     <!-- مدير لمنطقة رئيسية (is_area_manager) -->
                     <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                         <div>
@@ -167,16 +127,6 @@
                         <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                     </label>
 
-                    <!-- له أهداف مبيعات (has_sales_targets) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">له أهداف مبيعات (Target)</span>
-                            <span class="text-[10px] text-slate-400">ربط بحسابات التارجت الشهري</span>
-                        </div>
-                        <input type="checkbox" name="has_sales_targets" {% if role.has_sales_targets %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
                     <!-- مخول بعهدة نقدية / خزنة (can_hold_vault) -->
                     <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                         <div>
@@ -186,20 +136,6 @@
                         <input type="checkbox" name="can_hold_vault" {% if role.can_hold_vault %}checked{% endif %} class="sr-only peer">
                         <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                     </label>
-                </div>
-            </div>
-
-            <!-- Role Tags Section -->
-            <div class="pt-4 border-t border-slate-100">
-                <label class="block text-xs font-bold text-slate-700 mb-2">العلامات الوظيفية (Functional Tags)</label>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {% for tag in all_tags %}
-                    <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200/80 hover:bg-slate-100/70 transition-colors cursor-pointer min-h-[44px]">
-                        <input type="checkbox" name="tags" value="{{ tag.id }}" {% if tag.id in role_tag_ids %}checked{% endif %}
-                               class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300">
-                        <span class="text-xs font-semibold text-slate-700">{{ tag.display_name|default:tag.tag }}</span>
-                    </label>
-                    {% endfor %}
                 </div>
             </div>
         </div>

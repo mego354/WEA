@@ -24,13 +24,13 @@
         </div>
 
         <div class="flex gap-2">
-            <button type="button" id="{{ pid }}_locate_btn"
+            <button type="button" id="{{ pid }}_locate_btn" data-no-loader="true"
                     title="تحديد موقعي الحالي بالـ GPS"
                     class="flex-1 sm:flex-none px-3 py-2 bg-white hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-[#27bebe] text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
                 <span class="material-symbols-outlined text-base text-[#27bebe]">my_location</span>
                 <span>موقعي الحالي</span>
             </button>
-            <button type="button" id="{{ pid }}_toggle_manual_btn"
+            <button type="button" id="{{ pid }}_toggle_manual_btn" data-no-loader="true"
                     title="إدخال أو تعديل الإحداثيات يدوياً"
                     class="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold rounded-xl transition-all flex items-center gap-1 shadow-sm">
                 <span class="material-symbols-outlined text-base">pin_drop</span>
@@ -57,7 +57,7 @@
             </div>
         </div>
         <div class="flex justify-end">
-            <button type="button" id="{{ pid }}_apply_manual_btn"
+            <button type="button" id="{{ pid }}_apply_manual_btn" data-no-loader="true"
                     class="px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-all">
                 تطبيق الإحداثيات على الخريطة
             </button>
@@ -217,7 +217,8 @@
     function reverseGeocode(lat, lng) {
         setLoading(true);
         fetch(`/api/geocoding/reverse/?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`, {
-            headers: { "Accept": "application/json" },
+            headers: { "Accept": "application/json", "X-Skip-Global-Loader": "1" },
+            skipGlobalLoader: true,
             credentials: "same-origin"
         })
         .then(response => {
@@ -420,7 +421,8 @@
             setLoading(true);
             searchDebounce = setTimeout(() => {
                 fetch(`/api/geocoding/search/?q=${encodeURIComponent(query)}`, {
-                    headers: { "Accept": "application/json" },
+                    headers: { "Accept": "application/json", "X-Skip-Global-Loader": "1" },
+                    skipGlobalLoader: true,
                     credentials: "same-origin"
                 })
                 .then(response => {

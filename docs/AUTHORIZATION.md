@@ -136,6 +136,8 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Audit Log UI | Yes (`settings:auditLogs/view`) | If granted | If granted | No |
 | Contact Directory | All Areas | Assigned Main Area | All Areas | Assigned Brick(s) |
 | Visit Creation | Yes | Yes | If granted | Own (Assigned Brick) |
+| Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
+| Visit Questionnaire Answers Edit | Yes | Own Created/Assigned Only | Own Created/Assigned Only | Own Created/Assigned Only |
 | Visit Approval | Yes | Subordinates (Not Self) | No | No |
 | Sales Order Creation | Yes | Yes | If granted | Own Warehouse |
 | Sales Order Approval | Yes | Subordinates (Not Self) | View Only | No |

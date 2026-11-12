@@ -179,7 +179,7 @@
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">contacts</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_contacts }}">{{ stats.total_contacts }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_contacts|stat_number }}">{{ stats.total_contacts|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-slate-400 block truncate">جهة مسجلة</span>
             </div>
         </div>
@@ -191,7 +191,7 @@
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">store</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-[#27bebe] font-mono tracking-tight truncate block" title="{{ stats.total_customers }}">{{ stats.total_customers }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-[#27bebe] font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_customers|stat_number }}">{{ stats.total_customers|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block truncate">صيدلية / عيادة</span>
             </div>
         </div>
@@ -203,7 +203,7 @@
                 <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">person_search</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight truncate block" title="{{ stats.total_leads }}">{{ stats.total_leads }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_leads|stat_number }}">{{ stats.total_leads|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-amber-600 block truncate">قيد التأهيل</span>
             </div>
         </div>
@@ -215,7 +215,7 @@
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">domain</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.total_suppliers }}">{{ stats.total_suppliers }}</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_suppliers|stat_number }}">{{ stats.total_suppliers|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-blue-600 block truncate">مورد معتمد</span>
             </div>
         </div>

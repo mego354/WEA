@@ -196,6 +196,7 @@ class SettingsService:
             'bypass_reason_mandatory': loc.bypass_reason_mandatory,
             'distance_bypass_requires_approval': loc.distance_bypass_requires_approval,
             'require_manager_approval_for_visits': loc.require_manager_approval_for_visits,
+            'allow_visit_deletion_before_end': loc.allow_visit_deletion_before_end,
             'require_manager_approval_for_agreements': loc.require_manager_approval_for_agreements,
         }
 
@@ -215,9 +216,11 @@ class SettingsService:
         loc.bypass_reason_mandatory = data.get('bypass_reason_mandatory') in ('on', '1', 'true', True)
         loc.distance_bypass_requires_approval = data.get('distance_bypass_requires_approval') in ('on', '1', 'true', True)
 
-        if 'require_manager_approval_for_visits' in data:
+        if 'require_manager_approval_for_visits' in data or 'distance_governance_submitted' in data:
             loc.require_manager_approval_for_visits = data.get('require_manager_approval_for_visits') in ('on', '1', 'true', True)
-        if 'require_manager_approval_for_agreements' in data:
+        if 'allow_visit_deletion_before_end' in data or 'distance_governance_submitted' in data:
+            loc.allow_visit_deletion_before_end = data.get('allow_visit_deletion_before_end') in ('on', '1', 'true', True)
+        if 'require_manager_approval_for_agreements' in data or 'distance_governance_submitted' in data:
             loc.require_manager_approval_for_agreements = data.get('require_manager_approval_for_agreements') in ('on', '1', 'true', True)
 
         loc.save()
@@ -244,6 +247,7 @@ class SettingsService:
             'bypass_reason_mandatory': loc.bypass_reason_mandatory,
             'distance_bypass_requires_approval': loc.distance_bypass_requires_approval,
             'require_manager_approval_for_visits': loc.require_manager_approval_for_visits,
+            'allow_visit_deletion_before_end': loc.allow_visit_deletion_before_end,
             'require_manager_approval_for_agreements': loc.require_manager_approval_for_agreements,
         }
 

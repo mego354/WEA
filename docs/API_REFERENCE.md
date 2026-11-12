@@ -146,6 +146,16 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - `GET /planned-visits/?action=load_contacts&show_all=1`: returns all matching scoped contacts in one batch for "عرض جميع العملاء المؤهلين".
 - `POST /planned-visits/bulk-add/`: atomically creates `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records, returning `created_visit_ids`.
 
+### 3.4 Unended Visit Deletion (`visit_delete`)
+- **URL**: `POST /visits/<pk>/delete/`
+- **Permission**: Controlled by `LocationSettings.allow_visit_deletion_before_end` and `activities:visits/delete` (`can_delete_unended_visit`) plus object-level scope (`can_user_access_object(request.user, visit, 'delete')`).
+- **Behavior**: Deletes only visits that have not ended (`status != 'finished'` and `ended_at is None`) and writes `VISIT_DELETED` to `SecurityAuditLog`. Returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests.
+
+### 3.5 Visit Questionnaire Answers Update (`visit_update_answers`)
+- **URL**: `POST /visits/<pk>/answers/edit/`
+- **Permission**: Restricted to the visit's original creator/owner (`visit.created_by_id == request.user.id or visit.owner_id == request.user.id`) or SuperAdmin while the visit has not ended.
+- **Behavior**: Saves per-visit `questionnaire_answers` independently without modifying the `VisitTemplate`, affecting other visits, or invalidating `approval_status`. Logs before/after diffs in `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`) and `ApprovalAuditLog` (`answers_updated`).
+
 ---
 
 ## 4. Settings & Operational Endpoints

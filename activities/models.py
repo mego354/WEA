@@ -657,6 +657,8 @@ class ApprovalAuditLog(models.Model):
         ('status_changed', 'تغيير الحالة'),
         ('sent_to_agenda', 'إرسال لجدول الأعمال'),
         ('cancelled', 'إلغاء الزيارة'),
+        ('answers_updated', 'تعديل إجابات الاستبيان'),
+        ('visit_deleted', 'حذف الزيارة غير المنتهية'),
     ]
 
     record_type = models.CharField(max_length=20, choices=RECORD_TYPES, db_index=True, verbose_name="نوع السجل")

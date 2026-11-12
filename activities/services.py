@@ -78,7 +78,7 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
                           photo_file=None, force_bypass=False, bypass_reason='',
                           stage='create', request_distance_exception=False, strict_distance=False):
     """
-    Applies the ERP location and distance verification policy across visit creation and completion:
+    Applies the ERP location and distance verification policy across visit creation, start, and completion:
     1. Dynamically determines allowed distance threshold:
        - Uses template's special_tolerance if allow_template_distance_override is enabled and configured on template.
        - Otherwise uses default LocationSettings.tolerance.
@@ -92,13 +92,33 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
     tolerance = settings.get_effective_tolerance(template)
     visit.allowed_distance = Decimal(str(round(float(tolerance), 2)))
 
-    # Convert coordinates if passed
+    can_bypass_directly = settings.can_user_bypass_without_approval(user, stage=stage)
+    is_super = bool(getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False))
+    bypass_reason_clean = (bypass_reason or '').strip()
+
+    # Security check: unauthorized users must never force-bypass directly
+    if force_bypass and not can_bypass_directly:
+        raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
+
+    if request_distance_exception and not can_bypass_directly and not settings.distance_bypass_requires_approval:
+        raise ValidationError("عذراً، طلب استثناء تجاوز المسافة غير مفعل في إعدادات النظام.")
+
+    # Convert and validate coordinates if passed
     if visit_lat is not None and visit_lng is not None and str(visit_lat).strip() != '' and str(visit_lng).strip() != '':
         try:
+            lat_f = float(visit_lat)
+            lng_f = float(visit_lng)
+            if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
+                raise ValidationError("إحداثيات الموقع الجغرافي غير صالحة.")
+            if lat_f == 0.0 and lng_f == 0.0:
+                raise ValidationError("إحداثيات الموقع الجغرافي غير صالحة (0, 0).")
             visit.latitude = Decimal(str(visit_lat))
             visit.longitude = Decimal(str(visit_lng))
+        except ValidationError:
+            raise
         except Exception:
-            pass
+            if strict_distance:
+                raise ValidationError("صيغة إحداثيات الموقع غير صالحة.")
 
     if device_accuracy is not None and str(device_accuracy).strip() != '':
         try:
@@ -120,10 +140,6 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
             visit.distance = Decimal(str(round(dist, 2)))
             visit.distance_discrepancy = max(Decimal('0.00'), visit.distance - visit.allowed_distance)
 
-    can_bypass_directly = settings.can_user_bypass_without_approval(user, stage=stage)
-    is_super = bool(getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False))
-    bypass_reason_clean = (bypass_reason or '').strip()
-
     # Handle Photo Evidence if uploaded
     if photo_file:
         validate_and_save_photo_evidence(visit, photo_file)
@@ -132,7 +148,7 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
     stage_verify_enabled = settings.verify_visits
     if stage == 'create':
         if getattr(visit, 'is_planned', False):
-            # Requirement 3.B: Planned visits do NOT require distance validation during creation
+            # Planned visits do NOT require distance validation during creation, only at start/end
             stage_verify_enabled = False
         elif not settings.verify_unplanned_visit_distance:
             stage_verify_enabled = False
@@ -308,11 +324,12 @@ def can_start_visit(visit, user):
     return True, ""
 
 
-def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None, force_bypass=False, bypass_reason='', checkin_answers=None):
+def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None,
+                force_bypass=False, bypass_reason='', checkin_answers=None, request_distance_exception=False):
     """
     Executes explicit Start Visit / Check-in transition:
     planned (approved) -> started
-    Captures server-side started_at timestamp, applies GPS check-in verification if provided/required,
+    Captures server-side started_at timestamp, applies GPS check-in verification,
     validates and saves check-in questionnaire answers (stage='start_only'),
     and records an audit log entry.
     """
@@ -346,13 +363,21 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
                     if ans is None or (isinstance(ans, str) and not ans.strip()) or (isinstance(ans, (list, tuple)) and len(ans) == 0):
                         raise ValidationError(f"سؤال بداية الزيارة '{q.text_ar}' إلزامي لبدء الزيارة.")
 
-        # Process GPS check-in if coordinates provided
-        if lat is not None or lng is not None or photo_file or force_bypass:
+        # Enforce GPS check-in verification when enabled or when coordinates/bypass are provided
+        loc_settings = LocationSettings.get_settings()
+        should_verify_start = bool(
+            loc_settings.verify_visits or
+            lat is not None or lng is not None or photo_file or force_bypass or request_distance_exception
+        )
+        if should_verify_start:
             verify_visit_location(
                 visit, user, visit.contact,
-                visit_lat=lat, visit_lng=lng, device_accuracy=accuracy,
+                visit_lat=lat if lat is not None else visit.latitude,
+                visit_lng=lng if lng is not None else visit.longitude,
+                device_accuracy=accuracy if accuracy is not None else visit.device_accuracy,
                 photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason,
-                stage='create'
+                stage='start', request_distance_exception=request_distance_exception,
+                strict_distance=bool(loc_settings.verify_visits)
             )
 
         status_before = visit.status
@@ -764,6 +789,9 @@ def build_visit_timeline(visit):
             icon = 'view_agenda'
             color = 'teal'
             title = 'إرسال إلى جدول الأعمال'
+        elif log.action == 'answers_updated':
+            # Handled with full before/after diffs via SecurityAuditLog (`VISIT_ANSWERS_UPDATED`)
+            continue
 
         events.append({
             'timestamp': log.created_at,
@@ -795,10 +823,14 @@ def build_visit_timeline(visit):
             icon = 'published_with_changes'
             color = 'amber'
             title = 'تعديل بيانات زيارة معتمدة (إعادة اعتماد مطلوبة)'
+        elif slog.action_type == 'VISIT_ANSWERS_UPDATED':
+            icon = 'quiz'
+            color = 'teal'
+            title = 'تعديل إجابات استبيان الزيارة'
         elif 'UPDATE' in (slog.action_type or '') or slog.action_type == 'update':
             icon = 'edit'
             color = 'sky'
-            title = 'تحديث بيانات وإجابات الزيارة'
+            title = 'تحديث بيانات الزيارة'
         elif 'CANCEL' in (slog.action_type or ''):
             icon = 'cancel'
             color = 'rose'
@@ -843,5 +875,299 @@ def build_visit_timeline(visit):
             })
 
     events.sort(key=lambda x: x['timestamp'] or timezone.now())
+
+    # Build structured before/after diffs (`changes`) for template rendering
+    for ev in events:
+        prev_dict = ev.get('previous_values')
+        new_dict = ev.get('new_values')
+        if isinstance(prev_dict, dict) and isinstance(new_dict, dict):
+            changes = []
+            # If questionnaire_answers changed, expand each modified question
+            prev_ans = prev_dict.get('questionnaire_answers')
+            new_ans = new_dict.get('questionnaire_answers')
+            if isinstance(prev_ans, dict) and isinstance(new_ans, dict) and prev_ans != new_ans:
+                q_map = {}
+                if visit.template:
+                    for q in visit.template.questions.all():
+                        q_map[str(q.id)] = q.text_ar
+                all_q_keys = list(dict.fromkeys(list(prev_ans.keys()) + list(new_ans.keys())))
+                for qk in all_q_keys:
+                    old_v = prev_ans.get(qk)
+                    new_v = new_ans.get(qk)
+                    if old_v != new_v:
+                        q_label = q_map.get(str(qk), f"سؤال #{qk}")
+                        old_str = "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
+                        new_str = "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                        changes.append({'field': q_label, 'old': old_str, 'new': new_str})
+
+            # Also check answer_changes if explicitly stored
+            ans_changes = new_dict.get('answer_changes')
+            if isinstance(ans_changes, list):
+                for ac in ans_changes:
+                    if isinstance(ac, dict) and 'field' in ac:
+                        changes.append({
+                            'field': ac.get('field'),
+                            'old': ac.get('old', '-'),
+                            'new': ac.get('new', '-')
+                        })
+
+            field_labels = {
+                'contact_id': 'العميل (ID)',
+                'template_id': 'القالب (ID)',
+                'date': 'التاريخ',
+                'owner_id': 'المسؤول (ID)',
+                'feedback': 'الملاحظات',
+                'visit_outcome': 'نتيجة الزيارة',
+                'is_successful': 'زيارة ناجحة',
+                'doubled': 'زيارة مزدوجة',
+                'approval_status': 'حالة الاعتماد',
+                'status': 'حالة الزيارة',
+                'time': 'وقت الزيارة',
+                'الحالة السابقة': 'الحالة',
+            }
+            for k, old_val in prev_dict.items():
+                if k in ('questionnaire_answers', 'answer_changes', 'detailed_products'):
+                    continue
+                if k == 'الحالة السابقة' and 'الحالة الجديدة' in new_dict:
+                    if old_val != new_dict['الحالة الجديدة']:
+                        changes.append({'field': 'الحالة', 'old': str(old_val), 'new': str(new_dict['الحالة الجديدة'])})
+                    continue
+                if k in new_dict and new_dict[k] != old_val:
+                    changes.append({
+                        'field': field_labels.get(k, k),
+                        'old': str(old_val) if old_val not in (None, '') else '-',
+                        'new': str(new_dict[k]) if new_dict[k] not in (None, '') else '-'
+                    })
+            if changes:
+                ev['changes'] = changes
+
     return events
+
+
+def can_delete_unended_visit(visit, user):
+    """
+    Validates whether a user is authorized to delete a visit:
+    1. Visit must NOT be ended (`visit.status != 'finished'` and `visit.ended_at is None`).
+    2. `LocationSettings.allow_visit_deletion_before_end` must be enabled and user must have `activities:visits/delete`.
+    3. User must have data scope access (`can_user_access_object(user, visit, 'delete')`).
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False, "يجب تسجيل الدخول لحذف الزيارة."
+
+    if visit.status == 'finished' or visit.ended_at is not None:
+        return False, "لا يمكن حذف زيارة منتهية (مكتملة) حفاظاً على سلامة السجل التاريخي والتدقيق."
+
+    loc_settings = LocationSettings.get_settings()
+    if not loc_settings.allow_visit_deletion_before_end:
+        return False, "خاصية حذف الزيارات غير المنتهية معطلة حالياً في إعدادات النظام."
+
+    if not loc_settings.can_user_delete_visit(user):
+        return False, "عذراً، لا تملك صلاحية حذف الزيارات غير المنتهية."
+
+    from accounts.permissions import can_user_access_object
+    if not can_user_access_object(user, visit, 'delete'):
+        return False, "غير مصرح لك بحذف هذه الزيارة خارج نطاق صلاحياتك أو منطقتك الجغرافية."
+
+    return True, ""
+
+
+def delete_unended_visit(visit, user, request=None):
+    """
+    Deletes an unended visit after verifying permissions, settings, status, and data scope.
+    Unlinks any associated PlannedVisitItem so the planned slot remains intact,
+    and writes a comprehensive SecurityAuditLog entry (`VISIT_DELETED`).
+    """
+    from django.db import transaction
+    from activities.models import Visit, PlannedVisitItem
+    from accounts.services import AuditLogService
+
+    with transaction.atomic():
+        visit = Visit.objects.select_for_update().select_related('contact', 'owner', 'template').get(pk=visit.pk)
+        allowed, reason = can_delete_unended_visit(visit, user)
+        if not allowed:
+            raise ValidationError(reason)
+
+        visit_pk = visit.pk
+        serial_num = visit.serial_num
+        snapshot = {
+            'id': visit_pk,
+            'serial_num': serial_num,
+            'contact_id': visit.contact_id,
+            'contact_name': visit.contact.name if visit.contact else '',
+            'owner_id': visit.owner_id,
+            'owner_username': visit.owner.username if visit.owner else '',
+            'template_id': visit.template_id,
+            'date': str(visit.date),
+            'status': visit.status,
+            'approval_status': visit.approval_status,
+            'is_planned': visit.is_planned,
+        }
+
+        # Unlink any associated PlannedVisitItem before deleting the visit
+        PlannedVisitItem.objects.filter(visit=visit).update(visit=None, is_executed=False)
+
+        visit.delete()
+
+        AuditLogService.log(
+            action='delete',
+            action_type='VISIT_DELETED',
+            module='visits',
+            actor=user,
+            request=request,
+            record_id=visit_pk,
+            record_name=f"Visit #{serial_num}",
+            description=f"حذف الزيارة غير المنتهية رقم #{serial_num} للعميل {snapshot['contact_name']}",
+            previous_values=snapshot,
+            new_values=None,
+            status='SUCCESS',
+        )
+        return snapshot
+
+
+def can_edit_visit_answers(visit, user):
+    """
+    Validates whether a user is allowed to edit the visit's questionnaire answers:
+    - Strictly allowed ONLY for the original creator / assigned owner of the visit (or SuperAdmin).
+    - Visit must have a template and not be cancelled.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False, "يجب تسجيل الدخول لتعديل إجابات الاستبيان."
+
+    is_creator_or_owner = (
+        visit.created_by_id == user.id or
+        visit.owner_id == user.id or
+        getattr(user, 'is_superuser', False) or
+        getattr(user, 'is_super_admin', False)
+    )
+    if not is_creator_or_owner:
+        return False, "عذراً، تعديل إجابات استبيان الزيارة متاح فقط لمنشئ الزيارة الأصلي."
+
+    if visit.status == 'cancelled':
+        return False, "لا يمكن تعديل إجابات زيارة ملغاة."
+
+    if not visit.template:
+        return False, "لا يوجد قالب استبيان مرتبط بهذه الزيارة."
+
+    return True, ""
+
+
+def update_visit_questionnaire_answers(visit, user, post_data, request=None):
+    """
+    Independently updates only a visit's questionnaire answers (`visit.questionnaire_answers`):
+    - Restricted to the visit creator/owner.
+    - Never modifies VisitTemplate or its questions, and never affects other visits.
+    - Does NOT alter `visit.approval_status` or `visit.waiting_for_reapproval`.
+    - Records before/after answer diffs in `ApprovalAuditLog` (`answers_updated`) and `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`).
+    """
+    from django.db import transaction
+    from activities.models import Visit, ApprovalAuditLog
+    from accounts.services import AuditLogService
+
+    with transaction.atomic():
+        visit = Visit.objects.select_for_update().select_related('template', 'contact', 'owner').get(pk=visit.pk)
+        allowed, reason = can_edit_visit_answers(visit, user)
+        if not allowed:
+            raise ValidationError(reason)
+
+        template = visit.template
+        old_answers = dict(visit.questionnaire_answers or {})
+        new_answers = dict(old_answers)
+
+        questions = list(template.get_active_questions())
+        parent_answers = {}
+
+        # First pass: collect parent answers for conditional visibility
+        for q in questions:
+            field_name = f'question_{q.id}'
+            val = post_data.get(field_name)
+            if hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
+                val = post_data.getlist(field_name)
+            if val is not None and val != '' and val != []:
+                parent_answers[q.id] = val
+
+        for q in questions:
+            is_visible = True
+            if q.is_conditional and q.conditional_parent_id:
+                parent_val = parent_answers.get(q.conditional_parent_id, '')
+                trigger_val = (q.conditional_trigger_value or '').strip().lower()
+                if str(parent_val).strip().lower() != trigger_val:
+                    is_visible = False
+
+            if not is_visible:
+                new_answers.pop(str(q.id), None)
+                continue
+
+            field_name = f'question_{q.id}'
+            if hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
+                val = [v for v in post_data.getlist(field_name) if str(v).strip()]
+            else:
+                val = post_data.get(field_name)
+                if isinstance(val, str):
+                    val = val.strip()
+
+            # Enforce required questions when visit is already finished
+            if visit.status == 'finished' and q.is_required:
+                is_empty = (val is None or val == '' or val == [])
+                if is_empty:
+                    raise ValidationError(f"السؤال '{q.text_ar}' إلزامي ولا يمكن تركه فارغاً.")
+
+            if val is not None and val != '' and val != []:
+                new_answers[str(q.id)] = val
+            else:
+                new_answers.pop(str(q.id), None)
+
+        # Compute detailed per-question changes
+        q_map = {str(q.id): q.text_ar for q in questions}
+        answer_changes = []
+        all_keys = list(dict.fromkeys(list(old_answers.keys()) + list(new_answers.keys())))
+        for qk in all_keys:
+            old_v = old_answers.get(qk)
+            new_v = new_answers.get(qk)
+            if old_v != new_v:
+                old_str = "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
+                new_str = "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                answer_changes.append({
+                    'question_id': str(qk),
+                    'field': q_map.get(str(qk), f"سؤال #{qk}"),
+                    'old': old_str,
+                    'new': new_str,
+                })
+
+        if not answer_changes:
+            return visit, []
+
+        # Save ONLY questionnaire_answers and updated_at (preserve approval_status & waiting_for_reapproval!)
+        visit.questionnaire_answers = new_answers
+        visit.save(update_fields=['questionnaire_answers', 'updated_at'])
+
+        changes_summary = " | ".join(
+            f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in answer_changes
+        )
+        ip = request.META.get('REMOTE_ADDR') if request else None
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='answers_updated',
+            actor=user,
+            status_before=visit.approval_status,
+            status_after=visit.approval_status,
+            reason=f"تعديل إجابات الاستبيان: {changes_summary}",
+            ip_address=ip,
+        )
+
+        AuditLogService.log(
+            action='update',
+            action_type='VISIT_ANSWERS_UPDATED',
+            module='visits',
+            actor=user,
+            request=request,
+            record_id=visit.pk,
+            record_name=f"Visit #{visit.serial_num}",
+            description=f"تعديل إجابات استبيان الزيارة #{visit.serial_num} ({len(answer_changes)} تعديل)",
+            previous_values={'questionnaire_answers': old_answers},
+            new_values={'questionnaire_answers': new_answers},
+            status='SUCCESS',
+        )
+
+        return visit, answer_changes
 

@@ -80,7 +80,7 @@ class ScopeResolutionService:
         # 3. Fallbacks if unseeded/unconfigured
         if not scope:
             if role:
-                if getattr(role, 'is_area_manager', False) or getattr(role, 'is_manager_role', False):
+                if getattr(role, 'is_area_manager', False) or getattr(role, 'is_sub_area_manager', False) or getattr(role, 'is_manager_role', False):
                     scope = 'area'
                 elif getattr(role, 'is_rep', False):
                     scope = 'brick' if module == 'contacts' else 'own'
@@ -216,6 +216,10 @@ class ScopeResolutionService:
             return UserModel.objects.filter(is_active=True)
 
         scope = cls.get_user_scope(user, module, 'view')
+        if scope == 'own' and module == 'accounts':
+            act_scope = cls.get_user_scope(user, 'activities', 'view')
+            if act_scope in ('area', 'all', 'brick'):
+                scope = act_scope
         if scope == 'all':
             return UserModel.objects.filter(is_active=True)
 

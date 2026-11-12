@@ -45,8 +45,8 @@ class LocationSettingsAdmin(admin.ModelAdmin):
         'allow_template_distance_override', 'verify_unplanned_visit_distance',
         'verify_end_visit_distance', 'bypass_reason_mandatory',
         'distance_bypass_requires_approval', 'require_manager_approval_for_visits',
-        'require_manager_approval_for_agreements',
-        'allow_all_users_to_create_visits', 'enable_product_suggestions', 'suggested_products_count'
+        'allow_visit_deletion_before_end', 'require_manager_approval_for_agreements',
+        'enable_product_suggestions', 'suggested_products_count'
     )
     filter_horizontal = (
         'suggested_products',

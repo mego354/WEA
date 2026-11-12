@@ -96,18 +96,12 @@
                 </form>
                 {% endif %}
 
-                {% if visit.approval_status != 'disapproved' %}
+                {% if visit.approval_status != 'disapproved' and visit.approval_status != 'approved' %}
                 <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>رفض الزيارة</span>
                 </button>
                 {% endif %}
-
-                <!-- Change Status Modal Trigger (Area Manager / SuperAdmin) -->
-                <button type="button" onclick="openChangeStatusModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
-                    <span class="material-symbols-outlined text-base">tune</span>
-                    <span>تغيير الحالة</span>
-                </button>
             {% endif %}
 
             <!-- Start Visit Action (planned + approved only) -->
@@ -144,11 +138,25 @@
             </form>
             {% endif %}
 
+            {% if can_edit_answers and visit.template %}
+            <button type="button" onclick="openEditAnswersModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">quiz</span>
+                <span>تعديل إجابات الاستبيان</span>
+            </button>
+            {% endif %}
+
             {% if visit.status != 'finished' %}
             <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل بيانات الزيارة</span>
             </a>
+            {% endif %}
+
+            {% if can_delete_visit %}
+            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' visit.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ visit.serial_num }} ({{ visit.contact.name|escapejs }})' })" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
+                <span class="material-symbols-outlined text-base">delete</span>
+                <span>حذف الزيارة</span>
+            </button>
             {% endif %}
         </div>
     </div>
@@ -810,18 +818,26 @@
             <!-- READ-ONLY DOSSIER (When status == 'finished' or 'cancelled') -->
             
             <!-- Questionnaire Responses Dossier Card -->
-            {% if questionnaire_responses or visit.questionnaire_answers %}
+            {% if questionnaire_responses or visit.questionnaire_answers or visit.template %}
             <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                     <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
                         <span>إجابات استبيان الزيارة</span>
                     </h2>
-                    {% if visit.template %}
-                    <span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
-                        {{ visit.template.display_name_ar }}
-                    </span>
-                    {% endif %}
+                    <div class="flex items-center gap-2">
+                        {% if visit.template %}
+                        <span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
+                            {{ visit.template.display_name_ar }}
+                        </span>
+                        {% endif %}
+                        {% if can_edit_answers and visit.template %}
+                        <button type="button" onclick="openEditAnswersModal()" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-[11px] font-bold transition-colors shadow-2xs">
+                            <span class="material-symbols-outlined text-xs">edit_note</span>
+                            <span>تعديل الإجابات</span>
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="space-y-3">
@@ -1288,6 +1304,7 @@
                                 {% elif item.action == 'rejected' %}bg-rose-100 text-rose-800
                                 {% elif item.action == 'resubmitted' %}bg-sky-100 text-sky-800
                                 {% elif item.action == 'status_changed' %}bg-purple-100 text-purple-800
+                                {% elif item.action == 'answers_updated' %}bg-indigo-100 text-indigo-800
                                 {% elif item.action == 'sent_to_agenda' %}bg-teal-100 text-teal-800
                                 {% else %}bg-amber-100 text-amber-800{% endif %}">
                                 {{ item.get_action_display }}
@@ -1555,12 +1572,12 @@ function closeDisapproveModal() {
     if (m) m.classList.add('hidden');
 }
 
-function openChangeStatusModal() {
-    const m = document.getElementById('change-status-modal');
+function openEditAnswersModal() {
+    const m = document.getElementById('edit-answers-modal');
     if (m) m.classList.remove('hidden');
 }
-function closeChangeStatusModal() {
-    const m = document.getElementById('change-status-modal');
+function closeEditAnswersModal() {
+    const m = document.getElementById('edit-answers-modal');
     if (m) m.classList.add('hidden');
 }
 
@@ -1685,10 +1702,59 @@ function closeStartVisitModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+function updateStartVisitDistanceDisplay(lat, lng) {
+    const actualEl = document.getElementById('start-actual-distance-display');
+    const pillEl = document.getElementById('start-distance-status-pill');
+    const bypassBox = document.getElementById('start-distance-bypass-container');
+    if (!actualEl || !pillEl) return;
+
+    if (clientRegisteredLat === null || clientRegisteredLng === null) {
+        actualEl.textContent = "0 متر (تثبيت أول مرة)";
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
+        pillEl.textContent = "سيتم تثبيت موقع العميل تلقائياً ✓";
+        if (bypassBox) bypassBox.classList.add('hidden');
+        return;
+    }
+
+    const dist = computeHaversineDistance(lat, lng, clientRegisteredLat, clientRegisteredLng);
+    if (dist === null) return;
+    actualEl.textContent = `${Math.round(dist)} متر`;
+
+    if (dist <= visitAllowedDistance) {
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
+        pillEl.textContent = `ضمن النطاق المسموح (${visitAllowedDistance}م) ✓`;
+        if (bypassBox) bypassBox.classList.add('hidden');
+    } else {
+        const diff = Math.round(dist - visitAllowedDistance);
+        if (!verifyVisitsEnabled) {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-200";
+            pillEl.textContent = `المسافة ${Math.round(dist)}م (التحقق معطل)`;
+        } else {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200";
+            pillEl.textContent = `خارج النطاق بـ ${diff} متر ⚠️`;
+            if (bypassBox) bypassBox.classList.remove('hidden');
+        }
+    }
+}
+
+function toggleStartBypassReason() {
+    const chk = document.getElementById('start-force-bypass-chk') || document.getElementById('start-request-exception-chk');
+    const reasonBox = document.getElementById('start-bypass-reason-box');
+    if (chk && reasonBox) {
+        if (chk.checked) {
+            reasonBox.classList.remove('hidden');
+        } else {
+            reasonBox.classList.add('hidden');
+        }
+    }
+}
+
 function acquireStartCoordinates() {
     const gpsText = document.getElementById('start-modal-gps-text');
+    const bypassBox = document.getElementById('start-distance-bypass-container');
     if (!navigator.geolocation) {
         if (gpsText) gpsText.textContent = 'GPS غير مدعوم في المتصفح';
+        if (bypassBox && verifyVisitsEnabled) bypassBox.classList.remove('hidden');
         return;
     }
     if (gpsText) gpsText.textContent = 'جاري التقاط إحداثيات الموقع...';
@@ -1704,15 +1770,17 @@ function acquireStartCoordinates() {
             if (lngInp) lngInp.value = lng;
             if (accInp) accInp.value = acc;
             if (gpsText) {
-                gpsText.textContent = `تم التقاط الموقع بدقة (±${acc}م) ✓`;
-                gpsText.className = 'text-xs font-bold text-emerald-800';
+                gpsText.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${acc}م) ✓`;
+                gpsText.className = 'text-xs font-bold font-mono text-emerald-800 dir-ltr';
             }
+            updateStartVisitDistanceDisplay(lat, lng);
         },
         function(err) {
             if (gpsText) {
                 gpsText.textContent = 'تعذر التقاط الموقع الجغرافي تلقائياً';
                 gpsText.className = 'text-xs font-bold text-amber-800';
             }
+            if (bypassBox && verifyVisitsEnabled) bypassBox.classList.remove('hidden');
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -1745,6 +1813,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+{% if visit.approval_status != 'disapproved' and visit.approval_status != 'approved' %}
 <!-- DISAPPROVE / REJECT MODAL -->
 <div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
@@ -1774,54 +1843,99 @@ document.addEventListener('DOMContentLoaded', function() {
         </form>
     </div>
 </div>
+{% endif %}
 
-<!-- CHANGE STATUS MODAL (Area Manager / SuperAdmin) -->
-<div id="change-status-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-200">
+{% if can_edit_answers and visit.template %}
+<!-- EDIT QUESTIONNAIRE ANSWERS MODAL (Requirement D) -->
+<div id="edit-answers-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div class="flex items-center gap-2 text-slate-800">
-                <span class="material-symbols-outlined text-brand-600">tune</span>
-                <h3 class="font-bold text-slate-900 text-sm">تغيير حالة الزيارة والاعتماد (خاص بمدير المنطقة)</h3>
+            <div class="flex items-center gap-2 text-[#27bebe]">
+                <span class="material-symbols-outlined">quiz</span>
+                <div>
+                    <h3 class="font-bold text-slate-900 text-sm">تعديل إجابات استبيان الزيارة #{{ visit.serial_num }}</h3>
+                    <p class="text-[11px] text-slate-500">يتم حفظ التعديلات لهذه الزيارة فقط مع توثيق الإجابات السابقة في الخط الزمني</p>
+                </div>
             </div>
-            <button type="button" onclick="closeChangeStatusModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+            <button type="button" onclick="closeEditAnswersModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <span class="material-symbols-outlined text-lg">close</span>
             </button>
         </div>
-        <form method="POST" action="{% url 'visit_action' visit.pk 'change_status' %}" class="space-y-4 text-xs">
+
+        <form method="POST" action="{% url 'visit_update_answers' visit.pk %}" class="space-y-4 text-xs">
             {% csrf_token %}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">حالة الزيارة التنفيذية</label>
-                    <select name="visit_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                        {% for s_val, s_lbl in status_choices %}
-                        <option value="{{ s_val }}" {% if visit.status == s_val %}selected{% endif %}>{{ s_lbl }} ({{ s_val }})</option>
+            <div class="space-y-3.5">
+                {% for q in all_questions %}
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-800">
+                            {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500">*</span>{% endif %}
+                        </label>
+                        <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">{{ q.get_stage_display }}</span>
+                    </div>
+
+                    {% if q.question_type == 'boolean' or q.question_type == 'yes_no' %}
+                    <div class="flex items-center gap-4 pt-1">
+                        <label class="inline-flex items-center gap-2 cursor-pointer px-3 py-1.5 bg-white border border-slate-200 rounded-lg">
+                            <input type="radio" name="question_{{ q.id }}" value="Yes" class="text-[#27bebe] focus:ring-[#27bebe]"
+                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
+                            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
+                        </label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer px-3 py-1.5 bg-white border border-slate-200 rounded-lg">
+                            <input type="radio" name="question_{{ q.id }}" value="No" class="text-rose-500 focus:ring-rose-500"
+                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
+                            <span class="text-xs font-bold text-slate-700">لا (No)</span>
+                        </label>
+                    </div>
+                    {% elif q.question_type == 'single_choice' %}
+                    <select name="question_{{ q.id }}" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-[#27bebe]">
+                        <option value="">-- اختر الإجابة --</option>
+                        {% for opt in q.options %}
+                        <option value="{{ opt.value|default:opt.text_ar }}"
+                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt.value %}selected{% endif %}{% endfor %}>
+                            {{ opt.text_ar|default:opt.value }}
+                        </option>
                         {% endfor %}
                     </select>
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">حالة الاعتماد الإداري</label>
-                    <select name="approval_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                        {% for a_val, a_lbl in approval_choices %}
-                        <option value="{{ a_val }}" {% if visit.approval_status == a_val %}selected{% endif %}>{{ a_lbl }} ({{ a_val }})</option>
+                    {% elif q.question_type == 'multiple_choice' %}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {% for opt in q.options %}
+                        <label class="inline-flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer text-xs">
+                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
+                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt.value in resp.raw_answer %}checked{% endif %}{% endfor %}>
+                            <span class="text-slate-700 font-medium">{{ opt.text_ar|default:opt.value }}</span>
+                        </label>
                         {% endfor %}
-                    </select>
+                    </div>
+                    {% elif q.question_type == 'rating' %}
+                    <div class="flex items-center gap-2 pt-1">
+                        {% for rate in "12345" %}
+                        <label class="inline-flex flex-col items-center justify-center w-9 h-9 bg-white border border-slate-200 rounded-lg cursor-pointer">
+                            <input type="radio" name="question_{{ q.id }}" value="{{ rate }}" class="text-[#27bebe] focus:ring-[#27bebe]"
+                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == rate %}checked{% endif %}{% endfor %}>
+                            <span class="text-xs font-bold text-slate-700">{{ rate }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <textarea name="question_{{ q.id }}" rows="2" placeholder="اكتب الإجابة هنا..."
+                              class="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe]">{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}</textarea>
+                    {% endif %}
                 </div>
+                {% endfor %}
             </div>
-            <div>
-                <label class="block font-bold text-slate-700 mb-1">سبب أو ملاحظات التغيير</label>
-                <textarea name="reason" rows="2" placeholder="ملاحظات توثيق تغيير الحالة..."
-                          class="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"></textarea>
-            </div>
-            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button type="button" onclick="closeChangeStatusModal()" class="px-3.5 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-colors">إلغاء</button>
-                <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm">check</span>
-                    <span>حفظ التعديلات</span>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeEditAnswersModal()" class="px-3.5 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-colors">إلغاء</button>
+                <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    <span>حفظ إجابات الاستبيان</span>
                 </button>
             </div>
         </form>
     </div>
 </div>
+{% endif %}
 
 <!-- VISIT TIME MODAL -->
 <div id="visit-time-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
@@ -1890,14 +2004,33 @@ document.addEventListener('DOMContentLoaded', function() {
             <input type="hidden" name="device_accuracy" id="start-modal-accuracy" value="">
 
             <!-- Client & Geofence Quick Overview -->
-            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
-                <div>
-                    <span class="text-slate-400 text-[10px] block">العميل</span>
-                    <strong class="text-slate-800 text-xs">{{ visit.contact.name }}</strong>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                    <div class="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>العميل وموقعه المسجل:</span>
+                        <span class="material-symbols-outlined text-xs text-slate-400">pin_drop</span>
+                    </div>
+                    <strong class="text-slate-800 text-xs block truncate">{{ visit.contact.name }}</strong>
+                    <div id="start-client-gps-display" class="text-[11px] font-mono text-slate-600 dir-ltr text-right">
+                        {% if visit.contact.has_saved_location %}
+                        {{ visit.contact.latitude|floatformat:5 }}, {{ visit.contact.longitude|floatformat:5 }}
+                        {% else %}
+                        غير مسجل (سيتم تثبيت الموقع الحالي)
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="text-left">
-                    <span class="text-slate-400 text-[10px] block">الحد الأقصى للمسافة</span>
-                    <strong class="text-[#1a8b8b] text-xs font-mono">{{ allowed_distance }} متر</strong>
+
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                    <div class="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>المسافة الفعلية / المسموح بها ({{ allowed_distance }}م):</span>
+                        <span class="material-symbols-outlined text-xs text-[#27bebe]">straighten</span>
+                    </div>
+                    <div class="flex items-center justify-between pt-0.5">
+                        <span id="start-actual-distance-display" class="text-sm font-black text-slate-900">—</span>
+                        <span id="start-distance-status-pill" class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600">
+                            بانتظار الحساب
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -1911,6 +2044,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="material-symbols-outlined text-base">refresh</span>
                 </button>
             </div>
+
+            <!-- Start Distance Bypass / Exception Request Section (Requirement E) -->
+            {% if verify_visits_enabled %}
+            <div id="start-distance-bypass-container" class="hidden p-3.5 {% if can_bypass_start_gps %}bg-indigo-50/70 border border-indigo-200{% else %}bg-amber-50/80 border border-amber-300{% endif %} rounded-xl space-y-2.5">
+                {% if can_bypass_start_gps %}
+                <label class="flex items-center gap-2 text-xs font-bold text-indigo-950 cursor-pointer">
+                    <input type="checkbox" name="force_bypass_location" value="1" id="start-force-bypass-chk" class="text-indigo-600 rounded focus:ring-indigo-500" onchange="toggleStartBypassReason()">
+                    <span>تجاوز قيد المسافة وبدء الزيارة مباشرة (صلاحية إدارية)</span>
+                </label>
+                {% else %}
+                <label class="flex items-start gap-2 text-xs font-bold text-amber-950 cursor-pointer">
+                    <input type="checkbox" name="request_distance_exception" value="1" id="start-request-exception-chk" class="mt-0.5 text-amber-600 rounded focus:ring-amber-500" onchange="toggleStartBypassReason()">
+                    <div>
+                        <span class="block font-black">طلب استثناء لتجاوز المسافة عند بدء الزيارة</span>
+                        <span class="text-[11px] font-medium text-amber-800">سيتم توثيق طلب الاستثناء ومراجعته من المدير المختص.</span>
+                    </div>
+                </label>
+                {% endif %}
+                <div id="start-bypass-reason-box" class="hidden">
+                    <input type="text" name="bypass_reason" id="start-bypass-reason-input" placeholder="سبب التجاوز أو التواجد خارج المسافة المسموح بها (إلزامي *)..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium">
+                </div>
+            </div>
+            {% endif %}
 
             {% if start_questions %}
             <!-- Check-in Questions (stage == 'start_only') -->

@@ -61,9 +61,9 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الخزن المتاحة</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">wallet</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_vaults }}">{{ stats.total_vaults }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 shrink-0 truncate">({{ stats.active_vaults }} مفعلة)</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_vaults|stat_number }}">{{ stats.total_vaults|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 shrink-0">({{ stats.active_vaults|stat_number }} مفعلة)</span>
             </div>
         </div>
 
@@ -73,8 +73,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي السيولة الحالية</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">payments</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight truncate block" title="{{ stats.total_balance|intcomma }} ج.م">{{ stats.total_balance|intcomma }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_balance|stat_number }} ج.م">{{ stats.total_balance|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-emerald-600 font-bold shrink-0">ج.م</span>
             </div>
         </div>
@@ -85,8 +85,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">أرصدة الخزن النقدية</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">local_atm</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-teal-700 font-mono tracking-tight truncate block" title="{{ stats.cash_balance|intcomma }} ج.م">{{ stats.cash_balance|intcomma }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-teal-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.cash_balance|stat_number }} ج.م">{{ stats.cash_balance|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-teal-600 font-bold shrink-0">ج.م</span>
             </div>
         </div>
@@ -97,8 +97,8 @@
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">أرصدة الحسابات البنكية</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">account_balance</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight truncate block" title="{{ stats.bank_balance|intcomma }} ج.م">{{ stats.bank_balance|intcomma }}</span>
+            <div class="mt-2 sm:mt-3 flex flex-wrap items-baseline gap-1 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.bank_balance|stat_number }} ج.م">{{ stats.bank_balance|stat_number }}</span>
                 <span class="text-[10px] sm:text-xs text-blue-600 font-bold shrink-0">ج.م</span>
             </div>
         </div>
