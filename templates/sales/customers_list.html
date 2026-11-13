@@ -48,46 +48,50 @@
     <!-- 2. Dedicated Statistics Cards Section -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Customers -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-brand-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">groups</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي العملاء</span>
+                <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">groups</span>
             </div>
-            <div class="min-w-0">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي العملاء</p>
-                <p class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_customers|default:0 }}">{{ stats.total_customers|default:0 }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_customers|default:0|stat_number }}">{{ stats.total_customers|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">عميل مسجل بالدليل</span>
             </div>
         </div>
 
         <!-- Card 2: Active Customers -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">verified</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء نشطون</span>
+                <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">verified</span>
             </div>
-            <div class="min-w-0">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء نشطون</p>
-                <p class="text-base sm:text-lg lg:text-xl font-black text-emerald-600 font-mono tracking-tight truncate block" title="{{ stats.active_customers|default:0 }}">{{ stats.active_customers|default:0 }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.active_customers|default:0|stat_number }}">{{ stats.active_customers|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">عميل تجاري نشط</span>
             </div>
         </div>
 
         <!-- Card 3: Lead Customers -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">person_search</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء محتملون</span>
+                <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">person_search</span>
             </div>
-            <div class="min-w-0">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">عملاء محتملون</p>
-                <p class="text-base sm:text-lg lg:text-xl font-black text-blue-600 font-mono tracking-tight truncate block" title="{{ stats.lead_customers|default:0 }}">{{ stats.lead_customers|default:0 }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.lead_customers|default:0|stat_number }}">{{ stats.lead_customers|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block truncate">عميل مستهدف جديد</span>
             </div>
         </div>
 
         <!-- Card 4: Total Receivables -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">trending_up</span>
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المديونيات</span>
+                <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">trending_up</span>
             </div>
-            <div class="min-w-0">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المديونيات</p>
-                <p class="text-base sm:text-lg lg:text-xl font-black text-rose-600 font-mono tracking-tight truncate block" title="{{ stats.total_receivable|floatformat:2|intcomma }} ج.م">{{ stats.total_receivable|floatformat:2|intcomma }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_receivable|stat_number }} ج.م">{{ stats.total_receivable|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-rose-600 font-semibold block truncate">رصيد مدين مستحق</span>
             </div>
         </div>
     </div>

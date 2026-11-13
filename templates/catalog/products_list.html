@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}المنتجات - Bricks Rep{% endblock %}
 
@@ -42,43 +42,51 @@
 
     <!-- 2. Dedicated Statistics Cards Section -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-[#27bebe] shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">medication</span>
+        <!-- Card 1: Total Products -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المنتجات</span>
+                <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">medication</span>
             </div>
-            <div class="min-w-0 flex-1">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المنتجات</p>
-                <p class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_products|default:0|stat_number }}">{{ stats.total_products|default:0|stat_number }}</p>
-            </div>
-        </div>
-
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">check_circle</span>
-            </div>
-            <div class="min-w-0 flex-1">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">متاح للبيع</p>
-                <p class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.sellable_products|default:0|stat_number }}">{{ stats.sellable_products|default:0|stat_number }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_products|default:0|stat_number }}">{{ stats.total_products|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">منتج مسجل بالكتالوج</span>
             </div>
         </div>
 
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">visibility_off</span>
+        <!-- Card 2: Sellable Products -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">متاح للبيع</span>
+                <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">check_circle</span>
             </div>
-            <div class="min-w-0 flex-1">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">غير متاح للبيع</p>
-                <p class="text-sm sm:text-lg lg:text-xl font-black text-slate-600 font-mono tracking-tight break-words leading-snug block" title="{{ stats.unsellable_products|default:0|stat_number }}">{{ stats.unsellable_products|default:0|stat_number }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.sellable_products|default:0|stat_number }}">{{ stats.sellable_products|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">جاهز للتداول والطلب</span>
             </div>
         </div>
 
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/90 shadow-xs flex items-center gap-2.5 sm:gap-3.5 min-w-0 overflow-hidden">
-            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                <span class="material-symbols-outlined text-lg sm:text-xl">category</span>
+        <!-- Card 3: Unsellable Products -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">غير متاح للبيع</span>
+                <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-500 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">visibility_off</span>
             </div>
-            <div class="min-w-0 flex-1">
-                <p class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">تصنيفات المنتجات</p>
-                <p class="text-sm sm:text-lg lg:text-xl font-black text-indigo-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.categories_count|default:0|stat_number }}">{{ stats.categories_count|default:0|stat_number }}</p>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-600 font-mono tracking-tight break-words leading-snug block" title="{{ stats.unsellable_products|default:0|stat_number }}">{{ stats.unsellable_products|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">موقوف أو تحت المراجعة</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Categories Count -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">تصنيفات المنتجات</span>
+                <span class="p-1.5 sm:p-2 bg-indigo-50 text-indigo-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">category</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-indigo-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.categories_count|default:0|stat_number }}">{{ stats.categories_count|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-indigo-600 font-semibold block truncate">تصنيف علاجي معتمد</span>
             </div>
         </div>
     </div>
