@@ -40,6 +40,7 @@ from .services import (
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, get_user_managed_representatives,
+    get_visible_assignees_queryset,
     get_visit_eligible_contacts_queryset, can_user_access_contact_for_visit,
     get_user_managed_areas, get_user_main_areas, is_manager_or_higher
 )
@@ -98,9 +99,15 @@ def can_user_approve_contact_visit(user, contact=None, module_type='visits', vis
 
 def resolve_visit_creation_approval(user, contact, is_planned, location_settings, visit_owner=None):
     """
-    Centralized approval resolution for newly created visits (both unplanned and planned).
+    Centralized approval resolution for newly created visits:
+    - Planned visits: Do not require approval upon creation (auto-approved).
+    - Unplanned visits: Require approval after creation (unless manager approval is disabled globally
+      or the user has supervisory approval authority).
     Returns (approval_status, approved_by, approved_at).
     """
+    if is_planned:
+        return 'approved', None, timezone.now()
+
     if not location_settings.require_manager_approval_for_visits:
         return 'approved', user, timezone.now()
     if can_user_approve_contact_visit(user, contact=contact, module_type='visits', visit_owner=visit_owner):
@@ -532,17 +539,9 @@ def planned_visits_list(request):
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     from accounts.scope_service import ScopeResolutionService
     view_scope = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view')
-    can_view_others = (
-        is_super or
-        has_perm_or_admin(request.user, 'activities:planned/manage') or
-        view_scope in ['area', 'all']
-    )
-    if is_super or view_scope == 'all':
-        all_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
-    elif can_view_others:
-        all_reps = get_user_managed_representatives(request.user, module='activities').order_by('first_name', 'username')
-    else:
-        all_reps = User.objects.filter(id=request.user.id)
+    can_view_others = (is_super or view_scope in ['area', 'all'])
+
+    all_reps = get_visible_assignees_queryset(request.user, module='activities')
 
     rep_id = (request.GET.get('assignee') or '').strip()
     is_all_reps_view = False
@@ -1125,12 +1124,48 @@ def planned_visit_add_item(request):
             messages.warning(request, msg)
         else:
             max_order = plan_day.items.count() + 1
+            from master_data.models import LocationSettings
+            loc_settings = LocationSettings.get_settings()
+            approval_status, approved_by, approved_at = resolve_visit_creation_approval(
+                request.user, contact, True, loc_settings, visit_owner=assignee
+            )
+            next_serial = (Visit.objects.aggregate(m=Max('serial_num'))['m'] or 1000) + 1
+            visit = Visit.objects.create(
+                serial_num=next_serial,
+                contact=contact,
+                template=template,
+                date=target_date,
+                status='planned',
+                is_planned=True,
+                approval_status=approval_status,
+                approved_by=approved_by,
+                approved_at=approved_at,
+                allowed_distance=loc_settings.get_effective_tolerance(template),
+                owner=assignee,
+                created_by=request.user,
+                feedback=notes,
+                location_verified=False,
+                verification_status='unverified',
+                location_status='زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)',
+            )
             item = PlannedVisitItem.objects.create(
                 plan_day=plan_day,
                 order=max_order,
                 contact=contact,
                 template=template,
-                notes=notes
+                notes=notes,
+                visit=visit,
+                is_executed=False,
+            )
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='created',
+                actor=request.user,
+                status_before='',
+                status_after=visit.approval_status,
+                reason=f"إضافة زيارة مخططة للعميل {contact.name}",
+                ip_address=request.META.get('REMOTE_ADDR')
             )
             AuditLogService.log(
                 action='create',
@@ -1225,21 +1260,8 @@ def planned_visits_bulk_add(request):
 
     fallback_template_id = (request.POST.get('template_id') or '').strip()
 
-    assignee = get_object_or_404(User, pk=assignee_id)
-    is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
-    from accounts.scope_service import ScopeResolutionService
-    can_manage_others = (
-        is_super or
-        has_perm_or_admin(request.user, 'activities:planned/manage') or
-        ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
-    )
-    if assignee != request.user:
-        if not can_manage_others or (not is_super and not get_user_managed_representatives(request.user, module='activities').filter(pk=assignee.pk).exists()):
-            msg = "غير مصرح لك بإضافة زيارات مجمعة لخطة مندوب آخر خارج نطاق مسؤوليتك الجغرافية."
-            if is_ajax:
-                return JsonResponse({'success': False, 'message': msg}, status=403)
-            messages.error(request, msg)
-            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
+    # Bulk Planned Visit Creation: Always assign the currently authenticated user
+    assignee = request.user
 
     contacts = list(Contact.objects.filter(id__in=contact_ids).select_related('area', 'brick', 'area__parent'))
     if len(contacts) != len(contact_ids):
@@ -1511,15 +1533,12 @@ def planned_visits_export(request):
         from accounts.scope_service import ScopeResolutionService
         is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
         view_scope = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view')
-        can_view_others = (
-            is_super or
-            has_perm_or_admin(request.user, 'activities:planned/manage') or
-            view_scope in ['area', 'all']
-        )
+        can_view_others = (is_super or view_scope in ['area', 'all'])
         if not can_view_others and target_id != request.user.id:
             return render_forbidden_response(request, "غير مصرح لك بتصدير خطة زيارات مندوب آخر.")
         if not is_super and view_scope != 'all' and target_id != request.user.id:
-            if not get_user_managed_representatives(request.user, module='activities').filter(pk=target_id).exists():
+            all_reps = get_visible_assignees_queryset(request.user, module='activities')
+            if not all_reps.filter(pk=target_id).exists():
                 return render_forbidden_response(request, "غير مصرح لك بتصدير خطة زيارات مندوب خارج نطاق منطقتك الجغرافية.")
         items = items.filter(plan_day__assignee_id=target_id)
     date_from = request.GET.get('date_from', '').strip()
@@ -1720,38 +1739,14 @@ def visit_detail(request, pk):
     supports_detailing = template.is_product_detailing_supported() if template else False
 
     if request.method == 'POST':
-        action = request.POST.get('action', 'complete').strip()
+        if visit.status != 'started':
+            return render_forbidden_response(request, "لا يمكن تقديم الإجابات أو إنهاء الزيارة لأنها ليست جارية حالياً.")
 
-        if action == 'cancel':
-            if not can_user_access_object(request.user, visit, 'edit') and visit.owner != request.user:
-                return render_forbidden_response(request, "غير مصرح لك بإلغاء هذه الزيارة.")
-            old_status = visit.status
-            visit.status = 'cancelled'
-            visit.save(update_fields=['status'])
-            cancel_reason = (request.POST.get('cancel_reason') or 'إلغاء الزيارة').strip()
-            ApprovalAuditLog.objects.create(
-                record_type='visit',
-                visit=visit,
-                action='cancelled',
-                actor=request.user,
-                status_before=old_status,
-                status_after='cancelled',
-                reason=cancel_reason,
-                ip_address=request.META.get('REMOTE_ADDR')
-            )
-            AuditLogService.log(
-                action='update',
-                action_type='VISIT_CANCELLED',
-                module='visits',
-                user=request.user,
-                request=request,
-                record_id=visit.pk,
-                object_repr=f"Visit #{visit.serial_num}",
-                previous_values={'status': old_status},
-                new_values={'status': 'cancelled', 'reason': cancel_reason}
-            )
-            messages.warning(request, f"تم إلغاء الزيارة #{visit.serial_num}.")
-            return redirect('visit_detail', pk=visit.pk)
+        # Visit execution ownership check
+        if visit.owner_id != request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
+            return render_forbidden_response(request, "فقط المندوب المسؤول عن الزيارة هو المصرح له بتقديم إجاباتها وإنهائها.")
+
+        action = request.POST.get('action', 'complete').strip()
 
         # Process Questionnaire Answers
         answers = dict(visit.questionnaire_answers or {})
@@ -2081,6 +2076,7 @@ def visit_detail(request, pk):
     can_delete_visit_val, _ = can_delete_unended_visit(visit, request.user)
     can_edit_answers_val, _ = can_edit_visit_answers(visit, request.user)
     can_bypass_start_gps = location_settings.can_user_bypass_without_approval(request.user, stage='start')
+    can_request_gps_exception = location_settings.can_user_request_distance_exception(request.user)
     approval_history = visit.approval_history.select_related('actor').all()
     timeline_events = build_visit_timeline(visit)
     is_in_agenda = PlannedVisitItem.objects.filter(visit=visit).exists()
@@ -2097,6 +2093,7 @@ def visit_detail(request, pk):
         'supports_detailing': supports_detailing,
         'can_bypass_gps': can_bypass_gps,
         'can_bypass_start_gps': can_bypass_start_gps,
+        'can_request_gps_exception': can_request_gps_exception,
         'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
         'distance_bypass_requires_approval': location_settings.distance_bypass_requires_approval,
         'verify_visits_enabled': location_settings.verify_visits,
@@ -2559,180 +2556,114 @@ def visit_edit(request, pk):
     if not can_user_access_object(request.user, visit, 'edit'):
         return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
 
-    # Strict restriction: Ended / Finished visits CANNOT be edited
-    if visit.status == 'finished':
-        messages.error(request, "لا يمكن تعديل بيانات الزيارة بعد اكتمالها وإنهائها نهائياً.")
+    # Strict restriction: Started or Ended visits CANNOT have their metadata edited
+    if visit.status in ('started', 'finished') or visit.ended_at is not None:
+        messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد بدئها أو اكتمالها.")
         return redirect('visit_detail', pk=visit.pk)
 
     if request.method == 'POST':
         prev_approval_status = visit.approval_status
-        preserved_answers = dict(visit.questionnaire_answers or {})
+        prev_date = visit.date
+        prev_template = visit.template
+        prev_time = visit.time
         prev_values = {
-            'contact_id': visit.contact_id,
             'template_id': visit.template_id,
+            'template_name': visit.template.display_name_ar if visit.template else '',
             'date': str(visit.date),
-            'owner_id': visit.owner_id,
-            'feedback': visit.feedback or '',
-            'visit_outcome': visit.visit_outcome or '',
-            'is_successful': visit.is_successful,
-            'doubled': visit.doubled,
-            'detailed_products': list(visit.detailed_products.values_list('id', flat=True)),
+            'time': str(visit.time) if visit.time else '',
             'approval_status': visit.approval_status,
         }
 
         form = VisitForm(request.POST, request.FILES, instance=visit, user=request.user)
         if form.is_valid():
             with transaction.atomic():
-                visit = form.save(commit=False)
-                template = visit.template
+                # REQUIREMENT D: Before start and end, editing must be restricted to date, template, and time
+                cleaned_date = form.cleaned_data.get('date')
+                cleaned_template = form.cleaned_data.get('template')
 
-                # Strictly preserve existing questionnaire answers untouched during visit metadata edit
-                visit.questionnaire_answers = preserved_answers
-                visit_outcome = request.POST.get('visit_outcome', '').strip()
-                if visit_outcome:
-                    visit.visit_outcome = visit_outcome
-                    visit.is_successful = (visit_outcome == 'successful')
+                # Preserve other fields strictly
+                visit.date = cleaned_date
+                visit.template = cleaned_template
 
-                # Post-Approval Editing Rule:
-                # Identify if approval-relevant metadata fields changed
-                critical_fields_changed = False
-                if str(visit.date) != prev_values['date']:
-                    critical_fields_changed = True
-                elif visit.contact_id != prev_values['contact_id']:
-                    critical_fields_changed = True
-                elif visit.template_id != prev_values['template_id']:
-                    critical_fields_changed = True
-                elif visit.owner_id != prev_values['owner_id']:
-                    critical_fields_changed = True
-                elif visit.doubled != prev_values['doubled']:
-                    critical_fields_changed = True
+                # Track changes
+                field_changes = []
+                if str(cleaned_date) != str(prev_date):
+                    field_changes.append({
+                        'field': 'تاريخ الزيارة',
+                        'old': str(prev_date),
+                        'new': str(cleaned_date),
+                    })
+                if cleaned_template != prev_template:
+                    field_changes.append({
+                        'field': 'قالب الزيارة',
+                        'old': prev_template.display_name_ar if prev_template else 'بدون قالب',
+                        'new': cleaned_template.display_name_ar if cleaned_template else 'بدون قالب',
+                    })
 
-                was_approved = (prev_approval_status == 'approved')
-                user_has_approval_authority = (
-                    can_user_approve_contact_visit(request.user, visit.contact) and
-                    can_user_access_object(request.user, visit, 'approve')
-                )
-                reapproval_triggered = False
-                resubmitted_from_rejected = False
-
-                # Handle product detailing only if supported
-                detailed_product_ids = []
-                if template and template.is_product_detailing_supported():
-                    detailed_ids_raw = request.POST.getlist('detailed_products')
-                    if detailed_ids_raw:
-                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
-                        allowed_ids = eligible_ids | historical_ids
-                        detailed_product_ids = [int(pid) for pid in detailed_ids_raw if str(pid).isdigit() and int(pid) in allowed_ids]
-                        visit.detailed_products.set(detailed_product_ids)
-                    elif 'detailed_products_submitted' in request.POST:
-                        visit.detailed_products.clear()
-                else:
-                    visit.detailed_products.clear()
-
-                if set(detailed_product_ids) != set(prev_values['detailed_products']):
-                    critical_fields_changed = True
-
-                # Requirement H: Editing an existing visit by an unauthorized user
-                # must always reset/set its approval status to pending approval.
-                if not user_has_approval_authority:
-                    if was_approved:
-                        visit.approval_status = 'pending'
-                        visit.waiting_for_reapproval = True
-                        reapproval_triggered = True
-                    else:
-                        if prev_approval_status in ('disapproved', 'rejected'):
-                            resubmitted_from_rejected = True
-                        visit.approval_status = 'pending'
-                        visit.waiting_for_reapproval = False
-                        visit.approved_by = None
-                        visit.approved_at = None
-
-                visit.save()
+                # Requirement C & D: Every permitted update must trigger approval again
+                visit.approval_status = 'pending'
+                visit.waiting_for_reapproval = True
+                visit.approved_by = None
+                visit.approved_at = None
+                visit.save(update_fields=['date', 'template', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
 
                 new_values = {
-                    'contact_id': visit.contact_id,
                     'template_id': visit.template_id,
+                    'template_name': visit.template.display_name_ar if visit.template else '',
                     'date': str(visit.date),
-                    'owner_id': visit.owner_id,
-                    'feedback': visit.feedback or '',
-                    'visit_outcome': visit.visit_outcome or '',
-                    'is_successful': visit.is_successful,
-                    'doubled': visit.doubled,
-                    'detailed_products': list(visit.detailed_products.values_list('id', flat=True)),
+                    'time': str(visit.time) if visit.time else '',
                     'approval_status': visit.approval_status,
                     'waiting_for_reapproval': visit.waiting_for_reapproval,
                 }
 
-                if reapproval_triggered:
-                    ApprovalAuditLog.objects.create(
-                        record_type='visit',
-                        visit=visit,
-                        action='edited_reapproval_required',
-                        actor=request.user,
-                        status_before='approved',
-                        status_after='pending',
-                        reason='تم تعديل الزيارة بعد الاعتماد بواسطة المندوب — تتطلب إعادة اعتماد المدير',
-                        ip_address=request.META.get('REMOTE_ADDR')
-                    )
-                    AuditLogService.log(
-                        action='update',
-                        action_type='VISIT_EDITED_REAPPROVAL_REQUIRED',
-                        module='visits',
-                        user=request.user,
-                        request=request,
-                        record_id=visit.pk,
-                        object_repr=f"Visit #{visit.serial_num}",
-                        previous_values=prev_values,
-                        new_values=new_values
-                    )
-                    messages.warning(
-                        request,
-                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. نظراً لتعديلها بدون صلاحية اعتماد، تم تحويل حالتها إلى (قيد الاعتماد) من المدير."
-                    )
-                else:
-                    if user_has_approval_authority and was_approved:
-                        ApprovalAuditLog.objects.create(
-                            record_type='visit',
-                            visit=visit,
-                            action='edited_by_manager',
-                            actor=request.user,
-                            status_before=prev_approval_status,
-                            status_after=visit.approval_status,
-                            reason='تعديل بيانات الزيارة بواسطة مدير/مشرف معتمد',
-                            ip_address=request.META.get('REMOTE_ADDR')
-                        )
-                    elif resubmitted_from_rejected:
-                        ApprovalAuditLog.objects.create(
-                            record_type='visit',
-                            visit=visit,
-                            action='resubmitted',
-                            actor=request.user,
-                            status_before=prev_approval_status,
-                            status_after='pending',
-                            reason='تعديل زيارة مرفوضة وإعادة إرسالها للاعتماد',
-                            ip_address=request.META.get('REMOTE_ADDR')
-                        )
-                    AuditLogService.log(
-                        action='update',
-                        action_type='VISIT_UPDATED',
-                        module='visits',
-                        user=request.user,
-                        request=request,
-                        record_id=visit.pk,
-                        object_repr=f"Visit #{visit.serial_num}",
-                        previous_values=prev_values,
-                        new_values=new_values
-                    )
-                    messages.success(request, f"تم تحديث بيانات الزيارة #{visit.serial_num} بنجاح.")
+                changes_summary = " | ".join(
+                    f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in field_changes
+                ) if field_changes else "تعديل موعد وقالب الزيارة"
+
+                audit_action = 'resubmitted' if prev_approval_status in ('disapproved', 'rejected') else 'edited_reapproval_required'
+                audit_reason = (
+                    f"إعادة تقديم الزيارة بعد التعديل: {changes_summary}"
+                    if audit_action == 'resubmitted' else
+                    f"تعديل بيانات الزيارة قبل البدء (يتطلب إعادة اعتماد المدير): {changes_summary}"
+                )
+
+                ApprovalAuditLog.objects.create(
+                    record_type='visit',
+                    visit=visit,
+                    action=audit_action,
+                    actor=request.user,
+                    status_before=prev_approval_status,
+                    status_after='pending',
+                    reason=audit_reason,
+                    changes=field_changes,
+                    approval_required=True,
+                    context_data={'previous_approval_status': prev_approval_status},
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                AuditLogService.log(
+                    action='update',
+                    action_type='VISIT_EDITED_REAPPROVAL_REQUIRED',
+                    module='visits',
+                    user=request.user,
+                    request=request,
+                    record_id=visit.pk,
+                    record_name=f"Visit #{visit.serial_num}",
+                    description=f"تعديل بيانات الزيارة #{visit.serial_num} وتحويلها للاعتماد",
+                    previous_values=prev_values,
+                    new_values=new_values
+                )
+                messages.warning(
+                    request,
+                    f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. تم تحويل حالتها تلقائياً إلى (قيد الاعتماد) من المدير."
+                )
 
             return redirect('visit_detail', pk=visit.pk)
         else:
             messages.error(request, "تعذر حفظ التعديلات. يرجى مراجعة الحقول المطلوبة والتأكد من صحتها.")
     else:
-        # GET request: Ended visits cannot be opened for editing
-        if visit.status == 'finished':
-            messages.error(request, "لا يمكن تعديل بيانات الزيارة بعد اكتمالها وإنهائها نهائياً.")
+        # GET request: Started or Ended visits cannot be opened for editing
+        if visit.status in ('started', 'finished') or visit.ended_at is not None:
+            messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد بدئها أو اكتمالها.")
             return redirect('visit_detail', pk=visit.pk)
         form = VisitForm(instance=visit, user=request.user)
 
@@ -2819,7 +2750,7 @@ def visit_delete(request, pk):
         return redirect('visit_detail', pk=pk)
 
 
-@login_required
+@require_permission(['activities:visits/edit_answers', 'activities:visits/edit'])
 def visit_update_answers(request, pk):
     """
     Separate operation to update a visit's questionnaire answers (Requirement D):
@@ -2880,6 +2811,14 @@ def visit_set_time(request, pk):
 
     visit = get_object_or_404(Visit.objects.select_related('contact', 'owner'), pk=pk)
 
+    # Restriction: Time can only be set/edited before the visit has started and ended
+    if visit.status in ('started', 'finished') or visit.ended_at is not None:
+        return JsonResponse({
+            'success': False,
+            'error': 'ValidationError',
+            'detail': 'لا يمكن تعديل وقت الزيارة بعد بدئها أو اكتمالها.'
+        }, status=400)
+
     # Scoping check: Representatives can only edit their own visits within their scope
     if not can_user_access_object(request.user, visit, 'edit'):
         return JsonResponse({
@@ -2914,13 +2853,40 @@ def visit_set_time(request, pk):
 
     old_time_str = visit.time.strftime('%H:%M') if visit.time else None
     new_time_str = parsed_time.strftime('%H:%M')
+    prev_approval = visit.approval_status
 
     with transaction.atomic():
         visit.time = parsed_time
         if visit.date:
             combined_dt = datetime.datetime.combine(visit.date, parsed_time)
             visit.visit_time = timezone.make_aware(combined_dt) if timezone.is_naive(combined_dt) else combined_dt
-        visit.save(update_fields=['time', 'visit_time'])
+
+        # Requirement C & D: Editing time triggers re-approval
+        visit.approval_status = 'pending'
+        visit.waiting_for_reapproval = True
+        visit.approved_by = None
+        visit.approved_at = None
+        visit.save(update_fields=['time', 'visit_time', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
+
+        time_change = [{
+            'field': 'وقت الزيارة',
+            'old': old_time_str or 'غير محدد',
+            'new': new_time_str,
+        }]
+
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='edited_reapproval_required',
+            actor=request.user,
+            status_before=prev_approval,
+            status_after='pending',
+            reason=f"تحديد/تعديل وقت الزيارة إلى {new_time_str} (يتطلب إعادة اعتماد المدير)",
+            changes=time_change,
+            approval_required=True,
+            context_data={'previous_approval_status': prev_approval},
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
 
         AuditLogService.log(
             action='update',
@@ -2929,9 +2895,10 @@ def visit_set_time(request, pk):
             user=request.user,
             request=request,
             record_id=visit.pk,
-            object_repr=f"Visit #{visit.serial_num} ({visit.contact.name})",
-            previous_values={'time': old_time_str},
-            new_values={'time': new_time_str},
+            record_name=f"Visit #{visit.serial_num}",
+            description=f"تعديل وقت الزيارة #{visit.serial_num} إلى {new_time_str} وتحويلها للاعتماد",
+            previous_values={'time': old_time_str, 'approval_status': prev_approval},
+            new_values={'time': new_time_str, 'approval_status': 'pending', 'waiting_for_reapproval': True},
         )
 
     formatted_12h = parsed_time.strftime('%I:%M %p')
@@ -3774,13 +3741,7 @@ def agenda_view(request):
     is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
     can_view_others = is_super or is_mgr
 
-    if is_super:
-        available_reps = User.objects.filter(is_active=True).order_by('first_name', 'username')
-    elif is_mgr:
-        managed_ids = list(get_user_managed_representatives(request.user, module='activities').values_list('id', flat=True)) + [request.user.pk]
-        available_reps = User.objects.filter(id__in=managed_ids, is_active=True).order_by('first_name', 'username')
-    else:
-        available_reps = User.objects.filter(pk=request.user.pk)
+    available_reps = get_visible_assignees_queryset(request.user, module='activities')
 
     target_rep_id = request.GET.get('assignee')
     if target_rep_id:
@@ -3823,9 +3784,39 @@ def agenda_view(request):
     plan_day = PlannedVisitDay.objects.filter(assignee=selected_rep, date=selected_date).first()
     planned_items = []
     planned_visit_ids = set()
+    from master_data.models import LocationSettings
+    loc_settings = LocationSettings.get_settings()
+
     if plan_day:
-        planned_items = list(plan_day.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
-        for itm in planned_items:
+        raw_items = list(plan_day.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        for itm in raw_items:
+            if not itm.visit_id:
+                # Ensure every planned item has a linked auto-approved Visit record
+                next_serial = (Visit.objects.aggregate(m=Max('serial_num'))['m'] or 1000) + 1
+                approval_status, approved_by, approved_at = resolve_visit_creation_approval(
+                    request.user, itm.contact, True, loc_settings, visit_owner=selected_rep
+                )
+                v = Visit.objects.create(
+                    serial_num=next_serial,
+                    contact=itm.contact,
+                    template=itm.template,
+                    date=selected_date,
+                    status='planned',
+                    is_planned=True,
+                    approval_status=approval_status,
+                    approved_by=approved_by,
+                    approved_at=approved_at,
+                    allowed_distance=loc_settings.get_effective_tolerance(itm.template),
+                    owner=selected_rep,
+                    created_by=itm.plan_day.created_by or request.user,
+                    feedback=itm.notes,
+                    location_verified=False,
+                    verification_status='unverified',
+                    location_status='زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)',
+                )
+                itm.visit = v
+                itm.save(update_fields=['visit'])
+            planned_items.append(itm)
             if itm.visit_id:
                 planned_visit_ids.add(itm.visit_id)
 
@@ -3838,56 +3829,42 @@ def agenda_view(request):
     ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num')
 
     user_can_manage = can_manage_approvals(request.user)
+    can_bypass_start_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='start')
+    can_request_gps_exception = loc_settings.can_user_request_distance_exception(request.user)
+
     agenda_visits = []
     for itm in planned_items:
         v = itm.visit
-        if v:
-            can_approve = bool(
-                user_can_manage and
-                v.owner_id != request.user.id and
-                can_user_access_object(request.user, v, 'approve')
-            )
-            agenda_visits.append({
-                'type': 'planned',
-                'source_item': itm,
-                'visit': v,
-                'contact': itm.contact,
-                'template': itm.template or v.template,
-                'order': itm.order,
-                'status': v.status,
-                'status_display': v.status_display_ar,
-                'status_badge_class': v.status_badge_class,
-                'approval_status': v.approval_status,
-                'approval_display': v.approval_display_ar,
-                'approval_badge_class': v.approval_badge_class,
-                'is_executed': (v.status == 'finished'),
-                'can_approve': can_approve,
-                'detail_url': reverse('visit_detail', args=[v.pk]),
-                'action_url': reverse('visit_detail', args=[v.pk]),
-                'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-                'notes': itm.notes,
-            })
-        else:
-            agenda_visits.append({
-                'type': 'planned',
-                'source_item': itm,
-                'visit': None,
-                'contact': itm.contact,
-                'template': itm.template,
-                'order': itm.order,
-                'status': 'planned',
-                'status_display': 'مخططة',
-                'status_badge_class': 'bg-sky-100 text-sky-800 border-sky-300',
-                'approval_status': 'approved',
-                'approval_display': 'مجدولة',
-                'approval_badge_class': 'bg-teal-50 text-teal-700 border-teal-200',
-                'is_executed': False,
-                'can_approve': False,
-                'detail_url': None,
-                'action_url': f"{reverse('visit_create')}?contact_id={itm.contact_id}&template_id={itm.template_id or ''}&plan_item_id={itm.id}",
-                'action_label': 'بدء الزيارة',
-                'notes': itm.notes,
-            })
+        can_approve = bool(
+            user_can_manage and
+            v.owner_id != request.user.id and
+            can_user_access_object(request.user, v, 'approve')
+        )
+        can_start, _ = can_start_visit(v, request.user)
+        start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
+        agenda_visits.append({
+            'type': 'planned',
+            'source_item': itm,
+            'visit': v,
+            'contact': itm.contact,
+            'template': itm.template or v.template,
+            'order': itm.order,
+            'status': v.status,
+            'status_display': v.status_display_ar,
+            'status_badge_class': v.status_badge_class,
+            'approval_status': v.approval_status,
+            'approval_display': v.approval_display_ar,
+            'approval_badge_class': v.approval_badge_class,
+            'is_executed': (v.status == 'finished'),
+            'can_approve': can_approve,
+            'can_start': can_start,
+            'start_questions': start_questions,
+            'effective_allowed_distance': v.effective_allowed_distance,
+            'detail_url': reverse('visit_detail', args=[v.pk]),
+            'action_url': reverse('visit_detail', args=[v.pk]),
+            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
+            'notes': itm.notes,
+        })
 
     for v in unplanned_visits:
         can_approve = bool(
@@ -3895,6 +3872,8 @@ def agenda_view(request):
             v.owner_id != request.user.id and
             can_user_access_object(request.user, v, 'approve')
         )
+        can_start, _ = can_start_visit(v, request.user)
+        start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
         agenda_visits.append({
             'type': 'unplanned',
             'source_item': None,
@@ -3910,6 +3889,9 @@ def agenda_view(request):
             'approval_badge_class': v.approval_badge_class,
             'is_executed': (v.status == 'finished'),
             'can_approve': can_approve,
+            'can_start': can_start,
+            'start_questions': start_questions,
+            'effective_allowed_distance': v.effective_allowed_distance,
             'detail_url': reverse('visit_detail', args=[v.pk]),
             'action_url': reverse('visit_detail', args=[v.pk]),
             'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
@@ -3938,6 +3920,9 @@ def agenda_view(request):
         'todos': todos,
         'todos_count': todos.count(),
         'current_tab': current_tab,
+        'can_bypass_start_gps': can_bypass_start_gps,
+        'can_request_gps_exception': can_request_gps_exception,
+        'verify_visits_enabled': loc_settings.verify_visits,
     }
     return render(request, 'activities/agenda.html', context)
 

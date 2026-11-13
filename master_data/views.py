@@ -289,8 +289,10 @@ def home_view(request):
 
     # Build Role-Appropriate KPI Cards
     if is_acct:
-        vaults_total = Vault.objects.filter(is_active=True).aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
-        vendors_total = VendorAccount.objects.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        scoped_vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), user, 'vault')
+        vaults_total = scoped_vaults.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        scoped_vendors = get_scoped_queryset(VendorAccount.objects.all(), user, 'vendoraccount')
+        vendors_total = scoped_vendors.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
         kpi_cards = [
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
@@ -302,8 +304,8 @@ def home_view(request):
             {'id': 'po_outstanding_stats', 'title': 'مستحقات أوامر الشراء', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'},
             {'id': 'acc_stats_balance', 'title': 'إجمالي رصيد العملاء', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
             {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
-            {'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{Vault.objects.filter(is_active=True).count()} خزنة وحساب"},
-            {'id': 'vendors_total_stats', 'title': 'إجمالي مستحقات الموردين', 'amount': _format_metric_amount(vendors_total), 'subtitle': f"{VendorAccount.objects.count()} مورد"},
+            {'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{scoped_vaults.count()} خزنة وحساب"},
+            {'id': 'vendors_total_stats', 'title': 'إجمالي مستحقات الموردين', 'amount': _format_metric_amount(vendors_total), 'subtitle': f"{scoped_vendors.count()} مورد"},
         ]
     elif is_rep:
         rep_vault = Vault.objects.filter(assigned_user=user).first()

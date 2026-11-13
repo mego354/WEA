@@ -266,10 +266,12 @@ ERP_PERMISSIONS_CATALOG = {
                     ('activities:visits/view', 'عرض تفاصيل الزيارة والصور والاستبيان وموقع GPS', 'read'),
                     ('activities:visits/create', 'تسجيل وبدء زيارة ميدانية (مخططة أو حرة)', 'write'),
                     ('activities:visits/edit', 'تعديل بيانات الزيارة الميدانية', 'write'),
+                    ('activities:visits/edit_answers', 'تعديل إجابات استبيان الزيارة بعد اكتمالها', 'write'),
                     ('activities:visits/delete', 'حذف الزيارات غير المنتهية', 'delete'),
                     ('activities:visits/approve', 'اعتماد أو رفض الزيارة الميدانية من المشرف', 'workflow'),
                     ('activities:visits/evidence', 'رفع وتوثيق صورة الإثبات والموقع الجغرافي', 'write'),
                     ('activities:visits/export', 'تصدير تقارير الزيارات الميدانية إلى Excel', 'export'),
+                    ('activities:visits/gps_request_exception', 'طلب استثناء تجاوز المسافة الجغرافية (GBS)', 'workflow'),
                 ]
             },
             'plans': {

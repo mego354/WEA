@@ -397,6 +397,40 @@ def get_user_managed_representatives(user, module: str = 'accounts'):
     return ScopeResolutionService.get_user_managed_subordinates(user, module=module)
 
 
+def get_visible_assignees_queryset(user, module: str = 'activities'):
+    """
+    Standardized, reusable queryset for assignee selection across Planned Visits, Agenda, and Visits.
+    Enforces identical visibility rules:
+    - SuperAdmin / 'all' scope: All active users.
+    - Regional Managers ('area' scope): Active subordinates within managed area(s) + the user themselves.
+    - Representatives / 'own' / 'brick' scope: Exclusively the user themselves.
+    """
+    from django.contrib.auth import get_user_model
+    UserModel = get_user_model()
+    if not user or not user.is_authenticated or not user.is_active:
+        return UserModel.objects.none()
+
+    if getattr(user, 'is_super_admin', False) or user.is_superuser:
+        return UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
+
+    role = getattr(user, 'role', None)
+    if role and getattr(role, 'is_super', False):
+        return UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
+
+    from accounts.scope_service import ScopeResolutionService
+    scope = ScopeResolutionService.get_user_scope(user, module, 'view')
+    if scope == 'all':
+        return UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
+
+    if scope == 'area':
+        return ScopeResolutionService.get_user_managed_subordinates(user, module=module).filter(
+            is_active=True
+        ).order_by('first_name', 'username')
+
+    # 'own' or 'brick' scope: Strictly the user themselves
+    return UserModel.objects.filter(pk=user.pk)
+
+
 def get_scoped_queryset(queryset, user, model_name: str = None, scope_type: str = 'view'):
     """
     Filters QuerySet based on configurable module data scopes (OWN, BRICK, AREA, ALL).

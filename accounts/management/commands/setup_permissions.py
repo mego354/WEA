@@ -145,7 +145,9 @@ class Command(BaseCommand):
 
         manager_codenames = [
             'module:activities', 'activities:visits/list', 'activities:visits/view',
-            'activities:visits/approve', 'activities:visits/export',
+            'activities:visits/create', 'activities:visits/edit', 'activities:visits/edit_answers',
+            'activities:visits/delete', 'activities:visits/approve', 'activities:visits/evidence',
+            'activities:visits/export', 'activities:visits/gps_request_exception',
             'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/approve',
             'activities:agreements/export',
@@ -223,7 +225,8 @@ class Command(BaseCommand):
 
         rep_codenames = [
             'module:activities', 'activities:visits/list', 'activities:visits/view',
-            'activities:visits/create', 'activities:visits/edit', 'activities:visits/evidence',
+            'activities:visits/create', 'activities:visits/edit', 'activities:visits/edit_answers',
+            'activities:visits/evidence', 'activities:visits/gps_request_exception',
             'activities:planned/list',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',

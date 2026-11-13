@@ -167,7 +167,6 @@
                         <th data-col="account_type" data-col-label="نوع الاكونت" class="py-3.5 px-4">نوع الاكونت</th>
                         <th data-col="is_successful" data-col-label="ناجحة" class="py-3.5 px-4 text-center">ناجحة</th>
                         <th data-col="doubled" data-col-label="مزدوجة" class="py-3.5 px-4 text-center">مزدوجة</th>
-                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 text-center">الحالة</th>
                         <th data-col="approval" data-col-label="الاعتماد" class="py-3.5 px-4 text-center">الاعتماد</th>
                         <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center w-20">إجراءات</th>
                     </tr>
@@ -189,9 +188,14 @@
                             </div>
                         </td>
                         <td data-col="type" class="py-3 px-4 text-center">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
-                                {{ v.plan_type_display_ar }}
-                            </span>
+                            <div class="flex flex-col items-center gap-1">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
+                                    {{ v.plan_type_display_ar }}
+                                </span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.status_badge_class }}">
+                                    {{ v.status_display_ar }}
+                                </span>
+                            </div>
                         </td>
                         <td data-col="contact" class="py-3 px-4">
                             <div class="flex items-center gap-2">
@@ -245,11 +249,6 @@
                             {% else %}
                             <span class="text-slate-300">-</span>
                             {% endif %}
-                        </td>
-                        <td data-col="status" class="py-3 px-4 text-center">
-                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
-                                {{ v.status_display_ar }}
-                            </span>
                         </td>
                         <td data-col="approval" class="py-3 px-4 text-center">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">

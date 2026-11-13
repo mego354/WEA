@@ -24,39 +24,40 @@ stateDiagram-v2
     Completed --> [*]
 ```
 
-### 1.1 Automatic Planned vs. Unplanned Determination
+### 1.1 Automatic Planned vs. Unplanned Determination & Approval Lifecycle
 - **Zero Ambiguity**: Manual selection of planned vs. unplanned visit type has been eliminated.
-- **Unplanned Visits**: Initiated only via `/visits/create/` (e.g. from the global navigation `+` button). The backend automatically sets `is_planned=False`. Creators without area-level supervisory approval authority always start visits as `approval_status='pending'` (users with `'own'` or `'brick'` manage scope cannot auto-approve).
-- **Planned Visits**: Generated directly via bulk daily planning (`/planned-visits/bulk-add/`), which atomically creates both the `PlannedVisitItem` and the corresponding `Visit(is_planned=True, status='planned')` linked via `PlannedVisitItem.visit`. Approval status resolves through the centralized `resolve_visit_creation_approval` helper.
+- **Planned Visits**: Generated directly via bulk daily planning (`/planned-visits/bulk-add/`) or individual planned add. Planned visits are **automatically approved upon creation** (`approval_status='approved'`, `approved_by=None`, `approved_at=now()`) and do not require manager approval to start.
+- **Unplanned Visits**: Initiated via `/visits/create/`. The backend sets `is_planned=False`. Unplanned visits require manager approval upon creation (`approval_status='pending'`).
+- **Re-approval Trigger on Edits**: Any permitted edit to a visit's date, template, time (pre-start/pre-end) or questionnaire answers (post-end) immediately invalidates existing approval: sets `approval_status='pending'`, `waiting_for_reapproval=True`, clears prior approver info, and writes structured changes with `approval_required=True` to the Complete Visit Timeline.
 
 ### 1.2 GPS Distance Validation & Geofencing
 - **Configurable Allowed Distance**:
   - Global default: `LocationSettings.tolerance` (default 300 meters).
-  - Start stage tolerance: `LocationSettings.visit_start_distance_tolerance` (falls back to `tolerance` when not set).
-  - End stage tolerance: `LocationSettings.visit_end_distance_tolerance` (falls back to `tolerance` when not set).
   - Template override: If `LocationSettings.allow_template_distance_override` is enabled and `VisitTemplate.has_special_location_settings=True`, the template's `special_tolerance` takes precedence.
+- **Coordinate Handling & Decimal Separator Resilience**:
+  - The distance calculation engine (`calculate_haversine_distance`) and verification services sanitize input coordinates by converting comma decimal separators (common in Arabic locales, e.g. `'30,0444'`) to standard dots prior to float and Decimal conversion, preventing localization crashes.
 - **Stage-Specific Validation (`verify_visit_location`)**:
-  - **Creation (`stage='create'`)**: Mandatory for **unplanned** visits when `LocationSettings.verify_unplanned_visit_distance=True`. **Not enforced** at creation time for **planned** visits (planned visits start with `location_verified=False` and `location_verification_status='not_required'` until field execution).
+  - **Creation (`stage='create'`)**: Mandatory for **unplanned** visits when `LocationSettings.verify_unplanned_visit_distance=True`. **Not enforced** at creation time for **planned** visits (planned visits start with `location_verified=False` until field execution).
   - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user.
   - **Completion (`stage='end'`)**: Mandatory when ending a visit (`end_visit`) if `LocationSettings.verify_end_visit_distance=True`.
 - **Bypass & Exception Security**:
   - **Direct Bypass**: Controlled server-side via `LocationSettings.can_user_bypass_without_approval(user, stage)`. Unauthorized users submitting `force_bypass_location=1` are rejected on both form and service layers.
-  - **Representatives / Exception Requests**: When outside the geofence, users without direct bypass permission can only request an exception (`request_distance_exception=1`) with a mandatory `bypass_reason` if `LocationSettings.allow_rep_Bypass_request_with_approval` is enabled; this sets `requires_approval_due_to_distance=True` and `approval_status='pending'`.
+  - **Exception Requests**: Controlled by the explicit permission `activities:visits/gps_request_exception` and `LocationSettings.can_user_request_distance_exception(user)`. When outside tolerance, only users with this permission can request an exception with mandatory `bypass_reason`, marking the visit with `requires_approval_due_to_distance=True` and `approval_status='pending'`.
 
-### 1.3 Separation of Visit Metadata vs. Questionnaire Answers & Unended Visit Deletion
-- **Visit Metadata Editing (`visit_edit` / `POST /visits/<pk>/edit/`)**:
-  - Updates only the visit's own metadata (`contact`, `template`, `date`, `owner`, `doubled`, `is_successful`, `feedback`, `detailed_products`).
-  - Never modifies `VisitTemplate`, its questions, other visits, or `visit.questionnaire_answers`.
-  - Visits that have ended (`status == 'finished'`) are strictly locked from modification.
-  - When edited by a user without supervisory approval authority over that visit's region, previously approved visits reset to `approval_status = 'pending'`, `waiting_for_reapproval = True`, and append an `edited_reapproval_required` log.
-- **Independent Questionnaire Answer Editing (`visit_update_answers` / `POST /visits/<pk>/answers/edit/`)**:
-  - Allowed exclusively for the original creator/owner of the visit (`visit.created_by_id == user.id or visit.owner_id == user.id`) or SuperAdmin while the visit has not ended.
-  - Updates only `visit.questionnaire_answers` for that specific visit without modifying the template, without affecting other visits, and without invalidating `visit.approval_status`.
-  - Records before/after answer diffs in `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`), `ApprovalAuditLog` (`answers_updated`), and the visit timeline (`build_visit_timeline`).
-- **Permission-Controlled Unended Visit Deletion (`visit_delete` / `POST /visits/<pk>/delete/`)**:
-  - Controlled via `LocationSettings.allow_visit_deletion_before_end` and the `activities:visits/delete` permission (`can_delete_unended_visit`).
-  - Only visits that have **not** been ended (`visit.status != 'finished'` and `visit.ended_at is None`) may be deleted. Ended visits cannot be deleted even by users with deletion permission or SuperAdmin.
-  - Every deletion is recorded in `SecurityAuditLog` (`VISIT_DELETED`).
+### 1.3 Separation of Visit Metadata vs. Questionnaire Answers & Lifecycle Restrictions
+- **Pre-Start / Pre-End Visit Editing (`visit_edit` / `POST /visits/<pk>/edit/`)**:
+  - Before the visit has started and ended, editing is restricted strictly to the visit date, template, and scheduled time. Questionnaire answers and execution fields cannot be edited.
+  - All permitted edits trigger re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), and write structured diffs to `ApprovalAuditLog` and `SecurityAuditLog`.
+- **Post-End Questionnaire Answer Editing (`visit_update_answers` / `POST /activities/visits/<pk>/update-answers/`)**:
+  - Allowed **only after the visit has finished** (`status == 'finished'` and `ended_at` is set) by the visit owner/creator (or superuser) with `activities:visits/edit_answers`.
+  - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs in `ApprovalAuditLog` (`action='answers_updated'`), and is displayed in the Complete Visit Timeline.
+  - The UI button «تعديل إجابات استبيان» is hidden until the visit has ended.
+- **Agenda Start-Visit Execution**:
+  - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying bypass/exception options, and answering check-in questions), rather than merely redirecting.
+- **Removal of Cancellation Actions & Strict Deletion Rules**:
+  - Visit cancellation buttons and actions have been completely removed from the UI.
+  - Finished visits cannot be deleted under any circumstances (`status == 'finished'` or `ended_at is not None`).
+  - Unended visits may only be deleted by authorized users holding `activities:visits/delete` when `LocationSettings.allow_visit_deletion_before_end=True`. Deletion unbinds any linked `PlannedVisitItem` to preserve the planned slot.
 - **Visit Detail Actions**:
   - Direct manual status overrides (`change_status` / `manage_status`) are prohibited; visits progress exclusively through `approve`, `disapprove` (only while `approval_status != 'approved'`), `start`, and `complete`.
 

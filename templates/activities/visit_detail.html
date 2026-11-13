@@ -145,7 +145,7 @@
             </button>
             {% endif %}
 
-            {% if visit.status != 'finished' %}
+            {% if visit.status == 'planned' %}
             <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل بيانات الزيارة</span>
@@ -402,9 +402,9 @@
             {% if visit.status == 'started' %}
             <form method="POST" enctype="multipart/form-data" id="visit-lifecycle-form" class="space-y-6">
                 {% csrf_token %}
-                <input type="hidden" name="latitude" id="form-latitude" value="{{ visit.latitude|default:'' }}">
-                <input type="hidden" name="longitude" id="form-longitude" value="{{ visit.longitude|default:'' }}">
-                <input type="hidden" name="device_accuracy" id="form-accuracy" value="{{ visit.device_accuracy|default:'' }}">
+                <input type="hidden" name="latitude" id="form-latitude" value="">
+                <input type="hidden" name="longitude" id="form-longitude" value="">
+                <input type="hidden" name="device_accuracy" id="form-accuracy" value="">
                 <input type="hidden" name="detailed_products_submitted" value="1">
 
                 <!-- Check-in Questions Already Answered Summary -->
@@ -804,13 +804,6 @@
                                 <span>حفظ كمسودة والعودة لاحقاً</span>
                             </button>
                         </div>
-
-                    <!-- Cancel Visit -->
-                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_action' visit.pk 'cancel' %}', title: 'إلغاء الزيارة', itemName: '{{ visit.serial_num }}', message: 'هل أنت متأكد من إلغاء هذه الزيارة رقم <span class=\'font-bold text-slate-800\'>#{{ visit.serial_num }}</span> نهائياً؟ لا يمكن استئنافها بعد الإلغاء.', submitText: 'نعم، إلغاء الزيارة', icon: 'cancel' })"
-                            class="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors">
-                        <span class="material-symbols-outlined text-base">cancel</span>
-                        <span>إلغاء الزيارة</span>
-                    </button>
                 </div>
             </form>
 
@@ -1248,6 +1241,12 @@
                         {% if ev.details %}
                         <p class="text-slate-700 font-medium leading-relaxed">{{ ev.details }}</p>
                         {% endif %}
+                        {% if ev.approval_required %}
+                        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            <span class="material-symbols-outlined text-xs">pending_actions</span>
+                            <span>يتطلب إعادة اعتماد المدير</span>
+                        </div>
+                        {% endif %}
                         {% if ev.changes %}
                         <div class="mt-2 pt-2 border-t border-slate-200/80 space-y-1">
                             <span class="text-[10px] font-bold text-slate-500 block">التغييرات المسجلة (قبل ➔ بعد):</span>
@@ -1269,58 +1268,6 @@
         {% else %}
         <div class="p-6 text-center text-xs text-slate-400">
             لا توجد أحداث زمنية مسجلة لهذه الزيارة حتى الآن.
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Approval Audit History Log (Requirement 3 & 5) -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-[#27bebe]">history</span>
-                <h3 class="text-sm font-bold text-slate-900">سجل تدقيق الاعتمادات والقرارات</h3>
-            </div>
-            <span class="text-xs text-slate-400 font-mono">{{ approval_history|length }} حركات مسجلة</span>
-        </div>
-        {% if approval_history %}
-        <div class="overflow-x-auto">
-            <table class="w-full text-right border-collapse text-xs">
-                <thead>
-                    <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                        <th class="py-2.5 px-4">التاريخ والوقت</th>
-                        <th class="py-2.5 px-4">الإجراء</th>
-                        <th class="py-2.5 px-4">المستخدم المنفذ</th>
-                        <th class="py-2.5 px-4">الحالة (قبل ➔ بعد)</th>
-                        <th class="py-2.5 px-4">السبب / الملاحظات</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 font-medium">
-                    {% for item in approval_history %}
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="py-2.5 px-4 font-mono text-slate-500">{{ item.created_at|date:"Y-m-d H:i" }}</td>
-                        <td class="py-2.5 px-4">
-                            <span class="px-2 py-0.5 rounded-full font-bold text-[10px]
-                                {% if item.action == 'approved' %}bg-emerald-100 text-emerald-800
-                                {% elif item.action == 'rejected' %}bg-rose-100 text-rose-800
-                                {% elif item.action == 'resubmitted' %}bg-sky-100 text-sky-800
-                                {% elif item.action == 'status_changed' %}bg-purple-100 text-purple-800
-                                {% elif item.action == 'answers_updated' %}bg-indigo-100 text-indigo-800
-                                {% elif item.action == 'sent_to_agenda' %}bg-teal-100 text-teal-800
-                                {% else %}bg-amber-100 text-amber-800{% endif %}">
-                                {{ item.get_action_display }}
-                            </span>
-                        </td>
-                        <td class="py-2.5 px-4 font-bold text-slate-800">{{ item.actor.get_full_name|default:item.actor.username|default:"النظام" }}</td>
-                        <td class="py-2.5 px-4 font-mono text-slate-500">{{ item.status_before|default:"-" }} ➔ {{ item.status_after|default:"-" }}</td>
-                        <td class="py-2.5 px-4 text-slate-700">{{ item.reason|default:"-" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="p-6 text-center text-xs text-slate-400">
-            لا توجد حركات تدقيق مسجلة لهذه الزيارة حتى الآن.
         </div>
         {% endif %}
     </div>
@@ -2053,7 +2000,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="checkbox" name="force_bypass_location" value="1" id="start-force-bypass-chk" class="text-indigo-600 rounded focus:ring-indigo-500" onchange="toggleStartBypassReason()">
                     <span>تجاوز قيد المسافة وبدء الزيارة مباشرة (صلاحية إدارية)</span>
                 </label>
-                {% else %}
+                {% elif can_request_gps_exception %}
                 <label class="flex items-start gap-2 text-xs font-bold text-amber-950 cursor-pointer">
                     <input type="checkbox" name="request_distance_exception" value="1" id="start-request-exception-chk" class="mt-0.5 text-amber-600 rounded focus:ring-amber-500" onchange="toggleStartBypassReason()">
                     <div>
@@ -2061,6 +2008,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span class="text-[11px] font-medium text-amber-800">سيتم توثيق طلب الاستثناء ومراجعته من المدير المختص.</span>
                     </div>
                 </label>
+                {% else %}
+                <div class="text-rose-600 font-bold text-xs p-2 bg-rose-50 rounded-lg">
+                    <span>أنت خارج النطاق الجغرافي المسموح به ولا تملك صلاحية طلب استثناء لتجاوز المسافة.</span>
+                </div>
                 {% endif %}
                 <div id="start-bypass-reason-box" class="hidden">
                     <input type="text" name="bypass_reason" id="start-bypass-reason-input" placeholder="سبب التجاوز أو التواجد خارج المسافة المسموح بها (إلزامي *)..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium">

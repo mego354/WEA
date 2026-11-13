@@ -651,7 +651,8 @@ class ApprovalAuditLog(models.Model):
         ('approved', 'اعتماد'),
         ('rejected', 'رفض'),
         ('resubmitted', 'إعادة تقديم بعد التعديل'),
-        ('edited_reapproval_required', 'تعديل بعد الاعتماد (يتطلب إعادة اعتماد)'),
+        ('edited_reapproval_required', 'تعديل الزيارة (يتطلب اعتماد المدير)'),
+        ('edited_by_manager', 'تعديل بيانات الزيارة'),
         ('distance_bypass', 'تجاوز شرط المسافة'),
         ('distance_exception_requested', 'طلب استثناء مسافة واعتماد المدير'),
         ('status_changed', 'تغيير الحالة'),
@@ -670,6 +671,9 @@ class ApprovalAuditLog(models.Model):
     status_before = models.CharField(max_length=50, blank=True, verbose_name="الحالة السابقة")
     status_after = models.CharField(max_length=50, blank=True, verbose_name="الحالة الجديدة")
     reason = models.TextField(blank=True, default='', verbose_name="السبب / الملاحظات")
+    changes = models.JSONField(default=list, blank=True, verbose_name="تفاصيل التغييرات")
+    approval_required = models.BooleanField(default=False, verbose_name="يتطلب اعتماد")
+    context_data = models.JSONField(default=dict, blank=True, verbose_name="بيانات السياق")
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="عنوان IP")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="تاريخ ووقت الإجراء")
 
