@@ -201,6 +201,20 @@ class LocationSettings(models.Model):
                     return True
         return False
 
+    def can_user_request_distance_exception(self, user) -> bool:
+        """
+        Check if user is authorized to request a GPS distance exception.
+        Superadmins, Managers, and users with `activities:visits/gps_request_exception` permission can request.
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
+            return True
+        from accounts.permissions import has_perm_or_admin, is_manager_or_higher
+        if is_manager_or_higher(user):
+            return True
+        return has_perm_or_admin(user, 'activities:visits/gps_request_exception')
+
     def can_user_delete_visit(self, user) -> bool:
         """
         Check if user is permitted to delete an unended visit under current LocationSettings

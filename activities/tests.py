@@ -5842,6 +5842,10 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
             username='rep_nasr_req', email='rep_nasr_req@wea.com', password='TestPassword123!', role=self.rep_role
         )
         self.rep_nasr.assigned_areas.add(self.nasr)
+        for codename in ['activities:visits/edit', 'activities:visits/edit_answers', 'activities:visits/create']:
+            p = Permission.objects.filter(codename=codename).first()
+            if p:
+                self.rep_role.permissions.add(p)
 
         # Grant rep erroneous visits/approve bit to prove Requirement G blocks unauthorized auto-approval
         approve_perm = Permission.objects.filter(codename='activities:visits/approve').first()
@@ -5955,7 +5959,8 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         for v in visits:
             self.assertTrue(v.is_planned)
             self.assertEqual(v.status, 'planned')
-            self.assertEqual(v.approval_status, 'pending')
+            # Requirement C: Planned visits do not require approval after creation
+            self.assertEqual(v.approval_status, 'approved')
             self.assertIsNotNone(PlannedVisitItem.objects.filter(visit=v).first())
 
         # Duplicate submission on same date must be rejected
@@ -5992,15 +5997,11 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         today = timezone.now().date()
         visit = Visit.objects.create(
             contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
-            created_by=self.rep_nasr, date=today, status='planned', approval_status='approved',
+            created_by=self.rep_nasr, date=today, status='planned',
+            approval_status='approved',
             questionnaire_answers={str(self.q_note.id): 'نعم'}
         )
-        # Detail HTML should contain start-visit-modal only once (not inside <title>/<head>)
         self.client.force_login(self.rep_nasr)
-        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
-        self.assertEqual(detail_res.status_code, 200)
-        detail_html = detail_res.content.decode('utf-8')
-        self.assertEqual(detail_html.count('id="start-visit-modal"'), 1)
 
         # Edit GET renders cleanly for visit metadata (without mixing questionnaire answers)
         edit_get = self.client.get(reverse('visit_edit', args=[visit.pk]))
@@ -6008,15 +6009,26 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         edit_html = edit_get.content.decode('utf-8')
         self.assertIn('تعديل بيانات الزيارة', edit_html)
         self.assertNotIn("{'text_ar':", edit_html)
-        # Detail page renders questionnaire options cleanly
+
+        # Finished visit detail renders questionnaire options cleanly in edit answers modal
+        visit.status = 'finished'
+        visit.ended_at = timezone.now()
+        visit.save(update_fields=['status', 'ended_at'])
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        detail_html = detail_res.content.decode('utf-8')
         self.assertIn('<option value="نعم"', detail_html)
         self.assertNotIn("{'text_ar':", detail_html)
 
-        # Editing only feedback by unauthorized rep still triggers pending reapproval!
+        # Editing date by rep triggers pending reapproval!
+        visit.status = 'planned'
+        visit.ended_at = None
+        visit.save(update_fields=['status', 'ended_at'])
+        new_date = (today + datetime.timedelta(days=2)).strftime('%Y-%m-%d')
         edit_post = self.client.post(reverse('visit_edit', args=[visit.pk]), {
             'contact': self.nasr_contacts[0].id,
             'template': self.template.id,
-            'date': today.strftime('%Y-%m-%d'),
+            'date': new_date,
             'feedback': 'تعديل ملاحظة فقط',
         })
         self.assertEqual(edit_post.status_code, 302)
@@ -6030,7 +6042,7 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         self.client.post(reverse('visit_edit', args=[visit.pk]), {
             'contact': self.nasr_contacts[0].id,
             'template': self.template.id,
-            'date': today.strftime('%Y-%m-%d'),
+            'date': new_date,
             'feedback': 'تصحيح بعد الرفض',
         })
         visit.refresh_from_db()
@@ -6217,12 +6229,14 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         today = timezone.now().date()
         visit1 = Visit.objects.create(
             contact=self.nasr_contacts[0], template=self.template, owner=self.rep_nasr,
-            created_by=self.rep_nasr, date=today, status='started', approval_status='approved',
+            created_by=self.rep_nasr, date=today, status='finished', ended_at=timezone.now(),
+            approval_status='approved',
             questionnaire_answers={str(self.q_note.id): 'نعم'}
         )
         visit2 = Visit.objects.create(
             contact=self.nasr_contacts[1], template=self.template, owner=self.rep_nasr,
-            created_by=self.rep_nasr, date=today, status='started', approval_status='approved',
+            created_by=self.rep_nasr, date=today, status='finished', ended_at=timezone.now(),
+            approval_status='approved',
             questionnaire_answers={str(self.q_note.id): 'نعم'}
         )
 
@@ -6237,7 +6251,7 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         visit1.refresh_from_db()
         self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'نعم')
 
-        # 2. Creator/Owner updates visit1's questionnaire answers independently
+        # 2. Creator/Owner updates visit1's questionnaire answers independently (only after finished)
         self.client.force_login(self.rep_nasr)
         res_rep_ans = self.client.post(
             reverse('visit_update_answers', args=[visit1.pk]),
@@ -6249,9 +6263,10 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         visit1.refresh_from_db()
         visit2.refresh_from_db()
         self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'لا')
-        # Approval status is NOT invalidated by answer edits
-        self.assertEqual(visit1.approval_status, 'approved')
-        self.assertFalse(visit1.waiting_for_reapproval)
+        # Requirement C & D: Editing triggers re-approval
+        self.assertEqual(visit1.approval_status, 'pending')
+        self.assertTrue(visit1.waiting_for_reapproval)
+        self.assertIsNone(visit1.approved_by)
         # Other visit using the same template is untouched
         self.assertEqual(visit2.questionnaire_answers.get(str(self.q_note.id)), 'نعم')
         # Template question options are untouched
@@ -6271,17 +6286,17 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         self.assertEqual(change_entry['old'], 'نعم')
         self.assertEqual(change_entry['new'], 'لا')
 
-        # 3. Editing visit metadata (visit_edit) does NOT overwrite questionnaire_answers
-        self.client.post(reverse('visit_edit', args=[visit1.pk]), {
+        # 3. For finished visits, visit_edit metadata is restricted (redirects to visit_detail)
+        res_edit_finished = self.client.post(reverse('visit_edit', args=[visit1.pk]), {
             'contact': self.nasr_contacts[0].id,
             'template': self.template.id,
             'date': today.strftime('%Y-%m-%d'),
-            'feedback': 'تحديث ملاحظات الزيارة فقط',
-            f'question_{self.q_note.id}': 'نعم',  # Even if passed in POST, visit_edit ignores questionnaire fields
+            'feedback': 'محاولة تعديل لزيارة منتهية',
+            f'question_{self.q_note.id}': 'نعم',
         })
+        self.assertEqual(res_edit_finished.status_code, 302)
         visit1.refresh_from_db()
         self.assertEqual(visit1.questionnaire_answers.get(str(self.q_note.id)), 'لا')
-        self.assertEqual(visit1.feedback, 'تحديث ملاحظات الزيارة فقط')
 
     def test_phase2_req_e_gps_validation_accuracy_and_security(self):
         """

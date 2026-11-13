@@ -32,6 +32,9 @@ class ScopeResolutionService:
         'vaulttransaction': 'treasury',
         'vendorpayment': 'treasury',
         'vendortransaction': 'treasury',
+        'vendoraccount': 'treasury',
+        'stocklot': 'inventory',
+        'productlot': 'inventory',
         'user': 'accounts',
     }
 
@@ -321,7 +324,10 @@ class ScopeResolutionService:
 
         model = queryset.model
         m_name = (model_name or model.__name__).lower()
-        module = cls.MODEL_MODULE_MAP.get(m_name, 'contacts')
+        if m_name not in cls.MODEL_MODULE_MAP:
+            # Unknown model fails closed for non-superusers
+            return queryset.none()
+        module = cls.MODEL_MODULE_MAP[m_name]
 
         scope = cls.get_user_scope(user, module, scope_type)
 
@@ -632,7 +638,35 @@ class ScopeResolutionService:
                     Q(pk=user.pk) | Q(assigned_areas__in=managed_areas)
                 ).distinct()
 
-        return queryset
+        # 17. Treasury: VendorAccount
+        elif m_name == 'vendoraccount':
+            if scope == 'own':
+                return queryset.filter(Q(vendor__created_by=user) | Q(vendor__assigned_team=user))
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(vendor__brick__in=user_bricks) |
+                    Q(vendor__area__in=user_bricks) |
+                    Q(vendor__created_by=user) |
+                    Q(vendor__assigned_team=user)
+                ).distinct()
+            elif scope == 'area':
+                return queryset.filter(
+                    Q(vendor__brick__in=managed_areas) |
+                    Q(vendor__area__in=managed_areas) |
+                    Q(vendor__created_by__in=managed_subordinates) |
+                    Q(vendor__assigned_team__in=managed_subordinates)
+                ).distinct()
+
+        # 18. Activities: VisitTemplate
+        elif m_name == 'visittemplate':
+            qs = queryset.filter(active=True)
+            user_role = getattr(user, 'role', None)
+            if user_role:
+                return qs.filter(Q(restricted_roles__isnull=True) | Q(restricted_roles=user_role)).distinct()
+            return qs
+
+        # Fail closed for any unhandled model
+        return queryset.none()
 
     @classmethod
     def can_user_access_object(cls, user, obj, action: str = 'view') -> bool:

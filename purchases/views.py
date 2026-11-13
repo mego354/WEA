@@ -153,7 +153,11 @@ def purchase_order_create(request):
             return redirect('purchase_order_create')
 
         supplier = get_object_or_404(Contact, id=supplier_id)
+        if not can_user_access_object(request.user, supplier, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+        if not can_user_access_object(request.user, warehouse, 'operate'):
+            return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
 
         try:
             order = PurchaseOrderService.create_order(
@@ -251,7 +255,11 @@ def purchase_order_edit(request, pk):
             return redirect('purchase_order_edit', pk=order.pk)
 
         supplier = get_object_or_404(Contact, id=supplier_id)
+        if not can_user_access_object(request.user, supplier, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+        if not can_user_access_object(request.user, warehouse, 'operate'):
+            return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
 
         try:
             order = PurchaseOrderService.update_order(
@@ -517,6 +525,8 @@ def purchase_order_print(request, pk):
         PurchaseOrder.objects.select_related('supplier', 'supplier__area', 'target_warehouse', 'created_by').prefetch_related('items__product'),
         pk=pk
     )
+    if not can_user_access_object(request.user, order, 'view'):
+        return render_forbidden_response(request, "غير مصرح لك باستعراض أو طباعة أمر الشراء هذا.")
     return render(request, 'purchases/purchase_order_print.html', {'order': order})
 
 
@@ -529,6 +539,7 @@ def purchase_orders_export(request):
     qs = PurchaseOrder.objects.select_related(
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
@@ -559,6 +570,8 @@ def purchase_orders_export(request):
 @require_permission('purchases:orders/edit')
 def purchase_order_split(request, pk):
     order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'edit'):
+        return render_forbidden_response(request, "غير مصرح لك بتعديل أو فصل أمر الشراء هذا.")
     if request.method == 'POST':
         item_ids = request.POST.getlist('split_item_id[]')
         quantities = request.POST.getlist('split_qty[]')
@@ -706,7 +719,11 @@ def purchase_return_order_create(request):
             return redirect('purchase_return_order_create')
 
         supplier = get_object_or_404(Contact, id=supplier_id)
+        if not can_user_access_object(request.user, supplier, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+        if not can_user_access_object(request.user, warehouse, 'operate'):
+            return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
         po = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
 
         try:

@@ -126,6 +126,16 @@ if not can_user_access_object(request.user, visit, 'edit'):
     raise PermissionDenied("غير مصرح لك بتعديل هذه الزيارة")
 ```
 
+### 4. Fail-Closed Scope Architecture (`ScopeResolutionService`)
+- When querying any model that is not explicitly mapped or recognized in `MODEL_MODULE_MAP`, `ScopeResolutionService` fails closed by returning `queryset.none()` for all non-superusers.
+- This guarantees zero-trust protection against data leaks for newly introduced models or unmapped tables.
+
+### 5. Assignee Scoping Parity (`get_visible_assignees_queryset`)
+- Both Planned Visits (`/planned-visits/`) and Agenda (`/agenda/`) resolve visible users using the unified helper `get_visible_assignees_queryset(user, module='activities')`.
+- **SuperAdmin**: Returns all active users in the system.
+- **Area Manager**: Returns all active users who share at least one canonical root Main Area (`get_main_area()`) with the manager.
+- **Representative**: Returns exclusively `[request.user]`. Representatives cannot see or select peers across any area.
+
 ---
 
 ## 6. Operational Permissions Matrix
@@ -137,7 +147,8 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Contact Directory | All Areas | Assigned Main Area | All Areas | Assigned Brick(s) |
 | Visit Creation | Yes | Yes | If granted | Own (Assigned Brick) |
 | Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
-| Visit Questionnaire Answers Edit | Yes | Own Created/Assigned Only | Own Created/Assigned Only | Own Created/Assigned Only |
+| Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
+| GBS Exception Request | Yes | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) | No | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) |
 | Visit Approval | Yes | Subordinates (Not Self) | No | No |
 | Sales Order Creation | Yes | Yes | If granted | Own Warehouse |
 | Sales Order Approval | Yes | Subordinates (Not Self) | View Only | No |
@@ -146,4 +157,5 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Transfer Request | Yes | If role in settings | Yes | If role in settings |
 | Transfer Approval & Execution | Yes | No | Yes | No |
 | Vault Deposits & Withdrawals | Yes | Subordinates + Perm | Yes | Own Vault |
+
 

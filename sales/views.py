@@ -146,6 +146,8 @@ def sales_order_create(request):
             return redirect('sales_order_create')
 
         customer = get_object_or_404(Contact, id=customer_id)
+        if not can_user_access_object(request.user, customer, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
 
         try:
             order = SalesOrderService.create_order(
@@ -250,6 +252,8 @@ def sales_order_edit(request, pk):
             return redirect('sales_order_edit', pk=order.pk)
 
         customer = get_object_or_404(Contact, id=customer_id)
+        if not can_user_access_object(request.user, customer, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
 
         try:
             order = SalesOrderService.update_order(

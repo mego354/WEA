@@ -17,10 +17,10 @@ def calculate_haversine_distance(lat1, lon1, lat2, lon2):
         return None
 
     try:
-        lat1 = float(lat1)
-        lon1 = float(lon1)
-        lat2 = float(lat2)
-        lon2 = float(lon2)
+        lat1 = float(str(lat1).replace(',', '.'))
+        lon1 = float(str(lon1).replace(',', '.'))
+        lat2 = float(str(lat2).replace(',', '.'))
+        lon2 = float(str(lon2).replace(',', '.'))
     except (ValueError, TypeError):
         return None
 
@@ -100,20 +100,25 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
     if force_bypass and not can_bypass_directly:
         raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
 
-    if request_distance_exception and not can_bypass_directly and not settings.distance_bypass_requires_approval:
-        raise ValidationError("عذراً، طلب استثناء تجاوز المسافة غير مفعل في إعدادات النظام.")
+    if request_distance_exception and not can_bypass_directly:
+        if not settings.can_user_request_distance_exception(user):
+            raise ValidationError("عذراً، لا تملك صلاحية طلب استثناء لتجاوز المسافة الجغرافية للزيارة.")
+        if not settings.distance_bypass_requires_approval:
+            raise ValidationError("عذراً، طلب استثناء تجاوز المسافة غير مفعل في إعدادات النظام.")
 
     # Convert and validate coordinates if passed
     if visit_lat is not None and visit_lng is not None and str(visit_lat).strip() != '' and str(visit_lng).strip() != '':
         try:
-            lat_f = float(visit_lat)
-            lng_f = float(visit_lng)
+            lat_str = str(visit_lat).strip().replace(',', '.')
+            lng_str = str(visit_lng).strip().replace(',', '.')
+            lat_f = float(lat_str)
+            lng_f = float(lng_str)
             if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
                 raise ValidationError("إحداثيات الموقع الجغرافي غير صالحة.")
             if lat_f == 0.0 and lng_f == 0.0:
                 raise ValidationError("إحداثيات الموقع الجغرافي غير صالحة (0, 0).")
-            visit.latitude = Decimal(str(visit_lat))
-            visit.longitude = Decimal(str(visit_lng))
+            visit.latitude = Decimal(lat_str)
+            visit.longitude = Decimal(lng_str)
         except ValidationError:
             raise
         except Exception:
@@ -301,16 +306,9 @@ def can_start_visit(visit, user):
         return False, "يجب تسجيل الدخول لبدء الزيارة."
 
     is_owner = (visit.owner_id == user.id or visit.created_by_id == user.id)
-    from accounts.permissions import has_perm_or_admin
-    from accounts.scope_service import ScopeResolutionService
-    can_manage = (
-        user.is_superuser or
-        getattr(user, 'is_super_admin', False) or
-        has_perm_or_admin(user, 'activities:visits/manage') or
-        ScopeResolutionService.get_user_scope(user, 'activities', 'manage') in ['area', 'all']
-    )
-    if not (is_owner or can_manage):
-        return False, "غير مصرح لك ببدء هذه الزيارة (فقط المندوب المسؤول أو المشرف المصرح له)."
+    can_override = user.is_superuser or getattr(user, 'is_super_admin', False)
+    if not (is_owner or can_override):
+        return False, "غير مصرح لك ببدء هذه الزيارة (فقط المندوب المسؤول أو منشئ الزيارة)."
 
     if visit.template and not visit.template.is_user_eligible(user):
         return False, f"دورك الوظيفي ({getattr(user, 'role_name', 'مستخدم')}) غير مصرح له باستخدام قالب الزيارة '{visit.template.display_name_ar}'."
@@ -759,7 +757,11 @@ def build_visit_timeline(visit):
         elif log.action == 'edited_reapproval_required':
             icon = 'edit_notifications'
             color = 'amber'
-            title = 'تعديل بعد الاعتماد — تتطلب إعادة اعتماد المدير'
+            title = 'تعديل بيانات الزيارة (يتطلب اعتماد المدير)'
+        elif log.action == 'edited_by_manager':
+            icon = 'edit_note'
+            color = 'sky'
+            title = 'تعديل بيانات الزيارة'
         elif log.action == 'distance_bypass':
             icon = 'admin_panel_settings'
             color = 'amber'
@@ -790,8 +792,9 @@ def build_visit_timeline(visit):
             color = 'teal'
             title = 'إرسال إلى جدول الأعمال'
         elif log.action == 'answers_updated':
-            # Handled with full before/after diffs via SecurityAuditLog (`VISIT_ANSWERS_UPDATED`)
-            continue
+            icon = 'quiz'
+            color = 'teal'
+            title = 'تعديل إجابات استبيان الزيارة'
 
         events.append({
             'timestamp': log.created_at,
@@ -802,11 +805,13 @@ def build_visit_timeline(visit):
             'details': log.reason or f"تغيير الحالة من ({log.status_before or '-'}) إلى ({log.status_after or '-'}).",
             'previous_values': {'الحالة السابقة': log.status_before} if log.status_before else None,
             'new_values': {'الحالة الجديدة': log.status_after} if log.status_after else None,
+            'changes': log.changes if log.changes else None,
+            'approval_required': log.approval_required,
         })
 
     # 3. SecurityAuditLog entries for edits, distance validations, and answers
     sec_logs = SecurityAuditLog.objects.filter(
-        module__in=['visits', 'activities'],
+        module='visits',
         record_id=str(visit.pk)
     ).select_related('actor').order_by('created_at', 'id')
 
@@ -878,6 +883,8 @@ def build_visit_timeline(visit):
 
     # Build structured before/after diffs (`changes`) for template rendering
     for ev in events:
+        if ev.get('changes'):
+            continue
         prev_dict = ev.get('previous_values')
         new_dict = ev.get('new_values')
         if isinstance(prev_dict, dict) and isinstance(new_dict, dict):
@@ -1027,23 +1034,26 @@ def delete_unended_visit(visit, user, request=None):
 def can_edit_visit_answers(visit, user):
     """
     Validates whether a user is allowed to edit the visit's questionnaire answers:
-    - Strictly allowed ONLY for the original creator / assigned owner of the visit (or SuperAdmin).
-    - Visit must have a template and not be cancelled.
+    - REQUIREMENT E: Must ONLY be available AFTER the visit has ended (`status == 'finished'` and `ended_at` is set).
+    - REQUIREMENT I: Restricted to original creator / assigned owner of the visit (or superuser).
+    - User must have `activities:visits/edit_answers` or `activities:visits/edit` permission.
+    - Visit must have a template.
     """
     if not user or not getattr(user, 'is_authenticated', False):
         return False, "يجب تسجيل الدخول لتعديل إجابات الاستبيان."
 
-    is_creator_or_owner = (
-        visit.created_by_id == user.id or
-        visit.owner_id == user.id or
-        getattr(user, 'is_superuser', False) or
-        getattr(user, 'is_super_admin', False)
-    )
-    if not is_creator_or_owner:
-        return False, "عذراً، تعديل إجابات استبيان الزيارة متاح فقط لمنشئ الزيارة الأصلي."
+    if visit.status != 'finished' or not visit.ended_at:
+        return False, "عذراً، لا يمكن تعديل إجابات الاستبيان إلا بعد انتهاء الزيارة واكتمالها نهائياً."
 
-    if visit.status == 'cancelled':
-        return False, "لا يمكن تعديل إجابات زيارة ملغاة."
+    is_owner = (visit.owner_id == user.id or visit.created_by_id == user.id)
+    is_super = getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False)
+    if not (is_owner or is_super):
+        return False, "عذراً، تعديل إجابات الاستبيان مقتصر على المندوب المسؤول صاحب الزيارة فقط."
+
+    from accounts.permissions import has_perm_or_admin
+    can_perm = has_perm_or_admin(user, 'activities:visits/edit_answers') or has_perm_or_admin(user, 'activities:visits/edit')
+    if not can_perm:
+        return False, "عذراً، لا تملك صلاحية تعديل إجابات استبيان هذه الزيارة."
 
     if not visit.template:
         return False, "لا يوجد قالب استبيان مرتبط بهذه الزيارة."
@@ -1054,10 +1064,10 @@ def can_edit_visit_answers(visit, user):
 def update_visit_questionnaire_answers(visit, user, post_data, request=None):
     """
     Independently updates only a visit's questionnaire answers (`visit.questionnaire_answers`):
-    - Restricted to the visit creator/owner.
+    - Restricted to ended visits and authorized users.
     - Never modifies VisitTemplate or its questions, and never affects other visits.
-    - Does NOT alter `visit.approval_status` or `visit.waiting_for_reapproval`.
-    - Records before/after answer diffs in `ApprovalAuditLog` (`answers_updated`) and `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`).
+    - REQUIREMENT C & D: Every update triggers approval again (`approval_status='pending'`, `waiting_for_reapproval=True`).
+    - Records before/after answer diffs in `ApprovalAuditLog` (`answers_updated`) with structured changes and `SecurityAuditLog`.
     """
     from django.db import transaction
     from activities.models import Visit, ApprovalAuditLog
@@ -1136,9 +1146,14 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
         if not answer_changes:
             return visit, []
 
-        # Save ONLY questionnaire_answers and updated_at (preserve approval_status & waiting_for_reapproval!)
+        prev_approval_status = visit.approval_status
+        # REQUIREMENT C & D: Editing questionnaire answers triggers re-approval
         visit.questionnaire_answers = new_answers
-        visit.save(update_fields=['questionnaire_answers', 'updated_at'])
+        visit.approval_status = 'pending'
+        visit.waiting_for_reapproval = True
+        visit.approved_by = None
+        visit.approved_at = None
+        visit.save(update_fields=['questionnaire_answers', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
 
         changes_summary = " | ".join(
             f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in answer_changes
@@ -1149,9 +1164,12 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
             visit=visit,
             action='answers_updated',
             actor=user,
-            status_before=visit.approval_status,
-            status_after=visit.approval_status,
-            reason=f"تعديل إجابات الاستبيان: {changes_summary}",
+            status_before=prev_approval_status,
+            status_after='pending',
+            reason=f"تعديل إجابات الاستبيان بعد انتهاء الزيارة (يتطلب إعادة اعتماد المدير): {changes_summary}",
+            changes=answer_changes,
+            approval_required=True,
+            context_data={'previous_approval_status': prev_approval_status},
             ip_address=ip,
         )
 
@@ -1163,9 +1181,9 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
             request=request,
             record_id=visit.pk,
             record_name=f"Visit #{visit.serial_num}",
-            description=f"تعديل إجابات استبيان الزيارة #{visit.serial_num} ({len(answer_changes)} تعديل)",
-            previous_values={'questionnaire_answers': old_answers},
-            new_values={'questionnaire_answers': new_answers},
+            description=f"تعديل إجابات استبيان الزيارة #{visit.serial_num} وتحويلها للاعتماد ({len(answer_changes)} تعديل)",
+            previous_values={'questionnaire_answers': old_answers, 'approval_status': prev_approval_status},
+            new_values={'questionnaire_answers': new_answers, 'approval_status': 'pending', 'waiting_for_reapproval': True},
             status='SUCCESS',
         )
 

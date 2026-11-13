@@ -152,13 +152,58 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Behavior**: Deletes only visits that have not ended (`status != 'finished'` and `ended_at is None`) and writes `VISIT_DELETED` to `SecurityAuditLog`. Returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests.
 
 ### 3.5 Visit Questionnaire Answers Update (`visit_update_answers`)
-- **URL**: `POST /visits/<pk>/answers/edit/`
-- **Permission**: Restricted to the visit's original creator/owner (`visit.created_by_id == request.user.id or visit.owner_id == request.user.id`) or SuperAdmin while the visit has not ended.
-- **Behavior**: Saves per-visit `questionnaire_answers` independently without modifying the `VisitTemplate`, affecting other visits, or invalidating `approval_status`. Logs before/after diffs in `SecurityAuditLog` (`VISIT_ANSWERS_UPDATED`) and `ApprovalAuditLog` (`answers_updated`).
+- **URLs**:
+  - `POST /activities/visits/<pk>/update-answers/`
+  - `POST /visits/<pk>/update-answers/` (Reference ERP Alias)
+  - `POST /visits/<pk>/answers/edit/` (Legacy Alias)
+- **Permissions Required**: `@require_permission(['activities:visits/edit_answers', 'activities:visits/edit'])` and `can_edit_visit_answers(request.user, visit)`
+- **Restrictions**:
+  - Visit must be ended (`visit.status == 'finished'` and `visit.ended_at is not None`). Editing answers on unended visits is strictly forbidden.
+  - User must be the visit owner/creator (`visit.owner_id == request.user.id or visit.created_by_id == request.user.id`) or SuperAdmin.
+- **Re-approval Behavior**:
+  - Setting answers triggers immediate re-approval: sets `approval_status = 'pending'`, `waiting_for_reapproval = True`, and resets `approved_by` and `approved_at` to `None`.
+  - Records diff in `ApprovalAuditLog(action='answers_updated', approval_required=True, changes={...})` and `SecurityAuditLog(action='VISIT_ANSWERS_UPDATED')`.
+- **Response Format**:
+  - AJAX: `{ "success": true, "message": "تم تحديث إجابات الاستبيان بنجاح، والزيارة بانتظار إعادة الاعتماد" }`
+  - Standard POST: Redirects to `/activities/visits/<pk>/` with success flash message.
+
+### 3.6 Visit Action Workflow (`visit_action`)
+- **URL**: `POST /activities/visits/<pk>/action/<action_type>/` (where `action_type` in `start`, `end`, `cancel`)
+- **Method**: `POST`
+- **Actions**:
+  - `start`: Starts an unstarted visit (`status='planned'|'unplanned'`).
+    - Validates GBS coordinates against client coordinates within tolerance (unless distance bypass is authorized for the user's role).
+    - Checks `request_distance_exception`: strictly verified against `settings.can_user_request_distance_exception(user)`. If requested, flags `is_distance_exception_requested=True` and enforces manager approval upon visit end.
+    - Handles start-only question answers.
+    - Transitions `status='in_progress'`, sets `started_at=now()`, `start_latitude`, `start_longitude`.
+    - Both Agenda and Visit Detail view use this unified endpoint.
+  - `end`: Ends an in-progress visit (`status='in_progress'`).
+    - Validates end GBS coordinates and end questionnaire answers.
+    - Transitions `status='finished'`, sets `ended_at=now()`.
+    - Evaluates approval: if unplanned, or distance exception requested, or questionnaire answered, flags for approval (`pending`); if planned without exceptions, auto-approves (`approved`).
+  - `cancel`: Legacy cancellation action (retained for backward compatibility; unended visits are deleted via `/visits/<pk>/delete/` per Requirement J).
 
 ---
 
-## 4. Settings & Operational Endpoints
+## 4. Purchases & Sales Scoped Endpoints
+
+### 4.1 Purchase Order Print & Export Protection
+- **Print View**: `GET /purchases/orders/<pk>/print/`
+  - Enforces `can_user_access_object(request.user, order, 'view')`. Attempts to access out-of-scope purchase orders return HTTP 403 Forbidden.
+- **Export View**: `GET /purchases/orders/export/`
+  - Applies `get_scoped_queryset(qs, request.user, 'purchaseorder')`. Exports only orders authorized within the user's module scope.
+- **Split View**: `GET|POST /purchases/orders/<pk>/split/`
+  - Enforces `can_user_access_object(request.user, order, 'edit')`. Out-of-scope access returns HTTP 403.
+- **Create & Edit Views**: `POST /purchases/orders/create/` and `POST /purchases/orders/<pk>/edit/`
+  - Enforces object-level access checks on submitted `supplier` (`can_user_access_object(request.user, supplier, 'view')`) and `warehouse` (`can_user_access_object(request.user, warehouse, 'operate')`).
+
+### 4.2 Sales Order Client Scoping
+- **Create & Edit Views**: `POST /sales/orders/create/` and `POST /sales/orders/<pk>/edit/`
+  - Enforces object-level access check on submitted `customer` (`can_user_access_object(request.user, customer, 'view')`). Prevent selecting clients outside the representative's assigned Brick or manager's assigned Main Area.
+
+---
+
+## 5. Settings & Operational Endpoints
 
 ### 4.1 Geofence Settings API (`geofence_settings_api`)
 - **URL**: `/settings/api/geofence/`
