@@ -36,52 +36,52 @@
     </div>
 
     <!-- 2. Dedicated Statistics Cards Section -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Suppliers -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الموردين</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">domain</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight truncate block" title="{{ stats.total_suppliers }}">{{ stats.total_suppliers }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 shrink-0">مورد</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_suppliers|stat_number }}">{{ stats.total_suppliers|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">مورد مسجل</span>
             </div>
         </div>
 
         <!-- Card 2: Total Payable Balance -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المديونية</span>
                 <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">credit_card</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight truncate block" title="{{ stats.total_payable|intcomma }} ج.م">{{ stats.total_payable|intcomma }}</span>
-                <span class="text-[10px] sm:text-xs text-rose-600 font-bold shrink-0">ج.م</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_payable|stat_number }} ج.م">{{ stats.total_payable|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-rose-600 font-semibold block truncate">رصيد واجب السداد</span>
             </div>
         </div>
 
         <!-- Card 3: Overdue Balance -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">المديونية المتأخرة</span>
                 <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">warning</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight truncate block" title="{{ stats.total_overdue|intcomma }} ج.م">{{ stats.total_overdue|intcomma }}</span>
-                <span class="text-[10px] sm:text-xs text-amber-600 font-bold shrink-0">ج.م</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_overdue|stat_number }} ج.م">{{ stats.total_overdue|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-amber-600 font-semibold block truncate">متجاوزة فترة الائتمان</span>
             </div>
         </div>
 
         <!-- Card 4: Total Credit Limits -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-5 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1">
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">حدود الائتمان</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">verified</span>
             </div>
-            <div class="mt-2 sm:mt-3 flex items-baseline gap-1 min-w-0">
-                <span class="text-base sm:text-lg lg:text-xl font-black text-teal-700 font-mono tracking-tight truncate block" title="{{ stats.total_credit_limit|intcomma }} ج.م">{{ stats.total_credit_limit|intcomma }}</span>
-                <span class="text-[10px] sm:text-xs text-teal-600 font-bold shrink-0">ج.م</span>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-teal-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_credit_limit|stat_number }} ج.م">{{ stats.total_credit_limit|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block truncate">إجمالي الحد الائتماني المتاح</span>
             </div>
         </div>
     </div>
