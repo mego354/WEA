@@ -44,49 +44,49 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Products -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المنتجات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المنتجات</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">medication</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_products|default:0|stat_number }}">{{ stats.total_products|default:0|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">منتج مسجل بالكتالوج</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">منتج مسجل بالكتالوج</span>
             </div>
         </div>
 
         <!-- Card 2: Sellable Products -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">متاح للبيع</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">متاح للبيع</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">check_circle</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.sellable_products|default:0|stat_number }}">{{ stats.sellable_products|default:0|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">جاهز للتداول والطلب</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">جاهز للتداول والطلب</span>
             </div>
         </div>
 
         <!-- Card 3: Unsellable Products -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">غير متاح للبيع</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">غير متاح للبيع</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-500 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">visibility_off</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-600 font-mono tracking-tight break-words leading-snug block" title="{{ stats.unsellable_products|default:0|stat_number }}">{{ stats.unsellable_products|default:0|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">موقوف أو تحت المراجعة</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">موقوف أو تحت المراجعة</span>
             </div>
         </div>
 
         <!-- Card 4: Categories Count -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">تصنيفات المنتجات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">تصنيفات المنتجات</span>
                 <span class="p-1.5 sm:p-2 bg-indigo-50 text-indigo-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">category</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-indigo-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.categories_count|default:0|stat_number }}">{{ stats.categories_count|default:0|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-indigo-600 font-semibold block truncate">تصنيف علاجي معتمد</span>
+                <span class="text-[10px] sm:text-xs text-indigo-600 font-semibold block leading-tight mt-0.5">تصنيف علاجي معتمد</span>
             </div>
         </div>
     </div>

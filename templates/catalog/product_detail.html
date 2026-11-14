@@ -52,49 +52,49 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Retail Price -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">سعر الجمهور</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">سعر الجمهور</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">sell</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ product.retail_price|stat_number }} ج.م">{{ product.retail_price|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">سعر البيع الرسمي للجمهور</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">سعر البيع الرسمي للجمهور</span>
             </div>
         </div>
 
         <!-- Purchase Cost -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">تكلفة الشراء</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">تكلفة الشراء</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">shopping_cart</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-700 font-mono tracking-tight break-words leading-snug block" title="{{ product.default_purchase_cost|stat_number }} ج.م">{{ product.default_purchase_cost|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">تكلفة الشراء الافتراضية</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">تكلفة الشراء الافتراضية</span>
             </div>
         </div>
 
         <!-- Tax Rate -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">نسبة الضريبة</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">نسبة الضريبة</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">percent</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ product.tax_percentage }}%">{{ product.tax_percentage }}%</span>
-                <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block truncate">ضريبة القيمة المضافة</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block leading-tight mt-0.5">ضريبة القيمة المضافة</span>
             </div>
         </div>
 
         <!-- Total Stock -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">المخزون الحالي</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المخزون الحالي</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">inventory_2</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ total_stock|stat_number }} {{ product.unit }}">{{ total_stock|stat_number }} <span class="text-[10px] sm:text-xs font-normal">{{ product.unit }}</span></span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">إجمالي الرصيد بالمستودعات</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">إجمالي الرصيد بالمستودعات</span>
             </div>
         </div>
     </div>
