@@ -34,49 +34,49 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Ledger Entries -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي القيود</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي القيود</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">receipt_long</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_count|default:0|stat_number }}">{{ stats.total_count|default:0|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">قيد محاسبي مسجل</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">قيد محاسبي مسجل</span>
             </div>
         </div>
 
         <!-- Card 2: Total Credit (Purchases/Invoices) -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الفواتير</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي الفواتير</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">add_circle</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_credit|stat_number }} ج.م">{{ stats.total_credit|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">دائن / فواتير مشتريات</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">دائن / فواتير مشتريات</span>
             </div>
         </div>
 
         <!-- Card 3: Total Debit (Payments) -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي السدادات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي السدادات</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">remove_circle</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_debit|stat_number }} ج.م">{{ stats.total_debit|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block truncate">مدين / سندات صرف</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 font-semibold block leading-tight mt-0.5">مدين / سندات صرف</span>
             </div>
         </div>
 
         <!-- Card 4: Net Balance -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">صافي الرصيد</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">صافي الرصيد</span>
                 <span class="p-1.5 sm:p-2 bg-purple-50 text-purple-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">account_balance</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-purple-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.net_balance|stat_number }} ج.م">{{ stats.net_balance|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-purple-600 font-semibold block truncate">صافي رصيد الموردين</span>
+                <span class="text-[10px] sm:text-xs text-purple-600 font-semibold block leading-tight mt-0.5">صافي رصيد الموردين</span>
             </div>
         </div>
     </div>

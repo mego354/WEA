@@ -52,49 +52,49 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Collections -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي السندات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي السندات</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">receipt</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_count|stat_number }}">{{ stats.total_count|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">سند محصل</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">سند محصل</span>
             </div>
         </div>
 
         <!-- Card 2: Total Collected Amount -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">المبالغ المحصلة</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المبالغ المحصلة</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">payments</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_amount|stat_number }} ج.م">{{ stats.total_amount|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">إجمالي المحصل</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">إجمالي المحصل</span>
             </div>
         </div>
 
         <!-- Card 3: Collected This Month -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">تحصيلات الشهر</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">تحصيلات الشهر</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-teal-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">calendar_month</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-teal-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.month_amount|stat_number }} ج.م">{{ stats.month_amount|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block truncate">الشهر الحالي</span>
+                <span class="text-[10px] sm:text-xs text-teal-600 font-semibold block leading-tight mt-0.5">الشهر الحالي</span>
             </div>
         </div>
 
         <!-- Card 4: Deposited Vaults -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">الخزن المستلمة</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">الخزن المستلمة</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">account_balance_wallet</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.vaults_count|stat_number }}">{{ stats.vaults_count|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-blue-600 block truncate">خزنة مودع بها</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 block leading-tight mt-0.5">خزنة مودع بها</span>
             </div>
         </div>
     </div>

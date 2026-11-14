@@ -51,49 +51,49 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
         <!-- Card 1: Total Transactions -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الحركات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي الحركات</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">receipt_long</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_count|stat_number }}">{{ stats.total_count|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-slate-400 block truncate">حركة نقدية مسجلة</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">حركة نقدية مسجلة</span>
             </div>
         </div>
 
         <!-- Card 2: Total Inflow -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي الإيداعات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي الإيداعات</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">arrow_downward</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_inflow|stat_number }} ج.م">{{ stats.total_inflow|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block truncate">تدفقات نقدية واردة</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">تدفقات نقدية واردة</span>
             </div>
         </div>
 
         <!-- Card 3: Total Outflow -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">إجمالي المنصرفات</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المنصرفات</span>
                 <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">arrow_upward</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_outflow|stat_number }} ج.م">{{ stats.total_outflow|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs text-rose-600 font-semibold block truncate">تدفقات نقدية منصرفة</span>
+                <span class="text-[10px] sm:text-xs text-rose-600 font-semibold block leading-tight mt-0.5">تدفقات نقدية منصرفة</span>
             </div>
         </div>
 
         <!-- Card 4: Net Flow -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 truncate">صافي التدفق</span>
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">صافي التدفق</span>
                 <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">account_balance_wallet</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black {% if stats.net_flow >= 0 %}text-teal-700{% else %}text-rose-700{% endif %} font-mono tracking-tight break-words leading-snug block" title="{{ stats.net_flow|stat_number }} ج.م">{{ stats.net_flow|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
-                <span class="text-[10px] sm:text-xs {% if stats.net_flow >= 0 %}text-teal-600{% else %}text-rose-600{% endif %} font-semibold block truncate">فارق الإيداع والمنصرف</span>
+                <span class="text-[10px] sm:text-xs {% if stats.net_flow >= 0 %}text-teal-600{% else %}text-rose-600{% endif %} font-semibold block leading-tight mt-0.5">فارق الإيداع والمنصرف</span>
             </div>
         </div>
     </div>
