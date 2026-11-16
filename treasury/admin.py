@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     Vault, VendorAccount, VendorTransaction, VendorInstallment,
-    VendorPayment, Settlement, VaultTransaction
+    VendorPayment, Settlement, VaultTransaction, VendorPaymentRequest
 )
 
 
@@ -165,3 +165,31 @@ class VaultTransactionAdmin(admin.ModelAdmin):
     def running_balance_display(self, obj):
         return f"{obj.running_balance:,.2f} ج.م"
     running_balance_display.short_description = "الرصيد بعد الحركة"
+
+
+@admin.register(VendorPaymentRequest)
+class VendorPaymentRequestAdmin(admin.ModelAdmin):
+    list_display = ('request_number', 'supplier', 'amount_display', 'preferred_vault', 'request_date', 'status_badge', 'created_by')
+    list_filter = ('status', 'request_date')
+    search_fields = ('request_number', 'supplier__name', 'purchase_order__order_number')
+    date_hierarchy = 'request_date'
+
+    def amount_display(self, obj):
+        return f"{obj.amount:,.2f} ج.م"
+    amount_display.short_description = "المبلغ المطلوب"
+
+    def status_badge(self, obj):
+        colors = {
+            'pending': ('#b45309', '#fef3c7', 'قيد الانتظار'),
+            'approved': ('#0f766e', '#ccfbf1', 'معتمد'),
+            'executed': ('#059669', '#d1fae5', 'تم الصرف'),
+            'rejected': ('#dc2626', '#fee2e2', 'مرفوض'),
+            'cancelled': ('#475569', '#f1f5f9', 'ملغي'),
+        }
+        text_color, bg_color, label = colors.get(obj.status, ('#475569', '#f1f5f9', obj.status))
+        return format_html(
+            '<span style="background-color:{}; color:{}; padding:3px 10px; border-radius:12px; font-weight:600; font-size:12px;">{}</span>',
+            bg_color, text_color, label
+        )
+    status_badge.short_description = "الحالة"
+

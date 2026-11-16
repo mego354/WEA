@@ -200,3 +200,70 @@ class VaultTransaction(models.Model):
 
     def __str__(self):
         return f"{self.vault.name} - {self.get_transaction_type_display()} {self.amount:,.2f} ج.م"
+
+
+class VendorPaymentRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'قيد الانتظار والمراجعة'),
+        ('approved', 'معتمد للصرف'),
+        ('rejected', 'مرفوض'),
+        ('executed', 'تم الصرف والسداد'),
+        ('cancelled', 'ملغي'),
+    ]
+
+    serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
+    request_number = models.CharField(max_length=50, unique=True, verbose_name="رقم طلب الصرف")
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="payment_requests", verbose_name="أمر الشراء المرتبط")
+    supplier = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="payment_requests", verbose_name="المورد")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="المبلغ المطلوب صرفه (ج.م)")
+    preferred_vault = models.ForeignKey(Vault, on_delete=models.SET_NULL, null=True, blank=True, related_name="payment_requests", verbose_name="الخزنة المقترحة")
+    request_date = models.DateField(default=timezone.now, verbose_name="تاريخ الطلب")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
+    
+    notes = models.TextField(blank=True, verbose_name="ملاحظات وأسباب الصرف")
+    rejection_reason = models.TextField(blank=True, default="", verbose_name="سبب الرفض")
+
+    vendor_payment = models.OneToOneField(
+        VendorPayment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="payment_request", verbose_name="سند الصرف المنفذ"
+    )
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_payment_requests", verbose_name="المنشئ")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payment_requests", verbose_name="المعتمد")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
+    executed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="executed_payment_requests", verbose_name="المنفذ")
+    executed_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ التنفيذ والصرف")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "طلب صرف لمورد"
+        verbose_name_plural = "طلبات صرف الموردين"
+        ordering = ['-serial_num']
+
+    def __str__(self):
+        return f"{self.request_number} - {self.supplier.name} ({self.amount:,.2f} ج.م)"
+
+    def save(self, *args, **kwargs):
+        if not self.serial_num:
+            max_s = VendorPaymentRequest.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 100
+            self.serial_num = max_s + 1
+            self.request_number = f"VPR-{timezone.now().year}-{self.serial_num:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def status_display_ar(self):
+        mapping = dict(self.STATUS_CHOICES)
+        return mapping.get(self.status, self.get_status_display())
+
+    @property
+    def status_badge_class(self):
+        mapping = {
+            'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+            'approved': 'bg-teal-100 text-teal-800 border-teal-300',
+            'executed': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'rejected': 'bg-rose-100 text-rose-800 border-rose-300',
+            'cancelled': 'bg-slate-100 text-slate-800 border-slate-300',
+        }
+        return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
+

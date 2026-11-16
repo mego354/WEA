@@ -188,15 +188,10 @@ def contacts_list(request):
         active_filters_count += 1
 
     if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(mobile__icontains=search) |
-            Q(phone__icontains=search) |
-            Q(tax_card__icontains=search) |
-            Q(tax_id__icontains=search) |
-            Q(code__icontains=search) |
-            Q(contact_person__icontains=search)
+        from master_data.search_utils import filter_by_arabic_search
+        qs = filter_by_arabic_search(
+            qs, search,
+            ['name', 'serial_num', 'mobile', 'phone', 'tax_card', 'tax_id', 'code', 'contact_person']
         ).distinct()
 
     from master_data.pagination_utils import paginate_queryset
@@ -1798,12 +1793,10 @@ def contacts_export(request):
         ).distinct()
 
     if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(mobile__icontains=search) |
-            Q(tax_id__icontains=search) |
-            Q(code__icontains=search)
+        from master_data.search_utils import filter_by_arabic_search
+        qs = filter_by_arabic_search(
+            qs, search,
+            ['name', 'serial_num', 'mobile', 'tax_id', 'code']
         )
 
     columns = [
@@ -2199,13 +2192,13 @@ def customers_search_api(request):
     if contact_id and str(contact_id).isdigit():
         qs = qs.filter(id=int(contact_id))
     elif q:
-        qs = qs.filter(
-            Q(name__icontains=q) |
-            Q(code__icontains=q) |
-            Q(serial_num__icontains=q) |
-            Q(mobile__icontains=q) |
-            Q(area__name__icontains=q) |
-            Q(brick__name__icontains=q)
+        from master_data.search_utils import filter_by_arabic_search
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'code', 'mobile', 'area__name', 'brick__name', 'specialty'],
+            q,
+            raw_fields=['code', 'mobile'],
+            numeric_id_field='serial_num'
         ).distinct()
 
     qs = qs.order_by('name')

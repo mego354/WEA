@@ -688,3 +688,473 @@ class CollectionService:
         )
 
         return collection
+
+
+class SalesReturnOrderService:
+
+    @classmethod
+    @transaction.atomic
+    def create_return_order(cls, sales_order, target_warehouse=None, order_date=None, items_data=None, user=None, notes="", **kwargs):
+        """
+        Creates a new SalesReturnOrder strictly referencing an eligible original order and its items.
+        Enforces Returnable Quantity = Original Ordered Quantity - Previously Returned Quantity.
+        """
+        target_warehouse = target_warehouse or kwargs.get('destination_warehouse')
+        notes = notes or kwargs.get('reason', '')
+        if not items_data:
+            raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر إرجاع المبيعات.")
+
+        if not sales_order:
+            raise ValidationError("أمر البيع الأصلي إلزامي لإنشاء مرتجع مبيعات.")
+
+        # Lock parent order to prevent concurrent over-returns
+        parent_order = SalesOrder.objects.select_for_update().get(pk=sales_order.pk)
+        if parent_order.status not in ['delivered', 'invoiced']:
+            raise ValidationError(f"لا يمكن إنشاء مرتجع لأمر بيع بحالة '{parent_order.status_display_ar}'. يجب أن يكون أمر البيع مسلماً أو مفوتراً.")
+
+        warehouse = target_warehouse or parent_order.source_warehouse
+        if not warehouse:
+            raise ValidationError("يرجى تحديد مخزن استلام المرتجع.")
+
+        from .models import SalesReturnOrder, SalesReturnOrderItem
+        from activities.models import ApprovalAuditLog
+
+        return_order = SalesReturnOrder.objects.create(
+            sales_order=parent_order,
+            customer=parent_order.customer,
+            target_warehouse=warehouse,
+            order_date=order_date or timezone.now().date(),
+            notes=notes,
+            created_by=user,
+            updated_by=user,
+            status='pending'
+        )
+
+        for itm in items_data:
+            orig_item_id = itm.get('original_item_id') or itm.get('sales_order_item_id') or getattr(itm.get('original_item'), 'id', None)
+            if not orig_item_id:
+                raise ValidationError("يجب تحديد بند أمر البيع الأصلي لكل صنف في المرتجع.")
+
+            orig_item = parent_order.items.select_for_update().filter(id=orig_item_id).first()
+            if not orig_item:
+                raise ValidationError("الصنف المحدد غير موجود في بنود أمر البيع الأصلي.")
+
+            qty = Decimal(str(itm['quantity']))
+            if qty <= Decimal('0.00'):
+                raise ValidationError(f"الكمية المرتجعة للصنف '{orig_item.product.name}' يجب أن تكون أكبر من الصفر.")
+
+            # Calculate previously returned quantity
+            from django.db.models import Sum
+            returned_so_far = SalesReturnOrderItem.objects.filter(
+                order__sales_order=parent_order,
+                original_item=orig_item
+            ).exclude(order__status__in=['cancelled', 'rejected']).aggregate(s=Sum('quantity'))['s'] or Decimal('0.00')
+
+            returnable_qty = orig_item.quantity - returned_so_far
+            if qty > returnable_qty:
+                raise ValidationError(
+                    f"الكمية المرتجعة من الصنف '{orig_item.product.name}' ({qty:,.2f}) تتجاوز الكمية المتبقية القابلة للإرجاع ({returnable_qty:,.2f}). "
+                    f"(الكمية الأصلية: {orig_item.quantity:,.2f}، المرتجع سابقاً: {returned_so_far:,.2f})"
+                )
+
+            unit_price = Decimal(str(itm.get('unit_price', orig_item.unit_price)))
+            disc_pct = Decimal(str(itm.get('discount_percentage', orig_item.discount_percentage or 0)))
+            tax_pct = Decimal(str(itm.get('tax_percentage', orig_item.tax_percentage or 0)))
+            condition = itm.get('condition')
+            if not condition:
+                condition = 'damaged' if itm.get('is_damaged') else 'resalable'
+            batch = itm.get('batch_number', '')
+            expiry = itm.get('expiry_date') or None
+
+            SalesReturnOrderItem.objects.create(
+                order=return_order,
+                original_item=orig_item,
+                product=orig_item.product,
+                condition=condition,
+                quantity=qty,
+                unit_price=unit_price,
+                discount_percentage=disc_pct,
+                tax_percentage=tax_pct,
+                batch_number=batch,
+                expiry_date=expiry
+            )
+
+        return_order.recalculate_totals()
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=return_order,
+            action='created',
+            actor=user,
+            status_before='',
+            status_after='pending',
+            reason=f"إنشاء إشعار مرتجع مبيعات لأمر البيع #{parent_order.order_number}",
+            changes=[{'field': 'الحالة', 'old': '-', 'new': 'قيد الانتظار والمراجعة'}],
+        )
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='SALES_RETURN_CREATED',
+            module='sales',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.customer.name})",
+            description=f"إنشاء مرتجع مبيعات {return_order.order_number} لأمر البيع {parent_order.order_number} بمبلغ {return_order.grand_total:,.2f} ج.م",
+            new_values={
+                'order_number': return_order.order_number,
+                'sales_order': parent_order.order_number,
+                'customer': return_order.customer.name,
+                'warehouse': return_order.target_warehouse.name,
+                'grand_total': str(return_order.grand_total)
+            }
+        )
+        return return_order
+
+    @classmethod
+    @transaction.atomic
+    def approve_return_order(cls, return_order, user, notes="", **kwargs):
+        """Transitions status from pending to approved with anti-self-approval."""
+        from accounts.permissions import can_user_access_object
+        from activities.models import ApprovalAuditLog
+        from accounts.services import AuditLogService
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'pending':
+            raise ValidationError(f"لا يمكن اعتماد مرتجع بحالة: {locked_order.status_display_ar}")
+
+        if not can_user_access_object(user, locked_order, 'approve'):
+            raise ValidationError("لا يمكنك اعتماد أمر إرجاع قمت بإنشائه بنفسك (منع الاعتماد الذاتي).")
+
+        status_before = locked_order.status
+        locked_order.status = 'approved'
+        locked_order.approved_by = user
+        locked_order.approved_at = timezone.now()
+        locked_order.updated_by = user
+        if notes:
+            locked_order.approval_notes = notes
+        locked_order.save()
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=locked_order,
+            action='approved',
+            actor=user,
+            status_before=status_before,
+            status_after='approved',
+            reason=notes or "اعتماد مرتجع المبيعات من قبل الإدارة",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'معتمد من الإدارة'}],
+        )
+
+        AuditLogService.log(
+            action_type='SALES_RETURN_APPROVED',
+            module='sales',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
+            description=f"اعتماد مرتجع مبيعات {locked_order.order_number}",
+            previous_values={'status': status_before},
+            new_values={'status': 'approved'}
+        )
+        return locked_order
+
+    @classmethod
+    @transaction.atomic
+    def reject_return_order(cls, return_order, user, rejection_reason="", reason="", **kwargs):
+        """Rejects a pending sales return order."""
+        rejection_reason = rejection_reason or reason or kwargs.get('notes', '')
+        from activities.models import ApprovalAuditLog
+        from accounts.services import AuditLogService
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'pending':
+            raise ValidationError(f"لا يمكن رفض مرتجع بحالة: {locked_order.status_display_ar}")
+
+        status_before = locked_order.status
+        locked_order.status = 'rejected'
+        locked_order.rejection_reason = rejection_reason
+        locked_order.approved_by = user
+        locked_order.approved_at = timezone.now()
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['status', 'rejection_reason', 'approved_by', 'approved_at', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=locked_order,
+            action='rejected',
+            actor=user,
+            status_before=status_before,
+            status_after='rejected',
+            reason=rejection_reason or "رفض مرتجع المبيعات",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'مرفوض'}],
+        )
+
+        AuditLogService.log(
+            action_type='SALES_RETURN_REJECTED',
+            module='sales',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
+            description=f"رفض مرتجع مبيعات {locked_order.order_number}: {rejection_reason}",
+            previous_values={'status': status_before},
+            new_values={'status': 'rejected', 'rejection_reason': rejection_reason}
+        )
+        return locked_order
+
+    @classmethod
+    @transaction.atomic
+    def deliver_return_order(cls, return_order, user):
+        """
+        Warehouse Receiving / Inward Memo:
+        1. Resalable goods are added to InventoryStock and InventoryLot.
+        2. Damaged goods are documented in memo without adding to usable InventoryStock.
+        3. Transitions status to 'delivered'.
+        """
+        from activities.models import ApprovalAuditLog
+        from accounts.services import AuditLogService
+        from inventory.models import InventoryLot
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'approved':
+            raise ValidationError(f"لا يمكن استلام بضاعة المرتجع بالمخزن إلا بعد الاعتماد الإداري (الحالة الحالية: {locked_order.status_display_ar}).")
+
+        memo_number = f"MEMO-IN-SRET-{locked_order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='inward',
+            warehouse=locked_order.target_warehouse,
+            statement=f"إذن إضافة استلام مرتجع مبيعات {locked_order.order_number} من العميل {locked_order.customer.name}",
+            status='applied',
+            applied_at=timezone.now(),
+            created_by=user
+        )
+
+        for item in locked_order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=item.product,
+                quantity=item.quantity,
+                unit_cost=item.unit_price,
+                batch_number=item.batch_number,
+                expiry_date=item.expiry_date
+            )
+
+            # Only add to sellable inventory if condition is resalable
+            if item.condition == 'resalable':
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                    warehouse=locked_order.target_warehouse,
+                    product=item.product,
+                    defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+                )
+                stock.qty_on_hand += item.quantity
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+                if item.batch_number:
+                    lot, _ = InventoryLot.objects.get_or_create(
+                        stock=stock,
+                        batch_number=item.batch_number,
+                        defaults={'quantity': Decimal('0.00'), 'expiry_date': item.expiry_date}
+                    )
+                    lot.quantity += item.quantity
+                    if item.expiry_date and not lot.expiry_date:
+                        lot.expiry_date = item.expiry_date
+                    lot.save()
+
+        locked_order.memo = memo
+        locked_order.stocked_at = timezone.now()
+        locked_order.status = 'delivered'
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['memo', 'stocked_at', 'status', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=locked_order,
+            action='status_changed',
+            actor=user,
+            status_before='approved',
+            status_after='delivered',
+            reason=f"استلام بضاعة المرتجع بالمخزن {locked_order.target_warehouse.name} (إذن إضافة {memo.memo_number})",
+            changes=[{'field': 'الحالة', 'old': 'معتمد', 'new': 'مستلم بالمخزن'}],
+        )
+
+        AuditLogService.log(
+            action_type='SALES_RETURN_DELIVERED',
+            module='sales',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
+            description=f"استلام مرتجع مبيعات {locked_order.order_number} في مخزن {locked_order.target_warehouse.name} (إذن إضافة {memo.memo_number})",
+            previous_values={'status': 'approved'},
+            new_values={'status': 'delivered', 'memo_number': memo.memo_number}
+        )
+        return locked_order
+
+    @classmethod
+    @transaction.atomic
+    def settle_return_order(cls, return_order, user):
+        """
+        Financial Settlement / Credit Note:
+        1. Ensures goods were physically received in warehouse (status='delivered').
+        2. Posts Credit entry in CustomerTransaction.
+        3. Decrements customer debt balance in CustomerAccount.
+        4. Transitions status to 'settled'.
+        """
+        from activities.models import ApprovalAuditLog
+        from accounts.services import AuditLogService
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'delivered':
+            raise ValidationError("يجب استلام بضاعة المرتجع بالمخزن أولاً (Delivered) قبل الترحيل للحسابات.")
+
+        account = CustomerAccount.get_or_create_for_customer(locked_order.customer)
+        new_balance = account.current_balance - locked_order.grand_total
+
+        tx = CustomerTransaction.objects.create(
+            account=account,
+            transaction_type='credit',
+            reason='sales_return',
+            transaction_date=timezone.now().date(),
+            credit=locked_order.grand_total,
+            debit=Decimal('0.00'),
+            running_balance=new_balance,
+            description=f"إشعار دائن مرتجع مبيعات {locked_order.order_number}" + (f" (أمر بيع #{locked_order.sales_order.order_number})" if locked_order.sales_order else ""),
+            created_by=user
+        )
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx.transaction_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        locked_order.settled_at = timezone.now()
+        locked_order.status = 'settled'
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['settled_at', 'status', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=locked_order,
+            action='status_changed',
+            actor=user,
+            status_before='delivered',
+            status_after='settled',
+            reason=f"ترحيل مرتجع المبيعات للحسابات (إشعار دائن #{tx.serial} بمبلغ {locked_order.grand_total:,.2f} ج.م)",
+            changes=[{'field': 'الحالة', 'old': 'مستلم بالمخزن', 'new': 'تم الترحيل للحسابات'}],
+        )
+
+        AuditLogService.log(
+            action_type='SALES_RETURN_SETTLED',
+            module='sales',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
+            description=f"ترحيل مرتجع مبيعات {locked_order.order_number} للحسابات (إشعار دائن #{tx.serial} بمبلغ {locked_order.grand_total:,.2f} ج.م)",
+            previous_values={'status': 'delivered'},
+            new_values={'status': 'settled', 'transaction_serial': tx.serial, 'customer_balance': str(new_balance)}
+        )
+        return locked_order
+
+    @classmethod
+    @transaction.atomic
+    def cancel_return_order(cls, return_order, user):
+        """Cancels a pending or approved return order before warehouse receiving."""
+        from activities.models import ApprovalAuditLog
+        from accounts.services import AuditLogService
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status in ['delivered', 'settled']:
+            raise ValidationError("لا يمكن إلغاء أمر مرتجع بعد استلام البضاعة في المخزن أو ترحيله للحسابات.")
+
+        status_before = locked_order.status
+        locked_order.status = 'cancelled'
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='sales_return',
+            sales_return=locked_order,
+            action='cancelled',
+            actor=user,
+            status_before=status_before,
+            status_after='cancelled',
+            reason="إلغاء أمر مرتجع المبيعات",
+            changes=[{'field': 'الحالة', 'old': status_before, 'new': 'ملغي'}],
+        )
+
+        AuditLogService.log(
+            action_type='SALES_RETURN_CANCELLED',
+            module='sales',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
+            description=f"إلغاء أمر مرتجع مبيعات {locked_order.order_number}",
+            previous_values={'status': status_before},
+            new_values={'status': 'cancelled'}
+        )
+        return locked_order
+
+
+def build_sales_return_timeline(return_order):
+    """Builds full chronological timeline for a sales return order."""
+    from activities.models import ApprovalAuditLog
+    from accounts.models import SecurityAuditLog
+
+    events = []
+    creator_name = (return_order.created_by.get_full_name() or return_order.created_by.username) if return_order.created_by else "النظام"
+
+    events.append({
+        'timestamp': return_order.created_at,
+        'title': f"إنشاء مرتجع المبيعات {return_order.order_number}",
+        'actor': creator_name,
+        'icon': 'assignment_return',
+        'color': 'teal',
+        'details': f"تم تسجيل إشعار مرتجع مبيعات للعميل «{return_order.customer.name}» لأمر البيع #{return_order.sales_order.order_number if return_order.sales_order else '-'}.",
+        'changes': None,
+        'approval_required': False,
+    })
+
+    for log in return_order.approval_history.select_related('actor').order_by('created_at', 'id'):
+        if log.action == 'created':
+            continue
+        actor_str = (log.actor.get_full_name() or log.actor.username) if log.actor else "النظام"
+        icon = 'history'
+        color = 'slate'
+        title = log.get_action_display()
+
+        if log.action == 'approved':
+            icon = 'check_circle'
+            color = 'emerald'
+            title = 'اعتماد مرتجع المبيعات'
+        elif log.action == 'rejected':
+            icon = 'cancel'
+            color = 'rose'
+            title = 'رفض مرتجع المبيعات'
+        elif log.action == 'status_changed':
+            if log.status_after == 'delivered':
+                icon = 'warehouse'
+                color = 'sky'
+                title = 'استلام البضاعة في المخزن'
+            elif log.status_after == 'settled':
+                icon = 'account_balance'
+                color = 'emerald'
+                title = 'الترحيل للحسابات'
+            else:
+                icon = 'tune'
+                color = 'purple'
+                title = 'تغيير الحالة'
+        elif log.action == 'cancelled':
+            icon = 'block'
+            color = 'rose'
+            title = 'إلغاء مرتجع المبيعات'
+
+        events.append({
+            'timestamp': log.created_at,
+            'title': title,
+            'actor': actor_str,
+            'icon': icon,
+            'color': color,
+            'details': log.reason or '',
+            'changes': log.changes if log.changes else None,
+            'approval_required': False,
+        })
+
+    events.sort(key=lambda x: x['timestamp'] or timezone.now())
+    return events

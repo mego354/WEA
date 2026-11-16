@@ -11,12 +11,7 @@
 <span class="font-bold text-slate-900">أوامر البيع</span>
 {% endblock %}
 
-{% block top_actions %}
-<a href="{% url 'sales_order_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
-    <span class="material-symbols-outlined text-base">add</span>
-    <span>أمر بيع جديد</span>
-</a>
-{% endblock %}
+
 
 {% block content %}
 <div class="space-y-6">
@@ -133,10 +128,14 @@
             </div>
 
             <div class="w-full md:w-64">
-                <select name="customer" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                <select name="customer" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'sales_customers_search_api' %}"
+                        data-search-placeholder="بحث عن عميل..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
                     <option value="">جميع العملاء</option>
                     {% for c in customers %}
-                    <option value="{{ c.id }}" {% if selected_customer|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+                    <option value="{{ c.id }}" data-subtext="#{{ c.serial_num }}{% if c.area %} | {{ c.area.name }}{% endif %}" data-search="{{ c.serial_num }} {{ c.code }} {{ c.area.name|default:'' }}" {% if selected_customer|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
                     {% endfor %}
                 </select>
             </div>

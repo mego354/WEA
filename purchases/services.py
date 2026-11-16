@@ -656,18 +656,33 @@ class PurchaseReturnOrderService:
 
     @staticmethod
     @transaction.atomic
-    def create_return_order(supplier, warehouse, order_date, items_data, user,
-                            purchase_order=None, delivery_agent="", delivery_time="", notes=""):
+    def create_return_order(supplier=None, warehouse=None, order_date=None, items_data=None, user=None,
+                            purchase_order=None, delivery_agent="", delivery_time="", notes="", **kwargs):
         """
         Creates a new purchase return order with line items.
+        If linked to a purchase order, strictly validates eligible status and Returnable Quantity = Original Ordered Quantity - Previously Returned Quantity.
         """
+        supplier = supplier or kwargs.get('vendor')
+        warehouse = warehouse or kwargs.get('target_warehouse')
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر إرجاع المشتريات.")
+
+        if purchase_order:
+            parent_order = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
+            if parent_order.status not in ['approved', 'picked', 'settled']:
+                raise ValidationError(f"لا يمكن إنشاء مرتجع لأمر شراء بحالة '{parent_order.get_status_display()}'.")
+            if supplier and supplier.pk != parent_order.supplier_id:
+                raise ValidationError("المورد لا يطابق مورد أمر الشراء الأصلي.")
+            supplier = parent_order.supplier
+            if not warehouse:
+                warehouse = parent_order.target_warehouse
+        else:
+            parent_order = None
 
         return_order = PurchaseReturnOrder.objects.create(
             supplier=supplier,
             warehouse=warehouse,
-            purchase_order=purchase_order,
+            purchase_order=parent_order,
             order_date=order_date or timezone.now().date(),
             delivery_agent=delivery_agent,
             delivery_time=delivery_time,
@@ -678,11 +693,38 @@ class PurchaseReturnOrderService:
         )
 
         for idx, itm in enumerate(items_data, start=1):
+            qty = Decimal(str(itm['quantity']))
+            if qty <= Decimal('0.00'):
+                raise ValidationError("الكمية المرتجعة يجب أن تكون أكبر من الصفر.")
+
+            orig_item = None
+            if parent_order:
+                orig_item_id = itm.get('original_item_id') or getattr(itm.get('original_item'), 'id', None)
+                if orig_item_id:
+                    orig_item = parent_order.items.select_for_update().filter(id=orig_item_id).first()
+                if not orig_item:
+                    orig_item = parent_order.items.select_for_update().filter(product=itm['product']).first()
+
+                if orig_item:
+                    from django.db.models import Sum
+                    returned_so_far = PurchaseReturnOrderItem.objects.filter(
+                        return_order__purchase_order=parent_order,
+                        original_item=orig_item
+                    ).exclude(return_order__status__in=['cancelled', 'rejected']).aggregate(s=Sum('quantity'))['s'] or Decimal('0.00')
+
+                    returnable_qty = orig_item.quantity - returned_so_far
+                    if qty > returnable_qty:
+                        raise ValidationError(
+                            f"الكمية المرتجعة للصنف '{orig_item.product.name}' ({qty:,.2f}) تتجاوز الكمية المتاحة للإرجاع ({returnable_qty:,.2f}). "
+                            f"(الكمية الأصلية: {orig_item.quantity:,.2f}، المرتجع سابقاً: {returned_so_far:,.2f})"
+                        )
+
             PurchaseReturnOrderItem.objects.create(
                 return_order=return_order,
+                original_item=orig_item,
                 item_order=idx,
                 product=itm['product'],
-                quantity=Decimal(str(itm['quantity'])),
+                quantity=qty,
                 unit_price=Decimal(str(itm['unit_price'])),
                 product_batch_number=itm.get('batch_number', ''),
                 product_expiry_date=itm.get('expiry_date') or None,
@@ -690,6 +732,18 @@ class PurchaseReturnOrderService:
             )
 
         return_order.recalculate_totals()
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=return_order,
+            action='created',
+            actor=user,
+            status_before='',
+            status_after='pending',
+            reason="إنشاء أمر إرجاع مشتريات جديد" + (f" لأمر الشراء #{parent_order.order_number}" if parent_order else ""),
+            changes=[{'field': 'الحالة', 'old': '-', 'new': 'قيد الانتظار'}],
+        )
 
         AuditLogService.log(
             action_type='PURCHASE_RETURN_CREATED',
@@ -710,24 +764,87 @@ class PurchaseReturnOrderService:
     @staticmethod
     @transaction.atomic
     def approve_return_order(return_order: PurchaseReturnOrder, user):
-        """Transitions status from pending to approved."""
-        if return_order.status != 'pending':
-            raise ValidationError(f"لا يمكن اعتماد مرتجع بحالة: {return_order.get_status_display()}")
-        return_order.status = 'approved'
-        return_order.updated_by = user
-        return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
+        """Transitions status from pending to approved with anti-self-approval."""
+        from accounts.permissions import can_user_access_object
+        from activities.models import ApprovalAuditLog
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'pending':
+            raise ValidationError(f"لا يمكن اعتماد مرتجع بحالة: {locked_order.get_status_display()}")
+
+        if not can_user_access_object(user, locked_order, 'approve'):
+            raise ValidationError("لا يمكنك اعتماد أمر إرجاع قمت بإنشائه بنفسك (منع الاعتماد الذاتي).")
+
+        status_before = locked_order.status
+        locked_order.status = 'approved'
+        locked_order.approved_by = user
+        locked_order.approved_at = timezone.now()
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=locked_order,
+            action='approved',
+            actor=user,
+            status_before=status_before,
+            status_after='approved',
+            reason="اعتماد أمر إرجاع المشتريات من قبل الإدارة",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'معتمد'}],
+        )
 
         AuditLogService.log(
             action_type='PURCHASE_RETURN_APPROVED',
             module='purchases',
             actor=user,
-            record_id=return_order.id,
-            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
-            description=f"اعتماد أمر إرجاع مشتريات {return_order.order_number}",
-            previous_values={'status': 'pending'},
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.supplier.name})",
+            description=f"اعتماد أمر إرجاع مشتريات {locked_order.order_number}",
+            previous_values={'status': status_before},
             new_values={'status': 'approved'}
         )
-        return return_order
+        return locked_order
+
+    @staticmethod
+    @transaction.atomic
+    def reject_return_order(return_order: PurchaseReturnOrder, user, rejection_reason=""):
+        """Rejects a pending purchase return order."""
+        from activities.models import ApprovalAuditLog
+
+        locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status != 'pending':
+            raise ValidationError(f"لا يمكن رفض مرتجع بحالة: {locked_order.get_status_display()}")
+
+        status_before = locked_order.status
+        locked_order.status = 'rejected'
+        locked_order.rejection_reason = rejection_reason
+        locked_order.approved_by = user
+        locked_order.approved_at = timezone.now()
+        locked_order.updated_by = user
+        locked_order.save(update_fields=['status', 'rejection_reason', 'approved_by', 'approved_at', 'updated_by', 'updated_at'])
+
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=locked_order,
+            action='rejected',
+            actor=user,
+            status_before=status_before,
+            status_after='rejected',
+            reason=rejection_reason or "رفض أمر إرجاع المشتريات",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'مرفوض'}],
+        )
+
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_REJECTED',
+            module='purchases',
+            actor=user,
+            record_id=locked_order.id,
+            record_name=f"{locked_order.order_number} ({locked_order.supplier.name})",
+            description=f"رفض أمر إرجاع مشتريات {locked_order.order_number}: {rejection_reason}",
+            previous_values={'status': status_before},
+            new_values={'status': 'rejected', 'rejection_reason': rejection_reason}
+        )
+        return locked_order
 
     @staticmethod
     @transaction.atomic
@@ -790,6 +907,18 @@ class PurchaseReturnOrderService:
         return_order.updated_by = user
         return_order.save(update_fields=['memo', 'dispatched_at', 'status', 'updated_by', 'updated_at'])
 
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=return_order,
+            action='status_changed',
+            actor=user,
+            status_before='approved',
+            status_after='delivered',
+            reason=f"صرف بضاعة المرتجع من مخزن {return_order.warehouse.name} (إذن صرف {memo.memo_number})",
+            changes=[{'field': 'الحالة', 'old': 'معتمد', 'new': 'خرج من المخزن'}],
+        )
+
         AuditLogService.log(
             action_type='PURCHASE_RETURN_DELIVERED',
             module='purchases',
@@ -810,7 +939,8 @@ class PurchaseReturnOrderService:
         1. Ensures goods were physically dispatched (status='delivered').
         2. Posts a double-entry Debit Note in VendorTransaction.
         3. Decrements supplier payable debt balance in VendorAccount.
-        4. Transitions status to settled.
+        4. Reconciles open vendor installments if parent order is linked.
+        5. Transitions status to settled.
         """
         if return_order.status != 'delivered':
             raise ValidationError("يجب صرف البضاعة من المخزن أولاً (Delivered) قبل الترحيل للحسابات.")
@@ -834,10 +964,40 @@ class PurchaseReturnOrderService:
         account.last_transaction_date = tx.transaction_date
         account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
 
+        # Reconcile unpaid installments FIFO if purchase_order is linked
+        if return_order.purchase_order:
+            remaining_to_deduct = return_order.grand_total
+            for inst in VendorInstallment.objects.filter(transaction__purchase_order=return_order.purchase_order, is_settled=False).order_by('due_date'):
+                if remaining_to_deduct <= Decimal('0.00'):
+                    break
+                inst_rem = inst.open_amount
+                if remaining_to_deduct >= inst_rem:
+                    inst.closed_amount = inst.total_amount
+                    inst.open_amount = Decimal('0.00')
+                    inst.is_settled = True
+                    remaining_to_deduct -= inst_rem
+                else:
+                    inst.closed_amount += remaining_to_deduct
+                    inst.open_amount -= remaining_to_deduct
+                    remaining_to_deduct = Decimal('0.00')
+                inst.save(update_fields=['closed_amount', 'open_amount', 'is_settled'])
+
         return_order.settled_at = timezone.now()
         return_order.status = 'settled'
         return_order.updated_by = user
         return_order.save(update_fields=['settled_at', 'status', 'updated_by', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=return_order,
+            action='status_changed',
+            actor=user,
+            status_before='delivered',
+            status_after='settled',
+            reason=f"ترحيل مرتجع المشتريات للحسابات (إشعار خصم #{tx.serial} بمبلغ {return_order.grand_total:,.2f} ج.م)",
+            changes=[{'field': 'الحالة', 'old': 'خرج من المخزن', 'new': 'تم الترحيل للحسابات'}],
+        )
 
         AuditLogService.log(
             action_type='PURCHASE_RETURN_SETTLED',
@@ -862,6 +1022,18 @@ class PurchaseReturnOrderService:
         return_order.updated_by = user
         return_order.save(update_fields=['status', 'updated_by', 'updated_at'])
 
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_return',
+            purchase_return=return_order,
+            action='cancelled',
+            actor=user,
+            status_before=status_before,
+            status_after='cancelled',
+            reason="إلغاء أمر إرجاع المشتريات",
+            changes=[{'field': 'الحالة', 'old': status_before, 'new': 'ملغي'}],
+        )
+
         AuditLogService.log(
             action_type='PURCHASE_RETURN_CANCELLED',
             module='purchases',
@@ -873,5 +1045,70 @@ class PurchaseReturnOrderService:
             new_values={'status': 'cancelled'}
         )
         return return_order
+
+
+def build_purchase_return_timeline(return_order):
+    """Builds full chronological timeline for a purchase return order."""
+    events = []
+    creator_name = (return_order.created_by.get_full_name() or return_order.created_by.username) if return_order.created_by else "النظام"
+
+    events.append({
+        'timestamp': return_order.created_at,
+        'title': f"إنشاء أمر إرجاع المشتريات {return_order.order_number}",
+        'actor': creator_name,
+        'icon': 'assignment_return',
+        'color': 'teal',
+        'details': f"تم تسجيل إرجاع مشتريات للمورد «{return_order.supplier.name}»" + (f" لأمر الشراء #{return_order.purchase_order.order_number}" if return_order.purchase_order else "") + f" بقيمة {return_order.grand_total:,.2f} ج.م.",
+        'changes': None,
+        'approval_required': False,
+    })
+
+    for log in return_order.approval_history.select_related('actor').order_by('created_at', 'id'):
+        if log.action == 'created':
+            continue
+        actor_str = (log.actor.get_full_name() or log.actor.username) if log.actor else "النظام"
+        icon = 'history'
+        color = 'slate'
+        title = log.get_action_display()
+
+        if log.action == 'approved':
+            icon = 'check_circle'
+            color = 'emerald'
+            title = 'اعتماد أمر الإرجاع'
+        elif log.action == 'rejected':
+            icon = 'cancel'
+            color = 'rose'
+            title = 'رفض أمر الإرجاع'
+        elif log.action == 'status_changed':
+            if log.status_after == 'delivered':
+                icon = 'warehouse'
+                color = 'sky'
+                title = 'صرف البضاعة من المخزن'
+            elif log.status_after == 'settled':
+                icon = 'account_balance'
+                color = 'emerald'
+                title = 'الترحيل للحسابات'
+            else:
+                icon = 'tune'
+                color = 'purple'
+                title = 'تغيير الحالة'
+        elif log.action == 'cancelled':
+            icon = 'block'
+            color = 'rose'
+            title = 'إلغاء أمر الإرجاع'
+
+        events.append({
+            'timestamp': log.created_at,
+            'title': title,
+            'actor': actor_str,
+            'icon': icon,
+            'color': color,
+            'details': log.reason or '',
+            'changes': log.changes if log.changes else None,
+            'approval_required': False,
+        })
+
+    events.sort(key=lambda x: x['timestamp'] or timezone.now())
+    return events
 
 

@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'treasury.apps.TreasuryConfig',
     'sales.apps.SalesConfig',
     'activities.apps.ActivitiesConfig',
+    'reports.apps.ReportsConfig',
 ]
 
 MIDDLEWARE = [

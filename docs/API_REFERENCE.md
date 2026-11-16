@@ -201,6 +201,33 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Create & Edit Views**: `POST /sales/orders/create/` and `POST /sales/orders/<pk>/edit/`
   - Enforces object-level access check on submitted `customer` (`can_user_access_object(request.user, customer, 'view')`). Prevent selecting clients outside the representative's assigned Brick or manager's assigned Main Area.
 
+### 4.3 Sales Return Order APIs
+- **Eligible Delivered Orders API**: `GET /sales/api/eligible-orders/`
+  - **Permission**: `@login_required`, scoped via `get_scoped_queryset(..., 'salesorder')`.
+  - **Query Parameters**:
+    - `customer_id` (integer, optional): Filter orders by customer ID.
+    - `q` (string, optional): Search query (order number, customer name).
+  - **Response Format**:
+    ```json
+    {
+      "results": [
+        {
+          "id": 142,
+          "order_number": "SO-501",
+          "customer_name": "صيدلية السلامة",
+          "customer_id": 88,
+          "warehouse_id": 3,
+          "warehouse_name": "مخزن القاهرة الرئيسي",
+          "order_date": "2026-11-10",
+          "grand_total": "4800.00"
+        }
+      ]
+    }
+    ```
+- **Order Details for Return API**: `GET /sales/api/order-details/<int:order_id>/`
+  - **Permission**: `@login_required`, validates object-level access (`can_user_access_object(..., 'view')`).
+  - **Returns**: Original order items, previously returned quantities, unit prices, discounts, and returnable quantity bounds.
+
 ---
 
 ## 5. Settings & Operational Endpoints
@@ -235,3 +262,72 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
     "message": "تم اعتماد طلب الشراء بنجاح"
   }
   ```
+
+---
+
+## 6. Performance & Reports Export Endpoints
+
+All performance and reporting views provide standard OpenXML Excel downloads (`.xlsx`) and formatted print views, respecting the requester's data scope:
+
+- **Performance Analytical Export**: `GET /performance/analysis/export/?period=...&area=...`
+  - Permission: `performance:analysis/export`
+- **Performance Daily Activity Export**: `GET /performance/daily/export/?date=YYYY-MM-DD`
+  - Permission: `performance:daily/export`
+- **Performance Detailed Matrix Export**: `GET /performance/detailed/export/?period=...&area=...`
+  - Permission: `performance:detailed/export`
+- **AR Aging Export & Print**: `GET /reports/ar-aging/export/` & `GET /reports/ar-aging/print/`
+  - Permission: `reports:financial/export`
+- **Trial Balance Export & Print**: `GET /reports/trial-balance/export/` & `GET /reports/trial-balance/print/`
+  - Permission: `reports:financial/export`
+- **Target Achievement Export**: `GET /reports/target-achievement/export/`
+  - Permission: `reports:financial/export`
+- **Net Sales & Profitability Export**: `GET /reports/net-sales/export/`
+  - Permission: `reports:sales/export`
+- **Customer 360 Export**: `GET /reports/customer-360/export/`
+  - Permission: `reports:sales/export`
+- **Promotions Export**: `GET /reports/promotions/export/`
+  - Permission: `reports:sales/export`
+- **Item Sales by Customer Export**: `GET /reports/item-sales-by-customer/export/`
+  - Permission: `reports:sales/export`
+- **Order Deliveries Export & Print**: `GET /reports/order-deliveries/export/` & `GET /reports/order-deliveries/print/`
+  - Permission: `reports:inventory/export`
+- **Delivery Stock Availability Export**: `GET /reports/delivery-stock/export/`
+  - Permission: `reports:inventory/export`
+- **Item Purchases Export**: `GET /reports/item-purchases/export/`
+  - Permission: `reports:inventory/export`
+- **Agreements ROI Export**: `GET /reports/agreements-roi/export/`
+  - Permission: `reports:activities/export`
+- **Calls & Telesales Export**: `GET /reports/calls/export/`
+  - Permission: `reports:activities/export`
+- **Medical Samples Export**: `GET /reports/samples/export/`
+  - Permission: `reports:activities/export`
+
+---
+
+## 7. Smart Search Combobox Endpoints (`Sales`, `Purchases`, `Treasury`)
+
+All smart-search endpoints enforce `@require_permission([...])`, use `ScopeResolutionService.get_scoped_choices(...)`, normalize Arabic queries via `master_data.search_utils.filter_by_arabic_search`, clamp `limit` (`1..50`, default `30`), and return `{"results": [...], "count": <int>}`. Background requests include `X-Skip-Global-Loader: 1` (and matching paths in `templates/layouts/base.html`).
+
+### 7.1 Sales Smart Search Endpoints
+- `GET /sales/api/search/customers/?q=<query>&limit=30` (`sales_customers_search_api`)
+  - **Permissions**: `sales:orders/list`, `sales:orders/create`, `sales:orders/edit`, `sales:collections/list`, `sales:collections/create`, `sales:returns/list`, `sales:customers/transactions`, `sales:customers/accounting`
+  - **Scope**: Active (`status != 'inactive'`, `is_customer=True`) scoped via `ScopeResolutionService.get_scoped_choices(user, 'customers', 'sales')`
+  - **Fields searched**: Normalized `name`, `area__name`, `brick__name` + raw `code`, `mobile`, `serial_num` (plus exact numeric `serial_num`).
+  - **Item keys**: `id`, `text`, `name`, `serial_num`, `code`, `mobile`, `area`, `brick`, `subtext`
+- `GET /sales/api/search/warehouses/?q=<query>&limit=30` (`sales_warehouses_search_api`)
+  - **Permissions**: `sales:orders/list`, `sales:orders/create`, `sales:orders/edit`, `sales:returns/create`
+  - **Item keys**: `id`, `text`, `name`, `code`, `subtext`
+- `GET /sales/api/search/vaults/?q=<query>&limit=30` (`sales_vaults_search_api`)
+  - **Permissions**: `sales:collections/list`, `sales:collections/create`
+  - **Item keys**: `id`, `text`, `name`, `serial_num`, `balance`, `subtext`
+
+### 7.2 Purchases & Treasury Smart Search Endpoints
+- `GET /purchases/api/search/suppliers/?q=<query>&limit=30` (`purchases_suppliers_search_api`)
+  - **Permissions**: `purchases:orders/*`, `purchases:returns/*`, `treasury:payments/*`, `treasury:payment_requests/*`, `treasury:vendors/*`
+  - **Scope**: Active (`status != 'inactive'`, `is_supplier=True`) scoped via `ScopeResolutionService.get_scoped_choices(user, 'suppliers', 'purchases')`, including corporate company-area suppliers (`is_supplier=True, area__is_company_area=True`) while keeping territorial suppliers isolated by area/brick.
+- `GET /purchases/api/search/warehouses/?q=<query>&limit=30` (`purchases_warehouses_search_api`)
+  - **Permissions**: `purchases:orders/list`, `purchases:orders/create`, `purchases:orders/edit`, `purchases:returns/create`
+- `GET /purchases/api/search/vaults/?q=<query>&limit=30` (`purchases_vaults_search_api`)
+  - **Permissions**: `treasury:payments/*`, `treasury:payment_requests/*`, `treasury:vaults/view`, `treasury:vaults/transfer`, `treasury:transactions/list`, `treasury:transactions/create`
+
+

@@ -706,6 +706,27 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"  [DRY-RUN] Would import {len(df_c)} contacts."))
             return
 
+        # Pre-load explicit supplier identifiers from suppliers.xlsx if present
+        supplier_uuids = set()
+        supplier_serials = set()
+        supplier_norm_names = set()
+        suppliers_file = os.path.join(ctx['source_dir'], 'suppliers.xlsx')
+        if os.path.isfile(suppliers_file):
+            from master_data.search_utils import normalize_arabic_text
+            df_sup = pd.read_excel(suppliers_file)
+            for _, s_row in df_sup.iterrows():
+                if 'المعرف' in df_sup.columns and pd.notna(s_row.get('المعرف')):
+                    supplier_uuids.add(str(s_row.get('المعرف')).strip())
+                if 'مسلسل' in df_sup.columns and pd.notna(s_row.get('مسلسل')):
+                    try:
+                        supplier_serials.add(int(s_row.get('مسلسل')))
+                    except (TypeError, ValueError):
+                        pass
+                if 'الاسم' in df_sup.columns and pd.notna(s_row.get('الاسم')):
+                    norm_n = normalize_arabic_text(str(s_row.get('الاسم')).strip())
+                    if norm_n:
+                        supplier_norm_names.add(norm_n)
+
         with transaction.atomic():
             contacts_to_create = []
             addresses_to_create = []
@@ -720,8 +741,13 @@ class Command(BaseCommand):
                 serial = int(row['مسلسل'])
                 code = str(row['الكود']).strip()
                 acc_type = str(row['نوع الاكونت']).strip()
-                is_supplier = (acc_type == 'مورد')
-                is_customer = not is_supplier
+                is_listed_supplier = (
+                    src_uuid in supplier_uuids
+                    or serial in supplier_serials
+                    or (supplier_norm_names and normalize_arabic_text(name) in supplier_norm_names)
+                )
+                is_supplier = (acc_type == 'مورد') or is_listed_supplier
+                is_customer = not is_supplier or is_listed_supplier
                 cust_category = str(row['تصنيف العميل']).strip() if pd.notna(row['تصنيف العميل']) else ""
                 specialty = str(row['التخصص']).strip() if pd.notna(row['التخصص']) else ""
                 mobile = clean_phone(row['الموبايل'])

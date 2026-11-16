@@ -1,0 +1,322 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}أمر إرجاع مبيعات جديد - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto pb-16">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 pb-4 border-b border-slate-200">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">أمر إرجاع مبيعات جديد</h1>
+            <p class="text-xs text-slate-500 mt-1">إنشاء إشعار إرجاع بضاعة من العميل مرتبط بأمر بيع سابق والتحقق من الكميات القابلة للإرجاع</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <a href="{% url 'sales_return_orders_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                إلغاء
+            </a>
+            <button type="submit" form="sales-return-form" class="px-5 sm:px-6 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">check</span>
+                <span>حفظ أمر المرتجع</span>
+            </button>
+        </div>
+    </div>
+
+    <form id="sales-return-form" method="POST" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Original Sales Order & General Info Card -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+            <h2 class="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">shopping_bag</span>
+                <span>أمر البيع الأصلي ومخزن الاستلام</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                <!-- Sales Order Selector -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        أمر البيع الأصلي <span class="text-red-500">*</span>
+                    </label>
+                    <select name="sales_order" id="sales_order_select" required onchange="handleOrderSelection(this.value)"
+                            data-smart-select="true"
+                            data-search-placeholder="ابحث برقم أمر البيع أو اسم العميل..."
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختر أمر البيع --</option>
+                        {% for o in eligible_orders %}
+                        <option value="{{ o.id }}" {% if selected_order and selected_order.id == o.id %}selected{% endif %}>
+                            {{ o.order_number }} — {{ o.customer.name }} ({{ o.order_date|date:"Y-m-d" }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-[11px] text-slate-400 mt-1">يقتصر على أوامر البيع المسلمة أو المفوترة فقط</p>
+                </div>
+
+                <!-- Target Warehouse -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        مخزن استلام المرتجع <span class="text-red-500">*</span>
+                    </label>
+                    <select name="warehouse" id="warehouse_select" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'sales_warehouses_search_api' %}"
+                            data-search-placeholder="ابحث باسم المخزن أو الكود..."
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        {% for w in warehouses %}
+                        <option value="{{ w.id }}" data-subtext="{{ w.code }}{% if w.area %} | {{ w.area.name }}{% endif %}" data-search="{{ w.code }} {{ w.area.name|default:'' }}" {% if selected_order and selected_order.source_warehouse_id == w.id %}selected{% endif %}>
+                            {{ w.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Return Date -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">تاريخ المرتجع</label>
+                    <input type="date" name="order_date" value="{% now 'Y-m-d' %}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Customer Display (Read-only) -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">العميل</label>
+                    <input type="text" id="customer_display" readonly
+                           value="{% if selected_order %}{{ selected_order.customer.name }}{% else %}—{% endif %}"
+                           class="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 font-bold focus:outline-none cursor-not-allowed">
+                </div>
+
+                <!-- Notes / Reason -->
+                <div class="md:col-span-2">
+                    <label class="block font-bold text-slate-700 mb-1.5">ملاحظات وأسباب الإرجاع</label>
+                    <textarea name="notes" rows="2" placeholder="اكتب سبب إرجاع العميل للبضاعة والملاحظات الفنية إن وجدت..."
+                              class="w-full px-3.5 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Return Items Table -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe]">inventory_2</span>
+                        <span>بنود المرتجع وحالة الأصناف</span>
+                    </h2>
+                    <p class="text-[11px] text-slate-400 mt-0.5">حدد الكمية المرتجعة لكل صنف وحالته (سليم وقابل للبيع أم تالف/معيب)</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto scrollbar-thin">
+                <table class="w-full text-right text-xs">
+                    <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
+                        <tr>
+                            <th class="py-3 px-4">الصنف والتشغيلة</th>
+                            <th class="py-3 px-4 text-center">الكمية الأصلية</th>
+                            <th class="py-3 px-4 text-center">تم إرجاعه</th>
+                            <th class="py-3 px-4 text-center text-[#27bebe]">المتاح للإرجاع</th>
+                            <th class="py-3 px-4 text-center w-32">الكمية المرتجعة</th>
+                            <th class="py-3 px-4 text-center w-36">حالة الصنف</th>
+                            <th class="py-3 px-4 text-left">السعر الصافي</th>
+                            <th class="py-3 px-4 text-left">إجمالي البند</th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-tbody" class="divide-y divide-slate-100 text-slate-700">
+                        {% if order_items_payload %}
+                            {% for row in order_items_payload %}
+                            <tr class="item-row hover:bg-slate-50/50 transition-colors" data-unit-price="{{ row.item.unit_price }}" data-disc="{{ row.item.discount_percentage }}" data-tax="{{ row.item.tax_percentage }}">
+                                <td class="py-3 px-4">
+                                    <input type="hidden" name="original_item_id[]" value="{{ row.item.id }}">
+                                    <input type="hidden" name="batch_number[]" value="{{ row.item.batch_number|default:'' }}">
+                                    <input type="hidden" name="expiry_date[]" value="{{ row.item.expiry_date|date:'Y-m-d'|default:'' }}">
+                                    <div class="font-bold text-slate-900">{{ row.item.product.name }}</div>
+                                    <div class="text-[10px] text-slate-400 font-mono">
+                                        كود: {{ row.item.product.code }}
+                                        {% if row.item.batch_number %} | تشغيلة: {{ row.item.batch_number }}{% endif %}
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 text-center font-mono font-bold text-slate-600">
+                                    {{ row.item.quantity|floatformat:2 }}
+                                </td>
+                                <td class="py-3 px-4 text-center font-mono text-slate-500">
+                                    {{ row.returned_so_far|floatformat:2 }}
+                                </td>
+                                <td class="py-3 px-4 text-center font-mono font-bold text-[#27bebe] returnable-qty">
+                                    {{ row.remaining_returnable|floatformat:2 }}
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <input type="number" name="quantity[]" step="0.01" min="0" max="{{ row.remaining_returnable }}"
+                                           value="0.00" oninput="calculateTotals()"
+                                           class="w-24 text-center py-1.5 px-2 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <select name="condition[]" class="py-1 px-2 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-bold text-slate-800">
+                                        <option value="resalable">سليم (قابل للبيع)</option>
+                                        <option value="damaged">تالف / معيب</option>
+                                    </select>
+                                </td>
+                                <td class="py-3 px-4 text-left font-mono font-semibold text-slate-700">
+                                    {{ row.item.unit_price|floatformat:2 }} ج.م
+                                </td>
+                                <td class="py-3 px-4 text-left font-mono font-bold text-emerald-700 row-total">
+                                    0.00 ج.م
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr id="empty-row">
+                                <td colspan="8" class="py-12 text-center text-slate-400">
+                                    <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">shopping_cart</span>
+                                    يرجى اختيار أمر بيع لعرض أصنافه والكميات المتاحة للإرجاع.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Totals Footer -->
+            <div class="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="text-xs text-slate-500">
+                    <span class="font-bold">ملاحظة أمان:</span> لا يتم احتساب أي كمية تتجاوز الكمية المتبقية القابلة للإرجاع.
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="text-left">
+                        <span class="text-xs text-slate-500 block">إجمالي قيمة المرتجع</span>
+                        <span id="grand-total-display" class="text-xl font-black text-emerald-700 font-mono">0.00 ج.م</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </form>
+
+</div>
+
+<script>
+function handleOrderSelection(orderId) {
+    if (!orderId) {
+        document.getElementById('items-tbody').innerHTML = `
+            <tr id="empty-row">
+                <td colspan="8" class="py-12 text-center text-slate-400">
+                    <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">shopping_cart</span>
+                    يرجى اختيار أمر بيع لعرض أصنافه والكميات المتاحة للإرجاع.
+                </td>
+            </tr>`;
+        document.getElementById('customer_display').value = '—';
+        document.getElementById('grand-total-display').innerText = '0.00 ج.م';
+        return;
+    }
+
+    fetch(`/sales/api/order-details/${orderId}/`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            document.getElementById('customer_display').value = data.customer_name;
+            if (data.warehouse_id) {
+                const whSelect = document.getElementById('warehouse_select');
+                if (whSelect) {
+                    whSelect.value = data.warehouse_id;
+                    if (window.ERPSmartSelect) window.ERPSmartSelect.refresh(whSelect);
+                }
+            }
+
+            const tbody = document.getElementById('items-tbody');
+            if (!data.items || data.items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">لا توجد أصناف في هذا الطلب.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            data.items.forEach(itm => {
+                const remQty = parseFloat(itm.remaining_returnable) || 0;
+                html += `
+                <tr class="item-row hover:bg-slate-50/50 transition-colors" data-unit-price="${itm.unit_price}" data-disc="${itm.discount_percentage}" data-tax="${itm.tax_percentage}">
+                    <td class="py-3 px-4">
+                        <input type="hidden" name="original_item_id[]" value="${itm.item_id}">
+                        <input type="hidden" name="batch_number[]" value="${itm.batch_number || ''}">
+                        <input type="hidden" name="expiry_date[]" value="${itm.expiry_date || ''}">
+                        <div class="font-bold text-slate-900">${itm.product_name}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">
+                            كود: ${itm.product_code}
+                            ${itm.batch_number ? ' | تشغيلة: ' + itm.batch_number : ''}
+                        </div>
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono font-bold text-slate-600">
+                        ${parseFloat(itm.original_quantity).toFixed(2)}
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono text-slate-500">
+                        ${parseFloat(itm.returned_so_far).toFixed(2)}
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono font-bold text-[#27bebe] returnable-qty">
+                        ${remQty.toFixed(2)}
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <input type="number" name="quantity[]" step="0.01" min="0" max="${remQty}"
+                               value="0.00" oninput="calculateTotals()"
+                               class="w-24 text-center py-1.5 px-2 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <select name="condition[]" class="py-1 px-2 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-bold text-slate-800">
+                            <option value="resalable">سليم (قابل للبيع)</option>
+                            <option value="damaged">تالف / معيب</option>
+                        </select>
+                    </td>
+                    <td class="py-3 px-4 text-left font-mono font-semibold text-slate-700">
+                        ${parseFloat(itm.unit_price).toFixed(2)} ج.م
+                    </td>
+                    <td class="py-3 px-4 text-left font-mono font-bold text-emerald-700 row-total">
+                        0.00 ج.م
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+            calculateTotals();
+        })
+        .catch(err => {
+            console.error('Error fetching order details:', err);
+        });
+}
+
+function calculateTotals() {
+    let grandTotal = 0;
+    const rows = document.querySelectorAll('.item-row');
+    rows.forEach(row => {
+        const qtyInput = row.querySelector('input[name="quantity[]"]');
+        const maxQty = parseFloat(row.querySelector('.returnable-qty').innerText) || 0;
+        let qty = parseFloat(qtyInput.value) || 0;
+        if (qty > maxQty) {
+            qty = maxQty;
+            qtyInput.value = maxQty.toFixed(2);
+        }
+        if (qty < 0) {
+            qty = 0;
+            qtyInput.value = '0.00';
+        }
+
+        const price = parseFloat(row.dataset.unitPrice) || 0;
+        const discPct = parseFloat(row.dataset.disc) || 0;
+        const taxPct = parseFloat(row.dataset.tax) || 0;
+
+        const subtotal = qty * price;
+        const disc = subtotal * (discPct / 100);
+        const taxable = Math.max(0, subtotal - disc);
+        const tax = taxable * (taxPct / 100);
+        const total = taxable + tax;
+
+        row.querySelector('.row-total').innerText = total.toFixed(2) + ' ج.م';
+        grandTotal += total;
+    });
+
+    document.getElementById('grand-total-display').innerText = grandTotal.toFixed(2) + ' ج.م';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    calculateTotals();
+});
+</script>
+{% endblock %}

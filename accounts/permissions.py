@@ -277,6 +277,8 @@ def get_user_main_areas(user):
 def is_accountant(user) -> bool:
     """
     Returns True if user is an accountant, bookkeeper, or financial administrator.
+    Excludes representatives and explicit management roles so holding treasury
+    view permissions does not misclassify them as accountants.
     """
     if not user or not user.is_authenticated or not user.is_active:
         return False
@@ -285,11 +287,19 @@ def is_accountant(user) -> bool:
     role = getattr(user, 'role', None)
     if not role or not role.is_active:
         return False
-    if has_perm_or_admin(user, 'module:treasury') and has_perm_or_admin(user, 'treasury:transactions/list'):
-        return True
+    if getattr(role, 'is_rep', False) or is_representative(user):
+        return False
     name_l = (role.name or '').lower()
     disp_l = (role.display_name or '').lower()
-    return 'accountant' in name_l or 'bookkeeper' in name_l or 'محاسب' in disp_l or 'حسابات' in disp_l
+    if any(k in name_l or k in disp_l for k in ['accountant', 'bookkeeper', 'محاسب', 'حسابات']):
+        return True
+    if getattr(role, 'is_manager_role', False) or getattr(role, 'is_area_manager', False) or getattr(role, 'is_sub_area_manager', False):
+        return False
+    if any(k in name_l or k in disp_l for k in ['manager', 'director', 'supervisor', 'مدير', 'مشرف', 'رئيس']):
+        return False
+    if has_perm_or_admin(user, 'module:treasury') and has_perm_or_admin(user, 'treasury:transactions/list'):
+        return True
+    return False
 
 
 def is_representative(user) -> bool:

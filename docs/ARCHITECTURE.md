@@ -74,9 +74,18 @@ erDiagram
     SalesOrder }|--|| Contact : "customer"
     SalesOrder }|--|| Warehouse : "source_warehouse"
     SalesOrder ||--o{ SalesOrderItem : "items"
+    SalesReturnOrder }|--|| SalesOrder : "sales_order"
+    SalesReturnOrder }|--|| Contact : "customer"
+    SalesReturnOrder }|--|| Warehouse : "target_warehouse"
     PurchaseOrder }|--|| Contact : "supplier"
     PurchaseOrder }|--|| Warehouse : "target_warehouse"
     PurchaseOrder ||--o{ PurchaseOrderItem : "items"
+    PurchaseReturnOrder }|--o| PurchaseOrder : "purchase_order"
+    PurchaseReturnOrder }|--|| Contact : "supplier"
+    PurchaseReturnOrder }|--|| Warehouse : "warehouse"
+    VendorPaymentRequest }|--|| Contact : "supplier"
+    VendorPaymentRequest }|--o| PurchaseOrder : "purchase_order"
+    VendorPaymentRequest ||--o| VendorPayment : "vendor_payment (1-to-1)"
     ProductTransferRequest }|--|| Warehouse : "source_warehouse"
     ProductTransferRequest }|--|| Warehouse : "destination_warehouse"
 ```
@@ -108,22 +117,39 @@ erDiagram
    - Planned visits generated directly by bulk daily planning (`/planned-visits/bulk-add/`) creating linked `PlannedVisitItem` and `Visit(is_planned=True, status='planned')` records atomically, with fallback execution support for legacy unlinked items.
    - Stores scheduled `time` (`TimeField`) and localized 12-hour formatted representation.
    - GPS coordinates with distance verification against client address within configurable tolerance; OpenStreetMap Leaflet tile rendering with `SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'` and automatic fallback tiles.
+   - GPS bypass permission moved entirely to centralized Role Settings (`activities:visits/bypass_gps`), eliminating insecure per-user bypass checkboxes.
 
-5. **SalesOrder (`sales.SalesOrder`)**:
-   - Multi-stage pipeline: `pending` → `manager_approval` → `preparing` → `delivered` → `invoiced`.
+5. **Agreement (`activities.Agreement`)**:
+   - Rep-to-doctor contractual commitments with approval workflow: `new` (قيد الانتظار) → `approved` (معتمد) / `rejected` (مرفوض) → `done` (مكتمل).
+   - Edit and Delete operations restricted strictly to unapproved agreements (`status in ['new', 'rejected']`). Once approved, modifying or deleting is blocked on backend and IDOR checks.
+   - Customer picker is dynamically scoped via `get_visit_eligible_contacts_queryset`.
+   - Complete visual Arabic timeline built via `build_agreement_timeline`.
+
+6. **SalesOrder (`sales.SalesOrder`) & SalesReturnOrder (`sales.SalesReturnOrder`)**:
+   - Multi-stage sales pipeline: `pending` → `manager_approval` → `preparing` → `delivered` → `invoiced`.
    - Server-side available stock validation (`qty_on_hand - qty_reserved`) at creation and delivery.
-   - Item-level and order-level discount and tax calculations.
-   - Delivers inventory atomically and posts customer ledger balance for collections.
+   - `SalesReturnOrder`: Strictly references eligible delivered/invoiced original sales order. Enforces `Returnable Quantity = Original Quantity - Previously Returned Quantity`.
+   - Inward warehouse receipt differentiates between resalable stock (re-added to `InventoryStock` and `InventoryLot`) and damaged goods (documented in memo without sellable inventory inflation).
+   - Financial settlement posts credit transaction decreasing customer outstanding balance in `CustomerAccount`.
+   - Anti-self-approval and POST-only action endpoints enforced.
 
-6. **PurchaseOrder (`purchases.PurchaseOrder`)**:
+7. **PurchaseOrder (`purchases.PurchaseOrder`) & PurchaseReturnOrder (`purchases.PurchaseReturnOrder`)**:
    - Pipeline: `pending` → `approved` → `picked` → `settled`.
    - Receipt of inventory creates atomic inward inventory memos and recalculates weighted average unit cost.
-   - Settlement records vendor ledger liabilities.
+   - `PurchaseReturnOrder`: Enforces original PO returnable quantity bounds. Dispatches goods via outward memo, reducing `InventoryStock` and batch lots.
+   - Financial settlement creates a debit note decreasing vendor accounts payable in `VendorAccount`.
 
-7. **ProductTransferRequest (`inventory.ProductTransferRequest`)**:
+8. **VendorPaymentRequest (`treasury.VendorPaymentRequest`)**:
+   - Pre-payment requisition workflow: `pending` → `approved` / `rejected` → `executed` / `cancelled`.
+   - Anti-self-approval prevents creators from approving their own payment requests.
+   - Concurrency-safe execution with row-level locking (`select_for_update()`) and `OneToOneField(VendorPayment)` blocking duplicate payments.
+   - Full timeline auditing via `build_payment_request_timeline`.
+
+9. **ProductTransferRequest (`inventory.ProductTransferRequest`)**:
    - Moves inventory between warehouses within the same canonical root Main Area.
    - Validates available stock strictly before reserving and executing transfer.
    - Creates balanced, immutable Stock In and Stock Out memos upon completion.
+   - Automatically recalculates destination warehouse `Stock.product_cost` via weighted-average and transfers `InventoryLot` batches.
 
 ---
 
@@ -191,3 +217,37 @@ The system maintains two distinct, non-overlapping audit stores:
 2. **`activities.ApprovalAuditLog`**:
    - Operational workflow history specifically for state machines (Visits, Sales Orders, Purchase Orders).
    - Tracks transition timestamps, approving manager, previous status, next status, and optional decision notes.
+
+---
+
+## 6. Field Performance Analytics & Enterprise Reports (`reports` App)
+
+The `reports` app provides real-time field performance tracking, analytical comparisons, daily monitoring, and multi-domain financial/commercial reports, fully integrated with the multi-tenant data-scope architecture.
+
+### Architectural Structure:
+- **Models**:
+  - `SalesTarget`: Representative monthly quotas for sales volume (EGP), collections (EGP), and visit counts.
+  - `CustomerCall`: Telesales and remote medical detailing phone logs with duration, purpose, outcome, and linked sales order.
+  - `CoachingEvaluation`: Joint double-visit field evaluations assessing product knowledge, selling skills, detailing clarity, objection handling, and action plans.
+- **Performance Modules (`/performance/*`)**:
+  - `overview/`: 22 KPI summary cards comparing current vs prior periods with variance deltas, working days calculator, and top detailed products leaderboard.
+  - `analysis/`: 8 Chart.js comparative visual charts across representatives + 11-column representative performance comparison table with Excel export.
+  - `daily/`: Day picker (`prev`/`today`/`next`), 4 Today vs Yesterday comparative KPI cards, 20-column daily representative activity matrix with Excel export, and 8 drilldown sub-tabs (Visits, Customers, Calls, Expenses, Tasks, Approvals, Orders, Collections).
+  - `detailed/`: 63-column mega performance matrix across all field metrics and operational rates + dual-visit coaching evaluations audit log table with supervisor feedback + Excel export.
+- **Reports Section (`/reports/*`)**:
+  - `reports_hub`: Unified enterprise portal categorizing reports into Financial, Commercial, Supply Chain, and Activity categories with permission-aware cards.
+  - **13 Standalone Reports**:
+    1. AR Aging (`/reports/ar-aging/` + `/export/` + `/print/`): 5 overdue aging buckets + DSO.
+    2. Trial Balance (`/reports/trial-balance/` + `/export/` + `/print/`): Opening, debit, credit, and closing balances.
+    3. Target Achievement (`/reports/target-achievement/` + `/export/`): Monthly sales and collections quotas vs actual achievements with progress indicators.
+    4. Net Sales & Profitability (`/reports/net-sales/` + `/export/`): Delivered sales minus returns, COGS, gross profit, and margin % per product.
+    5. Customer 360 (`/reports/customer-360/` + `/export/`): 22-column comprehensive client audit.
+    6. Promotions (`/reports/promotions/` + `/export/`): Composite discount offers, bundle discounts, and promo sales volume.
+    7. Item Sales by Customer (`/reports/item-sales-by-customer/` + `/export/`): Product distribution matrix across clinics and pharmacies.
+    8. Order Deliveries (`/reports/order-deliveries/` + `/export/` + `/print/`): Logistics, dispatch status, fulfillment %, and customer GPS coordinates.
+    9. Delivery Stock Availability (`/reports/delivery-stock/` + `/export/`): Open orders allocation against on-hand, reserved, and free stock.
+    10. Item Purchases & Vendors (`/reports/item-purchases/` + `/export/`): Purchase order volumes, vendor spend, and average purchase unit cost.
+    11. Agreements ROI (`/reports/agreements-roi/` + `/export/`): Budget vs actual sales and ROI %.
+    12. Calls & Telesales (`/reports/calls/` + `/export/`): Telesales and doctor phone calls tracking, durations, and resulting orders.
+    13. Medical Samples Tracking (`/reports/samples/` + `/export/`): 16-column medical sample allocation, inventory valuations, and physician tracking.
+- **Data Scoping**: Every report and KPI strictly executes `get_scoped_queryset(qs, request.user)`, ensuring complete data isolation between managers and reps.

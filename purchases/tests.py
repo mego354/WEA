@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from accounts.models import Role, SecurityAuditLog
+from master_data.models import Area
 from contacts.models import Contact
 from catalog.models import Product, ProductCategory
 from inventory.models import Warehouse, InventoryStock, InventoryLot, InventoryMemo
@@ -575,6 +576,301 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.context['stats']['total_orders'], 0)
         self.assertEqual(res.context['stats']['total_value'], Decimal('0.00'))
+
+
+class PurchaseReturnOrderWorkflowTests(TestCase):
+    """
+    Verifies Phase 2 Purchase Return Order workflows:
+    1. Quantity bounds (Returnable = Original Delivered - Previously Returned)
+    2. Anti-self-approval enforcement
+    3. Rejection workflow with required reason
+    4. Outward memo warehouse dispatch and stock reduction
+    5. Financial debit note settlement and VendorAccount balance reduction
+    6. Timeline events and POST-only action views
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin = User.objects.create_superuser(
+            username='admin_pret', email='admin_pret@wea.com', password='Password123!'
+        )
+        self.mgr_role = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.acc_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
+
+        self.alex = Area.objects.create(name='الإسكندرية', code='ALX-PRET')
+        self.manager = User.objects.create_user(
+            username='mgr_pret', email='mgr_pret@wea.com', password='Password123!', role=self.mgr_role
+        )
+        self.manager.assigned_areas.add(self.alex)
+
+        self.accountant = User.objects.create_user(
+            username='acc_pret', email='acc_pret@wea.com', password='Password123!', role=self.acc_role
+        )
+
+        self.wh = Warehouse.objects.create(name='مخزن الإسكندرية المركزي', code='WH-ALX-PRET', area=self.alex, is_active=True)
+        self.supplier = Contact.objects.create(
+            name='شركة الدلتا للأدوية', code='SUP-DELTA-01', is_supplier=True, area=self.alex, status='active'
+        )
+        self.vendor_acc = VendorAccount.get_or_create_for_supplier(self.supplier)
+
+        self.cat = ProductCategory.objects.create(name='أدوية عامة', code='CAT-PRET-01')
+        self.product = Product.objects.create(
+            name='بانادول أقراص', sku_code='PRD-PAN-01', category=self.cat,
+            retail_price=Decimal('50.00'), default_purchase_cost=Decimal('30.00'),
+            is_active=True, sellable=True
+        )
+        self.stock = InventoryStock.objects.create(
+            warehouse=self.wh, product=self.product, qty_on_hand=Decimal('100.00'), product_cost=Decimal('30.00')
+        )
+
+        # Create original purchase order, approve, stock, and invoice 20 units
+        self.orig_po = PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.wh,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 20, 'unit_price': Decimal('30.00')}],
+            user=self.accountant
+        )
+        PurchaseOrderService.approve_order(self.orig_po, self.superadmin)
+        PurchaseOrderService.stock_order(self.orig_po, self.superadmin)
+        PurchaseOrderService.invoice_order(self.orig_po, self.superadmin)
+        self.orig_po.refresh_from_db()
+        self.orig_po_item = self.orig_po.items.first()
+        self.vendor_acc.refresh_from_db()
+        self.assertEqual(self.vendor_acc.current_balance, Decimal('600.00'))
+
+    def test_purchase_return_quantity_bounds_and_over_return_prevention(self):
+        """Return quantity cannot exceed original delivered quantity minus previous returns."""
+        # 1. Return 8 units
+        ret1 = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('8.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant,
+            notes='مرتجع عيوب صناعة'
+        )
+        self.assertEqual(ret1.status, 'pending')
+        self.assertEqual(ret1.grand_total, Decimal('240.00'))
+
+        # 2. Return remaining 12 units
+        ret2 = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('12.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant
+        )
+        self.assertIsNotNone(ret2)
+
+        # 3. Third return of even 1 unit fails (8 + 12 = 20 max reached)
+        with self.assertRaises(ValidationError) as ctx:
+            PurchaseReturnOrderService.create_return_order(
+                supplier=self.supplier,
+                warehouse=self.wh,
+                purchase_order=self.orig_po,
+                items_data=[{
+                    'product': self.product,
+                    'quantity': Decimal('1.00'),
+                    'unit_price': Decimal('30.00'),
+                    'original_item': self.orig_po_item
+                }],
+                user=self.accountant
+            )
+        self.assertIn('تتجاوز الكمية المتاحة للإرجاع', str(ctx.exception))
+
+    def test_purchase_return_anti_self_approval(self):
+        """User who created purchase return cannot approve it."""
+        ret = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('5.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant
+        )
+
+        # Self-approval by accountant fails
+        with self.assertRaises(ValidationError) as ctx:
+            PurchaseReturnOrderService.approve_return_order(ret, self.accountant)
+        self.assertIn('منع الاعتماد الذاتي', str(ctx.exception))
+
+        # Approval by manager succeeds
+        approved = PurchaseReturnOrderService.approve_return_order(ret, self.manager)
+        self.assertEqual(approved.status, 'approved')
+
+    def test_purchase_return_rejection_workflow(self):
+        """Rejecting purchase return requires manager approval and saves rejection reason."""
+        ret = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('3.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant
+        )
+        rejected = PurchaseReturnOrderService.reject_return_order(ret, self.manager, rejection_reason='تجاوز فترة الضمان المسموح بها')
+        self.assertEqual(rejected.status, 'rejected')
+        self.assertEqual(rejected.rejection_reason, 'تجاوز فترة الضمان المسموح بها')
+
+    def test_purchase_return_delivery_and_settlement_workflow(self):
+        """Dispatching return un-stocks warehouse; settling decrements vendor payable balance."""
+        ret = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('4.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant
+        )
+        PurchaseReturnOrderService.approve_return_order(ret, self.manager)
+
+        # Stock before dispatch
+        self.stock.refresh_from_db()
+        initial_stock = self.stock.qty_on_hand
+
+        # Dispatch (deliver)
+        delivered = PurchaseReturnOrderService.deliver_return_order(ret, self.manager)
+        self.assertEqual(delivered.status, 'delivered')
+
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.qty_on_hand, initial_stock - Decimal('4.00'))
+
+        # Settle
+        initial_bal = self.vendor_acc.current_balance # 600.00
+        settled = PurchaseReturnOrderService.settle_return_order(ret, self.accountant)
+        self.assertEqual(settled.status, 'settled')
+
+        self.vendor_acc.refresh_from_db()
+        # 600.00 - 120.00 (4 * 30.00) = 480.00
+        self.assertEqual(self.vendor_acc.current_balance, initial_bal - Decimal('120.00'))
+
+    def test_purchase_return_views_post_only_actions(self):
+        """Purchase return action endpoints reject GET and require POST."""
+        ret = PurchaseReturnOrderService.create_return_order(
+            supplier=self.supplier,
+            warehouse=self.wh,
+            purchase_order=self.orig_po,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('2.00'),
+                'unit_price': Decimal('30.00'),
+                'original_item': self.orig_po_item
+            }],
+            user=self.accountant
+        )
+        self.client.force_login(self.manager)
+
+        # GET request on approve endpoint redirects to detail view without action
+        get_resp = self.client.get(reverse('purchase_return_order_action', args=[ret.pk, 'approve']))
+        self.assertEqual(get_resp.status_code, 302)
+        ret.refresh_from_db()
+        self.assertEqual(ret.status, 'pending')
+
+        # POST request on approve endpoint executes action
+        post_resp = self.client.post(reverse('purchase_return_order_action', args=[ret.pk, 'approve']))
+        self.assertEqual(post_resp.status_code, 302)
+        ret.refresh_from_db()
+        self.assertEqual(ret.status, 'approved')
+
+
+class PurchasesSupplierScopingAndSmartSearchTests(TestCase):
+    """Verifies corporate company-area supplier scoping, territorial isolation, and smart search APIs."""
+
+    def setUp(self):
+        from django.core.management import call_command
+
+        call_command('setup_permissions')
+        self.role_super = Role.objects.get(name='superadmin')
+        self.role_manager = Role.objects.get(name='manager')
+
+        self.superadmin = User.objects.create_superuser(
+            username='pur_super@wea.com', email='pur_super@wea.com', password='Password123!', role=self.role_super
+        )
+        self.cairo = Area.objects.create(code='P-CAI', name='القاهرة', area_type='governorate', is_company_area=False)
+        self.alex = Area.objects.create(code='P-ALX', name='الإسكندرية', area_type='governorate', is_company_area=False)
+        self.corp_sup_area = Area.objects.create(code='P-CORP', name='موردين', area_type='governorate', is_company_area=True)
+
+        self.mgr_cairo = User.objects.create_user(
+            username='pur_mgr_cai@wea.com', email='pur_mgr_cai@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+
+        self.corp_supplier = Contact.objects.create(
+            serial_num=16115, name='مصنع اورجانيك للمكملات الغذائية بنها',
+            is_supplier=True, is_customer=True, status='customer', area=self.corp_sup_area
+        )
+        self.alex_supplier = Contact.objects.create(
+            serial_num=88101, name='مورد إقليمي الإسكندرية',
+            is_supplier=True, is_customer=False, status='customer', area=self.alex
+        )
+        self.cust_only = Contact.objects.create(
+            serial_num=88102, name='عميل القاهرة فقط',
+            is_supplier=False, is_customer=True, status='customer', area=self.cairo
+        )
+
+        self.wh_cairo = Warehouse.objects.create(name='مخزن مشتريات القاهرة', code='WH-P-CAI', area=self.cairo)
+        self.wh_alex = Warehouse.objects.create(name='مخزن مشتريات الإسكندرية', code='WH-P-ALX', area=self.alex)
+        self.vault_cairo = Vault.objects.create(serial_num=8801, name='خزنة القاهرة', area=self.cairo)
+
+    def test_supplier_search_and_return_list_scoping(self):
+        self.client.force_login(self.mgr_cairo)
+
+        # Corporate company-area supplier is visible with Arabic normalization ('أورجانيك' -> 'اورجانيك')
+        sup_api = self.client.get(reverse('purchases_suppliers_search_api') + '?q=أورجانيك')
+        self.assertEqual(sup_api.status_code, 200)
+        ids = [r['id'] for r in sup_api.json()['results']]
+        self.assertIn(self.corp_supplier.id, ids)
+        self.assertNotIn(self.alex_supplier.id, ids)
+        self.assertNotIn(self.cust_only.id, ids)
+
+        # Purchase returns list page also scopes suppliers cleanly (previously leaked unscoped suppliers)
+        ret_list = self.client.get(reverse('purchase_return_orders_list'))
+        self.assertEqual(ret_list.status_code, 200)
+        ctx_supplier_ids = {s.id for s in ret_list.context['suppliers']}
+        self.assertIn(self.corp_supplier.id, ctx_supplier_ids)
+        self.assertNotIn(self.alex_supplier.id, ctx_supplier_ids)
+
+        # Warehouses smart search is scoped to Cairo
+        wh_api = self.client.get(reverse('purchases_warehouses_search_api') + '?q=القاهره')
+        self.assertEqual(wh_api.status_code, 200)
+        wh_ids = [r['id'] for r in wh_api.json()['results']]
+        self.assertIn(self.wh_cairo.id, wh_ids)
+        self.assertNotIn(self.wh_alex.id, wh_ids)
+
+        # POST rejects non-supplier contact (checked under superadmin with create permission)
+        self.client.force_login(self.superadmin)
+        before = PurchaseOrder.objects.count()
+        bad_po = self.client.post(reverse('purchase_order_create'), {
+            'supplier': self.cust_only.id,
+            'warehouse': self.wh_cairo.id,
+            'order_date': '2026-11-16',
+        })
+        self.assertEqual(bad_po.status_code, 302)
+        self.assertEqual(PurchaseOrder.objects.count(), before)
+
 
 
 

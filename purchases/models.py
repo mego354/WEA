@@ -250,6 +250,7 @@ class PurchaseReturnOrder(models.Model):
         ('approved', 'Approved / معتمد'),
         ('delivered', 'Delivered / خرج من المخزن'),
         ('settled', 'Settled / تم الترحيل للحسابات'),
+        ('rejected', 'Rejected / مرفوض'),
         ('cancelled', 'Cancelled / ملغي'),
     ]
 
@@ -277,6 +278,9 @@ class PurchaseReturnOrder(models.Model):
     grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي قيمة المرتجع (ج.م)")
 
     notes = models.TextField(blank=True, verbose_name="ملاحظات وأسباب الإرجاع")
+    rejection_reason = models.TextField(blank=True, default="", verbose_name="سبب الرفض")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_purchase_returns", verbose_name="المعتمد")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_purchase_returns", verbose_name="المنشئ")
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_purchase_returns", verbose_name="آخر تعديل بواسطة")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
@@ -313,6 +317,7 @@ class PurchaseReturnOrder(models.Model):
             'approved': 'Approved',
             'delivered': 'Delivered',
             'settled': 'Settled',
+            'rejected': 'Rejected',
             'cancelled': 'Cancelled'
         }
         return labels.get(self.status, self.status.capitalize())
@@ -324,6 +329,7 @@ class PurchaseReturnOrder(models.Model):
             'approved': 'معتمد',
             'delivered': 'خرج من المخزن',
             'settled': 'تم الترحيل للحسابات',
+            'rejected': 'مرفوض',
             'cancelled': 'ملغي'
         }
         return labels.get(self.status, self.status)
@@ -335,6 +341,7 @@ class PurchaseReturnOrder(models.Model):
             'delivered': 'bg-blue-50 text-blue-700 border border-blue-200',
             'approved': 'bg-green-50 text-green-700 border border-green-200',
             'pending': 'bg-amber-50 text-amber-700 border border-amber-200',
+            'rejected': 'bg-rose-50 text-rose-700 border border-rose-200',
             'cancelled': 'bg-slate-100 text-slate-700 border border-slate-300',
         }
         return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
@@ -342,6 +349,7 @@ class PurchaseReturnOrder(models.Model):
 
 class PurchaseReturnOrderItem(models.Model):
     return_order = models.ForeignKey(PurchaseReturnOrder, on_delete=models.CASCADE, related_name="items", verbose_name="أمر الإرجاع")
+    original_item = models.ForeignKey('purchases.PurchaseOrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name="return_items", verbose_name="بند أمر الشراء الأصلي")
     item_order = models.PositiveSmallIntegerField(default=1, verbose_name="ترتيب البند")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="purchase_return_items", verbose_name="المنتج")
 

@@ -1058,3 +1058,142 @@ class WeaMigrationCommandTests(TestCase):
         self.assertEqual(parse_dec(100.25), Decimal('100.25'))
 
 
+class DashboardVendorScopingTests(TestCase):
+    """
+    Verifies that the dashboard and VendorAccount scoping:
+    1. Does not raise Cannot resolve keyword 'vendor' into field.
+    2. Correctly scopes supplier balances across roles (superadmin, accountant, manager, rep).
+    """
+
+    def setUp(self):
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-DSH', area_type='governorate')
+        self.giza = Area.objects.create(name='الجيزة', code='GIZ-DSH', area_type='governorate')
+        self.nasr = Area.objects.create(name='مدينة نصر', code='NASR-DSH', area_type='subarea', parent=self.cairo)
+
+        self.superadmin = User.objects.create_superuser(
+            username='sa_dsh', email='sa_dsh@wea.com', password='Password123!'
+        )
+        self.accountant_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
+        self.manager_role = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.rep_role = Role.objects.get(name=Role.ROLE_REP)
+
+        self.accountant = User.objects.create_user(
+            username='acc_dsh', email='acc_dsh@wea.com', password='Password123!', role=self.accountant_role
+        )
+        self.cairo_mgr = User.objects.create_user(
+            username='mgr_cai_dsh', email='mgr_cai_dsh@wea.com', password='Password123!', role=self.manager_role
+        )
+        self.cairo_mgr.assigned_areas.add(self.cairo)
+
+        self.giza_mgr = User.objects.create_user(
+            username='mgr_giz_dsh', email='mgr_giz_dsh@wea.com', password='Password123!', role=self.manager_role
+        )
+        self.giza_mgr.assigned_areas.add(self.giza)
+
+        self.rep = User.objects.create_user(
+            username='rep_dsh', email='rep_dsh@wea.com', password='Password123!', role=self.rep_role
+        )
+        self.rep.assigned_areas.add(self.nasr)
+
+        self.vendor_cairo = Contact.objects.create(
+            name='شركة فارما القاهرة للتوريدات',
+            code='SUP-CAI-01',
+            is_supplier=True,
+            area=self.nasr,
+            status='active'
+        )
+        self.vendor_acc, _ = VendorAccount.objects.get_or_create(
+            supplier=self.vendor_cairo,
+            defaults={'current_balance': Decimal('25000.00'), 'credit_limit': Decimal('50000.00')}
+        )
+        self.vendor_acc.current_balance = Decimal('25000.00')
+        self.vendor_acc.credit_limit = Decimal('50000.00')
+        self.vendor_acc.save()
+
+    def test_vendor_account_scoping_no_keyword_error(self):
+        """Scoping VendorAccount must use supplier__* relationship without 'vendor' keyword errors."""
+        from accounts.permissions import get_scoped_queryset
+
+        # Superadmin sees vendor account
+        qs_sa = get_scoped_queryset(VendorAccount.objects.all(), self.superadmin, 'vendoraccount')
+        self.assertIn(self.vendor_acc, qs_sa)
+
+        # Accountant sees vendor account (financial view)
+        qs_acc = get_scoped_queryset(VendorAccount.objects.all(), self.accountant, 'vendoraccount')
+        self.assertIn(self.vendor_acc, qs_acc)
+
+        # Cairo manager sees Cairo vendor
+        qs_cai = get_scoped_queryset(VendorAccount.objects.all(), self.cairo_mgr, 'vendoraccount')
+        self.assertIn(self.vendor_acc, qs_cai)
+
+        # Giza manager does not see Cairo vendor
+        qs_giz = get_scoped_queryset(VendorAccount.objects.all(), self.giza_mgr, 'vendoraccount')
+        self.assertNotIn(self.vendor_acc, qs_giz)
+
+        # Commercial Rep has no supplier scope -> empty
+        qs_rep = get_scoped_queryset(VendorAccount.objects.all(), self.rep, 'vendoraccount')
+        self.assertEqual(qs_rep.count(), 0)
+
+    def test_dashboard_renders_without_vendor_error_for_all_roles(self):
+        """Dashboard view must render with HTTP 200 without raising keyword errors across roles."""
+        client = Client()
+
+        for user in [self.superadmin, self.accountant, self.cairo_mgr, self.rep]:
+            client.force_login(user)
+            resp = client.get(reverse('home'))
+            self.assertEqual(resp.status_code, 200, f"Dashboard failed for {user.username}")
+
+
+class ArabicSearchNormalizationTests(TestCase):
+    """
+    Verifies Arabic search normalization across characters, diacritics, and query matching.
+    """
+
+    def test_normalize_arabic_text_variations(self):
+        from master_data.search_utils import normalize_arabic_text
+
+        # Alef variations
+        self.assertEqual(normalize_arabic_text('أحمد'), 'احمد')
+        self.assertEqual(normalize_arabic_text('إبراهيم'), 'ابراهيم')
+        self.assertEqual(normalize_arabic_text('آدم'), 'ادم')
+        self.assertEqual(normalize_arabic_text('ٱستخدام'), 'استخدام')
+
+        # Taa Marbuta
+        self.assertEqual(normalize_arabic_text('صيدلية'), 'صيدليه')
+        self.assertEqual(normalize_arabic_text('مكة'), 'مكه')
+
+        # Yaa / Alef Maqsura
+        self.assertEqual(normalize_arabic_text('علي'), 'علي')
+        self.assertEqual(normalize_arabic_text('منى'), 'مني')
+        self.assertEqual(normalize_arabic_text('يحيى'), 'يحيي')
+
+        # Tashkeel (diacritics) & Tatweel
+        self.assertEqual(normalize_arabic_text('مُحَمَّدٌ'), 'محمد')
+        self.assertEqual(normalize_arabic_text('شــــركة'), 'شركه')
+
+    def test_matches_arabic_query(self):
+        from master_data.search_utils import matches_arabic_query
+
+        self.assertTrue(matches_arabic_query('صيدلية الأمل الحديثة', 'صيدليه الامل'))
+        self.assertTrue(matches_arabic_query('شركة الإخوة المتحدون', 'اخوه'))
+        self.assertTrue(matches_arabic_query('مستشفى الشفاء', 'مستشفي'))
+        self.assertFalse(matches_arabic_query('صيدلية السلام', 'الامل'))
+
+    def test_filter_by_arabic_search_orm(self):
+        from master_data.search_utils import filter_by_arabic_search
+
+        area = Area.objects.create(name='منطقة البحث', code='SRCH-01')
+        c1 = Contact.objects.create(name='صيدلية الأهرام الكبرى', area=area, status='active')
+        c2 = Contact.objects.create(name='مستشفى الشروق التخصصي', area=area, status='active')
+
+        # Search with different letter forms
+        res1 = filter_by_arabic_search(Contact.objects.all(), ['name'], 'صيدليه الاهرام')
+        self.assertIn(c1, res1)
+        self.assertNotIn(c2, res1)
+
+        res2 = filter_by_arabic_search(Contact.objects.all(), ['name'], 'مستشفي')
+        self.assertIn(c2, res2)
+        self.assertNotIn(c1, res2)
+
+
+

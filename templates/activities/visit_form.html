@@ -384,7 +384,7 @@
                 </div>
 
                 <!-- Conditional Bypass / Exception Request Box (Simple & Compact) -->
-                <div id="distance-bypass-container" class="hidden p-3 rounded-xl border {% if can_bypass_gps %}border-indigo-200 bg-indigo-50/50{% else %}border-amber-200 bg-amber-50/50{% endif %} space-y-2">
+                <div id="distance-bypass-container" class="hidden p-3 rounded-xl border {% if can_bypass_gps %}border-indigo-200 bg-indigo-50/50{% elif can_request_gps_exception %}border-amber-200 bg-amber-50/50{% else %}border-rose-200 bg-rose-50/50{% endif %} space-y-2">
                     {% if can_bypass_gps %}
                     <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-indigo-950">
                         <input type="checkbox" name="force_bypass_location" id="id_force_bypass_location" value="1" class="rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500">
@@ -395,7 +395,7 @@
                                placeholder="سبب التجاوز {% if bypass_reason_mandatory %}(إلزامي *){% else %}(اختياري){% endif %}..."
                                class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none">
                     </div>
-                    {% else %}
+                    {% elif can_request_gps_exception %}
                     <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-amber-950">
                         <input type="checkbox" name="request_distance_exception" id="id_request_distance_exception" value="1" class="rounded border-amber-400 text-amber-600 focus:ring-amber-500">
                         <span>طلب استثناء لتجاوز المسافة وتحويل الزيارة لاعتماد المدير</span>
@@ -404,6 +404,10 @@
                         <input type="text" name="bypass_reason" id="id_bypass_reason" value="{{ request.POST.bypass_reason|default:'' }}"
                                placeholder="سبب التواجد خارج النطاق المسموح (إلزامي *)..."
                                class="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none">
+                    </div>
+                    {% else %}
+                    <div class="text-rose-700 font-bold text-xs p-2 bg-rose-50 rounded-lg">
+                        <span>أنت خارج النطاق الجغرافي المسموح به ولا تملك صلاحية تجاوز المسافة أو طلب استثناء.</span>
                     </div>
                     {% endif %}
                 </div>

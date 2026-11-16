@@ -22,6 +22,15 @@ from catalog.models import Product
 from inventory.models import Warehouse
 from treasury.models import VendorTransaction
 from accounts.permissions import require_permission, has_perm_or_admin, render_forbidden_response, can_user_access_object, get_scoped_queryset
+from accounts.scope_service import ScopeResolutionService
+from master_data.search_utils import (
+    filter_by_arabic_search,
+    parse_search_limit,
+    get_bounded_select_options,
+    serialize_contact_option,
+    serialize_warehouse_option,
+    serialize_vault_option,
+)
 
 
 @require_permission('purchases:orders/list')
@@ -46,7 +55,7 @@ def purchase_orders_list(request):
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
-        s_obj = Contact.objects.filter(id=supplier_filter).first()
+        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_filter).first()
         active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
 
     if date_from:
@@ -58,19 +67,14 @@ def purchase_orders_list(request):
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
-        qs = qs.filter(
-            Q(order_number__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(supplier__name__icontains=search) |
-            Q(supplier__area__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name', 'supplier__area__name'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     stats_qs = qs if status_filter == 'cancelled' else qs.exclude(status='cancelled')
     po_agg = stats_qs.aggregate(
         total_orders=Count('id'),
         total_value=Sum('grand_total'),
-        total_pending=Count('id', filter=Q(status='manager_approval')),
+        total_pending=Count('id', filter=Q(status='pending')),
         total_settled=Count('id', filter=Q(status='settled')),
     )
     stats = {
@@ -80,7 +84,11 @@ def purchase_orders_list(request):
         'total_settled': po_agg['total_settled'] or 0,
     }
 
-    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
+    suppliers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+        selected_id=supplier_filter,
+        limit=100,
+    )
 
     # Bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
@@ -153,8 +161,11 @@ def purchase_order_create(request):
             return redirect('purchase_order_create')
 
         supplier = get_object_or_404(Contact, id=supplier_id)
-        if not can_user_access_object(request.user, supplier, 'view'):
+        if not ScopeResolutionService.can_user_access_supplier(request.user, supplier):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
+        if not supplier.is_supplier or supplier.status == 'inactive':
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كمورد نشط.")
+            return redirect('purchase_order_create')
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
         if not can_user_access_object(request.user, warehouse, 'operate'):
             return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
@@ -183,8 +194,13 @@ def purchase_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_order_create')
 
-    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
-    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
+    raw_selected_supplier = request.GET.get('supplier') or request.GET.get('supplier_id')
+    suppliers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+        selected_id=raw_selected_supplier,
+        limit=100,
+    )
+    warehouses = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'purchases')
     products = Product.objects.filter(is_active=True).order_by('name')
 
     context = {
@@ -255,8 +271,11 @@ def purchase_order_edit(request, pk):
             return redirect('purchase_order_edit', pk=order.pk)
 
         supplier = get_object_or_404(Contact, id=supplier_id)
-        if not can_user_access_object(request.user, supplier, 'view'):
+        if not ScopeResolutionService.can_user_access_supplier(request.user, supplier):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
+        if not supplier.is_supplier or (supplier.pk != order.supplier_id and supplier.status == 'inactive'):
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كمورد نشط.")
+            return redirect('purchase_order_edit', pk=order.pk)
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
         if not can_user_access_object(request.user, warehouse, 'operate'):
             return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
@@ -286,8 +305,16 @@ def purchase_order_edit(request, pk):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_order_edit', pk=order.pk)
 
-    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
-    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
+    suppliers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+        selected_id=order.supplier_id,
+        limit=100,
+    )
+    warehouses = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'purchases'),
+        selected_id=order.target_warehouse_id,
+        limit=100,
+    )
     products = Product.objects.filter(is_active=True).order_by('name')
 
     context = {
@@ -546,10 +573,7 @@ def purchase_orders_export(request):
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
     if search:
-        qs = qs.filter(
-            Q(order_number__icontains=search) |
-            Q(supplier__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'supplier__name'])
 
     columns = [
         {'header': 'رقم الطلب', 'key': 'order_number', 'width': 16, 'align': 'center'},
@@ -619,7 +643,7 @@ def purchase_return_orders_list(request):
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
-        s_obj = Contact.objects.filter(id=supplier_filter).first()
+        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_filter).first()
         active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
 
     if date_from:
@@ -631,20 +655,20 @@ def purchase_return_orders_list(request):
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
-        qs = qs.filter(
-            Q(order_number__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(supplier__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    suppliers = Contact.objects.filter(is_supplier=True).order_by('name')
+    suppliers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+        selected_id=supplier_filter,
+        limit=100,
+    )
 
     # Scoped real statistics matching active filters
     ret_agg = qs.aggregate(
         total_orders=Count('id'),
         total_value=Sum('grand_total'),
-        draft_count=Count('id', filter=Q(status='draft')),
+        draft_count=Count('id', filter=Q(status='pending')),
         settled_count=Count('id', filter=Q(status='settled')),
     )
     return_stats = {
@@ -719,12 +743,17 @@ def purchase_return_order_create(request):
             return redirect('purchase_return_order_create')
 
         supplier = get_object_or_404(Contact, id=supplier_id)
-        if not can_user_access_object(request.user, supplier, 'view'):
+        if not ScopeResolutionService.can_user_access_supplier(request.user, supplier):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
+        if not supplier.is_supplier or supplier.status == 'inactive':
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كمورد نشط.")
+            return redirect('purchase_return_order_create')
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
         if not can_user_access_object(request.user, warehouse, 'operate'):
             return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
         po = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
+        if po and not can_user_access_object(request.user, po, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بربط مرتجع بأمر شراء خارج نطاق صلاحياتك.")
 
         try:
             return_order = PurchaseReturnOrderService.create_return_order(
@@ -744,11 +773,24 @@ def purchase_return_order_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('purchase_return_order_create')
 
-    suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact').order_by('name')
-    warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
-    products = Product.objects.filter(is_active=True).order_by('name')
     po_id = request.GET.get('po')
     selected_po = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
+    if selected_po and not can_user_access_object(request.user, selected_po, 'view'):
+        selected_po = None
+
+    raw_selected_supplier = request.GET.get('supplier') or request.GET.get('supplier_id')
+    selected_supplier_id = selected_po.supplier_id if selected_po else raw_selected_supplier
+    suppliers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+        selected_id=selected_supplier_id,
+        limit=100,
+    )
+    warehouses = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'purchases'),
+        selected_id=selected_po.target_warehouse_id if selected_po else None,
+        limit=100,
+    )
+    products = Product.objects.filter(is_active=True).order_by('name')
 
     context = {
         'suppliers': suppliers,
@@ -763,8 +805,8 @@ def purchase_return_order_create(request):
 def purchase_return_order_detail(request, pk):
     return_order = get_object_or_404(
         PurchaseReturnOrder.objects.select_related(
-            'supplier', 'supplier__area', 'warehouse', 'created_by', 'memo', 'purchase_order'
-        ).prefetch_related('items__product'),
+            'supplier', 'supplier__area', 'warehouse', 'created_by', 'memo', 'purchase_order', 'approved_by'
+        ).prefetch_related('items__product', 'items__original_item'),
         pk=pk
     )
 
@@ -778,25 +820,52 @@ def purchase_return_order_detail(request, pk):
         debit=return_order.grand_total
     ).first()
 
+    from .services import build_purchase_return_timeline
+    timeline_events = build_purchase_return_timeline(return_order)
+
+    can_approve = has_perm_or_admin(request.user, 'purchases:returns/approve') and can_user_access_object(request.user, return_order, 'approve')
+    can_deliver = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status == 'approved'
+    can_settle = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status == 'delivered'
+    can_cancel = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status in ['pending', 'approved']
+
     context = {
         'return_order': return_order,
         'linked_tx': linked_tx,
         'status_choices': PurchaseReturnOrder.STATUS_CHOICES,
+        'timeline_events': timeline_events,
+        'can_approve': can_approve,
+        'can_deliver': can_deliver,
+        'can_settle': can_settle,
+        'can_cancel': can_cancel,
     }
     return render(request, 'purchases/purchase_return_order_detail.html', context)
 
 
 @require_permission('purchases:returns/manage')
 def purchase_return_order_action(request, pk, action):
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة. يلزم استخدام POST لتغيير الحالة.")
+        return redirect('purchase_return_order_detail', pk=pk)
+
     return_order = get_object_or_404(PurchaseReturnOrder, pk=pk)
 
-    if not can_user_access_object(request.user, return_order, action):
-        return render_forbidden_response(request, "لا يمكنك تنفيذ هذا الإجراء خارج نطاق منطقتك الجغرافية المصرح بها.")
+    if action in ['approve', 'reject']:
+        if not has_perm_or_admin(request.user, 'purchases:returns/approve'):
+            return render_forbidden_response(request, "لا تملك صلاحية اعتماد أو رفض أمر الإرجاع.")
+        if not can_user_access_object(request.user, return_order, 'approve'):
+            return render_forbidden_response(request, "لا يمكنك اعتماد أو رفض أمر إرجاع قمت بإنشائه بنفسك أو خارج نطاقك.")
+    else:
+        if not can_user_access_object(request.user, return_order, action):
+            return render_forbidden_response(request, "لا يمكنك تنفيذ هذا الإجراء خارج نطاق منطقتك الجغرافية المصرح بها.")
 
     try:
         if action == 'approve':
             PurchaseReturnOrderService.approve_return_order(return_order, request.user)
             messages.success(request, f"تم اعتماد أمر الإرجاع {return_order.order_number} بنجاح.")
+        elif action == 'reject':
+            reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', '')
+            PurchaseReturnOrderService.reject_return_order(return_order, request.user, rejection_reason=reason)
+            messages.error(request, f"تم رفض أمر الإرجاع {return_order.order_number}.")
         elif action == 'deliver':
             PurchaseReturnOrderService.deliver_return_order(return_order, request.user)
             messages.success(request, f"تم صرف بضاعة أمر الإرجاع من المخزن بنجاح ({return_order.order_number}) وتم توليد إذن صرف مخزن.")
@@ -841,10 +910,7 @@ def purchase_return_orders_export(request):
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
     if search:
-        qs = qs.filter(
-            Q(order_number__icontains=search) |
-            Q(supplier__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'supplier__name'])
 
     columns = [
         {'header': 'رقم أمر الإرجاع', 'key': 'order_number', 'width': 18, 'align': 'center'},
@@ -860,4 +926,91 @@ def purchase_return_orders_export(request):
     ]
 
     return export_to_excel_response(qs, columns, filename="purchase_returns_export", sheet_title="مرتجعات الشراء")
+
+
+@require_permission([
+    'purchases:orders/list',
+    'purchases:orders/create',
+    'purchases:orders/edit',
+    'purchases:returns/list',
+    'purchases:returns/create',
+    'treasury:payments/list',
+    'treasury:payments/create',
+    'treasury:payment_requests/list',
+    'treasury:payment_requests/create',
+    'treasury:vendors/transactions',
+    'treasury:vendors/accounting',
+])
+def purchases_suppliers_search_api(request):
+    """Scoped Arabic-normalized smart-search API for Supplier selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'area__name', 'brick__name'],
+            q,
+            raw_fields=['code', 'mobile', 'serial_num'],
+            numeric_id_field='serial_num',
+        )
+
+    results = [serialize_contact_option(s) for s in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
+
+@require_permission([
+    'purchases:orders/list',
+    'purchases:orders/create',
+    'purchases:orders/edit',
+    'purchases:returns/create',
+])
+def purchases_warehouses_search_api(request):
+    """Scoped smart-search API for Purchases warehouse selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'purchases')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'area__name', 'assigned_user__name'],
+            q,
+            raw_fields=['code'],
+        )
+
+    results = [serialize_warehouse_option(wh) for wh in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
+
+@require_permission([
+    'treasury:payments/list',
+    'treasury:payments/create',
+    'treasury:payment_requests/list',
+    'treasury:payment_requests/create',
+    'treasury:payment_requests/execute',
+    'treasury:vaults/view',
+    'treasury:vaults/transfer',
+    'treasury:transactions/list',
+    'treasury:transactions/create',
+])
+def purchases_vaults_search_api(request):
+    """Scoped smart-search API for Purchases-adjacent Treasury vault selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'assigned_user__name'],
+            q,
+            raw_fields=['serial_num', 'assigned_user__username'],
+            numeric_id_field='serial_num',
+        )
+
+    results = [serialize_vault_option(v) for v in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
 

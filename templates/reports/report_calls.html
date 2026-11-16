@@ -1,0 +1,117 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}تقرير المكالمات والتواصل الهاتفي — WEA Pharma ERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <a href="{% url 'reports_hub' %}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                    <span>العودة لبوابة التقارير</span>
+                </a>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600 text-3xl">phone_in_talk</span>
+                <span>تقرير المكالمات والتواصل الهاتفي (Calls & Telesales)</span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                سجل التواصل الهاتفي والزيارات عن بعد مع العملاء ومعدلات الرد والأوامر الناتجة.
+            </p>
+        </div>
+
+        {% if request.user|has_permission:'reports:activities/export' %}
+        <div class="self-start sm:self-auto">
+            <a href="{% url 'report_calls_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير Excel</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">إجمالي المكالمات</span>
+            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ summary.total_calls }}</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">مكالمات ناجحة (تم التواصل)</span>
+            <span class="text-2xl font-black text-emerald-600 mt-1 block">{{ summary.completed_calls }}</span>
+            <span class="text-[11px] font-bold text-emerald-600 block mt-1">نسبة النجاح: {{ summary.completed_pct }}%</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">متوسط مدة المكالمة</span>
+            <span class="text-2xl font-black text-brand-600 mt-1 block">{{ summary.avg_duration }} <span class="text-xs font-bold text-slate-400">دقيقة</span></span>
+        </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">الفترة الزمنية</label>
+                <select name="period" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي</option>
+                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
+                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
+                </select>
+            </div>
+
+            <div>
+                <button type="submit" class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-colors min-h-[38px]">
+                    <span class="material-symbols-outlined text-base">filter_alt</span>
+                    <span>تصفية</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Data Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs whitespace-nowrap">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-3">التاريخ</th>
+                        <th class="py-3 px-3">الوقت</th>
+                        <th class="py-3 px-3">العميل</th>
+                        <th class="py-3 px-3">الهاتف</th>
+                        <th class="py-3 px-3">المندوب</th>
+                        <th class="py-3 px-3">الغرض</th>
+                        <th class="py-3 px-3">النتيجة</th>
+                        <th class="py-3 px-3 text-center">المدة (دقائق)</th>
+                        <th class="py-3 px-3">أمر البيع الناتج</th>
+                        <th class="py-3 px-3">ملاحظات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for r in rows %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-3 font-mono text-slate-500">{{ r.date }}</td>
+                        <td class="py-3 px-3 font-mono text-slate-500">{{ r.time }}</td>
+                        <td class="py-3 px-3 font-bold text-slate-900">{{ r.customer_name }}</td>
+                        <td class="py-3 px-3 font-mono text-slate-600">{{ r.phone }}</td>
+                        <td class="py-3 px-3 text-slate-700 font-medium">{{ r.rep_name }}</td>
+                        <td class="py-3 px-3 text-slate-600">{{ r.purpose }}</td>
+                        <td class="py-3 px-3 font-bold text-emerald-700">{{ r.outcome }}</td>
+                        <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.duration }} د</td>
+                        <td class="py-3 px-3 font-mono text-slate-600">{{ r.order_num }}</td>
+                        <td class="py-3 px-3 text-slate-500 max-w-xs truncate" title="{{ r.notes }}">{{ r.notes|default:'–' }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="py-8 text-center text-slate-400">لا توجد مكالمات مسجلة لهذه الفترة.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

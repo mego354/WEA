@@ -38,10 +38,14 @@
                 <!-- Vault Selector -->
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-2">الخزنة / الحساب المستلم للإيداع *</label>
-                    <select name="vault_id" required class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
+                    <select name="vault_id" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_vaults_search_api' %}"
+                            data-search-placeholder="ابحث باسم الخزنة أو الرقم..."
+                            class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all min-h-[44px]">
                         <option value="">-- اختر الخزنة المستلمة --</option>
                         {% for v in vaults %}
-                        <option value="{{ v.id }}" {% if selected_vault_id == v.id %}selected{% endif %}>
+                        <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|intcomma }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id == v.id %}selected{% endif %}>
                             {{ v.name }} (الرصيد الحالي: {{ v.current_balance|intcomma }} ج.م)
                         </option>
                         {% endfor %}

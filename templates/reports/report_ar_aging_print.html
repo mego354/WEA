@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تقرير أعمار الديون — WEA Pharma ERP</title>
+    <style>
+        body { font-family: 'Cairo', Tahoma, sans-serif; margin: 20px; font-size: 11px; color: #1e293b; }
+        .header { text-align: center; border-bottom: 2px solid #27bebe; padding-bottom: 12px; margin-bottom: 15px; }
+        .header h1 { margin: 0; font-size: 18px; color: #0f172a; }
+        .header p { margin: 4px 0 0 0; color: #64748b; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: right; }
+        th { background-color: #f1f5f9; color: #334155; font-weight: bold; }
+        .num { text-align: left; font-family: monospace; }
+        .overdue { color: #dc2626; font-weight: bold; }
+        .tfoot { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #0f172a; }
+        @media print {
+            body { margin: 0; font-size: 10px; }
+            th { background-color: #e2e8f0 !important; -webkit-print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body onload="window.print();">
+    <div class="header">
+        <h1>WEA PHARMA ERP — كشف تحليل أعمار الديون (AR Aging)</h1>
+        <p>تاريخ الاستخراج: {% now "Y-m-d H:i" %} | إجمالي الذمم المدينة: {{ summary.total_receivables|floatformat:2 }} ج.م | المتأخرات: {{ summary.total_overdue|floatformat:2 }} ج.م (DSO: {{ summary.dso }} يوم)</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>كود</th>
+                <th>اسم العميل</th>
+                <th>المنطقة</th>
+                <th>المندوب</th>
+                <th class="num">المديونية</th>
+                <th class="num overdue">المتأخرات</th>
+                <th class="num">1-30 يوم</th>
+                <th class="num">31-60 يوم</th>
+                <th class="num">61-90 يوم</th>
+                <th class="num">91-120 يوم</th>
+                <th class="num overdue">>120 يوم</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td class="num">{{ r.code }}</td>
+                <td><strong>{{ r.customer_name }}</strong></td>
+                <td>{{ r.brick }}</td>
+                <td>{{ r.rep_name }}</td>
+                <td class="num"><strong>{{ r.current_balance|floatformat:2 }}</strong></td>
+                <td class="num overdue">{{ r.overdue_balance|floatformat:2 }}</td>
+                <td class="num">{{ r.bucket_1_30|floatformat:2 }}</td>
+                <td class="num">{{ r.bucket_31_60|floatformat:2 }}</td>
+                <td class="num">{{ r.bucket_61_90|floatformat:2 }}</td>
+                <td class="num">{{ r.bucket_91_120|floatformat:2 }}</td>
+                <td class="num overdue">{{ r.bucket_over_120|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="11" style="text-align:center; padding: 20px;">لا توجد سجلات.</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="tfoot">
+                <td colspan="4" style="text-align:center;">الإجمالي العام</td>
+                <td class="num">{{ summary.total_receivables|floatformat:2 }}</td>
+                <td class="num overdue">{{ summary.total_overdue|floatformat:2 }}</td>
+                <td class="num">{{ summary.bucket_1_30|floatformat:2 }}</td>
+                <td class="num">{{ summary.bucket_31_60|floatformat:2 }}</td>
+                <td class="num">{{ summary.bucket_61_90|floatformat:2 }}</td>
+                <td class="num">{{ summary.bucket_91_120|floatformat:2 }}</td>
+                <td class="num overdue">{{ summary.bucket_over_120|floatformat:2 }}</td>
+            </tr>
+        </tfoot>
+    </table>
+</body>
+</html>

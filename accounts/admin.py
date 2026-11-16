@@ -153,9 +153,9 @@ class UserAdmin(BaseUserAdmin):
     list_display = (
         'username', 'name', 'code', 'mobile', 'role_badge',
         'assigned_areas_display', 'is_active', 'is_staff', 'is_superuser',
-        'bypass_location_verification', 'change_password_button'
+        'change_password_button'
     )
-    list_filter = ('role', 'is_active', 'is_staff', 'is_superuser', 'bypass_location_verification', 'created_at')
+    list_filter = ('role', 'is_active', 'is_staff', 'is_superuser', 'created_at')
     search_fields = ('username', 'name', 'code', 'mobile', 'email')
     filter_horizontal = ('assigned_areas', 'user_permissions', 'groups')
     ordering = ('-date_joined',)
@@ -163,8 +163,6 @@ class UserAdmin(BaseUserAdmin):
         'reset_password_to_wea4444',
         'activate_users',
         'deactivate_users',
-        'enable_location_bypass',
-        'disable_location_bypass'
     ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -181,7 +179,7 @@ class UserAdmin(BaseUserAdmin):
             )
         }),
         ('الدور والصلاحيات الجغرافية', {
-            'fields': ('role', 'assigned_areas', 'has_custom_permissions', 'bypass_location_verification')
+            'fields': ('role', 'assigned_areas', 'has_custom_permissions')
         }),
         ('أذونات النظام وحالة الحساب', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')
@@ -284,14 +282,6 @@ class UserAdmin(BaseUserAdmin):
     @admin.action(description="تعطيل حسابات المستخدمين المحددة")
     def deactivate_users(self, request, queryset):
         queryset.exclude(is_superuser=True).update(is_active=False)
-
-    @admin.action(description="منح صلاحية تجاوز التحقق الجغرافي للموقع")
-    def enable_location_bypass(self, request, queryset):
-        queryset.update(bypass_location_verification=True)
-
-    @admin.action(description="إلغاء صلاحية تجاوز التحقق الجغرافي للموقع")
-    def disable_location_bypass(self, request, queryset):
-        queryset.update(bypass_location_verification=False)
 
 
 @admin.register(SecurityAuditLog)

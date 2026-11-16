@@ -21,10 +21,11 @@ class AgreementForm(forms.ModelForm):
         self.user = user
         super().__init__(*args, **kwargs)
         if user:
-            from accounts.permissions import get_scoped_queryset
+            from accounts.permissions import get_visit_eligible_contacts_queryset
             base_qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')
-            scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
-            self.fields['customer'].queryset = scoped_qs.order_by('name') if scoped_qs.exists() else base_qs.order_by('name')
+            self.fields['customer'].queryset = get_visit_eligible_contacts_queryset(base_qs, user).order_by('name')
+        else:
+            self.fields['customer'].queryset = Contact.objects.none()
 
 
 class PlannedVisitItemForm(forms.ModelForm):

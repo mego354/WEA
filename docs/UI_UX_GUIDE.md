@@ -97,4 +97,9 @@ This document outlines the user interface specifications, front-end architecture
 - **Client-First Template Cascading**: In visit forms, selecting the client automatically queries eligible templates via AJAX, preventing selection of incompatible templates.
 - **Territorial Cascading Dropdowns**: Selecting a Governorate dynamically updates the Brick/Subarea selector with child areas.
 - **Submit Button State Management**: Form submit buttons automatically disable and display a loading spinner upon submission to prevent accidental duplicate requests.
+- **Reusable Smart Search Combobox (`static/js/smart_select.js` / `window.ERPSmartSelect`)**:
+  - Automatically enhances `<select data-smart-select="true">` across Sales, Purchases, and Treasury create/edit forms, list filter bars/drawers, and modals.
+  - Supports instant client-side Arabic-normalized filtering (`window.normalizeArabicSearch`, `window.matchesNormalizedArabic`: `أ/إ/آ/ا`, `ة/ه`, `ى/ي`, diacritics stripped, collapsed spaces) and optional debounced (`220ms`) remote endpoint lookups (`data-search-url`) with `AbortController`, in-memory query cache, and `X-Skip-Global-Loader: 1`.
+  - Preserves native `<select>` `name`, `value`, `required` validation (without focusability errors), `change` events (including filter auto-submit and cascading order dropdowns via `MutationObserver` and `window.ERPSmartSelect.refresh(...)`), keyboard navigation (`ArrowDown`/`ArrowUp`/`Enter`/`Escape`), and viewport collision flipping for desktop and mobile RTL screens.
+
 

@@ -755,7 +755,7 @@
                                 <input type="text" name="bypass_reason" id="bypass-reason-input" placeholder="مثال: ضعف إشارة GPS داخل المستشفى، تم التحقق هاتفياً..." class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-medium">
                             </div>
                         </div>
-                        {% else %}
+                        {% elif can_request_gps_exception %}
                         <div id="end-distance-bypass-container" class="p-4 bg-amber-50/80 border-2 border-amber-300 rounded-xl space-y-3">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-amber-600 text-lg">wrong_location</span>
@@ -772,6 +772,11 @@
                                 <label class="block text-[11px] font-bold text-amber-900 mb-1">سبب التواجد خارج المسافة المسموح بها (إلزامي *) :</label>
                                 <input type="text" name="bypass_reason" id="exception-reason-input" placeholder="اشرح سبب إنهاء الزيارة خارج المسافة المسموح بها لإرساله للمدير..." class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium">
                             </div>
+                        </div>
+                        {% else %}
+                        <div id="end-distance-bypass-container" class="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base">wrong_location</span>
+                            <span>في حال التواجد خارج المسافة المسموح بها ({{ allowed_distance|default:300 }} متر)، لا تملك صلاحية تجاوز المسافة أو طلب استثناء.</span>
                         </div>
                         {% endif %}
                     </div>

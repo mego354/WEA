@@ -782,3 +782,90 @@ class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
         exp_multi = self.client.get(reverse('contacts_export') + f'?brick_id={self.nasr.id}')
         self.assertEqual(exp_multi.status_code, 200)
 
+
+class SupplierActivationServiceTests(TestCase):
+    """Tests safe matching and supplier flag activation without duplication."""
+
+    def test_activate_suppliers_arabic_normalization_and_safety(self):
+        from contacts.services import activate_suppliers_from_source
+        from treasury.models import VendorAccount
+
+        sup_area = Area.objects.create(code='SUP-AREA', name='موردين', area_type='governorate', is_company_area=True)
+        existing_1 = Contact.objects.create(
+            serial_num=16312,
+            name='مصنع الاسبانية نيوتريشن المكملات الغذائية',
+            is_customer=True,
+            is_supplier=False,
+            status='customer',
+            area=sup_area,
+            notes='keep me intact',
+        )
+        existing_2 = Contact.objects.create(
+            serial_num=16115,
+            name='مصنع اورجانيك للمكملات الغذائية بنها',
+            is_customer=True,
+            is_supplier=False,
+            status='customer',
+            area=sup_area,
+        )
+        existing_3 = Contact.objects.create(
+            serial_num=16028,
+            name='مطبعة المصريه للتوريدات مهندس زكى منصور',
+            is_customer=True,
+            is_supplier=False,
+            status='customer',
+            area=sup_area,
+        )
+        unrelated = Contact.objects.create(
+            serial_num=90001,
+            name='صيدلية unrelated',
+            is_customer=True,
+            is_supplier=False,
+            status='customer',
+        )
+        dup_a = Contact.objects.create(serial_num=90002, name='شركة الأمل', is_customer=True, is_supplier=False)
+        dup_b = Contact.objects.create(serial_num=90003, name='شركة الامل', is_customer=True, is_supplier=False)
+
+        initial_count = Contact.objects.count()
+
+        res = activate_suppliers_from_source(supplier_names=[
+            'مصنع   الإسبانية  نيوتريشن المكملات الغذائية',  # Hamza + multi-space variation
+            'مصنع أورجانيك للمكملات الغذائية بنها',         # Hamza variation
+            'مطبعة المصرية للتوريدات مهندس زكي منصور',     # Ta marbuta + Alef maqsura variation
+            'مورد غير موجود نهائياً',                        # Unmatched
+            'شركة الامل',                                    # Ambiguous
+        ])
+
+        self.assertEqual(Contact.objects.count(), initial_count)
+        self.assertEqual(len(res['matched']), 3)
+        self.assertEqual(set(res['activated']), {existing_1.id, existing_2.id, existing_3.id})
+        self.assertEqual(len(res['unmatched']), 1)
+        self.assertEqual(len(res['ambiguous']), 1)
+
+        existing_1.refresh_from_db()
+        existing_2.refresh_from_db()
+        existing_3.refresh_from_db()
+        unrelated.refresh_from_db()
+        dup_a.refresh_from_db()
+        dup_b.refresh_from_db()
+
+        self.assertTrue(existing_1.is_supplier)
+        self.assertTrue(existing_1.is_customer)
+        self.assertEqual(existing_1.status, 'customer')
+        self.assertEqual(existing_1.notes, 'keep me intact')
+        self.assertTrue(existing_2.is_supplier)
+        self.assertTrue(existing_3.is_supplier)
+        self.assertFalse(unrelated.is_supplier)
+        self.assertFalse(dup_a.is_supplier)
+        self.assertFalse(dup_b.is_supplier)
+
+        # VendorAccounts created cleanly
+        self.assertTrue(VendorAccount.objects.filter(supplier=existing_1).exists())
+        self.assertTrue(VendorAccount.objects.filter(supplier=existing_2).exists())
+
+        # Re-running is idempotent
+        res_again = activate_suppliers_from_source(supplier_names=['مصنع الاسبانية نيوتريشن المكملات الغذائية'])
+        self.assertEqual(res_again['activated'], [])
+        self.assertEqual(res_again['already_active'], [existing_1.id])
+
+

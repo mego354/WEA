@@ -310,6 +310,8 @@
             </a>
             {% endif %}
 
+
+
             <!-- Products (المنتجات) -->
             {% if request.user|can_access_module:'catalog' %}
             <div class="space-y-1 pt-1">
@@ -370,7 +372,50 @@
             </div>
             {% endif %}
 
-
+            <!-- Sales (المبيعات) - Placed directly under Purchases with exact 5 items -->
+            {% if request.user|can_access_module:'sales' %}
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'sales' in request.path and not 'settings' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl {% if 'sales' in request.path and not 'settings' in request.path %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
+                        <span>المبيعات</span>
+                    </div>
+                    <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path and not 'settings' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'sales:orders/list' %}
+                    <a href="{% url 'sales_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
+                        <span class="material-symbols-outlined text-base">shopping_bag</span>
+                        <span>أوامر البيع</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:returns/list' %}
+                    <a href="{% url 'sales_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
+                        <span class="material-symbols-outlined text-base">assignment_return</span>
+                        <span>المرتجعات</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:collections/list' %}
+                    <a href="{% url 'collections_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
+                        <span class="material-symbols-outlined text-base">payments</span>
+                        <span>التحصيلات</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:customers/accounting' %}
+                    <a href="{% url 'accounting_customers_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
+                        <span class="material-symbols-outlined text-base">account_circle</span>
+                        <span>حسابات العملاء</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'sales:customers/transactions' %}
+                    <a href="{% url 'customer_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
+                        <span class="material-symbols-outlined text-base">receipt_long</span>
+                        <span>عمليات العملاء</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Purchases (المشتريات) -->
             {% if request.user|can_access_module:'purchases' %}
@@ -423,13 +468,14 @@
             </div>
             {% endif %}
 
+
             <!-- Warehouses & Inventory -->
             {% if request.user|can_access_module:'inventory' %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">warehouse</span>
-                        <span>المخازن والمخزون</span>
+                        <span>المخازن</span>
                     </div>
                     <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
@@ -453,7 +499,7 @@
                 <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
-                        <span>الخزن والمالية</span>
+                        <span>الخزن</span>
                     </div>
                     <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
@@ -468,28 +514,121 @@
             </div>
             {% endif %}
 
-            <!-- Sales (P1) -->
-            {% if request.user|can_access_module:'sales' %}
+            <!-- Performance (الأداء الميداني) -->
+            {% if request.user|can_access_module:'performance' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-performance')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'performance' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl">storefront</span>
-                        <span>المبيعات والعملاء</span>
+                        <span class="material-symbols-outlined text-xl {% if 'performance' in request.path %}text-brand-600 material-symbols-fill{% endif %}">speed</span>
+                        <span>الأداء الميداني</span>
                     </div>
-                    <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-performance" class="material-symbols-outlined text-base transition-transform">expand_more</span>
                 </button>
-                <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path %}{% else %}hidden{% endif %}">
-                    {% if request.user|has_permission:'contacts:contacts/list' or request.user|has_permission:'sales:orders/list' or request.user|is_super_admin %}
-                    <a href="{% url 'sales_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">العملاء</a>
+                <div id="submenu-performance" class="pr-9 pl-2 space-y-1 {% if 'performance' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'performance:overview/view' %}
+                    <a href="{% url 'performance_overview' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/overview' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">dashboard</span>
+                        <span>نظرة عامة</span>
+                    </a>
                     {% endif %}
-                    {% if request.user|has_permission:'sales:orders/list' %}
-                    <a href="{% url 'sales_orders_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أوامر البيع</a>
+                    {% if request.user|has_permission:'performance:analysis/view' %}
+                    <a href="{% url 'performance_analysis' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/analysis' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">insights</span>
+                        <span>تحليلي</span>
+                    </a>
                     {% endif %}
-                    {% if request.user|has_permission:'sales:collections/list' %}
-                    <a href="{% url 'collections_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">التحصيلات</a>
+                    {% if request.user|has_permission:'performance:daily/view' %}
+                    <a href="{% url 'performance_daily' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/daily' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">today</span>
+                        <span>يومي</span>
+                    </a>
                     {% endif %}
-                    {% if request.user|has_permission:'sales:customers/accounting' %}
-                    <a href="{% url 'accounting_customers_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حسابات العملاء</a>
+                    {% if request.user|has_permission:'performance:detailed/view' %}
+                    <a href="{% url 'performance_detailed' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/detailed' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">grid_on</span>
+                        <span>مفصل</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Reports (التقارير) -->
+            {% if request.user|can_access_module:'reports' %}
+            <div class="space-y-1 pt-1">
+                <button type="button" onclick="toggleSubmenu('submenu-reports')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'reports' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-xl {% if 'reports' in request.path %}text-brand-600 material-symbols-fill{% endif %}">bar_chart</span>
+                        <span>التقارير</span>
+                    </div>
+                    <span id="arrow-reports" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                </button>
+                <div id="submenu-reports" class="pr-9 pl-2 space-y-1 {% if 'reports' in request.path %}{% else %}hidden{% endif %}">
+                    {% if request.user|has_permission:'reports:hub/view' %}
+                    <a href="{% url 'reports_hub' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if request.resolver_match.url_name == 'reports_hub' %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">apps</span>
+                        <span>بوابة التقارير</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'reports:financial/view' %}
+                    <a href="{% url 'report_ar_aging' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/ar-aging' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">pending_actions</span>
+                        <span>أعمار الديون</span>
+                    </a>
+                    <a href="{% url 'report_trial_balance' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/trial-balance' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">account_balance</span>
+                        <span>ميزان المراجعة للعملاء</span>
+                    </a>
+                    <a href="{% url 'report_target_achievement' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/target-achievement' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">flag</span>
+                        <span>تحقيق أهداف المبيعات</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'reports:sales/view' %}
+                    <a href="{% url 'report_net_sales' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/net-sales' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">query_stats</span>
+                        <span>صافي المبيعات والربحية</span>
+                    </a>
+                    <a href="{% url 'report_customer_360' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/customer-360' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">person_search</span>
+                        <span>ملخص العملاء 360</span>
+                    </a>
+                    <a href="{% url 'report_promotions' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/promotions' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">local_offer</span>
+                        <span>أداء العروض والخصومات</span>
+                    </a>
+                    <a href="{% url 'report_item_sales_by_customer' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/item-sales-by-customer' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">table_chart</span>
+                        <span>مبيعات الأصناف حسب العملاء</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'reports:inventory/view' %}
+                    <a href="{% url 'report_order_deliveries' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/order-deliveries' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">local_shipping</span>
+                        <span>تسليمات الطلبيات واللوجستيات</span>
+                    </a>
+                    <a href="{% url 'report_delivery_stock' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/delivery-stock' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">inventory_2</span>
+                        <span>توفر المخزون والتسليمات</span>
+                    </a>
+                    <a href="{% url 'report_item_purchases' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/item-purchases' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">shopping_cart_checkout</span>
+                        <span>مشتريات الأصناف والموردين</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'reports:activities/view' %}
+                    <a href="{% url 'report_agreements_roi' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/agreements-roi' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">handshake</span>
+                        <span>تحقيق الاتفاقيات وعائد الاستثمار</span>
+                    </a>
+                    <a href="{% url 'report_calls' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/calls' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">phone_in_talk</span>
+                        <span>تقرير التواصل الهاتفي (Calls)</span>
+                    </a>
+                    <a href="{% url 'report_samples' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/samples' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
+                        <span class="material-symbols-outlined text-base">science</span>
+                        <span>عينات المنتجات الطبية</span>
+                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -1081,7 +1220,9 @@
                                     '/visits/api/check-duplicate/',
                                     '/planned-visits/api/',
                                     '/activities/api/templates/',
-                                    '/api/templates/'
+                                    '/api/templates/',
+                                    '/sales/api/search/',
+                                    '/purchases/api/search/'
                                 ];
                                 if (bgPaths.some(p => parsed.pathname.includes(p))) {
                                     skip = true;
@@ -1133,6 +1274,27 @@
             });
         })();
     </script>
+    <script>
+        window.normalizeArabicSearch = function(text) {
+            if (!text || typeof text !== 'string') return '';
+            let s = text.toLowerCase();
+            s = s.replace(/[\u064B-\u065F\u0670\u0640]/g, '');
+            s = s.replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627');
+            s = s.replace(/\u0629/g, '\u0647');
+            s = s.replace(/\u0649/g, '\u064A');
+            return s.replace(/\s+/g, ' ').trim();
+        };
+        window.matchesNormalizedArabic = function(targetText, query) {
+            const normQuery = window.normalizeArabicSearch(query);
+            if (!normQuery) return true;
+            const normTarget = window.normalizeArabicSearch(targetText || '');
+            return normQuery.split(' ').filter(Boolean).every(function(tok) {
+                return normTarget.indexOf(tok) !== -1;
+            });
+        };
+    </script>
+    <!-- Reusable Smart Select Combobox -->
+    <script src="{% static 'js/smart_select.js' %}"></script>
     <!-- Reusable Table Column Manager -->
     <script src="{% static 'js/table_column_manager.js' %}"></script>
     {% block extra_js %}{% endblock %}

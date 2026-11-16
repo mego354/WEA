@@ -404,3 +404,112 @@ class ProductTransferWorkflowTests(TestCase):
         self.assertEqual(res_wh.status_code, 200)
         self.assertEqual(res_wh.context['stats']['total_warehouses'], 0)
 
+
+class InventoryCostAveragingAndEnhancementTests(TestCase):
+    """
+    Verifies Phase 2 Inventory transfer enhancements:
+    1. Recalculation of destination stock product_cost via weighted average
+    2. Accurate InventoryLot batch deductions and additions
+    3. Duplicate warehouse name/code prevention
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.superadmin = User.objects.create_superuser(
+            username='admin_inv_enh', email='admin_inv_enh@wea.com', password='Password123!'
+        )
+        self.acc_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
+        self.accountant = User.objects.create_user(
+            username='acc_inv_enh', email='acc_inv_enh@wea.com', password='Password123!', role=self.acc_role
+        )
+
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-INV-ENH')
+        self.superadmin.assigned_areas.add(self.cairo)
+        self.accountant.assigned_areas.add(self.cairo)
+
+        self.wh_source = Warehouse.objects.create(name='مخزن المصنع القاهرة', code='WH-SRC-01', area=self.cairo, is_active=True)
+        self.wh_dest = Warehouse.objects.create(name='مخزن التوزيع المعادي', code='WH-DST-01', area=self.cairo, is_active=True)
+
+        self.cat = ProductCategory.objects.create(name='مضادات حيوية', code='CAT-INV-ENH')
+        self.product = Product.objects.create(
+            name='كلافيموكس 1 جم', sku_code='PRD-CLAV-01', category=self.cat,
+            retail_price=Decimal('100.00'), default_purchase_cost=Decimal('60.00'),
+            is_active=True, sellable=True
+        )
+
+        # Source warehouse: 50 units @ 20.00 LE
+        self.source_stock = InventoryStock.objects.create(
+            warehouse=self.wh_source, product=self.product,
+            qty_on_hand=Decimal('50.00'), product_cost=Decimal('20.00')
+        )
+        # Destination warehouse: 50 units @ 10.00 LE
+        self.dest_stock = InventoryStock.objects.create(
+            warehouse=self.wh_dest, product=self.product,
+            qty_on_hand=Decimal('50.00'), product_cost=Decimal('10.00')
+        )
+
+    def test_destination_warehouse_weighted_average_cost_recalculation(self):
+        """Transferring items recalculates destination stock product_cost using weighted-average."""
+        # Transfer 50 units from source to dest
+        req = ProductTransferService.create_request(
+            requesting_user=self.accountant,
+            source_warehouse=self.wh_source,
+            destination_warehouse=self.wh_dest,
+            items_data=[{'product': self.product, 'quantity': Decimal('50.00')}],
+            notes='تحويل تجريبي لاحتساب متوسط التكلفة'
+        )
+        ProductTransferService.approve_request(req, self.superadmin)
+        ProductTransferService.execute_transfer(req, self.accountant)
+
+        self.source_stock.refresh_from_db()
+        self.dest_stock.refresh_from_db()
+
+        self.assertEqual(self.source_stock.qty_on_hand, Decimal('0.00'))
+        self.assertEqual(self.dest_stock.qty_on_hand, Decimal('100.00'))
+        # Weighted average: (50 * 10 + 50 * 20) / 100 = 1500 / 100 = 15.00 LE
+        self.assertEqual(self.dest_stock.product_cost, Decimal('15.00'))
+
+    def test_inventory_lot_batch_transfer(self):
+        """Batch lot quantity is decremented at source and incremented/created at destination."""
+        import datetime
+        source_lot = InventoryLot.objects.create(
+            stock=self.source_stock,
+            batch_number='LOT-CLAV-2026',
+            expiry_date=datetime.date(2028, 6, 30),
+            quantity=Decimal('50.00')
+        )
+
+        req = ProductTransferService.create_request(
+            requesting_user=self.accountant,
+            source_warehouse=self.wh_source,
+            destination_warehouse=self.wh_dest,
+            items_data=[{
+                'product': self.product,
+                'quantity': Decimal('20.00'),
+                'batch_number': 'LOT-CLAV-2026',
+                'expiry_date': datetime.date(2028, 6, 30)
+            }]
+        )
+        ProductTransferService.approve_request(req, self.superadmin)
+        ProductTransferService.execute_transfer(req, self.accountant)
+
+        source_lot.refresh_from_db()
+        self.assertEqual(source_lot.quantity, Decimal('30.00'))
+
+        dest_lot = InventoryLot.objects.filter(stock=self.dest_stock, batch_number='LOT-CLAV-2026').first()
+        self.assertIsNotNone(dest_lot)
+        self.assertEqual(dest_lot.quantity, Decimal('20.00'))
+        self.assertEqual(dest_lot.expiry_date, datetime.date(2028, 6, 30))
+
+    def test_duplicate_warehouse_name_or_code_rejected(self):
+        """Creating a warehouse with duplicate name or code is rejected."""
+        self.client.force_login(self.superadmin)
+        post_data = {
+            'name': 'مخزن المصنع القاهرة', # Existing name
+            'code': 'WH-NEW-UNIQUE',
+            'address': 'العنوان'
+        }
+        res = self.client.post(reverse('warehouses_list'), post_data, follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, "يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود")
+

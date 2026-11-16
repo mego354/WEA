@@ -40,10 +40,13 @@
                         المورد المستلم <span class="text-red-500">*</span>
                     </label>
                     <select name="supplier" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                            data-search-placeholder="ابحث باسم المورد، الكود، الرقم، أو المنطقة..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر المورد --</option>
                         {% for s in suppliers %}
-                        <option value="{{ s.id }}" {% if selected_po and selected_po.supplier_id == s.id %}selected{% endif %}>
+                        <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_po and selected_po.supplier_id == s.id %}selected{% endif %}>
                             {{ s.name }} ({{ s.formatted_number }})
                         </option>
                         {% endfor %}
@@ -56,9 +59,12 @@
                         المخزن المنصرف منه البضاعة <span class="text-red-500">*</span>
                     </label>
                     <select name="warehouse" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_warehouses_search_api' %}"
+                            data-search-placeholder="ابحث باسم المخزن أو الكود..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         {% for w in warehouses %}
-                        <option value="{{ w.id }}" {% if selected_po and selected_po.target_warehouse_id == w.id %}selected{% endif %}>
+                        <option value="{{ w.id }}" data-subtext="{{ w.code }}{% if w.area %} | {{ w.area.name }}{% endif %}" data-search="{{ w.code }} {{ w.area.name|default:'' }}" {% if selected_po and selected_po.target_warehouse_id == w.id %}selected{% endif %}>
                             {{ w.name }}
                         </option>
                         {% endfor %}

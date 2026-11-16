@@ -179,20 +179,20 @@ class LocationSettings(models.Model):
     def can_user_bypass_without_approval(self, user, stage: str = 'end') -> bool:
         """
         Check if user is authorized to bypass distance validation without requiring manager approval.
-        Managers, Superadmins, users with bypass_location_verification, and roles configured
-        in LocationSettings can bypass directly.
+        Controlled strictly via Role Settings (`activities:visits/bypass_gps`), SuperAdmin status,
+        or stage-specific LocationSettings role selections (not legacy per-user toggles).
         """
-        if not user or not getattr(user, 'is_authenticated', False):
+        if not user or not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', True):
             return False
         if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
             return True
-        if getattr(user, 'bypass_location_verification', False):
-            return True
-        from accounts.permissions import is_manager_or_higher
-        if is_manager_or_higher(user):
-            return True
         role = getattr(user, 'role', None)
-        if role and role.is_active:
+        if role and getattr(role, 'is_super', False):
+            return True
+        from accounts.permissions import has_perm_or_admin
+        if has_perm_or_admin(user, 'activities:visits/bypass_gps'):
+            return True
+        if not getattr(user, 'has_custom_permissions', False) and role and role.is_active:
             if stage in ('create', 'start'):
                 if self.roles_can_bypass_distance_creation.filter(pk=role.pk).exists():
                     return True
@@ -204,16 +204,21 @@ class LocationSettings(models.Model):
     def can_user_request_distance_exception(self, user) -> bool:
         """
         Check if user is authorized to request a GPS distance exception.
-        Superadmins, Managers, and users with `activities:visits/gps_request_exception` permission can request.
+        Controlled by RBAC permissions (`activities:visits/gps_request_exception` or
+        `activities:visits/bypass_gps`) and SuperAdmin status.
         """
-        if not user or not getattr(user, 'is_authenticated', False):
+        if not user or not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', True):
             return False
         if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
             return True
-        from accounts.permissions import has_perm_or_admin, is_manager_or_higher
-        if is_manager_or_higher(user):
+        role = getattr(user, 'role', None)
+        if role and getattr(role, 'is_super', False):
             return True
-        return has_perm_or_admin(user, 'activities:visits/gps_request_exception')
+        from accounts.permissions import has_perm_or_admin
+        return (
+            has_perm_or_admin(user, 'activities:visits/gps_request_exception')
+            or has_perm_or_admin(user, 'activities:visits/bypass_gps')
+        )
 
     def can_user_delete_visit(self, user) -> bool:
         """

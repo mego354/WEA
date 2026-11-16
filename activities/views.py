@@ -35,8 +35,10 @@ from .services import (
     verify_visit_location, can_start_visit, start_visit,
     can_submit_answers, save_visit_answers, can_end_visit, end_visit,
     build_visit_timeline, can_delete_unended_visit, delete_unended_visit,
-    can_edit_visit_answers, update_visit_questionnaire_answers
+    can_edit_visit_answers, update_visit_questionnaire_answers,
+    build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields
 )
+from master_data.search_utils import filter_by_arabic_search
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, get_user_managed_representatives,
@@ -153,16 +155,17 @@ def agreements_list(request):
     qs = Agreement.objects.select_related('customer', 'type', 'created_by').all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'agreement')
 
-    # Search
+    # Search with Arabic normalization
     q = request.GET.get('q', '').strip()
     active_filters = []
 
     if q:
-        qs = qs.filter(
-            Q(title__icontains=q) |
-            Q(serial_num__icontains=q) |
-            Q(customer__name__icontains=q) |
-            Q(customer__code__icontains=q)
+        qs = filter_by_arabic_search(
+            qs,
+            ['title', 'description', 'customer__name', 'customer__code'],
+            q,
+            raw_fields=['customer__code'],
+            numeric_id_field='serial_num'
         )
         active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
 
@@ -202,6 +205,8 @@ def agreements_list(request):
 
     # Handle inline Create via POST
     if request.method == 'POST' and 'create_agreement' in request.POST:
+        if not has_perm_or_admin(request.user, 'activities:agreements/create'):
+            return render_forbidden_response(request, "عذراً، لا تملك صلاحية إضافة اتفاقية.")
         form = AgreementForm(request.POST, user=request.user)
         if form.is_valid():
             agreement = form.save(commit=False)
@@ -212,10 +217,41 @@ def agreements_list(request):
             loc_settings = LocationSettings.get_settings()
             if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
                 agreement.status = 'approved'
+                agreement.approved_by = request.user
+                agreement.approved_at = timezone.now()
             else:
                 agreement.status = 'new'
 
             agreement.save()
+
+            ApprovalAuditLog.objects.create(
+                record_type='agreement',
+                agreement=agreement,
+                action='created',
+                actor=request.user,
+                status_before='',
+                status_after=agreement.status,
+                reason='إنشاء اتفاقية جديدة عبر النافذة السريعة',
+                changes=[
+                    {'field': 'العنوان', 'old': '-', 'new': agreement.title},
+                    {'field': 'العميل', 'old': '-', 'new': agreement.customer.name},
+                    {'field': 'المبلغ', 'old': '-', 'new': f"{agreement.amount} ج.م"},
+                    {'field': 'الحالة', 'old': '-', 'new': agreement.status_display_ar},
+                ],
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            AuditLogService.log(
+                action='create',
+                action_type='AGREEMENT_CREATED',
+                module='activities',
+                actor=request.user,
+                record_id=agreement.pk,
+                record_name=f"اتفاقية #{agreement.serial_num}",
+                description=f"إنشاء الاتفاقية #{agreement.serial_num} للعميل {agreement.customer.name}",
+                new_values={'title': agreement.title, 'amount': str(agreement.amount), 'status': agreement.status, 'customer': agreement.customer.name},
+                status='SUCCESS',
+                request=request,
+            )
             messages.success(request, f"تم إنشاء الاتفاقية #{agreement.serial_num} بنجاح.")
             return redirect('agreements_list')
         else:
@@ -226,10 +262,9 @@ def agreements_list(request):
     # Standardized bounded pagination
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
-    # Filter dropdown options
+    # Filter dropdown options (strictly scoped)
     agreement_types = AgreementType.objects.filter(is_active=True)
-    users = User.objects.filter(is_active=True).order_by('first_name', 'username')
-    contacts = Contact.objects.all().order_by('name')[:50]
+    users = get_visible_assignees_queryset(request.user, 'activities').order_by('first_name', 'username')
 
     agreements_agg = qs.aggregate(
         total_count=Count('id'),
@@ -253,7 +288,6 @@ def agreements_list(request):
         'form': form,
         'agreement_types': agreement_types,
         'users': users,
-        'contacts': contacts,
         'selected_q': q,
         'selected_type': type_id,
         'selected_status': status,
@@ -261,7 +295,9 @@ def agreements_list(request):
         'selected_date_from': date_from,
         'selected_date_to': date_to,
         'active_filters': active_filters,
-        'can_manage_approvals': can_manage_approvals(request.user),
+        'can_manage_approvals': can_manage_approvals(request.user, 'agreements'),
+        'can_create_agreement': has_perm_or_admin(request.user, 'activities:agreements/create'),
+        'can_export_agreements': has_perm_or_admin(request.user, 'activities:agreements/export'),
         'stats': agreements_stats,
     }
     return render(request, 'activities/agreements_list.html', context)
@@ -273,6 +309,7 @@ def agreements_bulk_status(request):
     Update status of multiple selected agreements in bulk.
     Matches reference action bar 'تغيير الحالة'.
     Requires manager/superuser authorization.
+    Enforces server-side data scoping and anti-self-approval.
     """
     if request.method != 'POST':
         return redirect('agreements_list')
@@ -296,32 +333,103 @@ def agreements_bulk_status(request):
         messages.warning(request, "لم يتم تحديد أي اتفاقيات لتحديث حالتها.")
         return redirect('agreements_list')
 
-    updated_count = Agreement.objects.filter(pk__in=selected_ids).update(
-        status=new_status,
-        updated_by=request.user,
-        updated_at=timezone.now()
-    )
+    # Strictly scope target agreements
+    scoped_agreements = get_scoped_queryset(Agreement.objects.filter(pk__in=selected_ids), request.user, 'agreement')
 
     status_names = {
-        'new': 'جديد',
+        'new': 'بانتظار الاعتماد',
         'approved': 'معتمد',
         'disapproved': 'مرفوض',
         'done': 'تم الإنجاز',
     }
-    messages.success(request, f"تم تغيير حالة {updated_count} اتفاقية إلى '{status_names.get(new_status, new_status)}' بنجاح.")
+
+    updated_count = 0
+    skipped_self = 0
+    now = timezone.now()
+
+    for ag in scoped_agreements:
+        # Check action permission & anti-self-approval
+        action_map = {'approved': 'approve', 'disapproved': 'disapprove', 'done': 'done', 'new': 'reopen'}
+        act = action_map.get(new_status, 'approve')
+        if not can_user_access_object(request.user, ag, act):
+            skipped_self += 1
+            continue
+
+        if new_status == 'done' and ag.status != 'approved':
+            continue
+
+        status_before = ag.status
+        if status_before == new_status:
+            continue
+
+        ag.status = new_status
+        ag.updated_by = request.user
+        ag.updated_at = now
+        if new_status == 'approved':
+            ag.approved_by = request.user
+            ag.approved_at = now
+            ag.waiting_for_reapproval = False
+        elif new_status == 'disapproved':
+            ag.approved_by = request.user
+            ag.approved_at = now
+
+        ag.save()
+        updated_count += 1
+
+        ApprovalAuditLog.objects.create(
+            record_type='agreement',
+            agreement=ag,
+            action='approved' if new_status == 'approved' else ('rejected' if new_status == 'disapproved' else 'status_changed'),
+            actor=request.user,
+            status_before=status_before,
+            status_after=new_status,
+            reason=f"تحديث جماعي للحالة إلى '{status_names.get(new_status, new_status)}'",
+            changes=[{'field': 'الحالة', 'old': status_names.get(status_before, status_before), 'new': status_names.get(new_status, new_status)}],
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+        AuditLogService.log(
+            action_type='AGREEMENT_APPROVED' if new_status == 'approved' else ('AGREEMENT_REJECTED' if new_status == 'disapproved' else 'AGREEMENT_STATUS_CHANGED'),
+            module='activities',
+            actor=request.user,
+            record_id=ag.id,
+            record_name=f"اتفاقية #{ag.serial_num}",
+            description=f"تحديث حالة الاتفاقية من '{status_before}' إلى '{new_status}' (تحديث جماعي)",
+            previous_values={'status': status_before},
+            new_values={'status': new_status},
+            status='SUCCESS',
+            request=request,
+        )
+
+    if skipped_self > 0:
+        messages.warning(request, f"تم تخطي {skipped_self} اتفاقية لا تملك صلاحية اعتمادها أو أنك منشئها (منع الاعتماد الذاتي).")
+
+    if updated_count > 0:
+        messages.success(request, f"تم تغيير حالة {updated_count} اتفاقية إلى '{status_names.get(new_status, new_status)}' بنجاح.")
+    elif skipped_self == 0:
+        messages.info(request, "لم يتم تعديل أي اتفاقية (قد تكون بالحالة المطلوبة بالفعل).")
+
     return redirect('agreements_list')
 
 
 @require_permission('activities:agreements/view')
 def agreement_detail(request, pk):
-    """View details of a specific agreement."""
-    agreement = get_object_or_404(Agreement.objects.select_related('customer', 'type', 'created_by', 'updated_by'), pk=pk)
+    """View details of a specific agreement with timeline and permission gating."""
+    agreement = get_object_or_404(Agreement.objects.select_related('customer', 'type', 'created_by', 'updated_by', 'approved_by'), pk=pk)
     if not can_user_access_object(request.user, agreement, 'view'):
         return render_forbidden_response(request, "لا يمكنك عرض هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+
+    can_approve_this = can_manage_approvals(request.user, 'agreements') and can_user_access_object(request.user, agreement, 'approve')
+    can_edit = agreement.status in ('new', 'disapproved') and has_perm_or_admin(request.user, 'activities:agreements/edit') and can_user_access_object(request.user, agreement, 'edit')
+    can_delete = agreement.status in ('new', 'disapproved') and has_perm_or_admin(request.user, 'activities:agreements/delete') and can_user_access_object(request.user, agreement, 'delete')
+    timeline_events = build_agreement_timeline(agreement)
 
     return render(request, 'activities/agreement_detail.html', {
         'agreement': agreement,
         'can_manage_approvals': can_manage_approvals(request.user, 'agreements'),
+        'can_approve_this': can_approve_this,
+        'can_edit': can_edit,
+        'can_delete': can_delete,
+        'timeline_events': timeline_events,
     })
 
 
@@ -339,47 +447,138 @@ def agreement_create(request):
             loc_settings = LocationSettings.get_settings()
             if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
                 agreement.status = 'approved'
+                agreement.approved_by = request.user
+                agreement.approved_at = timezone.now()
             else:
                 agreement.status = 'new'
 
             agreement.save()
+
+            ApprovalAuditLog.objects.create(
+                record_type='agreement',
+                agreement=agreement,
+                action='created',
+                actor=request.user,
+                status_before='',
+                status_after=agreement.status,
+                reason='إنشاء اتفاقية جديدة',
+                changes=[
+                    {'field': 'العنوان', 'old': '-', 'new': agreement.title},
+                    {'field': 'العميل', 'old': '-', 'new': agreement.customer.name},
+                    {'field': 'المبلغ', 'old': '-', 'new': f"{agreement.amount} ج.م"},
+                    {'field': 'الحالة', 'old': '-', 'new': agreement.status_display_ar},
+                ],
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            AuditLogService.log(
+                action='create',
+                action_type='AGREEMENT_CREATED',
+                module='activities',
+                actor=request.user,
+                record_id=agreement.pk,
+                record_name=f"اتفاقية #{agreement.serial_num}",
+                description=f"إنشاء الاتفاقية #{agreement.serial_num} للعميل {agreement.customer.name}",
+                new_values={'title': agreement.title, 'amount': str(agreement.amount), 'status': agreement.status, 'customer': agreement.customer.name},
+                status='SUCCESS',
+                request=request,
+            )
             messages.success(request, f"تم إنشاء الاتفاقية #{agreement.serial_num} بنجاح.")
             return redirect('agreement_detail', pk=agreement.pk)
     else:
         form = AgreementForm(initial={'date': timezone.now().date()}, user=request.user)
-    return render(request, 'activities/agreement_form.html', {'form': form, 'title': 'إضافة اتفاقية جديدة'})
+    return render(request, 'activities/agreement_form.html', {
+        'form': form,
+        'title': 'إضافة اتفاقية جديدة',
+        'selected_contact': None,
+    })
 
 
 @require_permission('activities:agreements/edit')
 def agreement_edit(request, pk):
-    """Edit agreement (allowed if status is new)."""
+    """Edit agreement (allowed strictly if status is unapproved: new or disapproved)."""
     agreement = get_object_or_404(Agreement, pk=pk)
     if not can_user_access_object(request.user, agreement, 'edit'):
         return render_forbidden_response(request, "لا يمكنك تعديل هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
 
-    if agreement.status not in ['new']:
+    if agreement.status not in ['new', 'disapproved']:
         messages.warning(request, "لا يمكن تعديل الاتفاقية بعد اعتمادها أو إنجازها.")
         return redirect('agreement_detail', pk=agreement.pk)
 
+    before_snap = _agreement_snapshot(agreement)
+
     if request.method == 'POST':
-        form = AgreementForm(request.POST, instance=agreement)
+        form = AgreementForm(request.POST, instance=agreement, user=request.user)
         if form.is_valid():
             agreement = form.save(commit=False)
             agreement.updated_by = request.user
+
+            # If editing a disapproved agreement, transition back to pending approval
+            if before_snap['status'] == 'disapproved':
+                agreement.status = 'new'
+                agreement.waiting_for_reapproval = True
+                agreement.approved_by = None
+                agreement.approved_at = None
+
             agreement.save()
+            after_snap = _agreement_snapshot(agreement)
+            diffs = _diff_agreement_fields(before_snap, after_snap)
+
+            if diffs:
+                action_choice = 'resubmitted' if before_snap['status'] == 'disapproved' else (
+                    'edited_by_manager' if is_manager_or_higher(request.user) else 'submitted'
+                )
+                ApprovalAuditLog.objects.create(
+                    record_type='agreement',
+                    agreement=agreement,
+                    action=action_choice,
+                    actor=request.user,
+                    status_before=before_snap['status'],
+                    status_after=agreement.status,
+                    reason=f"تعديل بيانات الاتفاقية ({len(diffs)} حقول معدلة)",
+                    changes=diffs,
+                    approval_required=(agreement.status == 'new'),
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+                AuditLogService.log(
+                    action='update',
+                    action_type='AGREEMENT_UPDATED',
+                    module='activities',
+                    actor=request.user,
+                    record_id=agreement.pk,
+                    record_name=f"اتفاقية #{agreement.serial_num}",
+                    description=f"تحديث بيانات الاتفاقية #{agreement.serial_num} ({len(diffs)} حقول)",
+                    previous_values=before_snap,
+                    new_values=after_snap,
+                    status='SUCCESS',
+                    request=request,
+                )
+
             messages.success(request, f"تم تحديث الاتفاقية #{agreement.serial_num} بنجاح.")
             return redirect('agreement_detail', pk=agreement.pk)
     else:
-        form = AgreementForm(instance=agreement)
-    return render(request, 'activities/agreement_form.html', {'form': form, 'agreement': agreement, 'title': f'تعديل الاتفاقية #{agreement.serial_num}'})
+        form = AgreementForm(instance=agreement, user=request.user)
+    return render(request, 'activities/agreement_form.html', {
+        'form': form,
+        'agreement': agreement,
+        'title': f'تعديل الاتفاقية #{agreement.serial_num}',
+        'selected_contact': agreement.customer,
+    })
 
 
 @require_permission('activities:agreements/approve')
 def agreement_action(request, pk, action):
-    """Status transitions: approve, disapprove, done, reopen."""
+    """
+    Status transitions: approve, disapprove, done, reopen.
+    POST method required.
+    Anti-self-approval enforced via can_user_access_object.
+    """
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة. يلزم استخدام POST لتغيير الحالة.")
+        return redirect('agreement_detail', pk=pk)
+
     if not can_manage_approvals(request.user, 'agreements'):
         messages.error(request, "عذراً، لا تملك صلاحية تغيير حالة الاعتماد (خاص بالمدراء ومسؤولي النظام).")
-        next_url = request.GET.get('next', 'agreement_detail')
+        next_url = request.POST.get('next') or request.GET.get('next', 'agreement_detail')
         if next_url == 'list':
             return redirect('agreements_list')
         return redirect('agreement_detail', pk=pk)
@@ -389,30 +588,71 @@ def agreement_action(request, pk, action):
         return render_forbidden_response(request, "لا يمكنك تغيير حالة هذه الاتفاقية خارج نطاق اختصاصك أو اعتماد اتفاقيتك الخاصة.")
 
     status_before = agreement.status
+    now = timezone.now()
+    reason = request.POST.get('reason', '').strip()
+
+    status_map = {
+        'new': 'بانتظار الاعتماد',
+        'approved': 'معتمد',
+        'disapproved': 'مرفوض',
+        'done': 'تم الإنجاز',
+    }
 
     if action == 'approve':
         agreement.status = 'approved'
+        agreement.approved_by = request.user
+        agreement.approved_at = now
+        agreement.waiting_for_reapproval = False
         agreement.updated_by = request.user
         agreement.save()
         messages.success(request, f"تم اعتماد الاتفاقية #{agreement.serial_num} بنجاح.")
+        log_action = 'approved'
+        log_reason = reason or "اعتماد الاتفاقية من قبل المدير"
     elif action == 'disapprove':
         agreement.status = 'disapproved'
+        agreement.approved_by = request.user
+        agreement.approved_at = now
+        agreement.approval_notes = reason
         agreement.updated_by = request.user
         agreement.save()
         messages.error(request, f"تم رفض الاتفاقية #{agreement.serial_num}.")
+        log_action = 'rejected'
+        log_reason = reason or "رفض الاتفاقية"
     elif action == 'done':
+        if status_before != 'approved':
+            messages.error(request, "لا يمكن إنجاز اتفاقية غير معتمدة.")
+            return redirect('agreement_detail', pk=agreement.pk)
         agreement.status = 'done'
         agreement.updated_by = request.user
         agreement.save()
         messages.success(request, f"تم إنجاز الاتفاقية #{agreement.serial_num} بنجاح.")
+        log_action = 'status_changed'
+        log_reason = reason or "إنجاز الاتفاقية بنجاح"
     elif action == 'reopen':
         agreement.status = 'new'
+        agreement.waiting_for_reapproval = True
+        agreement.approved_by = None
+        agreement.approved_at = None
         agreement.updated_by = request.user
         agreement.save()
-        messages.info(request, f"تم إعادة فتح الاتفاقية #{agreement.serial_num} لحالة جديد.")
+        messages.info(request, f"تم إعادة فتح الاتفاقية #{agreement.serial_num} وباتت بانتظار الاعتماد.")
+        log_action = 'status_changed'
+        log_reason = reason or "إعادة فتح الاتفاقية للمراجعة والاعتماد"
     else:
         messages.error(request, "إجراء غير معروف.")
         return redirect('agreement_detail', pk=agreement.pk)
+
+    ApprovalAuditLog.objects.create(
+        record_type='agreement',
+        agreement=agreement,
+        action=log_action,
+        actor=request.user,
+        status_before=status_before,
+        status_after=agreement.status,
+        reason=log_reason,
+        changes=[{'field': 'الحالة', 'old': status_map.get(status_before, status_before), 'new': status_map.get(agreement.status, agreement.status)}],
+        ip_address=request.META.get('REMOTE_ADDR'),
+    )
 
     AuditLogService.log(
         action_type='AGREEMENT_APPROVED' if action == 'approve' else ('AGREEMENT_REJECTED' if action == 'disapprove' else 'AGREEMENT_STATUS_CHANGED'),
@@ -420,14 +660,14 @@ def agreement_action(request, pk, action):
         actor=request.user,
         record_id=agreement.id,
         record_name=f"اتفاقية #{agreement.serial_num}",
-        description=f"تغيير حالة الاتفاقية من '{status_before}' إلى '{agreement.status}'",
+        description=f"تغيير حالة الاتفاقية من '{status_before}' إلى '{agreement.status}': {log_reason}",
         previous_values={'status': status_before},
         new_values={'status': agreement.status},
         status='SUCCESS',
         request=request,
     )
 
-    next_url = request.GET.get('next', 'agreement_detail')
+    next_url = request.POST.get('next') or request.GET.get('next', 'agreement_detail')
     if next_url == 'list':
         return redirect('agreements_list')
     return redirect('agreement_detail', pk=agreement.pk)
@@ -435,16 +675,38 @@ def agreement_action(request, pk, action):
 
 @require_permission('activities:agreements/delete')
 def agreement_delete(request, pk):
-    """Delete an agreement if in new state."""
+    """
+    Delete an agreement strictly if in unapproved state (new or disapproved).
+    POST method required.
+    """
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة للحذف. يلزم استخدام POST.")
+        return redirect('agreement_detail', pk=pk)
+
     agreement = get_object_or_404(Agreement, pk=pk)
     if not can_user_access_object(request.user, agreement, 'delete'):
         return render_forbidden_response(request, "لا يمكنك حذف هذه الاتفاقية.")
 
-    if agreement.status != 'new' and not request.user.is_superuser:
-        messages.error(request, "لا يمكن حذف اتفاقية معتمدة.")
+    if agreement.status not in ['new', 'disapproved']:
+        messages.error(request, "لا يمكن حذف اتفاقية بعد اعتمادها أو إنجازها.")
         return redirect('agreement_detail', pk=agreement.pk)
 
     serial = agreement.serial_num
+    before_snap = _agreement_snapshot(agreement)
+
+    AuditLogService.log(
+        action='delete',
+        action_type='AGREEMENT_DELETED',
+        module='activities',
+        actor=request.user,
+        record_id=agreement.id,
+        record_name=f"اتفاقية #{serial}",
+        description=f"حذف الاتفاقية #{serial} (الحالة: {agreement.status})",
+        previous_values=before_snap,
+        status='SUCCESS',
+        request=request,
+    )
+
     agreement.delete()
     messages.success(request, f"تم حذف الاتفاقية #{serial} بنجاح.")
     return redirect('agreements_list')
@@ -453,17 +715,25 @@ def agreement_delete(request, pk):
 @require_permission('activities:agreements/export')
 def agreements_export(request):
     """Export filtered agreements to Excel (.xlsx) with styled formatting."""
-    qs = Agreement.objects.select_related('customer', 'type', 'created_by').all()
+    qs = Agreement.objects.select_related('customer', 'type', 'created_by').all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'agreement')
 
-    # Apply same filters
+    # Apply same filters with Arabic normalization
     q = request.GET.get('q', '').strip()
     if q:
-        qs = qs.filter(Q(title__icontains=q) | Q(serial_num__icontains=q) | Q(customer__name__icontains=q))
+        qs = filter_by_arabic_search(
+            qs,
+            ['title', 'description', 'customer__name', 'customer__code'],
+            q,
+            raw_fields=['customer__code'],
+            numeric_id_field='serial_num'
+        )
     if request.GET.get('type'):
         qs = qs.filter(type_id=request.GET.get('type'))
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET.get('status'))
+    if request.GET.get('creator'):
+        qs = qs.filter(created_by_id=request.GET.get('creator'))
     if request.GET.get('date_from'):
         qs = qs.filter(date__gte=request.GET.get('date_from'))
     if request.GET.get('date_to'):
@@ -487,6 +757,42 @@ def agreements_export(request):
 
     headers = ["#", "العميل", "كود العميل", "العنوان", "النوع", "المبلغ (ج.م)", "التاريخ", "المنشئ", "الحالة"]
     ws.append(headers)
+
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for a in qs:
+        row = [
+            f"#{a.serial_num}",
+            a.customer.name if a.customer else "",
+            a.customer.code if a.customer else "",
+            a.title,
+            a.type.name if a.type else "",
+            float(a.amount),
+            a.date.strftime("%Y-%m-%d") if a.date else "",
+            a.created_by.get_full_name() or a.created_by.username if a.created_by else "",
+            a.status_display_ar
+        ]
+        ws.append(row)
+
+    # Style rows & adjust widths
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.font = data_font
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center")
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = openpyxl.utils.get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response['Content-Disposition'] = f'attachment; filename="agreements_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
+    wb.save(response)
+    return response
 
     for cell in ws[1]:
         cell.fill = header_fill
@@ -1124,48 +1430,13 @@ def planned_visit_add_item(request):
             messages.warning(request, msg)
         else:
             max_order = plan_day.items.count() + 1
-            from master_data.models import LocationSettings
-            loc_settings = LocationSettings.get_settings()
-            approval_status, approved_by, approved_at = resolve_visit_creation_approval(
-                request.user, contact, True, loc_settings, visit_owner=assignee
-            )
-            next_serial = (Visit.objects.aggregate(m=Max('serial_num'))['m'] or 1000) + 1
-            visit = Visit.objects.create(
-                serial_num=next_serial,
-                contact=contact,
-                template=template,
-                date=target_date,
-                status='planned',
-                is_planned=True,
-                approval_status=approval_status,
-                approved_by=approved_by,
-                approved_at=approved_at,
-                allowed_distance=loc_settings.get_effective_tolerance(template),
-                owner=assignee,
-                created_by=request.user,
-                feedback=notes,
-                location_verified=False,
-                verification_status='unverified',
-                location_status='زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)',
-            )
             item = PlannedVisitItem.objects.create(
                 plan_day=plan_day,
                 order=max_order,
                 contact=contact,
                 template=template,
                 notes=notes,
-                visit=visit,
                 is_executed=False,
-            )
-            ApprovalAuditLog.objects.create(
-                record_type='visit',
-                visit=visit,
-                action='created',
-                actor=request.user,
-                status_before='',
-                status_after=visit.approval_status,
-                reason=f"إضافة زيارة مخططة للعميل {contact.name}",
-                ip_address=request.META.get('REMOTE_ADDR')
             )
             AuditLogService.log(
                 action='create',
@@ -1739,8 +2010,8 @@ def visit_detail(request, pk):
     supports_detailing = template.is_product_detailing_supported() if template else False
 
     if request.method == 'POST':
-        if visit.status != 'started':
-            return render_forbidden_response(request, "لا يمكن تقديم الإجابات أو إنهاء الزيارة لأنها ليست جارية حالياً.")
+        if visit.status in ('finished', 'cancelled'):
+            return render_forbidden_response(request, "لا يمكن تقديم الإجابات أو إنهاء الزيارة لأنها مكتملة أو ملغاة بالفعل.")
 
         # Visit execution ownership check
         if visit.owner_id != request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
@@ -2192,6 +2463,7 @@ def visit_create(request):
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
     can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='create')
+    can_request_gps_exception = location_settings.can_user_request_distance_exception(request.user)
 
     # Planned visits must ONLY be created through the bulk planned-visits workflow
     # and executed via planned_item_id. Direct visits via /visits/create/ are strictly unplanned.
@@ -2278,8 +2550,9 @@ def visit_create(request):
                         visit.started_at = None
                         visit.allowed_distance = location_settings.get_effective_tolerance(template)
 
+                        # Visits submitted through visit_create require manager approval for reps (Section 4)
                         visit.approval_status, visit.approved_by, visit.approved_at = resolve_visit_creation_approval(
-                            request.user, contact, is_planned_visit, location_settings, visit_owner=owner
+                            request.user, contact, False, location_settings, visit_owner=owner
                         )
 
                         lat = request.POST.get('latitude') or request.POST.get('lat')
@@ -2293,6 +2566,8 @@ def visit_create(request):
                         bypass_reason = (request.POST.get('bypass_reason') or '').strip()
 
                         try:
+                            if force_bypass and not can_bypass_gps:
+                                raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
                             if not is_planned_visit:
                                 if location_settings.verify_visits and location_settings.verify_unplanned_visit_distance:
                                     verify_visit_location(
@@ -2321,7 +2596,7 @@ def visit_create(request):
                                 visit.location_verified = False
                                 visit.verification_status = 'unverified'
                                 visit.location_status = 'زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)'
-                                if (lat or lng) and location_settings.verify_visits:
+                                if (lat or lng or force_bypass) and location_settings.verify_visits:
                                     try:
                                         verify_visit_location(
                                             visit, request.user, contact,
@@ -2331,6 +2606,8 @@ def visit_create(request):
                                             request_distance_exception=request_distance_exception,
                                             strict_distance=False
                                         )
+                                    except ValidationError:
+                                        raise
                                     except Exception:
                                         pass
                         except ValidationError as ve:
@@ -2347,6 +2624,7 @@ def visit_create(request):
                                 'verify_visits_enabled': location_settings.verify_visits,
                                 'verify_unplanned_distance': location_settings.verify_unplanned_visit_distance,
                                 'can_bypass_gps': can_bypass_gps,
+                                'can_request_gps_exception': can_request_gps_exception,
                                 'default_tolerance': location_settings.tolerance,
                             })
 
@@ -2528,6 +2806,7 @@ def visit_create(request):
         'today': today_date,
         'visit_type': 'planned' if is_planned_visit else 'unplanned',
         'can_bypass_gps': can_bypass_gps,
+        'can_request_gps_exception': can_request_gps_exception,
         'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
         'distance_bypass_requires_approval': location_settings.distance_bypass_requires_approval,
         'verify_visits_enabled': location_settings.verify_visits,
@@ -2556,9 +2835,9 @@ def visit_edit(request, pk):
     if not can_user_access_object(request.user, visit, 'edit'):
         return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
 
-    # Strict restriction: Started or Ended visits CANNOT have their metadata edited
-    if visit.status in ('started', 'finished') or visit.ended_at is not None:
-        messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد بدئها أو اكتمالها.")
+    # Strict restriction: Ended visits CANNOT have their metadata edited
+    if visit.status == 'finished' or visit.ended_at is not None:
+        messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد اكتمالها.")
         return redirect('visit_detail', pk=visit.pk)
 
     if request.method == 'POST':
@@ -2581,6 +2860,13 @@ def visit_edit(request, pk):
                 cleaned_date = form.cleaned_data.get('date')
                 cleaned_template = form.cleaned_data.get('template')
 
+                # Before start/end, editing is restricted to date/template/time; in-progress visits can update feedback
+                feedback = None
+                if visit.status == 'started':
+                    feedback = request.POST.get('feedback')
+                    if feedback is not None:
+                        visit.feedback = feedback
+
                 # Preserve other fields strictly
                 visit.date = cleaned_date
                 visit.template = cleaned_template
@@ -2600,12 +2886,41 @@ def visit_edit(request, pk):
                         'new': cleaned_template.display_name_ar if cleaned_template else 'بدون قالب',
                     })
 
-                # Requirement C & D: Every permitted update must trigger approval again
-                visit.approval_status = 'pending'
-                visit.waiting_for_reapproval = True
-                visit.approved_by = None
-                visit.approved_at = None
-                visit.save(update_fields=['date', 'template', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
+                changes_summary = " | ".join(
+                    f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in field_changes
+                ) if field_changes else "تعديل موعد وقالب الزيارة"
+
+                user_has_approval_authority = (
+                    can_user_approve_contact_visit(request.user, visit.contact) and
+                    can_user_access_object(request.user, visit, 'approve')
+                )
+                was_approved = (prev_approval_status == 'approved')
+
+                if user_has_approval_authority and was_approved:
+                    visit.approval_status = 'approved'
+                    visit.waiting_for_reapproval = False
+                    audit_action = 'edited_by_manager'
+                    audit_reason = 'تعديل بيانات الزيارة بواسطة مدير/مشرف معتمد'
+                    approval_required = False
+                    status_after = 'approved'
+                else:
+                    visit.approval_status = 'pending'
+                    visit.waiting_for_reapproval = True
+                    visit.approved_by = None
+                    visit.approved_at = None
+                    audit_action = 'resubmitted' if prev_approval_status in ('disapproved', 'rejected') else 'edited_reapproval_required'
+                    audit_reason = (
+                        f"إعادة تقديم الزيارة بعد التعديل: {changes_summary}"
+                        if audit_action == 'resubmitted' else
+                        f"تعديل بيانات الزيارة قبل البدء (يتطلب إعادة اعتماد المدير): {changes_summary}"
+                    )
+                    approval_required = True
+                    status_after = 'pending'
+
+                fields_to_save = ['date', 'template', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at']
+                if feedback is not None:
+                    fields_to_save.append('feedback')
+                visit.save(update_fields=fields_to_save)
 
                 new_values = {
                     'template_id': visit.template_id,
@@ -2616,46 +2931,38 @@ def visit_edit(request, pk):
                     'waiting_for_reapproval': visit.waiting_for_reapproval,
                 }
 
-                changes_summary = " | ".join(
-                    f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in field_changes
-                ) if field_changes else "تعديل موعد وقالب الزيارة"
-
-                audit_action = 'resubmitted' if prev_approval_status in ('disapproved', 'rejected') else 'edited_reapproval_required'
-                audit_reason = (
-                    f"إعادة تقديم الزيارة بعد التعديل: {changes_summary}"
-                    if audit_action == 'resubmitted' else
-                    f"تعديل بيانات الزيارة قبل البدء (يتطلب إعادة اعتماد المدير): {changes_summary}"
-                )
-
                 ApprovalAuditLog.objects.create(
                     record_type='visit',
                     visit=visit,
                     action=audit_action,
                     actor=request.user,
                     status_before=prev_approval_status,
-                    status_after='pending',
+                    status_after=status_after,
                     reason=audit_reason,
                     changes=field_changes,
-                    approval_required=True,
+                    approval_required=approval_required,
                     context_data={'previous_approval_status': prev_approval_status},
                     ip_address=request.META.get('REMOTE_ADDR')
                 )
                 AuditLogService.log(
                     action='update',
-                    action_type='VISIT_EDITED_REAPPROVAL_REQUIRED',
+                    action_type='VISIT_EDITED_BY_MANAGER' if audit_action == 'edited_by_manager' else 'VISIT_EDITED_REAPPROVAL_REQUIRED',
                     module='visits',
                     user=request.user,
                     request=request,
                     record_id=visit.pk,
                     record_name=f"Visit #{visit.serial_num}",
-                    description=f"تعديل بيانات الزيارة #{visit.serial_num} وتحويلها للاعتماد",
+                    description=audit_reason,
                     previous_values=prev_values,
                     new_values=new_values
                 )
-                messages.warning(
-                    request,
-                    f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. تم تحويل حالتها تلقائياً إلى (قيد الاعتماد) من المدير."
-                )
+                if audit_action == 'edited_by_manager':
+                    messages.success(request, f"تم حفظ تعديلات المدير على الزيارة #{visit.serial_num} بنجاح مع الاحتفاظ بحالة الاعتماد.")
+                else:
+                    messages.warning(
+                        request,
+                        f"تم حفظ التعديلات على الزيارة #{visit.serial_num}. تم تحويل حالتها تلقائياً إلى (قيد الاعتماد) من المدير."
+                    )
 
             return redirect('visit_detail', pk=visit.pk)
         else:
@@ -2676,6 +2983,7 @@ def visit_edit(request, pk):
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
     can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='end')
+    can_request_gps_exception = location_settings.can_user_request_distance_exception(request.user)
 
     saved_detailed_products = list(visit.detailed_products.values_list('id', flat=True))
     saved_answers = visit.questionnaire_answers or {}
@@ -2690,6 +2998,7 @@ def visit_edit(request, pk):
         'saved_answers_json': json.dumps(saved_answers),
         'saved_detailed_products': saved_detailed_products,
         'can_bypass_gps': can_bypass_gps,
+        'can_request_gps_exception': can_request_gps_exception,
         'is_lower_user': not is_manager_or_higher(request.user),
         'verify_visits_enabled': location_settings.verify_visits,
         'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
@@ -2986,6 +3295,12 @@ def visit_action(request, pk, action):
         can_bypass_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='start')
         force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
         request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
+        if force_bypass_raw and not can_bypass_gps:
+            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return get_redirect()
         force_bypass = bool(force_bypass_raw)
         request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
 
@@ -3033,6 +3348,12 @@ def visit_action(request, pk, action):
         can_bypass_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='end')
         force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
         request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
+        if force_bypass_raw and not can_bypass_gps:
+            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return get_redirect()
         force_bypass = bool(force_bypass_raw)
         request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
         try:

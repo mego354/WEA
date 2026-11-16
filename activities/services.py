@@ -757,7 +757,7 @@ def build_visit_timeline(visit):
         elif log.action == 'edited_reapproval_required':
             icon = 'edit_notifications'
             color = 'amber'
-            title = 'تعديل بيانات الزيارة (يتطلب اعتماد المدير)'
+            title = 'تعديل بعد الاعتماد (يتطلب اعتماد المدير)'
         elif log.action == 'edited_by_manager':
             icon = 'edit_note'
             color = 'sky'
@@ -1108,6 +1108,9 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
                 continue
 
             field_name = f'question_{q.id}'
+            if field_name not in post_data:
+                continue
+
             if hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
                 val = [v for v in post_data.getlist(field_name) if str(v).strip()]
             else:
@@ -1188,4 +1191,194 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
         )
 
         return visit, answer_changes
+
+
+def _agreement_snapshot(agreement):
+    if not agreement:
+        return {}
+    return {
+        'title': agreement.title,
+        'customer_id': agreement.customer_id,
+        'customer_name': agreement.customer.name if agreement.customer else '',
+        'type_id': agreement.type_id,
+        'type_name': agreement.type.name if agreement.type else '',
+        'amount': str(agreement.amount),
+        'date': agreement.date.strftime('%Y-%m-%d') if agreement.date else '',
+        'description': agreement.description or '',
+        'status': agreement.status,
+    }
+
+
+def _diff_agreement_fields(before_snap, after_snap):
+    labels = {
+        'title': 'العنوان',
+        'customer_name': 'العميل',
+        'type_name': 'النوع',
+        'amount': 'المبلغ',
+        'date': 'التاريخ',
+        'description': 'الوصف والشروط',
+        'status': 'الحالة',
+    }
+    status_map = {
+        'new': 'بانتظار الاعتماد',
+        'approved': 'معتمد',
+        'disapproved': 'مرفوض',
+        'done': 'منجز',
+    }
+    changes = []
+    for k in ('title', 'customer_name', 'type_name', 'amount', 'date', 'description', 'status'):
+        old_val = before_snap.get(k)
+        new_val = after_snap.get(k)
+        if old_val != new_val:
+            old_str = status_map.get(old_val, str(old_val) if old_val not in (None, '') else '-')
+            new_str = status_map.get(new_val, str(new_val) if new_val not in (None, '') else '-')
+            changes.append({
+                'field': labels.get(k, k),
+                'old': old_str,
+                'new': new_str,
+            })
+    return changes
+
+
+def build_agreement_timeline(agreement):
+    """
+    Constructs a complete, chronological timeline of all lifecycle events for an agreement:
+    - Creation
+    - Updates & field diffs
+    - Approval requests, approvals, rejections, reopening, and completion
+    - Deletion / status changes
+    """
+    from accounts.models import SecurityAuditLog
+
+    events = []
+    creator_name = (
+        (agreement.created_by.get_full_name() or agreement.created_by.username)
+        if agreement.created_by else "النظام"
+    )
+
+    # 1. Creation milestone
+    events.append({
+        'timestamp': agreement.created_at,
+        'title': f"إنشاء الاتفاقية #{agreement.serial_num}",
+        'actor': creator_name,
+        'icon': 'handshake',
+        'color': 'teal',
+        'details': (
+            f"تم إنشاء الاتفاقية للعميل «{agreement.customer.name if agreement.customer else '-'}» "
+            f"بقيمة {agreement.amount} ج.م ونوع «{agreement.type.name if agreement.type else '-'}»."
+        ),
+        'previous_values': None,
+        'new_values': {
+            'العميل': agreement.customer.name if agreement.customer else '-',
+            'العنوان': agreement.title,
+            'المبلغ': f"{agreement.amount} ج.م",
+            'التاريخ': agreement.date.strftime('%Y-%m-%d') if agreement.date else '-',
+            'الحالة': agreement.status_display_ar,
+        },
+        'changes': None,
+        'approval_required': False,
+    })
+
+    # 2. ApprovalAuditLog entries
+    approval_logs = list(agreement.approval_history.select_related('actor').order_by('created_at', 'id'))
+    status_map = {
+        'new': 'بانتظار الاعتماد',
+        'approved': 'معتمد',
+        'disapproved': 'مرفوض',
+        'done': 'منجز',
+    }
+    for log in approval_logs:
+        actor_str = (log.actor.get_full_name() or log.actor.username) if log.actor else "النظام"
+        icon = 'history'
+        color = 'slate'
+        title = log.get_action_display()
+
+        if log.action == 'approved':
+            icon = 'check_circle'
+            color = 'emerald'
+            title = 'اعتماد الاتفاقية'
+        elif log.action == 'rejected':
+            icon = 'cancel'
+            color = 'rose'
+            title = 'رفض الاتفاقية'
+        elif log.action == 'resubmitted':
+            icon = 'replay'
+            color = 'amber'
+            title = 'إعادة تقديم الاتفاقية للاعتماد'
+        elif log.action in ('edited_reapproval_required', 'edited_by_manager'):
+            icon = 'edit_note'
+            color = 'sky'
+            title = 'تعديل بيانات الاتفاقية'
+        elif log.action == 'status_changed':
+            if log.status_after == 'done':
+                icon = 'task_alt'
+                color = 'purple'
+                title = 'إنجاز الاتفاقية'
+            elif log.status_after == 'new':
+                icon = 'refresh'
+                color = 'sky'
+                title = 'إعادة فتح الاتفاقية'
+            else:
+                icon = 'tune'
+                color = 'teal'
+                title = 'تغيير حالة الاتفاقية'
+        elif log.action in ('created', 'submitted'):
+            continue
+
+        events.append({
+            'timestamp': log.created_at,
+            'title': title,
+            'actor': actor_str,
+            'icon': icon,
+            'color': color,
+            'details': log.reason or f"تغيير الحالة من ({status_map.get(log.status_before, log.status_before or '-')}) إلى ({status_map.get(log.status_after, log.status_after or '-')}).",
+            'previous_values': {'الحالة السابقة': status_map.get(log.status_before, log.status_before)} if log.status_before else None,
+            'new_values': {'الحالة الجديدة': status_map.get(log.status_after, log.status_after)} if log.status_after else None,
+            'changes': log.changes if log.changes else None,
+            'approval_required': log.approval_required,
+        })
+
+    # 3. SecurityAuditLog entries for updates and transitions not captured in ApprovalAuditLog
+    sec_logs = SecurityAuditLog.objects.filter(
+        module='activities',
+        record_id=str(agreement.pk)
+    ).select_related('actor').order_by('created_at', 'id')
+
+    for slog in sec_logs:
+        if slog.action_type in ('AGREEMENT_CREATED', 'AGREEMENT_APPROVED', 'AGREEMENT_REJECTED'):
+            continue
+        actor_str = (slog.actor.get_full_name() or slog.actor.username) if slog.actor else "النظام"
+        icon = 'edit_note'
+        color = 'sky'
+        title = slog.description or slog.action_type
+
+        if 'UPDATE' in (slog.action_type or '') or slog.action == 'update':
+            icon = 'edit'
+            color = 'sky'
+            title = 'تحديث بيانات الاتفاقية'
+        elif 'STATUS' in (slog.action_type or ''):
+            icon = 'tune'
+            color = 'teal'
+            title = 'تحديث حالة الاتفاقية'
+        elif 'DELETE' in (slog.action_type or ''):
+            icon = 'delete'
+            color = 'rose'
+            title = 'حذف الاتفاقية'
+
+        events.append({
+            'timestamp': slog.created_at,
+            'title': title,
+            'actor': actor_str,
+            'icon': icon,
+            'color': color,
+            'details': slog.description or '',
+            'previous_values': slog.previous_values if slog.previous_values else None,
+            'new_values': slog.new_values if slog.new_values else None,
+            'changes': None,
+            'approval_required': False,
+        })
+
+    events.sort(key=lambda x: x['timestamp'] or timezone.now())
+    return events
+
 

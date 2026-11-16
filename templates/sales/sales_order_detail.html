@@ -60,19 +60,35 @@
                 </button>
             </form>
             {% elif order.status == 'manager_approval' %}
-            <a href="{% url 'sales_order_action' order.pk 'prepare' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-base">inventory</span>
-                <span>تجهيز وحجز بالمخزن</span>
-            </a>
+            <form method="POST" action="{% url 'sales_order_action' order.pk 'prepare' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">inventory</span>
+                    <span>تجهيز وحجز بالمخزن</span>
+                </button>
+            </form>
             {% elif order.status == 'in_preparation' or order.status == 'preparing' %}
-            <a href="{% url 'sales_order_action' order.pk 'deliver' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-base">local_shipping</span>
-                <span>تسليم وصرف المخزن</span>
-            </a>
+            <form method="POST" action="{% url 'sales_order_action' order.pk 'deliver' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">local_shipping</span>
+                    <span>تسليم وصرف المخزن</span>
+                </button>
+            </form>
             {% elif order.status == 'delivered' %}
-            <a href="{% url 'sales_order_action' order.pk 'invoice' %}" class="inline-flex items-center gap-1.5 px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-base">receipt_long</span>
-                <span>فوترة وترحيل للحسابات</span>
+            <form method="POST" action="{% url 'sales_order_action' order.pk 'invoice' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all min-h-[44px]">
+                    <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <span>فوترة وترحيل للحسابات</span>
+                </button>
+            </form>
+            {% endif %}
+
+            {% if order.status in 'delivered,invoiced' %}
+            <a href="{% url 'sales_return_order_create' %}?order_id={{ order.pk }}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-[#27bebe] border border-teal-200 text-xs font-bold rounded-xl transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">assignment_return</span>
+                <span>إنشاء مرتجع بيع</span>
             </a>
             {% endif %}
 

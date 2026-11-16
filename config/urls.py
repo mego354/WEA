@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 import catalog.views as catalog_views
 import purchases.views as purchases_views
+import sales.views as sales_views
 import treasury.views as treasury_views
 import contacts.views as contacts_views
 
@@ -42,6 +43,8 @@ urlpatterns = [
     path('treasury/', include('treasury.urls')),
     path('sales/', include('sales.urls')),
     path('activities/', include('activities.urls')),
+    path('performance/', include('reports.urls_performance')),
+    path('reports/', include('reports.urls_reports')),
     path('', include('activities.urls')),
 
     # Reference ERP URL Parity Aliases
@@ -54,10 +57,20 @@ urlpatterns = [
     path('purchase-return-orders/<int:pk>/', purchases_views.purchase_return_order_detail, name='purchase_return_order_detail_alias'),
     path('purchase-return-orders/<int:pk>/action/<str:action>/', purchases_views.purchase_return_order_action, name='purchase_return_order_action_alias'),
     path('purchase-return-orders/<int:pk>/print/', purchases_views.purchase_return_order_print, name='purchase_return_order_print_alias'),
+    path('sales-return-orders/', sales_views.sales_return_orders_list, name='sales_return_orders_alias'),
+    path('sales-return-orders/create/', sales_views.sales_return_order_create, name='sales_return_order_create_alias'),
+    path('sales-return-orders/export/', sales_views.sales_return_orders_export, name='sales_return_orders_export_alias'),
+    path('sales-return-orders/<int:pk>/', sales_views.sales_return_order_detail, name='sales_return_order_detail_alias'),
+    path('sales-return-orders/<int:pk>/action/<str:action>/', sales_views.sales_return_order_action, name='sales_return_order_action_alias'),
+    path('sales-return-orders/<int:pk>/print/', sales_views.sales_return_order_print, name='sales_return_order_print_alias'),
 
     path('vendor-payments/', treasury_views.vendor_payments_list, name='vendor_payments_alias'),
     path('vendor-payments/create/', treasury_views.vendor_payment_create, name='vendor_payment_create_alias'),
     path('vendor-payment-requests/', treasury_views.vendor_payment_requests_list, name='vendor_payment_requests_alias'),
+    path('vendor-payment-requests/create/', treasury_views.vendor_payment_request_create, name='vendor_payment_request_create_alias'),
+    path('vendor-payment-requests/export/', treasury_views.vendor_payment_requests_export, name='vendor_payment_requests_export_alias'),
+    path('vendor-payment-requests/<int:pk>/', treasury_views.vendor_payment_request_detail, name='vendor_payment_request_detail_alias'),
+    path('vendor-payment-requests/<int:pk>/action/<str:action>/', treasury_views.vendor_payment_request_action, name='vendor_payment_request_action_alias'),
     path('accounting/vendors/', treasury_views.accounting_vendors_list, name='accounting_vendors_alias'),
     path('accounting/vendor-transactions/', treasury_views.vendor_transactions_list, name='vendor_transactions_alias'),
 

@@ -1,70 +1,288 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
-{% block title %}طلبات الدفع - Bricks Rep{% endblock %}
+{% block title %}طلبات صرف الموردين - Bricks Rep{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Top Action Bar -->
+    <!-- 1. Top Action Bar -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">طلبات الدفع</h1>
-            <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
-                0 طلب
-            </span>
+            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">طلبات صرف الموردين</h1>
+            <a href="{% url 'vendor_payments_list' %}" class="text-xs px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-[#27bebe] font-bold rounded-full border border-teal-200 transition-colors">
+                سندات الصرف
+            </a>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <button type="button" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير البيانات</span>
-            </button>
-            <button type="button" class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm">
-                <span class="material-symbols-outlined text-base">filter_list</span>
-                <span>فلتر</span>
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">2</span>
-            </button>
-            <button type="button" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20">
+            <!-- Export to Excel -->
+            <a href="{% url 'vendor_payment_requests_export' %}?status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
+               title="تصدير إلى Excel (.xlsx)">
+                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
+                <span>تصدير إلى Excel</span>
+            </a>
+
+            <!-- New Payment Request Button -->
+            <a href="{% url 'vendor_payment_request_create' %}"
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
-                <span>طلب دفع جديد</span>
-            </button>
+                <span>طلب صرف جديد</span>
+            </a>
         </div>
     </div>
 
-    <!-- Table Card -->
+    <!-- 2. Statistics Cards Section -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
+        <!-- Card 1: Total Requests -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي الطلبات</span>
+                <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">request_quote</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block">{{ stats.total_requests|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 block leading-tight mt-0.5">طلب صرف مسجل</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Total Amount -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي مبالغ الطلبات</span>
+                <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">payments</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block">{{ stats.total_amount|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">إجمالي المبالغ المطلوبة</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Pending Review -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">بانتظار الاعتماد</span>
+                <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">pending_actions</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight break-words leading-snug block">{{ stats.pending_count|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-amber-600 block leading-tight mt-0.5">طلب بانتظار المدير المالي</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Executed Payments -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">تم الصرف والتنفيذ</span>
+                <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">task_alt</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-blue-700 font-mono tracking-tight break-words leading-snug block">{{ stats.executed_count|default:0|stat_number }}</span>
+                <span class="text-[10px] sm:text-xs text-blue-600 block leading-tight mt-0.5">طلب تم صرفه من الخزينة</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Search & Filter Bar -->
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 max-w-md relative">
+                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
+                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث برقم الطلب أو المورد أو أمر الشراء..."
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
+                <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
+            </form>
+
+            <div class="flex items-center gap-2">
+                <!-- Slide-out Filter Drawer Button -->
+                <button type="button" onclick="openFilterDrawer()"
+                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
+                    <span>فلترة متقدمة</span>
+                    {% if active_filters_count > 0 %}
+                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
+                        {{ active_filters_count }}
+                    </span>
+                    {% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Filter Chips Bar -->
+    {% include 'components/active_filters.html' %}
+
+    <!-- 4. Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto scrollbar-thin">
             <table class="w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4">رقم المسلسل</th>
-                        <th class="py-3.5 px-4">الاسم</th>
-                        <th class="py-3.5 px-4">المنطقة</th>
-                        <th class="py-3.5 px-4">انشئ فى</th>
+                        <th class="py-3.5 px-4">رقم الطلب</th>
+                        <th class="py-3.5 px-4">المورد</th>
+                        <th class="py-3.5 px-4">أمر الشراء المرتبط</th>
+                        <th class="py-3.5 px-4 text-left">المبلغ المطلوب</th>
+                        <th class="py-3.5 px-4">الخزنة المقترحة</th>
+                        <th class="py-3.5 px-4">تاريخ الطلب</th>
                         <th class="py-3.5 px-4">المنشئ</th>
                         <th class="py-3.5 px-4">الحالة</th>
-                        <th class="py-3.5 px-4">المبلغ</th>
-                        <th class="py-3.5 px-4">الطريقة</th>
-                        <th class="py-3.5 px-4">المسئول</th>
-                        <th class="py-3.5 px-4">تاريخ التنفيذ</th>
+                        <th class="py-3.5 px-4">سند الصرف المنفذ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
-                    <tr>
-                        <td colspan="10" class="py-16 text-center text-slate-400">
-                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">request_quote</span>
-                            <p class="font-bold text-slate-500 text-sm">لا توجد طلبات دفع مسجلة</p>
+                    {% for r in requests %}
+                    <tr class="hover:bg-slate-50/80 transition-colors cursor-pointer" onclick="window.location='{% url 'vendor_payment_request_detail' r.id %}'">
+                        <td class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
+                            {{ r.request_number }}
+                        </td>
+                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                            {{ r.supplier.name }}
+                            {% if r.supplier.area %}
+                            <span class="text-[10px] text-slate-400 block font-normal">{{ r.supplier.area.name }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 font-mono text-slate-600">
+                            {% if r.purchase_order %}
+                            <a href="{% url 'purchase_order_detail' r.purchase_order.id %}" class="hover:text-brand-600 underline" onclick="event.stopPropagation()">
+                                {{ r.purchase_order.order_number }}
+                            </a>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-emerald-700 text-left">
+                            {{ r.amount|stat_number }} ج.م
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600">
+                            {{ r.preferred_vault.name|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                            {{ r.request_date|date:"Y-m-d" }}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600">
+                            {{ r.created_by.get_full_name|default:r.created_by.username|default:"—" }}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ r.status_badge_class }}">
+                                {{ r.status_display_ar }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 font-mono">
+                            {% if r.vendor_payment %}
+                            <span class="text-emerald-700 font-bold">#{{ r.vendor_payment.serial_num }}</span>
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
                         </td>
                     </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-12 text-center text-slate-400">
+                            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">request_quote</span>
+                            لا توجد طلبات صرف موردين مسجلة أو مطابقة لمعايير البحث.
+                        </td>
+                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
-        <div class="px-4 py-3 bg-white border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
-            <span>Items per page: 40</span>
-            <span>0 of 0</span>
+
+        <!-- Bounded Pagination -->
+        {% if paginator.num_pages > 1 %}
+        <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs text-slate-500 font-medium">
+                عرض {{ page_obj.start_index }} إلى {{ page_obj.end_index }} من إجمالي {{ total_count }} طلب
+            </span>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
+                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">السابق</a>
+                {% endif %}
+                <span class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-[#27bebe] font-mono">
+                    {{ page_obj.number }} / {{ paginator.num_pages }}
+                </span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
+                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">التالي</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Filter Drawer -->
+    <div id="filter-drawer" class="fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeFilterDrawer()"></div>
+        <div class="fixed inset-y-0 left-0 pl-10 max-w-full flex">
+            <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                <div class="p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <h2 class="text-sm font-black text-slate-800">فلترة متقدمة لطلبات الصرف</h2>
+                    <button type="button" onclick="closeFilterDrawer()" class="text-slate-400 hover:text-slate-600">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <form method="GET" class="p-6 flex-1 overflow-y-auto space-y-6 text-xs">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-2">حالة الطلب</label>
+                        <select name="status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">
+                            <option value="all" {% if current_status == 'all' %}selected{% endif %}>جميع الحالات</option>
+                            <option value="pending" {% if current_status == 'pending' %}selected{% endif %}>قيد الانتظار والمراجعة</option>
+                            <option value="approved" {% if current_status == 'approved' %}selected{% endif %}>معتمد للصرف</option>
+                            <option value="executed" {% if current_status == 'executed' %}selected{% endif %}>تم الصرف والسداد</option>
+                            <option value="rejected" {% if current_status == 'rejected' %}selected{% endif %}>مرفوض</option>
+                            <option value="cancelled" {% if current_status == 'cancelled' %}selected{% endif %}>ملغي</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-2">المورد</label>
+                        <select name="supplier"
+                                data-smart-select="true"
+                                data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                                data-search-placeholder="بحث عن مورد..."
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">
+                            <option value="">جميع الموردين</option>
+                            {% for s in suppliers %}
+                            <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_supplier == s.id|stringformat:'i' %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">من تاريخ</label>
+                            <input type="date" name="date_from" value="{{ date_from|default:'' }}" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">إلى تاريخ</label>
+                            <input type="date" name="date_to" value="{{ date_to|default:'' }}" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-100 flex items-center justify-end gap-2">
+                        <a href="{% url 'vendor_payment_requests_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                            مسح الفلاتر
+                        </a>
+                        <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                            تطبيق
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
 </div>
+
+<script>
+function openFilterDrawer() {
+    document.getElementById('filter-drawer').classList.remove('hidden');
+}
+function closeFilterDrawer() {
+    document.getElementById('filter-drawer').classList.add('hidden');
+}
+</script>
 {% endblock %}

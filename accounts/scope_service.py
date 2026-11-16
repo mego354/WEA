@@ -31,6 +31,7 @@ class ScopeResolutionService:
         'vault': 'treasury',
         'vaulttransaction': 'treasury',
         'vendorpayment': 'treasury',
+        'vendorpaymentrequest': 'treasury',
         'vendortransaction': 'treasury',
         'vendoraccount': 'treasury',
         'stocklot': 'inventory',
@@ -139,7 +140,8 @@ class ScopeResolutionService:
     def get_user_bricks(cls, user):
         """
         Returns a QuerySet of all assigned Bricks (subareas, parent__isnull=False).
-        If user is assigned directly to an area without parent, returns those assigned areas.
+        If user is assigned directly to main area(s) without specific bricks, includes
+        those areas and their child bricks.
         """
         from master_data.models import Area
         if not user or not user.is_authenticated or not user.is_active:
@@ -149,10 +151,15 @@ class ScopeResolutionService:
             return Area.objects.filter(parent__isnull=False)
 
         assigned = user.assigned_areas.all()
+        if not assigned.exists():
+            return assigned
+
         bricks = assigned.filter(parent__isnull=False)
         if bricks.exists():
             return bricks
-        return assigned
+        return Area.objects.filter(
+            Q(id__in=assigned.values('id')) | Q(parent__in=assigned)
+        ).distinct()
 
     @classmethod
     def get_user_managed_areas(cls, user, scope: str = 'area'):
@@ -420,8 +427,23 @@ class ScopeResolutionService:
 
         # 3. Activities: Agreement
         elif m_name == 'agreement':
-            if scope == 'own':
+            from accounts.permissions import is_representative
+            if scope == 'own' or is_representative(user):
                 return queryset.filter(created_by=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(created_by=user) |
+                    Q(customer__brick__in=user_bricks) |
+                    Q(customer__area__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(created_by__in=managed_subordinates) |
+                    Q(customer__brick__in=managed_areas) |
+                    Q(customer__area__in=managed_areas)
+                ).distinct()
             return queryset.filter(created_by__in=managed_subordinates).distinct()
 
         # 4. Contacts: Contact
@@ -619,10 +641,43 @@ class ScopeResolutionService:
             scoped_vaults = cls.get_scoped_queryset(Vault.objects.all(), user, 'vault', scope_type)
             return queryset.filter(vault__in=scoped_vaults)
 
-        # 15. Treasury: VendorPayment & VendorTransaction
-        elif m_name in ['vendorpayment', 'vendortransaction']:
+        # 15. Treasury: VendorPayment, VendorPaymentRequest & VendorTransaction
+        elif m_name in ['vendorpayment', 'vendorpaymentrequest']:
             if scope == 'own':
                 return queryset.filter(created_by=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(created_by=user) |
+                    Q(supplier__brick__in=user_bricks) |
+                    Q(supplier__area__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(created_by__in=managed_subordinates) |
+                    Q(supplier__brick__in=managed_areas) |
+                    Q(supplier__area__in=managed_areas)
+                ).distinct()
+            return queryset.filter(created_by__in=managed_subordinates).distinct()
+
+        elif m_name == 'vendortransaction':
+            if scope == 'own':
+                return queryset.filter(created_by=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(created_by=user) |
+                    Q(account__supplier__brick__in=user_bricks) |
+                    Q(account__supplier__area__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(created_by__in=managed_subordinates) |
+                    Q(account__supplier__brick__in=managed_areas) |
+                    Q(account__supplier__area__in=managed_areas)
+                ).distinct()
             return queryset.filter(created_by__in=managed_subordinates).distinct()
 
         # 16. Accounts: User
@@ -641,20 +696,22 @@ class ScopeResolutionService:
         # 17. Treasury: VendorAccount
         elif m_name == 'vendoraccount':
             if scope == 'own':
-                return queryset.filter(Q(vendor__created_by=user) | Q(vendor__assigned_team=user))
+                return queryset.filter(Q(supplier__created_by=user) | Q(supplier__assigned_team=user)).distinct()
             elif scope == 'brick':
                 return queryset.filter(
-                    Q(vendor__brick__in=user_bricks) |
-                    Q(vendor__area__in=user_bricks) |
-                    Q(vendor__created_by=user) |
-                    Q(vendor__assigned_team=user)
+                    Q(supplier__brick__in=user_bricks) |
+                    Q(supplier__area__in=user_bricks) |
+                    Q(supplier__created_by=user) |
+                    Q(supplier__assigned_team=user)
                 ).distinct()
             elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
                 return queryset.filter(
-                    Q(vendor__brick__in=managed_areas) |
-                    Q(vendor__area__in=managed_areas) |
-                    Q(vendor__created_by__in=managed_subordinates) |
-                    Q(vendor__assigned_team__in=managed_subordinates)
+                    Q(supplier__brick__in=managed_areas) |
+                    Q(supplier__area__in=managed_areas) |
+                    Q(supplier__created_by__in=managed_subordinates) |
+                    Q(supplier__assigned_team__in=managed_subordinates)
                 ).distinct()
 
         # 18. Activities: VisitTemplate
@@ -687,8 +744,11 @@ class ScopeResolutionService:
         if role and getattr(role, 'is_super', False):
             return True
 
+        model_class = obj.__class__
+        m_name = model_class.__name__.lower()
+
         # Anti-self-approval rule across all models
-        if action in ['approve', 'reject', 'disapprove', 'execute']:
+        if action in ['approve', 'reject', 'disapprove'] or (action == 'execute' and m_name != 'vendorpaymentrequest'):
             owner_id = (
                 getattr(obj, 'owner_id', None) or
                 getattr(obj, 'created_by_id', None) or
@@ -701,9 +761,6 @@ class ScopeResolutionService:
         scope_type = 'manage' if action in [
             'edit', 'delete', 'approve', 'reject', 'disapprove', 'execute', 'manage', 'operate'
         ] else 'view'
-
-        model_class = obj.__class__
-        m_name = model_class.__name__.lower()
 
         # Handle specific model rules:
         # 1. Warehouse: editing/deleting reserved for superadmin or inventory:warehouses/manage
@@ -718,14 +775,33 @@ class ScopeResolutionService:
                 if obj.assigned_user_id is not None and obj.assigned_user_id != user.id:
                     return False
 
-        # 2. Vault: transacting requires treasury permissions and ownership/manage scope
+        # 2. Vault: transacting requires treasury/collection permissions and ownership/manage scope
         elif m_name == 'vault':
             from accounts.permissions import has_perm_or_admin
             if action in ['edit', 'manage', 'delete']:
                 if not has_perm_or_admin(user, 'treasury:vaults/manage'):
                     return False
-            elif action in ['transfer', 'withdraw', 'deposit']:
+            elif action == 'transfer':
                 if not has_perm_or_admin(user, 'treasury:vaults/transfer'):
+                    return False
+                if obj.assigned_user_id == user.id:
+                    return True
+            elif action == 'deposit':
+                if not (
+                    has_perm_or_admin(user, 'treasury:vaults/transfer')
+                    or has_perm_or_admin(user, 'treasury:transactions/create')
+                    or has_perm_or_admin(user, 'sales:collections/create')
+                ):
+                    return False
+                if obj.assigned_user_id == user.id:
+                    return True
+            elif action == 'withdraw':
+                if not (
+                    has_perm_or_admin(user, 'treasury:vaults/transfer')
+                    or has_perm_or_admin(user, 'treasury:transactions/create')
+                    or has_perm_or_admin(user, 'treasury:payments/create')
+                    or has_perm_or_admin(user, 'treasury:payment_requests/execute')
+                ):
                     return False
                 if obj.assigned_user_id == user.id:
                     return True
@@ -788,23 +864,33 @@ class ScopeResolutionService:
 
         elif target_choice_type == 'customers':
             return cls.get_scoped_queryset(
-                Contact.objects.filter(is_customer=True, status='active'),
+                Contact.objects.filter(is_customer=True).exclude(status='inactive').select_related('area', 'brick'),
                 user,
                 'contact',
                 'view'
             ).order_by('name')
 
         elif target_choice_type == 'suppliers':
-            return cls.get_scoped_queryset(
-                Contact.objects.filter(is_supplier=True),
-                user,
-                'contact',
-                'view'
-            ).order_by('name')
+            base_sup = Contact.objects.filter(is_supplier=True).exclude(status='inactive').select_related('area', 'brick')
+            scoped_sup = cls.get_scoped_queryset(base_sup, user, 'contact', 'view')
+            scope = cls.get_user_scope(user, 'contact', 'view')
+            if getattr(user, 'is_super_admin', False) or user.is_superuser or scope == 'all':
+                return scoped_sup.order_by('name')
+            if scope == 'area':
+                if not cls.get_user_managed_areas(user).exists():
+                    return Contact.objects.none()
+                return base_sup.filter(
+                    Q(pk__in=scoped_sup.values('pk')) | Q(area__is_company_area=True)
+                ).distinct().order_by('name')
+            if scope == 'brick':
+                return base_sup.filter(
+                    Q(pk__in=scoped_sup.values('pk')) | Q(area__is_company_area=True)
+                ).distinct().order_by('name')
+            return scoped_sup.order_by('name')
 
         elif target_choice_type == 'warehouses':
             return cls.get_scoped_queryset(
-                Warehouse.objects.filter(is_active=True),
+                Warehouse.objects.filter(is_active=True).select_related('area', 'assigned_user'),
                 user,
                 'warehouse',
                 'view'
@@ -812,7 +898,7 @@ class ScopeResolutionService:
 
         elif target_choice_type == 'vaults':
             return cls.get_scoped_queryset(
-                Vault.objects.filter(is_active=True),
+                Vault.objects.filter(is_active=True).select_related('area', 'assigned_user'),
                 user,
                 'vault',
                 'view'
@@ -822,3 +908,26 @@ class ScopeResolutionService:
             return cls.get_user_managed_subordinates(user, module).order_by('name')
 
         return Area.objects.none()
+
+    @classmethod
+    def can_user_access_supplier(cls, user, supplier) -> bool:
+        """
+        Verify access to a Supplier contact: grants territorial access via `can_user_access_object`
+        plus shared access to corporate company-area suppliers (`area.is_company_area=True`)
+        for authorized area/brick/all scoped users without leaking them into Sales customer lists.
+        """
+        if not user or not user.is_authenticated or not user.is_active:
+            return False
+        if getattr(user, 'is_super_admin', False) or user.is_superuser:
+            return True
+        if cls.can_user_access_object(user, supplier, 'view'):
+            return True
+        if getattr(supplier, 'is_supplier', False) and supplier.area_id and getattr(supplier.area, 'is_company_area', False):
+            scope = cls.get_user_scope(user, 'contact', 'view')
+            if scope == 'all':
+                return True
+            if scope == 'area':
+                return cls.get_user_managed_areas(user).exists()
+            if scope == 'brick':
+                return True
+        return False

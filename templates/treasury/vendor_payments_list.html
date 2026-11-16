@@ -108,19 +108,27 @@
             </div>
 
             <div class="w-full md:w-56">
-                <select name="supplier" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
+                <select name="supplier" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                        data-search-placeholder="بحث عن مورد..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
                     <option value="">كافة الموردين</option>
                     {% for s in suppliers %}
-                    <option value="{{ s.id }}" {% if selected_supplier_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                    <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_supplier_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="w-full md:w-48">
-                <select name="vault" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
+                <select name="vault" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'purchases_vaults_search_api' %}"
+                        data-search-placeholder="بحث عن خزنة..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700 min-h-[44px]">
                     <option value="">كافة الخزن</option>
                     {% for v in vaults %}
-                    <option value="{{ v.id }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+                    <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
                     {% endfor %}
                 </select>
             </div>

@@ -18,49 +18,64 @@
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border {{ agreement.status_badge_class }}">
                         {{ agreement.status_display_ar }}
                     </span>
+                    {% if agreement.waiting_for_reapproval %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                        <span class="material-symbols-outlined text-xs">pending_actions</span>
+                        <span>مطلوب إعادة الاعتماد</span>
+                    </span>
+                    {% endif %}
                 </div>
                 <p class="text-xs text-slate-500 font-medium mt-0.5">{{ agreement.title }}</p>
             </div>
         </div>
 
-        <!-- Action Buttons -->
+        <!-- Action Buttons (Strictly POST Forms) -->
         <div class="flex flex-wrap items-center gap-2">
-            {% if can_manage_approvals %}
+            {% if can_approve_this %}
                 {% if agreement.status == 'new' %}
-                <a href="{% url 'agreement_action' agreement.pk 'approve' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
-                    <span class="material-symbols-outlined text-base">check_circle</span>
-                    <span>اعتماد</span>
-                </a>
-                <a href="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <form method="POST" action="{% url 'agreement_action' agreement.pk 'approve' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                        <span class="material-symbols-outlined text-base">check_circle</span>
+                        <span>اعتماد</span>
+                    </button>
+                </form>
+                <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>رفض</span>
-                </a>
+                </button>
                 {% elif agreement.status == 'approved' %}
-                <a href="{% url 'agreement_action' agreement.pk 'done' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
-                    <span class="material-symbols-outlined text-base">task_alt</span>
-                    <span>إنجاز الاتفاقية</span>
-                </a>
-                <a href="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                <form method="POST" action="{% url 'agreement_action' agreement.pk 'done' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                        <span class="material-symbols-outlined text-base">task_alt</span>
+                        <span>إنجاز الاتفاقية</span>
+                    </button>
+                </form>
+                <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>إلغاء الاعتماد</span>
-                </a>
+                </button>
                 {% elif agreement.status == 'disapproved' %}
-                <a href="{% url 'agreement_action' agreement.pk 'reopen' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
-                    <span class="material-symbols-outlined text-base">refresh</span>
-                    <span>إعادة فتح</span>
-                </a>
+                <form method="POST" action="{% url 'agreement_action' agreement.pk 'reopen' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                        <span>إعادة فتح</span>
+                    </button>
+                </form>
                 {% endif %}
             {% endif %}
 
-            {% if agreement.status == 'new' %}
+            {% if can_edit %}
             <a href="{% url 'agreement_edit' agreement.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل</span>
             </a>
             {% endif %}
 
-            {% if agreement.status == 'new' or request.user.is_superuser %}
-            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agreement_delete' agreement.pk %}', title: 'حذف الاتفاقية', itemName: '{{ agreement.serial_num }}', message: 'هل أنت متأكد من حذف هذه الاتفاقية رقم <span class=\'font-bold text-slate-800\'>#{{ agreement.serial_num }}</span>؟' })" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-colors">
+            {% if can_delete %}
+            <button type="button" onclick="openDeleteModal()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-colors">
                 <span class="material-symbols-outlined text-base">delete</span>
                 <span>حذف</span>
             </button>
@@ -114,9 +129,19 @@
                 <div class="pt-4 border-t border-slate-100">
                     <span class="text-slate-400 text-xs block mb-2">الوصف والشروط</span>
                     <div class="p-4 bg-slate-50 rounded-xl text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap">
-                        {% if agreement.description %}{{ agreement.description|safe }}{% else %}لا يوجد وصف مسجل لهذه الاتفاقية.{% endif %}
+                        {% if agreement.description %}{{ agreement.description|linebreaksbr }}{% else %}لا يوجد وصف مسجل لهذه الاتفاقية.{% endif %}
                     </div>
                 </div>
+
+                {% if agreement.approval_notes %}
+                <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
+                    <div class="font-bold flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">info</span>
+                        <span>ملاحظات الاعتماد / الرفض:</span>
+                    </div>
+                    <p class="leading-relaxed">{{ agreement.approval_notes }}</p>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -137,11 +162,180 @@
                         <span class="text-slate-400 block">آخر تحديث</span>
                         <span class="font-mono text-slate-700">{{ agreement.updated_at|date:"d/m/Y - H:i" }}</span>
                     </div>
+                    {% if agreement.approved_by %}
+                    <div class="pt-2 border-t border-slate-100">
+                        <span class="text-slate-400 block">تم الاعتماد / الرفض بواسطة</span>
+                        <span class="font-bold text-slate-800">{{ agreement.approved_by.get_full_name|default:agreement.approved_by.username }}</span>
+                        {% if agreement.approved_at %}
+                        <span class="text-[10px] text-slate-500 font-mono block">{{ agreement.approved_at|date:"d/m/Y - H:i" }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
     </div>
 
+    <!-- Complete Agreement Timeline (Section 3 & 4) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center border border-teal-100">
+                    <span class="material-symbols-outlined text-lg">timeline</span>
+                </div>
+                <div>
+                    <h3 class="text-sm font-black text-slate-900">سجل الأحداث والخط الزمني للاتفاقية (Agreement Timeline)</h3>
+                    <p class="text-[11px] text-slate-500">سجل زمني موحد لجميع مراحل الاتفاقية: الإنشاء، التعديلات، القرارات الإدارية، وتغيير الحالات</p>
+                </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-teal-50 text-[#1a8b8b] border border-teal-200 text-xs font-bold font-mono">
+                {{ timeline_events|length }} حدث
+            </span>
+        </div>
+
+        {% if timeline_events %}
+        <div class="p-5 sm:p-6">
+            <div class="relative border-r-2 border-slate-200 mr-4 space-y-6">
+                {% for ev in timeline_events %}
+                <div class="relative pr-6">
+                    <div class="absolute -right-[13px] top-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-xs
+                        {% if ev.color == 'emerald' %}bg-emerald-500 text-white
+                        {% elif ev.color == 'rose' %}bg-rose-500 text-white
+                        {% elif ev.color == 'amber' %}bg-amber-500 text-white
+                        {% elif ev.color == 'purple' %}bg-purple-500 text-white
+                        {% elif ev.color == 'blue' or ev.color == 'sky' %}bg-blue-500 text-white
+                        {% elif ev.color == 'teal' %}bg-[#27bebe] text-white
+                        {% else %}bg-slate-500 text-white{% endif %}">
+                        <span class="material-symbols-outlined text-[13px]">{{ ev.icon|default:"circle" }}</span>
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-1.5 text-xs">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <span class="font-black text-slate-900">{{ ev.title }}</span>
+                            <div class="flex items-center gap-2 text-[11px] text-slate-500">
+                                <span class="inline-flex items-center gap-1 font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <span class="material-symbols-outlined text-xs text-[#27bebe]">person</span>
+                                    <span>{{ ev.actor }}</span>
+                                </span>
+                                {% if ev.timestamp %}
+                                <span class="font-mono text-slate-400">{{ ev.timestamp|date:"Y-m-d H:i:s" }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if ev.details %}
+                        <p class="text-slate-700 font-medium leading-relaxed">{{ ev.details }}</p>
+                        {% endif %}
+                        {% if ev.approval_required %}
+                        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            <span class="material-symbols-outlined text-xs">pending_actions</span>
+                            <span>يتطلب اعتماد المدير</span>
+                        </div>
+                        {% endif %}
+                        {% if ev.changes %}
+                        <div class="mt-2 pt-2 border-t border-slate-200/80 space-y-1">
+                            <span class="text-[10px] font-bold text-slate-500 block">التغييرات المسجلة (قبل ➔ بعد):</span>
+                            {% for ch in ev.changes %}
+                            <div class="flex flex-wrap items-center gap-1.5 text-[11px] bg-white px-2.5 py-1 rounded border border-slate-200">
+                                <span class="font-bold text-slate-800">{{ ch.field }}:</span>
+                                <span class="text-rose-600 line-through">{{ ch.old|default:"-" }}</span>
+                                <span class="text-slate-400">➔</span>
+                                <span class="text-emerald-700 font-bold">{{ ch.new|default:"-" }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-xs text-slate-400">
+            لا توجد أحداث زمنية مسجلة لهذه الاتفاقية حتى الآن.
+        </div>
+        {% endif %}
+    </div>
+
 </div>
+
+<!-- Disapproval Modal -->
+<div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDisapproveModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="text-sm font-bold flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">cancel</span>
+                    <span>رفض الاتفاقية</span>
+                </h3>
+                <button type="button" onclick="closeDisapproveModal()" class="text-white/80 hover:text-white">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="POST" action="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="p-6 space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">سبب الرفض والملاحظات</label>
+                    <textarea name="reason" rows="3" required placeholder="يرجى كتابة سبب رفض الاتفاقية بوضوح..."
+                              class="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
+                </div>
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                        تأكيد الرفض
+                    </button>
+                    <button type="button" onclick="closeDisapproveModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إلغاء
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDeleteModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="text-sm font-bold flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                    <span>تأكيد حذف الاتفاقية</span>
+                </h3>
+                <button type="button" onclick="closeDeleteModal()" class="text-white/80 hover:text-white">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+            <form method="POST" action="{% url 'agreement_delete' agreement.pk %}" class="p-6 space-y-4">
+                {% csrf_token %}
+                <p class="text-xs text-slate-700 leading-relaxed">
+                    هل أنت متأكد من حذف هذه الاتفاقية رقم <span class="font-bold font-mono text-slate-900">#{{ agreement.serial_num }}</span>؟ لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+                </p>
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                        نعم، احذف الاتفاقية
+                    </button>
+                    <button type="button" onclick="closeDeleteModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                        إلغاء
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openDisapproveModal() {
+    document.getElementById('disapprove-modal').classList.remove('hidden');
+}
+function closeDisapproveModal() {
+    document.getElementById('disapprove-modal').classList.add('hidden');
+}
+function openDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('hidden');
+}
+function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+}
+</script>
 {% endblock %}

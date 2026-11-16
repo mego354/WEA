@@ -1,0 +1,134 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}تسليمات الطلبات واللوجستيات — WEA Pharma ERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <a href="{% url 'reports_hub' %}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                    <span>العودة لبوابة التقارير</span>
+                </a>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600 text-3xl">local_shipping</span>
+                <span>تسليمات الطلبيات واللوجستيات (Order Deliveries & Dispatch)</span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                تتبع حركة توصيل الطلبيات، سائقي الشحن، ومواعيد التسليم وحالات إثبات الاستلام.
+            </p>
+        </div>
+
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            {% if request.user|has_permission:'reports:inventory/export' %}
+            <a href="{% url 'report_order_deliveries_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير Excel</span>
+            </a>
+            {% endif %}
+            <a href="{% url 'report_order_deliveries_print' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" target="_blank" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">print</span>
+                <span>طباعة</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">إجمالي طلبيات الفترة</span>
+            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ summary.total_orders }}</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">طلبيات تم تسليمها بنجاح</span>
+            <span class="text-2xl font-black text-emerald-600 mt-1 block">{{ summary.delivered_count }}</span>
+            <span class="text-[11px] font-bold text-emerald-600 block mt-1">نسبة الإنجاز: {{ summary.fulfillment_pct }}%</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">طلبيات قيد التجهيز والشحن</span>
+            <span class="text-2xl font-black text-amber-600 mt-1 block">{{ summary.pending_count }}</span>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 block">معدل الإنجاز اللوجستي</span>
+            <span class="text-2xl font-black text-brand-600 mt-1 block">{{ summary.fulfillment_pct }}%</span>
+        </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">الفترة الزمنية</label>
+                <select name="period" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي</option>
+                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
+                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
+                </select>
+            </div>
+
+            <div>
+                <button type="submit" class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-colors min-h-[38px]">
+                    <span class="material-symbols-outlined text-base">filter_alt</span>
+                    <span>تصفية</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Data Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs whitespace-nowrap">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-3">رقم الطلب</th>
+                        <th class="py-3 px-3">تاريخ الطلب</th>
+                        <th class="py-3 px-3">تاريخ التسليم</th>
+                        <th class="py-3 px-3">العميل</th>
+                        <th class="py-3 px-3">المنطقة</th>
+                        <th class="py-3 px-3">المخزن</th>
+                        <th class="py-3 px-3">مندوب التوصيل</th>
+                        <th class="py-3 px-3 text-center">الحالة</th>
+                        <th class="py-3 px-3 text-center">البنود</th>
+                        <th class="py-3 px-3 text-center">الكمية</th>
+                        <th class="py-3 px-3 text-left font-bold text-slate-900">الإجمالي النهائي (ج.م)</th>
+                        <th class="py-3 px-3">إثبات التسليم</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for r in rows %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-3 font-mono font-bold text-slate-900">{{ r.order_num }}</td>
+                        <td class="py-3 px-3 font-mono text-slate-500">{{ r.order_date }}</td>
+                        <td class="py-3 px-3 font-mono text-slate-700">{{ r.delivery_date }}</td>
+                        <td class="py-3 px-3 font-bold text-slate-900">{{ r.customer_name }}</td>
+                        <td class="py-3 px-3 text-slate-600">{{ r.brick }}</td>
+                        <td class="py-3 px-3 text-slate-600">{{ r.warehouse }}</td>
+                        <td class="py-3 px-3 text-slate-700 font-medium">{{ r.delivery_agent }}</td>
+                        <td class="py-3 px-3 text-center">
+                            <span class="inline-block px-2 py-0.5 rounded-full font-bold text-[10px] {{ r.status_badge }} border">
+                                {{ r.status }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3 text-center text-slate-700">{{ r.items_count }}</td>
+                        <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.total_quantity }}</td>
+                        <td class="py-3 px-3 text-left font-mono font-black text-slate-900">{{ r.grand_total|floatformat:2 }}</td>
+                        <td class="py-3 px-3 text-slate-600">{{ r.confirmation_method }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="py-8 text-center text-slate-400">لا توجد طلبيات مسجلة لهذه الفترة.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

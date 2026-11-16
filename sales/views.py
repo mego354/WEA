@@ -5,14 +5,30 @@ from django.contrib import messages
 from django.db.models import Q, Sum, Count
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.http import JsonResponse
+from django.urls import reverse
 
 from django.core.paginator import Paginator
 from master_data.pagination_utils import paginate_queryset
 from master_data.models import Area
 from contacts.constants import CUSTOMER_CATEGORIES
 from contacts.views import contact_detail, contact_create, contact_edit
-from .models import SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection
-from .services import SalesOrderService, CollectionService
+from .models import (
+    SalesOrder, SalesOrderItem, CustomerAccount, CustomerTransaction, Collection,
+    SalesReturnOrder, SalesReturnOrderItem
+)
+from .services import (
+    SalesOrderService, CollectionService,
+    SalesReturnOrderService, build_sales_return_timeline
+)
+from master_data.search_utils import (
+    filter_by_arabic_search,
+    parse_search_limit,
+    get_bounded_select_options,
+    serialize_contact_option,
+    serialize_warehouse_option,
+    serialize_vault_option,
+)
 from contacts.models import Contact
 from catalog.models import Product
 from inventory.models import Warehouse
@@ -21,6 +37,7 @@ from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object
 )
+from accounts.scope_service import ScopeResolutionService
 
 
 @require_permission('sales:orders/list')
@@ -44,21 +61,21 @@ def sales_orders_list(request):
 
     if customer_filter:
         qs = qs.filter(customer_id=customer_filter)
-        c_obj = Contact.objects.filter(id=customer_filter).first()
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_filter).first()
         active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_filter}', 'param': 'customer'})
 
     if search:
-        qs = qs.filter(
-            Q(order_number__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(customer__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'customer__name'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
-    # Scoped customer filter options (top 50 active)
-    customers = Contact.objects.filter(is_customer=True).order_by('name')[:50]
+    # Scoped bounded customer filter options (selected customer preserved for smart search)
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=customer_filter,
+        limit=100,
+    )
 
     # Dedicated real scoped statistics cards matching filtered queryset
     stats_qs = qs if status_filter == 'rejected' else qs.exclude(status='rejected')
@@ -128,10 +145,13 @@ def sales_order_create(request):
             })
 
         from accounts.services import get_representative_warehouse
-        from accounts.permissions import can_user_access_object
         rep_wh = get_representative_warehouse(request.user)
 
         if rep_wh:
+            if warehouse_id and str(warehouse_id) != str(rep_wh.id):
+                forged_wh = get_object_or_404(Warehouse, id=warehouse_id)
+                if not can_user_access_object(request.user, forged_wh, 'operate'):
+                    return render_forbidden_response(request, "لا يمكنك إجراء مبيعات من مخزن خارج نطاق صلاحيتك.")
             warehouse = rep_wh
         elif warehouse_id:
             warehouse = get_object_or_404(Warehouse, id=warehouse_id)
@@ -148,6 +168,9 @@ def sales_order_create(request):
         customer = get_object_or_404(Contact, id=customer_id)
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
+        if not customer.is_customer or customer.status == 'inactive':
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كعميل نشط.")
+            return redirect('sales_order_create')
 
         try:
             order = SalesOrderService.create_order(
@@ -169,16 +192,23 @@ def sales_order_create(request):
             return redirect('sales_order_create')
 
     from accounts.services import is_representative, get_representative_warehouse
-    from accounts.scope_service import ScopeResolutionService
     is_rep = is_representative(request.user)
     user_rep_wh = get_representative_warehouse(request.user) if is_rep else None
 
-    customers = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
+    raw_selected_customer = request.GET.get('customer') or request.GET.get('customer_id')
+    customers_qs = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
+    customers = get_bounded_select_options(customers_qs, selected_id=raw_selected_customer, limit=100)
+    selected_customer_id = None
+    if raw_selected_customer and str(raw_selected_customer).isdigit():
+        candidate_cid = int(raw_selected_customer)
+        if any(c.id == candidate_cid for c in customers):
+            selected_customer_id = candidate_cid
     warehouses = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales')
-    products = Product.objects.filter(is_active=True)
+    products = Product.objects.filter(is_active=True, sellable=True)
 
     context = {
         'customers': customers,
+        'selected_customer_id': selected_customer_id,
         'warehouses': warehouses,
         'user_rep_wh': user_rep_wh,
         'is_rep': is_rep,
@@ -235,7 +265,6 @@ def sales_order_edit(request, pk):
             })
 
         from accounts.services import get_representative_warehouse
-        from accounts.permissions import can_user_access_object
         rep_wh = get_representative_warehouse(request.user)
 
         if warehouse_id:
@@ -254,6 +283,9 @@ def sales_order_edit(request, pk):
         customer = get_object_or_404(Contact, id=customer_id)
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
+        if not customer.is_customer or (customer.pk != order.customer_id and customer.status == 'inactive'):
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كعميل نشط.")
+            return redirect('sales_order_edit', pk=order.pk)
 
         try:
             order = SalesOrderService.update_order(
@@ -276,12 +308,19 @@ def sales_order_edit(request, pk):
             return redirect('sales_order_edit', pk=order.pk)
 
     from accounts.services import is_representative, get_representative_warehouse
-    from accounts.scope_service import ScopeResolutionService
     is_rep = is_representative(request.user)
     user_rep_wh = get_representative_warehouse(request.user) if is_rep else None
 
-    customers = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
-    warehouses = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales')
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=order.customer_id,
+        limit=100,
+    )
+    warehouses = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales'),
+        selected_id=order.source_warehouse_id,
+        limit=100,
+    )
     products = Product.objects.filter(is_active=True)
 
     context = {
@@ -420,24 +459,24 @@ def collections_list(request):
 
     if customer_id:
         qs = qs.filter(customer_id=customer_id)
-        c_obj = Contact.objects.filter(id=customer_id).first()
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_id).first()
         active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer'})
 
     if vault_id:
         qs = qs.filter(vault_id=vault_id)
-        v_obj = Vault.objects.filter(id=vault_id).first()
+        v_obj = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales').filter(id=vault_id).first()
         active_filters.append({'label': f'الخزنة: {v_obj.name if v_obj else vault_id}', 'param': 'vault'})
 
     if search:
-        qs = qs.filter(
-            Q(serial_num__icontains=search) |
-            Q(customer__name__icontains=search) |
-            Q(notes__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['serial_num', 'customer__name', 'notes'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact').order_by('name')[:50]
-    vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault').order_by('name')
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=customer_id,
+        limit=100,
+    )
+    vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales')
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -493,6 +532,9 @@ def collection_create(request):
 
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "لا يمكنك تسجيل تحصيل لعميل خارج نطاقك الجغرافي أو صلاحياتك.")
+        if not customer.is_customer or customer.status == 'inactive':
+            messages.error(request, "جهة الاتصال المحددة غير مصنفة كعميل نشط.")
+            return redirect('collection_create')
         if not can_user_access_object(request.user, vault, 'deposit'):
             return render_forbidden_response(request, "لا يمكنك الإيداع في خزنة غير مخصصة لك.")
 
@@ -521,15 +563,20 @@ def collection_create(request):
             messages.error(request, str(e.message if hasattr(e, 'message') else e))
             return redirect('collection_create')
 
-    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True), request.user, 'contact')
-    vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), request.user, 'vault')
-    initial_customer = request.GET.get('customer_id')
+    initial_customer = request.GET.get('customer_id') or request.GET.get('customer')
     initial_order = request.GET.get('order_id')
 
     if initial_order and not initial_customer:
         ord_obj = SalesOrder.objects.filter(id=initial_order).first()
-        if ord_obj:
+        if ord_obj and can_user_access_object(request.user, ord_obj, 'view'):
             initial_customer = ord_obj.customer_id
+
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=initial_customer,
+        limit=100,
+    )
+    vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales')
 
     # Open sales orders for dropdown linking
     orders_qs = SalesOrder.objects.exclude(status='cancelled').select_related('customer').order_by('-order_date')
@@ -567,14 +614,9 @@ def sales_customers_list(request):
         qs = qs.filter(customer_category=category)
 
     if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(serial_num__icontains=search) |
-            Q(mobile__icontains=search) |
-            Q(phone__icontains=search) |
-            Q(code__icontains=search) |
-            Q(contact_person__icontains=search) |
-            Q(tax_id__icontains=search)
+        qs = filter_by_arabic_search(
+            qs, search,
+            ['name', 'serial_num', 'mobile', 'phone', 'code', 'contact_person', 'tax_id']
         ).distinct()
 
     qs = qs.order_by('name')
@@ -594,9 +636,7 @@ def sales_customers_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
 
-    governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
-    if not governorates.exists():
-        governorates = Area.objects.filter(is_company_area=False).order_by('name')
+    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales')
 
     categories = [c[0] if isinstance(c, (list, tuple)) else c for c in CUSTOMER_CATEGORIES]
 
@@ -655,10 +695,7 @@ def accounting_customers_list(request):
 
     active_filters = []
     if search:
-        qs = qs.filter(
-            Q(customer__name__icontains=search) |
-            Q(customer__code__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['customer__name', 'customer__code'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     acc_agg = qs.aggregate(
@@ -704,18 +741,18 @@ def customer_transactions_list(request):
 
     if customer_id:
         qs = qs.filter(account__customer_id=customer_id)
-        c_obj = Contact.objects.filter(id=customer_id).first()
+        c_obj = scoped_contacts.filter(id=customer_id).first()
         active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer_id'})
 
     if search:
-        qs = qs.filter(
-            Q(serial__icontains=search) |
-            Q(description__icontains=search) |
-            Q(account__customer__name__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__customer__name'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    customers = scoped_contacts.filter(is_customer=True).order_by('name')[:50]
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=customer_id,
+        limit=100,
+    )
 
     tx_agg = qs.aggregate(
         total_count=Count('id'),
@@ -803,4 +840,490 @@ def collections_export(request):
     ]
 
     return export_to_excel_response(qs, columns, filename="collections_export", sheet_title="التحصيلات النقدية")
+
+
+@require_permission('sales:returns/list')
+def sales_return_orders_list(request):
+    status_filter = request.GET.get('status', 'all')
+    customer_filter = request.GET.get('customer')
+    search = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    qs = SalesReturnOrder.objects.select_related(
+        'customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by'
+    ).all().order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'salesreturnorder')
+
+    active_filters = []
+
+    if status_filter != 'all':
+        qs = qs.filter(status=status_filter)
+        status_labels = dict(SalesReturnOrder.STATUS_CHOICES)
+        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
+
+    if customer_filter:
+        qs = qs.filter(customer_id=customer_filter)
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_filter).first()
+        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_filter}', 'param': 'customer'})
+
+    if date_from:
+        qs = qs.filter(order_date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+
+    if date_to:
+        qs = qs.filter(order_date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'customer__name', 'sales_order__order_number'])
+        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=customer_filter,
+        limit=100,
+    )
+
+    ret_agg = qs.aggregate(
+        total_orders=Count('id'),
+        total_value=Sum('grand_total'),
+        pending_count=Count('id', filter=Q(status='pending')),
+        settled_count=Count('id', filter=Q(status='settled')),
+    )
+    return_stats = {
+        'total_orders': ret_agg['total_orders'] or 0,
+        'total_value': ret_agg['total_value'] or Decimal('0.00'),
+        'pending_count': ret_agg['pending_count'] or 0,
+        'settled_count': ret_agg['settled_count'] or 0,
+    }
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+
+    context = {
+        'returns': page_obj.object_list,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'current_status': status_filter,
+        'selected_customer': customer_filter,
+        'search_query': search,
+        'date_from': date_from,
+        'date_to': date_to,
+        'customers': customers,
+        'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
+        'total_count': paginator.count,
+        'stats': return_stats,
+    }
+    return render(request, 'sales/sales_return_orders_list.html', context)
+
+
+@require_permission('sales:returns/create')
+def sales_return_order_create(request):
+    if request.method == 'POST':
+        order_id = request.POST.get('sales_order')
+        warehouse_id = request.POST.get('warehouse')
+        order_date = request.POST.get('order_date') or timezone.now().date()
+        notes = request.POST.get('notes', '').strip()
+
+        if not order_id:
+            messages.error(request, "يرجى تحديد أمر البيع المراد عمل مرتجع له.")
+            return redirect('sales_return_order_create')
+
+        sales_order = get_object_or_404(SalesOrder, id=order_id)
+        if not can_user_access_object(request.user, sales_order, 'view'):
+            return render_forbidden_response(request, "غير مصرح لك بعمل مرتجع لأمر بيع خارج نطاقك الجغرافي.")
+
+        warehouse = None
+        if warehouse_id:
+            warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+            if not can_user_access_object(request.user, warehouse, 'operate'):
+                return render_forbidden_response(request, "غير مصرح لك بالاستلام في هذا المخزن.")
+
+        orig_item_ids = request.POST.getlist('original_item_id[]')
+        quantities = request.POST.getlist('quantity[]')
+        conditions = request.POST.getlist('condition[]')
+        batch_numbers = request.POST.getlist('batch_number[]')
+        expiry_dates = request.POST.getlist('expiry_date[]')
+
+        items_data = []
+        for i in range(len(orig_item_ids)):
+            item_id = orig_item_ids[i]
+            if not item_id:
+                continue
+            qty_str = quantities[i] if i < len(quantities) else '0'
+            try:
+                qty = Decimal(qty_str)
+            except Exception:
+                continue
+            if qty <= Decimal('0.00'):
+                continue
+
+            cond = conditions[i] if i < len(conditions) else 'resalable'
+            batch = batch_numbers[i] if i < len(batch_numbers) else ''
+            exp = expiry_dates[i] if (i < len(expiry_dates) and expiry_dates[i]) else None
+
+            items_data.append({
+                'original_item_id': item_id,
+                'quantity': qty,
+                'condition': cond,
+                'batch_number': batch,
+                'expiry_date': exp,
+            })
+
+        if not items_data:
+            messages.error(request, "يرجى تحديد صنف واحد على الأقل بكمية صالحة للإرجاع.")
+            return redirect(f"{reverse('sales_return_order_create')}?order_id={sales_order.id}")
+
+        try:
+            return_order = SalesReturnOrderService.create_return_order(
+                sales_order=sales_order,
+                target_warehouse=warehouse,
+                order_date=order_date,
+                items_data=items_data,
+                user=request.user,
+                notes=notes
+            )
+            messages.success(request, f"تم إنشاء إشعار مرتجع المبيعات {return_order.order_number} بنجاح وهو بانتظار الاعتماد.")
+            return redirect('sales_return_order_detail', pk=return_order.pk)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+            return redirect(f"{reverse('sales_return_order_create')}?order_id={sales_order.id}")
+
+    # GET request
+    order_id = request.GET.get('order_id')
+    selected_order = None
+    order_items_payload = []
+    if order_id:
+        selected_order = SalesOrder.objects.filter(id=order_id, status__in=['delivered', 'invoiced']).first()
+        if selected_order and can_user_access_object(request.user, selected_order, 'view'):
+            for item in selected_order.items.select_related('product').all():
+                ret_sum = SalesReturnOrderItem.objects.filter(
+                    order__sales_order=selected_order,
+                    original_item=item
+                ).exclude(order__status__in=['cancelled', 'rejected']).aggregate(s=Sum('quantity'))['s'] or Decimal('0.00')
+                rem_qty = max(Decimal('0.00'), item.quantity - ret_sum)
+                order_items_payload.append({
+                    'item': item,
+                    'returned_so_far': ret_sum,
+                    'remaining_returnable': rem_qty,
+                })
+
+    eligible_orders_qs = get_scoped_queryset(
+        SalesOrder.objects.filter(status__in=['delivered', 'invoiced']).select_related('customer').order_by('-order_date'),
+        request.user,
+        'salesorder',
+    )
+    eligible_orders = get_bounded_select_options(
+        eligible_orders_qs,
+        selected_id=selected_order.id if selected_order else None,
+        limit=50,
+    )
+    warehouses = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales')
+
+    context = {
+        'selected_order': selected_order,
+        'order_items_payload': order_items_payload,
+        'eligible_orders': eligible_orders,
+        'warehouses': warehouses,
+    }
+    return render(request, 'sales/sales_return_order_create.html', context)
+
+
+@require_permission('sales:returns/view')
+def sales_return_order_detail(request, pk):
+    return_order = get_object_or_404(
+        SalesReturnOrder.objects.select_related(
+            'customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by', 'approved_by', 'memo'
+        ).prefetch_related('items__product', 'items__original_item'),
+        pk=pk
+    )
+    if not can_user_access_object(request.user, return_order, 'view'):
+        return render_forbidden_response(request, "غير مصرح لك بعرض هذا المرتجع خارج نطاقك الجغرافي.")
+
+    role_name = getattr(request.user.role, 'name', '') if hasattr(request.user, 'role') and request.user.role else ''
+
+    can_approve = (
+        has_perm_or_admin(request.user, 'sales:returns/approve') and
+        can_user_access_object(request.user, return_order, 'approve') and
+        return_order.status == 'pending'
+    )
+    can_deliver = (
+        has_perm_or_admin(request.user, 'inventory:transfers/approve') and
+        can_user_access_object(request.user, return_order, 'operate') and
+        return_order.status == 'approved'
+    )
+    can_settle = (
+        (has_perm_or_admin(request.user, 'sales:orders/manage') or role_name in ['superadmin', 'accountant']) and
+        return_order.status == 'delivered'
+    )
+    can_cancel = (
+        (has_perm_or_admin(request.user, 'sales:returns/delete') or return_order.created_by_id == request.user.id) and
+        return_order.status in ['pending', 'approved']
+    )
+
+    timeline_events = build_sales_return_timeline(return_order)
+
+    context = {
+        'return_order': return_order,
+        'items': return_order.items.all(),
+        'can_approve': can_approve,
+        'can_deliver': can_deliver,
+        'can_settle': can_settle,
+        'can_cancel': can_cancel,
+        'timeline_events': timeline_events,
+    }
+    return render(request, 'sales/sales_return_order_detail.html', context)
+
+
+@login_required
+def sales_return_order_action(request, pk, action):
+    if request.method != 'POST':
+        messages.error(request, "طريقة الطلب غير صالحة. يجب إرسال الإجراءات عبر طلب آمن (POST).")
+        return redirect('sales_return_order_detail', pk=pk)
+
+    return_order = get_object_or_404(SalesReturnOrder, pk=pk)
+
+    try:
+        if action == 'approve':
+            if not has_perm_or_admin(request.user, 'sales:returns/approve'):
+                return render_forbidden_response(request, "ليس لديك صلاحية اعتماد مرتجعات المبيعات.", perm_codename='sales:returns/approve')
+            if not can_user_access_object(request.user, return_order, 'approve'):
+                messages.error(request, "لا يمكنك اعتماد مرتجع مبيعات قمت بإنشائه بنفسك أو يقع خارج نطاق إدارتك.")
+                return redirect('sales_return_order_detail', pk=pk)
+            notes = request.POST.get('approval_notes', '')
+            SalesReturnOrderService.approve_return_order(return_order, request.user, notes=notes)
+            messages.success(request, f"تم اعتماد مرتجع المبيعات {return_order.order_number} بنجاح.")
+
+        elif action == 'reject':
+            if not has_perm_or_admin(request.user, 'sales:returns/approve'):
+                return render_forbidden_response(request, "ليس لديك صلاحية رفض مرتجعات المبيعات.", perm_codename='sales:returns/approve')
+            if not can_user_access_object(request.user, return_order, 'reject'):
+                messages.error(request, "لا يمكنك رفض مرتجع مبيعات قمت بإنشائه بنفسك أو يقع خارج نطاق إدارتك.")
+                return redirect('sales_return_order_detail', pk=pk)
+            reason = request.POST.get('rejection_reason', '').strip()
+            if not reason:
+                messages.error(request, "يرجى كتابة سبب رفض المرتجع.")
+                return redirect('sales_return_order_detail', pk=pk)
+            SalesReturnOrderService.reject_return_order(return_order, request.user, reason=reason)
+            messages.warning(request, f"تم رفض مرتجع المبيعات {return_order.order_number}.")
+
+        elif action == 'deliver':
+            if not has_perm_or_admin(request.user, 'inventory:transfers/approve'):
+                return render_forbidden_response(request, "ليس لديك صلاحية استلام بضاعة المرتجع بالمخزن.", perm_codename='inventory:transfers/approve')
+            SalesReturnOrderService.deliver_return_order(return_order, request.user)
+            messages.success(request, f"تم استلام بضاعة المرتجع بالمخزن وتوليد إذن الإضافة المخزني بنجاح.")
+
+        elif action == 'settle':
+            role_name = getattr(request.user.role, 'name', '') if hasattr(request.user, 'role') and request.user.role else ''
+            if not (has_perm_or_admin(request.user, 'sales:orders/manage') or role_name in ['superadmin', 'accountant']):
+                return render_forbidden_response(request, "ليس لديك صلاحية ترحيل إشعار دائن المرتجع بالحسابات.", perm_codename='sales:orders/manage')
+            SalesReturnOrderService.settle_return_order(return_order, request.user)
+            messages.success(request, f"تم ترحيل إشعار الدائن للحسابات وتخفيض مديونية العميل {return_order.customer.name} بنجاح.")
+
+        elif action == 'cancel':
+            can_cancel = (has_perm_or_admin(request.user, 'sales:returns/delete') or return_order.created_by_id == request.user.id)
+            if not can_cancel:
+                return render_forbidden_response(request, "ليس لديك صلاحية إلغاء هذا المرتجع.", perm_codename='sales:returns/delete')
+            reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', 'إلغاء يدوي')
+            SalesReturnOrderService.cancel_return_order(return_order, request.user, reason=reason)
+            messages.warning(request, f"تم إلغاء مرتجع المبيعات {return_order.order_number}.")
+
+        else:
+            messages.error(request, "إجراء غير معروف.")
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+
+    return redirect('sales_return_order_detail', pk=pk)
+
+
+@require_permission('sales:returns/export')
+def sales_return_orders_export(request):
+    status_filter = request.GET.get('status', 'all')
+    customer_filter = request.GET.get('customer')
+    search = request.GET.get('search', '').strip()
+
+    qs = SalesReturnOrder.objects.select_related('customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by').order_by('-serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'salesreturnorder')
+
+    if status_filter != 'all':
+        qs = qs.filter(status=status_filter)
+    if customer_filter:
+        qs = qs.filter(customer_id=customer_filter)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'customer__name', 'sales_order__order_number'])
+
+    columns = [
+        {'header': 'رقم المرتجع', 'key': 'order_number', 'width': 18, 'align': 'center'},
+        {'header': 'أمر البيع الأصلي', 'key': lambda r: r.sales_order.order_number if r.sales_order else '-', 'width': 18, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda r: r.customer.name, 'width': 35, 'align': 'right'},
+        {'header': 'مخزن الاستلام', 'key': lambda r: r.target_warehouse.name if r.target_warehouse else '-', 'width': 22, 'align': 'right'},
+        {'header': 'تاريخ المرتجع', 'key': lambda r: r.order_date.strftime('%Y-%m-%d') if r.order_date else '', 'width': 16, 'align': 'center'},
+        {'header': 'الحالة', 'key': lambda r: r.status_display_ar, 'width': 20, 'align': 'center'},
+        {'header': 'عدد الأصناف', 'key': 'items_count', 'width': 14, 'align': 'center'},
+        {'header': 'إجمالي المرتجع (ج.م)', 'key': lambda r: float(r.grand_total) if r.grand_total is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'المنشئ', 'key': lambda r: r.created_by.get_full_name() or r.created_by.username if r.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'ملاحظات', 'key': lambda r: r.notes or '', 'width': 30, 'align': 'right'},
+    ]
+
+    return export_to_excel_response(qs, columns, filename="sales_returns_export", sheet_title="مرتجعات المبيعات")
+
+
+@require_permission('sales:returns/view')
+def sales_return_order_print(request, pk):
+    return_order = get_object_or_404(
+        SalesReturnOrder.objects.select_related(
+            'customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by', 'approved_by'
+        ).prefetch_related('items__product', 'items__original_item'),
+        pk=pk
+    )
+    if not can_user_access_object(request.user, return_order, 'view'):
+        return render_forbidden_response(request, "غير مصرح لك بطباعة هذا المرتجع خارج نطاقك الجغرافي.")
+    return render(request, 'sales/sales_return_order_print.html', {'return_order': return_order})
+
+
+@login_required
+def sales_eligible_orders_api(request):
+    search = request.GET.get('q', '').strip()
+    customer_id = request.GET.get('customer_id')
+
+    qs = SalesOrder.objects.filter(status__in=['delivered', 'invoiced']).select_related('customer', 'source_warehouse')
+    qs = get_scoped_queryset(qs, request.user, 'salesorder')
+
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'customer__name'])
+
+    results = []
+    for order in qs[:30]:
+        results.append({
+            'id': order.id,
+            'order_number': order.order_number,
+            'customer_name': order.customer.name,
+            'customer_id': order.customer_id,
+            'warehouse_id': order.source_warehouse_id,
+            'warehouse_name': order.source_warehouse.name if order.source_warehouse else '',
+            'order_date': str(order.order_date),
+            'grand_total': str(order.grand_total),
+        })
+    return JsonResponse({'orders': results})
+
+
+@login_required
+def sales_order_return_details_api(request, order_id):
+    order = get_object_or_404(SalesOrder.objects.select_related('customer', 'source_warehouse'), id=order_id)
+    if not can_user_access_object(request.user, order, 'view'):
+        return JsonResponse({'error': 'غير مصرح لك بعرض تفاصيل هذا الطلب.'}, status=403)
+
+    items_data = []
+    for itm in order.items.select_related('product').all():
+        ret_sum = SalesReturnOrderItem.objects.filter(
+            order__sales_order=order,
+            original_item=itm
+        ).exclude(order__status__in=['cancelled', 'rejected']).aggregate(s=Sum('quantity'))['s'] or Decimal('0.00')
+        rem_qty = max(Decimal('0.00'), itm.quantity - ret_sum)
+        items_data.append({
+            'item_id': itm.id,
+            'product_id': itm.product_id,
+            'product_name': itm.product.name,
+            'product_code': itm.product.code,
+            'unit_price': str(itm.unit_price),
+            'discount_percentage': str(itm.discount_percentage),
+            'tax_percentage': str(itm.tax_percentage),
+            'original_quantity': str(itm.quantity),
+            'returned_so_far': str(ret_sum),
+            'remaining_returnable': str(rem_qty),
+            'batch_number': itm.batch_number or '',
+            'expiry_date': str(itm.expiry_date) if itm.expiry_date else '',
+        })
+
+    return JsonResponse({
+        'order_id': order.id,
+        'order_number': order.order_number,
+        'customer_name': order.customer.name,
+        'customer_id': order.customer_id,
+        'warehouse_id': order.source_warehouse_id,
+        'warehouse_name': order.source_warehouse.name if order.source_warehouse else '',
+        'items': items_data
+    })
+
+
+@require_permission([
+    'sales:orders/list',
+    'sales:orders/create',
+    'sales:orders/edit',
+    'sales:collections/list',
+    'sales:collections/create',
+    'sales:returns/list',
+    'sales:customers/transactions',
+    'sales:customers/accounting',
+])
+def sales_customers_search_api(request):
+    """Scoped Arabic-normalized smart-search API for Sales customer selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'area__name', 'brick__name'],
+            q,
+            raw_fields=['code', 'mobile', 'serial_num'],
+            numeric_id_field='serial_num',
+        )
+
+    results = [serialize_contact_option(c) for c in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
+
+@require_permission([
+    'sales:orders/list',
+    'sales:orders/create',
+    'sales:orders/edit',
+    'sales:returns/create',
+])
+def sales_warehouses_search_api(request):
+    """Scoped smart-search API for Sales warehouse selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'area__name', 'assigned_user__name'],
+            q,
+            raw_fields=['code'],
+        )
+
+    results = [serialize_warehouse_option(wh) for wh in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
+
+@require_permission([
+    'sales:collections/list',
+    'sales:collections/create',
+])
+def sales_vaults_search_api(request):
+    """Scoped smart-search API for Sales vault selectors."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales')
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['name', 'assigned_user__name'],
+            q,
+            raw_fields=['serial_num', 'assigned_user__username'],
+            numeric_id_field='serial_num',
+        )
+
+    results = [serialize_vault_option(v) for v in qs[:limit]]
+    return JsonResponse({'results': results, 'count': len(results)})
+
+
 

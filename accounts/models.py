@@ -135,9 +135,11 @@ class User(AbstractUser):
     def can_bypass_location(self):
         if not self.is_active:
             return False
-        if self.is_superuser or self.is_super_admin or self.bypass_location_verification:
+        if self.is_superuser or self.is_super_admin:
             return True
-        if self.role and self.role.tags.filter(tag='customers:customers/bypassLocation').exists():
+        if self.has_permission('activities:visits/bypass_gps'):
+            return True
+        if not getattr(self, 'has_custom_permissions', False) and self.role and self.role.tags.filter(tag='customers:customers/bypassLocation').exists():
             return True
         return False
 

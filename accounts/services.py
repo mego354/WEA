@@ -229,6 +229,9 @@ class AuditLogService:
 
             action_val = action_type or action or 'action'
             actor_val = user or actor
+            record_id_val = record_id if record_id is not None else kwargs.get('resource_id')
+            record_name_val = record_name or kwargs.get('resource_name', '')
+            description_val = description or kwargs.get('details', '')
 
             ip_val = ip_address
             ua_val = user_agent or ''
@@ -247,11 +250,11 @@ class AuditLogService:
                 actor=actor_val,
                 module=module,
                 action_type=action_val,
-                record_id=str(record_id) if record_id is not None else '',
-                record_name=str(record_name) if record_name else '',
+                record_id=str(record_id_val) if record_id_val is not None else '',
+                record_name=str(record_name_val) if record_name_val else '',
                 target_user=target_user,
                 target_role=target_role,
-                description=description or f"[{module}] {action_val} {record_name or record_id or ''}".strip(),
+                description=description_val or f"[{module}] {action_val} {record_name_val or record_id_val or ''}".strip(),
                 previous_values=cleaned_prev,
                 new_values=cleaned_new,
                 status=status,

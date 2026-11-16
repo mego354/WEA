@@ -35,40 +35,48 @@
 
         <!-- Workflow Action Buttons -->
         <div class="flex items-center gap-2 flex-wrap">
-            {% if return_order.status == 'pending' %}
+            {% if return_order.status == 'pending' and can_approve %}
             <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'approve' %}">
                 {% csrf_token %}
                 <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors">
                     <span class="material-symbols-outlined text-base">check_circle</span>
-                    <span>اعتماد المرتجع (Approve)</span>
+                    <span>اعتماد المرتجع</span>
                 </button>
             </form>
-            {% elif return_order.status == 'approved' %}
+            <button type="button" onclick="openRejectModal()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>رفض</span>
+            </button>
+            {% elif return_order.status == 'approved' and can_deliver %}
             <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'deliver' %}">
                 {% csrf_token %}
                 <button type="submit" onclick="return confirm('تأكيد صرف البضاعة من المخزن وإنشاء إذن صرف؟');"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
                     <span class="material-symbols-outlined text-base">output</span>
-                    <span>صرف من المخزن (Deliver)</span>
+                    <span>صرف من المخزن</span>
                 </button>
             </form>
-            {% elif return_order.status == 'delivered' %}
+            {% elif return_order.status == 'delivered' and can_settle %}
             <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'settle' %}">
                 {% csrf_token %}
                 <button type="submit" onclick="return confirm('تأكيد ترحيل إشعار الخصم للحسابات وتخفيض مديونية المورد؟');"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
                     <span class="material-symbols-outlined text-base">receipt_long</span>
-                    <span>ترحيل للحسابات (Settle)</span>
+                    <span>ترحيل للحسابات</span>
                 </button>
             </form>
             {% endif %}
 
-            {% if return_order.status == 'pending' or return_order.status == 'approved' %}
-            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء أمر الإرجاع', itemName: '{{ return_order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع رقم <span class=\'font-bold text-slate-800\'>#{{ return_order.serial_num }}</span> نهائياً؟', submitText: 'نعم، إلغاء أمر الإرجاع', icon: 'cancel' })"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">close</span>
-                <span>إلغاء</span>
-            </button>
+            {% if can_cancel %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'cancel' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع نهائياً؟');"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">close</span>
+                    <span>إلغاء</span>
+                </button>
+            </form>
             {% endif %}
 
             <a href="{% url 'purchase_return_order_print' return_order.id %}" target="_blank"
@@ -87,6 +95,17 @@
 
         <!-- CENTER 2 COLUMNS: ITEMS & CALCULATIONS -->
         <div class="lg:col-span-2 space-y-6">
+
+            <!-- Rejection Notice Banner -->
+            {% if return_order.status == 'rejected' and return_order.rejection_reason %}
+            <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+                <span class="material-symbols-outlined text-rose-600 shrink-0 mt-0.5">error</span>
+                <div class="text-xs">
+                    <h4 class="font-bold text-rose-800 mb-0.5">سبب رفض المرتجع:</h4>
+                    <p class="text-rose-700">{{ return_order.rejection_reason }}</p>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Line Items Table -->
             <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
@@ -212,6 +231,47 @@
             </div>
             {% endif %}
 
+            <!-- Timeline -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5">
+                <h3 class="font-bold text-slate-900 text-xs pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">history</span>
+                    <span>سجل الإجراءات والتدقيق (Timeline)</span>
+                </h3>
+
+                <div class="relative border-r-2 border-slate-100 mr-3 space-y-6">
+                    {% for event in timeline_events %}
+                    <div class="relative pr-6">
+                        <span class="absolute -right-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center">
+                            <span class="w-1.5 h-1.5 rounded-full {{ event.dot_class|default:'bg-slate-400' }}"></span>
+                        </span>
+
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-slate-900">{{ event.title }}</span>
+                                {% if event.badge %}
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold {{ event.badge_class }}">
+                                    {{ event.badge }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <span class="text-[11px] font-mono text-slate-400">{{ event.timestamp|date:"d/m/Y h:i A" }}</span>
+                        </div>
+
+                        <div class="text-[11px] text-slate-500 mt-1">
+                            {% if event.user %}
+                            بواسطة: <span class="font-bold text-slate-700">{{ event.user }}</span>
+                            {% endif %}
+                            {% if event.notes %}
+                            <p class="text-slate-600 bg-slate-50 p-2 rounded mt-1 border border-slate-100">{{ event.notes }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-xs text-slate-400 py-3 pr-6">لا توجد سجلات تدقيق مسجلة.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
         </div>
 
         <!-- RIGHT SIDEBAR DETAILS -->
@@ -300,4 +360,33 @@
     </div>
 
 </div>
+
+<!-- Reject Modal -->
+<div id="reject-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeRejectModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
+            <h3 class="text-sm font-bold text-slate-900">رفض أمر إرجاع المشتريات</h3>
+            <p class="text-slate-500">يرجى توضيح سبب رفض أمر الإرجاع ليتم حفظه في سجل التدقيق:</p>
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'reject' %}">
+                {% csrf_token %}
+                <textarea name="rejection_reason" rows="3" required placeholder="سبب الرفض..."
+                          class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-red-500"></textarea>
+                <div class="pt-4 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">إلغاء</button>
+                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">تأكيد الرفض</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openRejectModal() {
+    document.getElementById('reject-modal').classList.remove('hidden');
+}
+function closeRejectModal() {
+    document.getElementById('reject-modal').classList.add('hidden');
+}
+</script>
 {% endblock %}

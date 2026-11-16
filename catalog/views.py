@@ -12,6 +12,7 @@ from accounts.permissions import require_permission, has_perm_or_admin, render_f
 
 
 from master_data.pagination_utils import paginate_queryset
+from master_data.search_utils import filter_by_arabic_search
 
 
 @require_permission('catalog:products/list')
@@ -54,12 +55,7 @@ def products_list(request):
             pass
 
     if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(sku_code__icontains=search) |
-            Q(barcode__icontains=search) |
-            Q(description__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['name', 'sku_code', 'barcode', 'description'])
         active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     categories = ProductCategory.objects.all().order_by('name')

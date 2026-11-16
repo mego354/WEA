@@ -155,11 +155,12 @@ def home_view(request):
     UserModel = get_user_model()
     from accounts.scope_service import ScopeResolutionService
 
+    from accounts.permissions import is_accountant, is_manager_or_higher
     is_super = getattr(user, 'is_super_admin', False) or user.is_superuser or (user.role and getattr(user.role, 'is_super', False))
     user_act_scope = ScopeResolutionService.get_user_scope(user, 'activities', 'view')
     user_sales_scope = ScopeResolutionService.get_user_scope(user, 'sales', 'view')
     is_acct = not is_super and is_accountant(user)
-    is_mgr = not is_super and not is_acct and (user_act_scope in ['area', 'all'] or user_sales_scope in ['area', 'all'])
+    is_mgr = not is_super and not is_acct and (is_manager_or_higher(user) or user_act_scope in ['area', 'all'] or user_sales_scope in ['area', 'all'])
     is_rep = not is_super and not is_mgr and not is_acct
 
     # Manager / Superadmin representative selection

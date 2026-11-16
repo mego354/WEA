@@ -451,18 +451,50 @@ class ProductTransferService:
             source_stock.qty_on_hand = max(Decimal('0.00'), source_stock.qty_on_hand - qty_to_move)
             source_stock.save(update_fields=['qty_on_hand', 'updated_at'])
 
-            # Add to destination warehouse
+            # Add to destination warehouse with weighted average cost recalculation
             dest_stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                 warehouse=transfer_request.destination_warehouse,
                 product=item.product,
                 defaults={
                     'qty_on_hand': Decimal('0.00'),
                     'qty_reserved': Decimal('0.00'),
-                    'product_cost': source_stock.product_cost
+                    'product_cost': source_stock.product_cost or Decimal('0.00')
                 }
             )
-            dest_stock.qty_on_hand += qty_to_move
-            dest_stock.save(update_fields=['qty_on_hand', 'updated_at'])
+            dest_old_qty = dest_stock.qty_on_hand
+            dest_old_cost = dest_stock.product_cost or Decimal('0.00')
+            incoming_cost = source_stock.product_cost or Decimal('0.00')
+            new_dest_qty = dest_old_qty + qty_to_move
+            if new_dest_qty > Decimal('0.00'):
+                dest_stock.product_cost = ((dest_old_qty * dest_old_cost) + (qty_to_move * incoming_cost)) / new_dest_qty
+
+            dest_stock.qty_on_hand = new_dest_qty
+            dest_stock.save(update_fields=['qty_on_hand', 'product_cost', 'updated_at'])
+
+            # Batch / Lot Transfer
+            if item.batch_number:
+                source_lot = InventoryLot.objects.select_for_update().filter(
+                    stock=source_stock,
+                    batch_number=item.batch_number
+                ).first()
+                if source_lot:
+                    source_lot.quantity = max(Decimal('0.00'), source_lot.quantity - qty_to_move)
+                    source_lot.save(update_fields=['quantity'])
+
+                dest_lot, _ = InventoryLot.objects.select_for_update().get_or_create(
+                    stock=dest_stock,
+                    batch_number=item.batch_number,
+                    defaults={
+                        'expiry_date': item.expiry_date or (source_lot.expiry_date if source_lot else None),
+                        'quantity': Decimal('0.00')
+                    }
+                )
+                dest_lot.quantity += qty_to_move
+                if item.expiry_date and not dest_lot.expiry_date:
+                    dest_lot.expiry_date = item.expiry_date
+                elif source_lot and source_lot.expiry_date and not dest_lot.expiry_date:
+                    dest_lot.expiry_date = source_lot.expiry_date
+                dest_lot.save(update_fields=['quantity', 'expiry_date'])
 
             InventoryMemoItem.objects.create(
                 memo=memo_out,
@@ -497,6 +529,7 @@ class ProductTransferService:
         AuditLogService.log(
             user=user,
             action='TRANSFER_EXECUTED',
+            module='inventory',
             resource_type='ProductTransferRequest',
             resource_id=str(transfer_request.id),
             resource_name=transfer_request.reference_number,

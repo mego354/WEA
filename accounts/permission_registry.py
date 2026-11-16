@@ -119,7 +119,8 @@ ERP_PERMISSIONS_CATALOG = {
                     ('purchases:returns/list', 'عرض قائمة مرتجعات المشتريات', 'read'),
                     ('purchases:returns/view', 'عرض تفاصيل إذن مرتجع المشتريات', 'read'),
                     ('purchases:returns/create', 'إنشاء إذن مرتجع مشتريات جديد', 'write'),
-                    ('purchases:returns/manage', 'تنفيذ واعتماد حركات مرتجع المشتريات', 'workflow'),
+                    ('purchases:returns/approve', 'اعتماد أو رفض أمر مرتجع المشتريات', 'workflow'),
+                    ('purchases:returns/manage', 'تنفيذ وتسوية حركات مرتجع المشتريات', 'workflow'),
                     ('purchases:returns/export', 'تصدير مرتجعات المشتريات إلى Excel', 'export'),
                 ]
             }
@@ -144,6 +145,18 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:orders/invoice', 'ترحيل فاتورة البيع لحساب العميل المدين', 'financial'),
                     ('sales:orders/cancel', 'إلغاء أمر البيع', 'workflow'),
                     ('sales:orders/export', 'تصدير أوامر البيع إلى Excel', 'export'),
+                ]
+            },
+            'returns': {
+                'name_ar': 'مرتجعات المبيعات',
+                'actions': [
+                    ('sales:returns/list', 'عرض قائمة مرتجعات المبيعات', 'read'),
+                    ('sales:returns/view', 'عرض تفاصيل وأمر مرتجع المبيعات', 'read'),
+                    ('sales:returns/create', 'إنشاء أمر مرتجع مبيعات جديد', 'write'),
+                    ('sales:returns/approve', 'اعتماد أو رفض أمر مرتجع المبيعات', 'workflow'),
+                    ('sales:returns/manage', 'استلام وتسوية مرتجع المبيعات', 'workflow'),
+                    ('sales:returns/cancel', 'إلغاء أمر مرتجع المبيعات', 'workflow'),
+                    ('sales:returns/export', 'تصدير مرتجعات المبيعات إلى Excel', 'export'),
                 ]
             },
             'collections': {
@@ -235,11 +248,15 @@ ERP_PERMISSIONS_CATALOG = {
                 ]
             },
             'vendor_payments': {
-                'name_ar': 'مدفوعات الموردين',
+                'name_ar': 'مدفوعات وطلبات سداد الموردين',
                 'actions': [
                     ('treasury:payments/list', 'عرض قائمة مدفوعات وسندات صرف الموردين', 'read'),
                     ('treasury:payments/create', 'تسجيل مدفوعة نقدية/بنكية لمورد', 'financial'),
-                    ('treasury:payments/requests', 'عرض واعتماد طلبات الدفع للموردين', 'workflow'),
+                    ('treasury:payments/requests', 'عرض قائمة وتفاصيل طلبات الدفع للموردين', 'read'),
+                    ('treasury:payment_requests/create', 'إنشاء وتعديل طلب سداد للمورد', 'write'),
+                    ('treasury:payment_requests/approve', 'اعتماد أو رفض طلبات سداد الموردين', 'workflow'),
+                    ('treasury:payment_requests/execute', 'تنفيذ وصرف طلبات سداد الموردين المعتمدة', 'financial'),
+                    ('treasury:payment_requests/export', 'تصدير طلبات سداد الموردين إلى Excel', 'export'),
                     ('treasury:payments/export', 'تصدير مدفوعات الموردين إلى Excel', 'export'),
                 ]
             },
@@ -271,6 +288,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('activities:visits/approve', 'اعتماد أو رفض الزيارة الميدانية من المشرف', 'workflow'),
                     ('activities:visits/evidence', 'رفع وتوثيق صورة الإثبات والموقع الجغرافي', 'write'),
                     ('activities:visits/export', 'تصدير تقارير الزيارات الميدانية إلى Excel', 'export'),
+                    ('activities:visits/bypass_gps', 'تجاوز قيد المسافة (صلاحية مدير / مشرف)', 'workflow'),
                     ('activities:visits/gps_request_exception', 'طلب استثناء تجاوز المسافة الجغرافية (GBS)', 'workflow'),
                 ]
             },
@@ -379,6 +397,85 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'قوالب واستبيانات الزيارات الميدانية',
                 'actions': [
                     ('settings:visitsTemplates/manage', 'تصميم وإدارة قوالب الزيارات وأسئلة الاستبيانات', 'admin'),
+                ]
+            }
+        }
+    },
+    'performance': {
+        'code': 'performance',
+        'name_ar': 'الأداء والتحليلات الميدانية',
+        'name_en': 'Performance & Field Analytics',
+        'icon': 'speed',
+        'root_perm': 'module:performance',
+        'pages': {
+            'overview': {
+                'name_ar': 'النظرة العامة والمؤشرات القيادية',
+                'actions': [
+                    ('performance:overview/view', 'عرض لوحة النظرة العامة ومؤشرات الأداء', 'read'),
+                ]
+            },
+            'analysis': {
+                'name_ar': 'التحليلات المقارنة والرسوم البيانية',
+                'actions': [
+                    ('performance:analysis/view', 'عرض التحليلات المقارنة والرسوم البيانية', 'read'),
+                    ('performance:analysis/export', 'تصدير تحليلات الأداء إلى Excel', 'export'),
+                ]
+            },
+            'daily': {
+                'name_ar': 'متابعة النشاط الميداني اليومي',
+                'actions': [
+                    ('performance:daily/view', 'متابعة النشاط اليومي للمناديب والتبويبات الفرعية', 'read'),
+                    ('performance:daily/export', 'تصدير كشف النشاط اليومي إلى Excel', 'export'),
+                ]
+            },
+            'detailed': {
+                'name_ar': 'مصفوفة الأداء الكبرى وتقييمات الكوتشينج',
+                'actions': [
+                    ('performance:detailed/view', 'عرض مصفوفة الأداء الكبرى وجلسات الكوتشينج', 'read'),
+                    ('performance:detailed/export', 'تصدير مصفوفة الأداء إلى Excel', 'export'),
+                ]
+            }
+        }
+    },
+    'reports': {
+        'code': 'reports',
+        'name_ar': 'التقارير وسجلات الأعمال الشاملة',
+        'name_en': 'Business & Financial Reports',
+        'icon': 'bar_chart',
+        'root_perm': 'module:reports',
+        'pages': {
+            'hub': {
+                'name_ar': 'بوابة التقارير الرئيسية',
+                'actions': [
+                    ('reports:hub/view', 'عرض بوابة وقائمة التقارير المتاحة', 'read'),
+                ]
+            },
+            'financial': {
+                'name_ar': 'التقارير المالية والديون والمراجعة',
+                'actions': [
+                    ('reports:financial/view', 'عرض تقارير أعمار الديون وميزان المراجعة وتحقيق الأهداف', 'read'),
+                    ('reports:financial/export', 'تصدير التقارير المالية إلى Excel والطباعة', 'export'),
+                ]
+            },
+            'sales': {
+                'name_ar': 'تقارير المبيعات والربحية والعملاء',
+                'actions': [
+                    ('reports:sales/view', 'عرض تقارير صافي المبيعات والربحية وملخص العملاء 360 وأداء العروض', 'read'),
+                    ('reports:sales/export', 'تصدير تقارير المبيعات إلى Excel', 'export'),
+                ]
+            },
+            'inventory': {
+                'name_ar': 'تقارير التوريد واللوجستيات والمخزون',
+                'actions': [
+                    ('reports:inventory/view', 'عرض تقارير تسليمات الطلبات وتوفر المخزون ومشتريات الأصناف', 'read'),
+                    ('reports:inventory/export', 'تصدير تقارير المخازن والتوريد إلى Excel', 'export'),
+                ]
+            },
+            'activities': {
+                'name_ar': 'تقارير الأنشطة والاتفاقيات والعينات',
+                'actions': [
+                    ('reports:activities/view', 'عرض تقارير تحقيق الاتفاقيات والمكالمات وتتبع العينات الطبية', 'read'),
+                    ('reports:activities/export', 'تصدير تقارير الأنشطة والعينات إلى Excel', 'export'),
                 ]
             }
         }

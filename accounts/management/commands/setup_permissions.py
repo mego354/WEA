@@ -32,6 +32,8 @@ class Command(BaseCommand):
             'inventory': _get_ct('inventory', 'inventorystock'),
             'treasury': _get_ct('treasury', 'vault'),
             'activities': _get_ct('activities', 'visit'),
+            'performance': _get_ct('activities', 'visit'),
+            'reports': _get_ct('reports', 'salestarget'),
             'settings': _get_ct('master_data', 'companyprofile'),
         }
 
@@ -147,11 +149,13 @@ class Command(BaseCommand):
             'module:activities', 'activities:visits/list', 'activities:visits/view',
             'activities:visits/create', 'activities:visits/edit', 'activities:visits/edit_answers',
             'activities:visits/delete', 'activities:visits/approve', 'activities:visits/evidence',
-            'activities:visits/export', 'activities:visits/gps_request_exception',
+            'activities:visits/export', 'activities:visits/bypass_gps', 'activities:visits/gps_request_exception',
             'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
-            'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/approve',
+            'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create',
+            'activities:agreements/edit', 'activities:agreements/delete', 'activities:agreements/approve',
             'activities:agreements/export',
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/edit', 'sales:orders/approve', 'sales:orders/export',
+            'sales:returns/list', 'sales:returns/view', 'sales:returns/create', 'sales:returns/approve', 'sales:returns/manage', 'sales:returns/cancel', 'sales:returns/export',
             'sales:collections/list',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
             'contacts:contacts/edit', 'contacts:contacts/export',
@@ -159,6 +163,11 @@ class Command(BaseCommand):
             'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export', 'inventory:transfers/list', 'inventory:transfers/view',
             'module:purchases', 'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/approve',
             'purchases:orders/export',
+            'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/approve', 'purchases:returns/manage', 'purchases:returns/export',
+            'module:treasury', 'treasury:payments/requests', 'treasury:payment_requests/approve', 'treasury:payment_requests/export',
+            'module:performance', 'performance:overview/view', 'performance:analysis/view', 'performance:daily/view', 'performance:detailed/view',
+            'performance:analysis/export', 'performance:daily/export', 'performance:detailed/export',
+            'module:reports', 'reports:hub/view', 'reports:financial/view', 'reports:financial/export', 'reports:sales/view', 'reports:sales/export', 'reports:inventory/view', 'reports:inventory/export', 'reports:activities/view', 'reports:activities/export',
         ]
         manager_role.permissions.set([perm_map[c] for c in manager_codenames if c in perm_map])
 
@@ -185,16 +194,19 @@ class Command(BaseCommand):
             'treasury:transactions/list', 'treasury:transactions/create', 'treasury:transactions/edit',
             'treasury:transactions/approve', 'treasury:transactions/reverse',
             'treasury:payments/list', 'treasury:payments/create', 'treasury:payments/requests',
+            'treasury:payment_requests/create', 'treasury:payment_requests/execute', 'treasury:payment_requests/export',
             'treasury:payments/export', 'treasury:vendors/accounting', 'treasury:vendors/transactions',
             'module:purchases', 'purchases:orders/list', 'purchases:orders/view',
             'purchases:orders/invoice', 'purchases:orders/undoInvoice', 'purchases:orders/export',
-            'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/export',
+            'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/create', 'purchases:returns/manage', 'purchases:returns/export',
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/invoice',
+            'sales:returns/list', 'sales:returns/view', 'sales:returns/manage', 'sales:returns/export',
             'sales:collections/list', 'sales:collections/create', 'sales:collections/export',
             'sales:customers/accounting', 'sales:customers/transactions',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/export',
             'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export',
             'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/approve', 'inventory:transfers/execute',
+            'module:reports', 'reports:hub/view', 'reports:financial/view', 'reports:financial/export', 'reports:sales/view', 'reports:sales/export', 'reports:inventory/view', 'reports:inventory/export',
         ]
         accountant.permissions.set([perm_map[c] for c in acc_codenames if c in perm_map])
 
@@ -229,11 +241,15 @@ class Command(BaseCommand):
             'activities:visits/evidence', 'activities:visits/gps_request_exception',
             'activities:planned/list',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create',
+            'activities:agreements/edit', 'activities:agreements/delete',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create',
+            'sales:returns/list', 'sales:returns/view', 'sales:returns/create',
             'sales:collections/list', 'sales:collections/create',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
             'module:inventory', 'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/create',
+            'module:performance', 'performance:overview/view', 'performance:daily/view',
+            'module:reports', 'reports:hub/view', 'reports:activities/view', 'reports:sales/view',
         ]
         rep_role.permissions.set([perm_map[c] for c in rep_codenames if c in perm_map])
 

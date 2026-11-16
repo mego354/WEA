@@ -40,7 +40,7 @@ class AgreementAdmin(admin.ModelAdmin):
 
     def status_badge(self, obj):
         colors = {
-            'new': ('#0284c7', '#e0f2fe', 'جديد'),
+            'new': ('#b45309', '#fef3c7', 'بانتظار الاعتماد'),
             'approved': ('#059669', '#d1fae5', 'معتمد'),
             'disapproved': ('#dc2626', '#fee2e2', 'مرفوض'),
             'done': ('#475569', '#f1f5f9', 'منجز'),

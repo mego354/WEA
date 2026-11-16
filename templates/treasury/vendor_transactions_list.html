@@ -91,10 +91,14 @@
             </div>
 
             <div class="w-full sm:w-64">
-                <select name="vendor_id" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900">
+                <select name="vendor_id" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                        data-search-placeholder="بحث عن مورد..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900">
                     <option value="">-- كافة الموردين --</option>
                     {% for s in suppliers %}
-                    <option value="{{ s.id }}" {% if selected_vendor_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                    <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_vendor_id|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
                     {% endfor %}
                 </select>
             </div>

@@ -215,14 +215,6 @@
                                         title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
                                     <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
                                 </button>
-
-                                {% if request.user.is_superuser or request.user.is_super_admin %}
-                                <a href="{% url 'user_toggle_bypass_location' u.pk %}"
-                                   class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.bypass_location_verification %}text-[#27bebe] bg-teal-50{% else %}text-slate-400 hover:text-slate-600 hover:bg-slate-100{% endif %} transition-colors"
-                                   title="تجاوز التحقق من الموقع">
-                                    <span class="material-symbols-outlined text-lg">near_me</span>
-                                </a>
-                                {% endif %}
                             </div>
                         </td>
                     </tr>

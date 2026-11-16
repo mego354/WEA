@@ -1,0 +1,120 @@
+{% load humanize erp_tags %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>إشعار إرجاع مبيعات {{ return_order.order_number }} - WEA Pharma</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; }
+        @media print {
+            .no-print { display: none; }
+            body { background: white; padding: 0; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 p-6 text-slate-800">
+
+    <div class="max-w-3xl mx-auto mb-4 no-print flex justify-end gap-3">
+        <button onclick="window.print()" class="px-4 py-2 bg-teal-600 text-white font-bold text-xs rounded-lg shadow">
+            طباعة إشعار الإرجاع (Print)
+        </button>
+        <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">
+            إغلاق
+        </button>
+    </div>
+
+    <div class="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow border border-slate-200 text-xs">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b pb-4 mb-6">
+            <div>
+                <h1 class="text-xl font-black text-slate-900">WEA PHARMA</h1>
+                <p class="text-slate-500">173 ز - البوابة الأولى- حدائق الأهرام</p>
+                <p class="text-slate-500">سجل تجاري: 184791 | بطاقة ضريبية: 978-339-684</p>
+                <p class="text-slate-500">هاتف: 01111787179 - 01024070412</p>
+            </div>
+            <div class="text-left">
+                <h2 class="text-lg font-bold text-teal-700">إشعار إرجاع مبيعات (Credit Note)</h2>
+                <p class="font-mono font-bold text-slate-900 text-sm">{{ return_order.order_number }}</p>
+                <p class="text-slate-500">التاريخ: {{ return_order.order_date|date:"Y-m-d" }}</p>
+                <p class="text-slate-500">الحالة: {{ return_order.status_display_ar }}</p>
+            </div>
+        </div>
+
+        <!-- Customer & Target Warehouse Info -->
+        <div class="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl mb-6">
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات العميل:</h3>
+                <p>الاسم: <strong>{{ return_order.customer.name }}</strong></p>
+                <p>الهاتف: {{ return_order.customer.phone|default:"-" }}</p>
+                <p>المنطقة: {{ return_order.customer.area.name|default:"-" }}</p>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-900 mb-1">بيانات الإرجاع:</h3>
+                <p>المخزن المستلم: <strong>{{ return_order.target_warehouse.name|default:"-" }}</strong></p>
+                <p>أمر البيع الأصلي: {{ return_order.sales_order.order_number|default:"-" }}</p>
+                <p>المنشئ: {{ return_order.created_by.get_full_name|default:return_order.created_by.username|default:"-" }}</p>
+                {% if return_order.memo %}
+                <p>إذن إضافة المخزن: {{ return_order.memo.memo_number }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Items Table -->
+        <table class="w-full text-right border-collapse mb-6">
+            <thead>
+                <tr class="border-b bg-slate-100 font-bold">
+                    <th class="p-2">#</th>
+                    <th class="p-2">الصنف</th>
+                    <th class="p-2">الكود</th>
+                    <th class="p-2 text-center">الحالة</th>
+                    <th class="p-2 text-center">الكمية</th>
+                    <th class="p-2">السعر</th>
+                    <th class="p-2">الخصم</th>
+                    <th class="p-2 text-left">الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in return_order.items.all %}
+                <tr class="border-b">
+                    <td class="p-2 font-mono text-slate-400">{{ forloop.counter }}</td>
+                    <td class="p-2 font-bold">{{ item.product.name }}</td>
+                    <td class="p-2 font-mono">{{ item.product.code }}</td>
+                    <td class="p-2 text-center">{{ item.get_condition_display }}</td>
+                    <td class="p-2 text-center font-mono font-bold">{{ item.quantity|floatformat:2 }}</td>
+                    <td class="p-2 font-mono">{{ item.unit_price|floatformat:2 }} ج.م</td>
+                    <td class="p-2 font-mono">{{ item.discount_amount|floatformat:2 }} ج.م</td>
+                    <td class="p-2 font-mono font-bold text-left">{{ item.total|floatformat:2 }} ج.م</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="font-bold bg-slate-50">
+                    <td colspan="4" class="p-2 text-left">الإجمالي:</td>
+                    <td class="p-2 text-center font-mono">{{ return_order.items_quantity|floatformat:2 }}</td>
+                    <td colspan="2"></td>
+                    <td class="p-2 text-left font-mono font-bold text-teal-700">{{ return_order.grand_total|stat_number }} ج.م</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- Signatures -->
+        <div class="grid grid-cols-3 gap-6 pt-12 text-center border-t border-slate-200">
+            <div>
+                <p class="font-bold mb-8">العميل المسترجع</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+            <div>
+                <p class="font-bold mb-8">أمين المخزن</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+            <div>
+                <p class="font-bold mb-8">الحسابات والاعتماد</p>
+                <div class="border-b border-dashed border-slate-300 w-32 mx-auto"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

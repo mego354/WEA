@@ -2,7 +2,10 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from .models import Vault, VendorAccount, VendorTransaction, VendorInstallment, VendorPayment, Settlement, VaultTransaction
+from .models import (
+    Vault, VendorAccount, VendorTransaction, VendorInstallment, VendorPayment,
+    Settlement, VaultTransaction, VendorPaymentRequest
+)
 from contacts.models import Contact
 from accounts.services import AuditLogService
 from purchases.models import PurchaseOrder
@@ -262,11 +265,13 @@ class TreasuryService:
 
     @staticmethod
     @transaction.atomic
-    def reverse_vault_transaction(tx_id=None, user=None, reason: str = '', transaction=None):
+    def reverse_vault_transaction(tx_id=None, user=None, reason: str = '', transaction=None, tx=None, **kwargs):
         """
         Reverses a posted VaultTransaction by executing an exact balancing entry.
         Preserves complete financial audit trail without destructive deletes.
         """
+        if transaction is None:
+            transaction = tx
         if transaction is not None:
             target_id = transaction.id if hasattr(transaction, 'id') else transaction
         elif hasattr(tx_id, 'id'):
@@ -520,4 +525,301 @@ reverse_vault_transaction = TreasuryService.reverse_vault_transaction
 record_vault_manual_transaction = TreasuryService.record_vault_manual_transaction
 deposit_funds = TreasuryService.deposit_funds
 withdraw_funds = TreasuryService.withdraw_funds
+
+
+class VendorPaymentRequestService:
+
+    @classmethod
+    @transaction.atomic
+    def create_request(cls, supplier, amount, preferred_vault=None, purchase_order=None,
+                       request_date=None, notes='', user=None):
+        amount = Decimal(str(amount or '0.00'))
+        if amount <= Decimal('0.00'):
+            raise ValidationError("مبلغ طلب السداد يجب أن يكون أكبر من الصفر.")
+
+        if purchase_order:
+            if purchase_order.supplier_id != supplier.id:
+                raise ValidationError("أمر الشراء المحدد لا ينتمي إلى هذا المورد.")
+            if amount > purchase_order.outstanding_balance:
+                raise ValidationError(
+                    f"مبلغ طلب السداد ({amount:,.2f} ج.م) يتجاوز الرصيد المستحق على أمر الشراء ({purchase_order.outstanding_balance:,.2f} ج.م)."
+                )
+
+        req = VendorPaymentRequest.objects.create(
+            supplier=supplier,
+            purchase_order=purchase_order,
+            amount=amount,
+            preferred_vault=preferred_vault,
+            request_date=request_date or timezone.now().date(),
+            notes=notes,
+            status='pending',
+            created_by=user
+        )
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='payment_request',
+            payment_request=req,
+            action='submitted',
+            actor=user,
+            status_before='',
+            status_after='pending',
+            reason=f"إنشاء طلب سداد مورد بمبلغ {amount:,.2f} ج.م" + (f" لأمر الشراء {purchase_order.order_number}" if purchase_order else "")
+        )
+
+        AuditLogService.log(
+            action_type='PAYMENT_REQUEST_CREATED',
+            module='treasury',
+            actor=user,
+            record_id=req.id,
+            record_name=req.request_number,
+            description=f"إنشاء طلب سداد مورد {supplier.name} بمبلغ {amount:,.2f} ج.م",
+            new_values={
+                'request_number': req.request_number,
+                'supplier': supplier.name,
+                'amount': str(amount),
+                'purchase_order': purchase_order.order_number if purchase_order else None
+            }
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
+    def approve_request(cls, payment_request, user, notes=''):
+        req = VendorPaymentRequest.objects.select_for_update().get(pk=payment_request.pk)
+        if req.status != 'pending':
+            raise ValidationError(f"لا يمكن اعتماد طلب سداد بحالة '{req.status_display_ar}'.")
+
+        if req.created_by_id == user.id and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError("لا يمكنك اعتماد طلب سداد قمت بإنشائه بنفسك.")
+
+        req.status = 'approved'
+        req.approved_by = user
+        req.approved_at = timezone.now()
+        req.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='payment_request',
+            payment_request=req,
+            action='approved',
+            actor=user,
+            status_before='pending',
+            status_after='approved',
+            reason=notes or "اعتماد طلب سداد المورد"
+        )
+
+        AuditLogService.log(
+            action_type='PAYMENT_REQUEST_APPROVED',
+            module='treasury',
+            actor=user,
+            record_id=req.id,
+            record_name=req.request_number,
+            description=f"اعتماد طلب سداد مورد {req.request_number}",
+            new_values={'status': 'approved', 'approved_by': user.username, 'notes': notes}
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
+    def reject_request(cls, payment_request, user, reason=''):
+        req = VendorPaymentRequest.objects.select_for_update().get(pk=payment_request.pk)
+        if req.status != 'pending':
+            raise ValidationError(f"لا يمكن رفض طلب سداد بحالة '{req.status_display_ar}'.")
+
+        if req.created_by_id == user.id and not (user.is_superuser or getattr(user, 'is_super_admin', False)):
+            raise ValidationError("لا يمكنك رفض طلب سداد قمت بإنشائه بنفسك.")
+
+        req.status = 'rejected'
+        req.rejection_reason = reason or "تم الرفض بواسطة الإدارة"
+        req.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='payment_request',
+            payment_request=req,
+            action='rejected',
+            actor=user,
+            status_before='pending',
+            status_after='rejected',
+            reason=reason or "رفض طلب سداد المورد"
+        )
+
+        AuditLogService.log(
+            action_type='PAYMENT_REQUEST_REJECTED',
+            module='treasury',
+            actor=user,
+            record_id=req.id,
+            record_name=req.request_number,
+            description=f"رفض طلب سداد مورد {req.request_number}: {reason}",
+            new_values={'status': 'rejected', 'reason': reason}
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
+    def execute_request(cls, payment_request, user, vault=None, payment_date=None,
+                        payment_method='cash', reference_number='', notes=''):
+        req = VendorPaymentRequest.objects.select_for_update().get(pk=payment_request.pk)
+        if req.vendor_payment is not None or req.status == 'executed':
+            serial_info = f" بموجب سند الصرف #{req.vendor_payment.serial_num}" if req.vendor_payment else ""
+            raise ValidationError(f"تم صرف هذا الطلب مسبقاً{serial_info}.")
+
+        if req.status != 'approved':
+            raise ValidationError(f"لا يمكن تنفيذ وصرف طلب سداد بحالة '{req.status_display_ar}'. يجب اعتماده أولاً.")
+
+        target_vault = vault or req.preferred_vault
+        if not target_vault:
+            raise ValidationError("يرجى تحديد خزنة الصرف لتنفيذ السداد.")
+
+        payment = TreasuryService.record_vendor_payment(
+            supplier=req.supplier,
+            vault=target_vault,
+            amount=req.amount,
+            user=user,
+            purchase_order=req.purchase_order,
+            payment_date=payment_date or timezone.now().date(),
+            payment_method=payment_method,
+            reference_number=reference_number,
+            notes=notes or req.notes
+        )
+
+        req.vendor_payment = payment
+        req.status = 'executed'
+        req.executed_by = user
+        req.executed_at = timezone.now()
+        req.save(update_fields=['vendor_payment', 'status', 'executed_by', 'executed_at', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='payment_request',
+            payment_request=req,
+            action='status_changed',
+            actor=user,
+            status_before='approved',
+            status_after='executed',
+            reason=f"تنفيذ وصرف المبلغ بموجب سند الصرف #{payment.serial_num} من {target_vault.name}"
+        )
+
+        AuditLogService.log(
+            action_type='PAYMENT_REQUEST_EXECUTED',
+            module='treasury',
+            actor=user,
+            record_id=req.id,
+            record_name=req.request_number,
+            description=f"تنفيذ صرف طلب السداد {req.request_number} وسند صرف #{payment.serial_num}",
+            new_values={
+                'status': 'executed',
+                'payment_id': payment.id,
+                'payment_serial': payment.serial_num,
+                'vault': target_vault.name
+            }
+        )
+        return req, payment
+
+    @classmethod
+    @transaction.atomic
+    def cancel_request(cls, payment_request, user, reason=''):
+        req = VendorPaymentRequest.objects.select_for_update().get(pk=payment_request.pk)
+        if req.status not in ['pending', 'approved']:
+            raise ValidationError(f"لا يمكن إلغاء طلب سداد بحالة '{req.status_display_ar}'.")
+
+        req.status = 'cancelled'
+        req.rejection_reason = reason or "تم الإلغاء"
+        req.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='payment_request',
+            record_id=req.id,
+            payment_request=req,
+            action='cancelled',
+            actor=user,
+            notes=reason or "إلغاء طلب السداد"
+        )
+        return req
+
+
+def build_payment_request_timeline(req):
+    events = []
+    if req.created_at:
+        events.append({
+            'timestamp': req.created_at,
+            'title': 'إنشاء طلب السداد',
+            'badge': 'قيد الانتظار',
+            'badge_class': 'bg-amber-100 text-amber-800 border border-amber-300',
+            'dot_class': 'bg-amber-500',
+            'user': req.created_by.get_full_name() or req.created_by.username if req.created_by else 'النظام',
+            'notes': req.notes or f'تم إنشاء طلب صرف بمبلغ {req.amount:,.2f} ج.م'
+        })
+    if req.approved_at and req.approved_by:
+        events.append({
+            'timestamp': req.approved_at,
+            'title': 'اعتماد طلب السداد',
+            'badge': 'معتمد',
+            'badge_class': 'bg-teal-100 text-teal-800 border border-teal-300',
+            'dot_class': 'bg-teal-500',
+            'user': req.approved_by.get_full_name() or req.approved_by.username,
+            'notes': 'تم اعتماد الطلب من قبل الإدارة المالية'
+        })
+    if req.executed_at and req.executed_by:
+        events.append({
+            'timestamp': req.executed_at,
+            'title': 'تنفيذ الصرف النقدي',
+            'badge': 'تم الصرف',
+            'badge_class': 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+            'dot_class': 'bg-emerald-500',
+            'user': req.executed_by.get_full_name() or req.executed_by.username,
+            'notes': f'تم صرف المبلغ وتوليد سند الصرف #{req.vendor_payment.serial_num}' if req.vendor_payment else 'تم تنفيذ السداد'
+        })
+    if req.status == 'rejected' and req.rejection_reason:
+        events.append({
+            'timestamp': req.updated_at,
+            'title': 'رفض طلب السداد',
+            'badge': 'مرفوض',
+            'badge_class': 'bg-rose-100 text-rose-800 border border-rose-300',
+            'dot_class': 'bg-rose-500',
+            'user': 'الإدارة',
+            'notes': req.rejection_reason
+        })
+    if req.status == 'cancelled':
+        events.append({
+            'timestamp': req.updated_at,
+            'title': 'إلغاء الطلب',
+            'badge': 'ملغي',
+            'badge_class': 'bg-slate-100 text-slate-800 border border-slate-300',
+            'dot_class': 'bg-slate-400',
+            'user': 'المسؤول',
+            'notes': req.rejection_reason or 'تم إلغاء الطلب'
+        })
+
+    from activities.models import ApprovalAuditLog
+    approval_logs = ApprovalAuditLog.objects.filter(
+        record_type='payment_request',
+        payment_request=req
+    ).select_related('actor').order_by('created_at')
+
+    action_title_map = {
+        'approved': ('اعتماد إداري', 'معتمد', 'bg-teal-100 text-teal-800 border border-teal-300', 'bg-teal-500'),
+        'rejected': ('رفض الطلب', 'مرفوض', 'bg-rose-100 text-rose-800 border border-rose-300', 'bg-rose-500'),
+        'status_changed': ('تنفيذ الصرف', 'منفذ', 'bg-emerald-100 text-emerald-800 border border-emerald-300', 'bg-emerald-500'),
+        'executed': ('تنفيذ الصرف', 'منفذ', 'bg-emerald-100 text-emerald-800 border border-emerald-300', 'bg-emerald-500'),
+        'cancelled': ('إلغاء الطلب', 'ملغي', 'bg-slate-100 text-slate-800 border border-slate-300', 'bg-slate-400'),
+    }
+    for log in approval_logs:
+        if log.action in action_title_map:
+            t, b, bc, dc = action_title_map[log.action]
+            events.append({
+                'timestamp': log.created_at,
+                'title': t,
+                'badge': b,
+                'badge_class': bc,
+                'dot_class': dc,
+                'user': log.actor.get_full_name() or log.actor.username if log.actor else 'النظام',
+                'notes': log.reason
+            })
+
+    events.sort(key=lambda x: x['timestamp'] if x.get('timestamp') else timezone.now())
+    return events
+
 

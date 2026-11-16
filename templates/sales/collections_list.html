@@ -11,12 +11,6 @@
 <span class="font-bold text-slate-900">سندات التحصيل</span>
 {% endblock %}
 
-{% block top_actions %}
-<a href="{% url 'collection_create' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm shadow-brand-500/20 transition-all">
-    <span class="material-symbols-outlined text-base">add</span>
-    <span>سند تحصيل جديد</span>
-</a>
-{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -109,19 +103,27 @@
             </div>
 
             <div class="w-full md:w-56">
-                <select name="customer" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                <select name="customer" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'sales_customers_search_api' %}"
+                        data-search-placeholder="بحث عن عميل..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
                     <option value="">جميع العملاء</option>
                     {% for c in customers %}
-                    <option value="{{ c.id }}" {% if selected_customer_id|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+                    <option value="{{ c.id }}" data-subtext="#{{ c.serial_num }}{% if c.area %} | {{ c.area.name }}{% endif %}" data-search="{{ c.serial_num }} {{ c.code }} {{ c.area.name|default:'' }}" {% if selected_customer_id|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
                     {% endfor %}
                 </select>
             </div>
 
             <div class="w-full md:w-48">
-                <select name="vault" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
+                <select name="vault" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'sales_vaults_search_api' %}"
+                        data-search-placeholder="بحث عن خزنة..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
                     <option value="">جميع الخزن</option>
                     {% for v in vaults %}
-                    <option value="{{ v.id }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+                    <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
                     {% endfor %}
                 </select>
             </div>

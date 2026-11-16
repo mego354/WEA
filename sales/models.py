@@ -261,22 +261,39 @@ class Collection(models.Model):
 
 class SalesReturnOrder(models.Model):
     STATUS_CHOICES = [
-        ('pending', 'قيد الانتظار'),
-        ('approved', 'معتمد'),
+        ('pending', 'قيد الانتظار والمراجعة'),
+        ('approved', 'معتمد من الإدارة'),
         ('delivered', 'مستلم بالمخزن'),
         ('settled', 'مرحل بالحسابات'),
+        ('rejected', 'مرفوض'),
         ('cancelled', 'ملغي'),
     ]
 
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
     order_number = models.CharField(max_length=50, unique=True, verbose_name="رقم إشعار المرتجع")
+    sales_order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, null=True, blank=True, related_name="return_orders", verbose_name="أمر البيع الأصلي")
     customer = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="sales_return_orders", verbose_name="العميل")
     target_warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, null=True, blank=True, related_name="sales_return_orders", verbose_name="مخزن الاستلام")
     order_date = models.DateField(default=timezone.now, verbose_name="تاريخ المرتجع")
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
-    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="إجمالي القيمة (ج.م)")
-    notes = models.TextField(blank=True, verbose_name="ملاحظات")
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المنشئ")
+    
+    memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_return_order", verbose_name="إذن إضافة المخزن")
+    stocked_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ استلام البضاعة في المخزن")
+    settled_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الترحيل للحسابات (إشعار الدائن)")
+
+    items_count = models.PositiveIntegerField(default=0, verbose_name="عدد الأصناف")
+    items_quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الكميات المرتجعة")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="المجموع قبل الخصم والضريبة (ج.م)")
+    discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الخصم (ج.م)")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الضريبة (ج.م)")
+    grand_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي القيمة النهائية (ج.م)")
+    
+    notes = models.TextField(blank=True, verbose_name="ملاحظات وأسباب الإرجاع")
+    rejection_reason = models.TextField(blank=True, default="", verbose_name="سبب الرفض")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_sales_returns", verbose_name="المعتمد")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_sales_returns", verbose_name="المنشئ")
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_sales_returns", verbose_name="آخر تعديل بواسطة")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -288,17 +305,93 @@ class SalesReturnOrder(models.Model):
     def __str__(self):
         return f"{self.order_number} ({self.customer.name})"
 
+    def save(self, *args, **kwargs):
+        if not self.serial_num:
+            max_s = SalesReturnOrder.objects.aggregate(models.Max('serial_num'))['serial_num__max'] or 100
+            self.serial_num = max_s + 1
+            self.order_number = f"SRET-{self.serial_num}"
+        super().save(*args, **kwargs)
+
+    def recalculate_totals(self):
+        items = self.items.all()
+        self.items_count = items.count()
+        self.items_quantity = sum((item.quantity for item in items), Decimal('0.00'))
+        self.subtotal = sum((item.subtotal for item in items), Decimal('0.00'))
+        self.discount_total = sum((item.discount_amount for item in items), Decimal('0.00'))
+        self.tax_amount = sum((item.tax_amount for item in items), Decimal('0.00'))
+        self.grand_total = sum((item.total for item in items), Decimal('0.00'))
+        self.save(update_fields=['items_count', 'items_quantity', 'subtotal', 'discount_total', 'tax_amount', 'grand_total'])
+
+    @property
+    def status_display_ar(self):
+        mapping = {
+            'pending': 'قيد المراجعة والاعتماد',
+            'approved': 'معتمد من الإدارة',
+            'delivered': 'مستلم بالمخزن',
+            'settled': 'تم الترحيل للحسابات',
+            'rejected': 'مرفوض',
+            'cancelled': 'ملغي',
+        }
+        return mapping.get(self.status, self.get_status_display())
+
+    @property
+    def status_badge_class(self):
+        mapping = {
+            'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+            'approved': 'bg-teal-100 text-teal-800 border-teal-300',
+            'delivered': 'bg-sky-100 text-sky-800 border-sky-300',
+            'settled': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'rejected': 'bg-rose-100 text-rose-800 border-rose-300',
+            'cancelled': 'bg-slate-100 text-slate-800 border-slate-300',
+        }
+        return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
+
 
 class SalesReturnOrderItem(models.Model):
+    CONDITION_CHOICES = [
+        ('resalable', 'سليم وقابل للبيع'),
+        ('damaged', 'تالف / معيب (لا يضاف للمخزون الصالح)'),
+    ]
+
     order = models.ForeignKey(SalesReturnOrder, on_delete=models.CASCADE, related_name="items", verbose_name="مرتجع المبيعات")
+    original_item = models.ForeignKey(SalesOrderItem, on_delete=models.SET_NULL, null=True, blank=True, related_name="return_items", verbose_name="بند أمر البيع الأصلي")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, verbose_name="المنتج")
+    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='resalable', verbose_name="حالة الصنف")
+    
     quantity = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="الكمية المرتجعة")
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="سعر الوحدة")
-    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الإجمالي")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="سعر البيع للوحدة")
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), verbose_name="خصم %")
+    discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="قيمة الخصم")
+    tax_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), verbose_name="الضريبة %")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="قيمة الضريبة")
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="المجموع قبل الخصم")
+    total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="الصافي الإجمالي")
+    
     batch_number = models.CharField(max_length=100, blank=True, verbose_name="رقم التشغيل")
     expiry_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الصلاحية")
 
     class Meta:
         verbose_name = "بند مرتجع مبيعات"
         verbose_name_plural = "بنود مرتجع المبيعات"
+
+    def save(self, *args, **kwargs):
+        qty = Decimal(str(self.quantity or '0'))
+        price = Decimal(str(self.unit_price or '0'))
+        self.subtotal = (qty * price).quantize(Decimal('0.01'))
+        
+        disc_pct = Decimal(str(self.discount_percentage or '0'))
+        disc_amt = Decimal(str(self.discount_amount or '0'))
+        if disc_pct > 0 and disc_amt == Decimal('0.00'):
+            disc_amt = (self.subtotal * (disc_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+        self.discount_amount = disc_amt
+
+        after_disc = max(Decimal('0.00'), self.subtotal - disc_amt)
+        tax_pct = Decimal(str(self.tax_percentage or '0'))
+        if tax_pct > 0:
+            self.tax_amount = (after_disc * (tax_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
+        else:
+            self.tax_amount = Decimal('0.00')
+
+        self.total = after_disc + self.tax_amount
+        super().save(*args, **kwargs)
 

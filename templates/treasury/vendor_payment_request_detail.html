@@ -1,0 +1,402 @@
+{% extends 'layouts/base.html' %}
+{% load humanize erp_tags %}
+
+{% block title %}{{ request_obj.request_number }} - طلبات صرف الموردين - Bricks Rep{% endblock %}
+
+{% block content %}
+<div class="space-y-6 pb-16">
+
+    <!-- TOP HEADER DOSSIER -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <!-- Identification & Supplier Tag -->
+        <div class="flex items-center gap-3.5 flex-wrap">
+            <span class="text-xs font-bold px-2.5 py-1 bg-teal-50 text-[#27bebe] border border-teal-200 rounded-md">
+                طلب صرف مورد
+            </span>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-md border {{ request_obj.status_badge_class }}">
+                {{ request_obj.status_display_ar }}
+            </span>
+            <span class="text-xl font-black text-slate-900 font-mono">
+                {{ request_obj.request_number }}
+            </span>
+
+            <div class="h-5 w-px bg-slate-200 mx-1"></div>
+
+            <!-- Supplier Badge & Name -->
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 text-[#27bebe] font-bold text-xs flex items-center justify-center">
+                    {{ request_obj.supplier.initials|default:"مو" }}
+                </div>
+                <a href="{% url 'contact_detail' request_obj.supplier.id %}" class="text-sm font-bold text-slate-900 hover:text-[#27bebe] transition-colors">
+                    {{ request_obj.supplier.name }}
+                </a>
+            </div>
+        </div>
+
+        <!-- Workflow Action Buttons -->
+        <div class="flex items-center gap-2 flex-wrap">
+            {% if can_approve %}
+            <form method="POST" action="{% url 'vendor_payment_request_action' request_obj.id 'approve' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-base">check_circle</span>
+                    <span>اعتماد الطلب</span>
+                </button>
+            </form>
+            <button type="button" onclick="openRejectModal()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">cancel</span>
+                <span>رفض</span>
+            </button>
+            {% endif %}
+
+            {% if can_execute %}
+            <button type="button" onclick="openExecuteModal()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">paid</span>
+                <span>تنفيذ الصرف (سداد نقدي)</span>
+            </button>
+            {% endif %}
+
+            {% if can_cancel %}
+            <button type="button" onclick="openCancelModal()"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-base">close</span>
+                <span>إلغاء</span>
+            </button>
+            {% endif %}
+
+            <a href="{% url 'vendor_payment_requests_list' %}"
+               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="العودة">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- MAIN DOSSIER LAYOUT -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- CENTER 2 COLUMNS: DETAILS, PAYMENT, TIMELINE -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Rejection Notice Banner -->
+            {% if request_obj.status == 'rejected' and request_obj.rejection_reason %}
+            <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+                <span class="material-symbols-outlined text-rose-600 shrink-0 mt-0.5">error</span>
+                <div class="text-xs">
+                    <h4 class="font-bold text-rose-800 mb-0.5">سبب رفض طلب الصرف:</h4>
+                    <p class="text-rose-700">{{ request_obj.rejection_reason }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Financial Summary Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+                <h3 class="font-bold text-slate-900 text-sm pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-lg">payments</span>
+                    <span>بيانات المبلغ والاستحقاق</span>
+                </h3>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="text-slate-500 block text-[11px] mb-1">المبلغ المطلوب صرفه</span>
+                        <span class="text-2xl font-black text-emerald-700 font-mono">{{ request_obj.amount|stat_number }} ج.م</span>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="text-slate-500 block text-[11px] mb-1">أمر الشراء المرتبط</span>
+                        {% if request_obj.purchase_order %}
+                        <a href="{% url 'purchase_order_detail' request_obj.purchase_order.id %}" class="font-bold font-mono text-sm text-[#27bebe] hover:underline block">
+                            {{ request_obj.purchase_order.order_number }}
+                        </a>
+                        <span class="text-[10px] text-slate-400 mt-0.5 block">الرصيد المستحق: {{ request_obj.purchase_order.outstanding_balance|floatformat:2 }} ج.م</span>
+                        {% else %}
+                        <span class="text-slate-600 font-bold text-sm block">دفعة مباشرة للمورد (بدون أمر شراء)</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if request_obj.notes %}
+                <div class="pt-2 text-xs">
+                    <span class="font-bold text-slate-700 block mb-1">ملاحظات ومبررات الصرف:</span>
+                    <p class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-slate-600 leading-relaxed">{{ request_obj.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Executed Payment Notice Card -->
+            {% if request_obj.vendor_payment %}
+            <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 space-y-3 text-xs">
+                <div class="flex items-center justify-between pb-2 border-b border-emerald-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600 text-base">task_alt</span>
+                        <h3 class="font-bold text-slate-900">سند الصرف المنفذ</h3>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                        تم الصرف بنجاح
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">رقم سند الصرف:</span>
+                        <span class="font-mono font-bold text-slate-900">#{{ request_obj.vendor_payment.serial_num }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">الخزنة المنصرف منها:</span>
+                        <span class="font-bold text-slate-900">{{ request_obj.vendor_payment.vault.name }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">طريقة السداد:</span>
+                        <span class="font-bold text-slate-900">{{ request_obj.vendor_payment.get_payment_method_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">تاريخ الصرف:</span>
+                        <span class="font-mono font-bold text-slate-900">{{ request_obj.vendor_payment.payment_date|date:"Y-m-d" }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Timeline -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5">
+                <h3 class="font-bold text-slate-900 text-xs pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">history</span>
+                    <span>سجل التدقيق ودورة حياة الطلب (Timeline)</span>
+                </h3>
+
+                <div class="relative border-r-2 border-slate-100 mr-3 space-y-6">
+                    {% for event in timeline_events %}
+                    <div class="relative pr-6">
+                        <span class="absolute -right-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center">
+                            <span class="w-1.5 h-1.5 rounded-full {{ event.dot_class|default:'bg-slate-400' }}"></span>
+                        </span>
+
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-slate-900">{{ event.title }}</span>
+                                {% if event.badge %}
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold {{ event.badge_class }}">
+                                    {{ event.badge }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <span class="text-[11px] font-mono text-slate-400">{{ event.timestamp|date:"d/m/Y h:i A" }}</span>
+                        </div>
+
+                        <div class="text-[11px] text-slate-500 mt-1">
+                            {% if event.user %}
+                            بواسطة: <span class="font-bold text-slate-700">{{ event.user }}</span>
+                            {% endif %}
+                            {% if event.notes %}
+                            <p class="text-slate-600 bg-slate-50 p-2 rounded mt-1 border border-slate-100">{{ event.notes }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-xs text-slate-400 py-3 pr-6">لا توجد سجلات تدقيق مسجلة.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT SIDEBAR DETAILS -->
+        <div class="space-y-6">
+
+            <!-- Basic Details Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 space-y-4 text-xs">
+                <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">info</span>
+                    <span>تفاصيل الطلب الإدارية</span>
+                </h3>
+
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ الطلب:</span>
+                        <span class="font-mono font-bold text-slate-800">{{ request_obj.request_date|date:"d/m/Y" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">الخزنة المقترحة:</span>
+                        <span class="font-bold text-slate-800">{{ request_obj.preferred_vault.name|default:"غير محددة" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">المنشئ:</span>
+                        <span class="font-medium text-slate-800">{{ request_obj.created_by.get_full_name|default:request_obj.created_by.username|default:"—" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ الإنشاء:</span>
+                        <span class="font-mono text-slate-600">{{ request_obj.created_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                    {% if request_obj.approved_by %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">المعتمد:</span>
+                        <span class="font-medium text-slate-800">{{ request_obj.approved_by.get_full_name|default:request_obj.approved_by.username }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ الاعتماد:</span>
+                        <span class="font-mono text-slate-600">{{ request_obj.approved_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                    {% endif %}
+                    {% if request_obj.executed_by %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">المنفذ:</span>
+                        <span class="font-medium text-slate-800">{{ request_obj.executed_by.get_full_name|default:request_obj.executed_by.username }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500">تاريخ التنفيذ:</span>
+                        <span class="font-mono text-slate-600">{{ request_obj.executed_at|date:"d/m/Y h:i A" }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Supplier Profile Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5 space-y-4 text-xs">
+                <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">store</span>
+                    <span>بيانات المورد</span>
+                </h3>
+                <div class="space-y-2">
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">اسم المورد:</span>
+                        <strong class="text-slate-800 text-sm">{{ request_obj.supplier.name }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">المنطقة / المحافظة:</span>
+                        <span class="text-slate-700">{{ request_obj.supplier.area.name|default:"غير محدد" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">الهاتف:</span>
+                        <span class="text-slate-700 font-mono">{{ request_obj.supplier.mobile|default:request_obj.supplier.phone|default:"—" }}</span>
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <a href="{% url 'accounting_vendors_list' %}" class="text-[#27bebe] hover:underline font-bold text-xs inline-flex items-center gap-1">
+                        <span>معاينة كشف حساب المورد</span>
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Execute Modal -->
+<div id="execute-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeExecuteModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
+            <h3 class="text-sm font-bold text-slate-900">تنفيذ صرف طلب السداد</h3>
+            <p class="text-slate-500">حدد الخزنة وطريقة السداد لإتمام الصرف وخصم المبلغ وتوليد سند الصرف:</p>
+            <form method="POST" action="{% url 'vendor_payment_request_action' request_obj.id 'execute' %}">
+                {% csrf_token %}
+                <div class="space-y-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الخزنة المنصرف منها <span class="text-red-500">*</span></label>
+                        <select name="vault" required
+                                data-smart-select="true"
+                                data-search-url="{% url 'purchases_vaults_search_api' %}"
+                                data-search-placeholder="ابحث باسم الخزنة أو الرقم..."
+                                class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg">
+                            {% for v in vaults %}
+                            <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if request_obj.preferred_vault_id == v.id %}selected{% endif %}>
+                                {{ v.name }} (رصيد: {{ v.current_balance|floatformat:2 }} ج.م)
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">طريقة الدفع</label>
+                        <select name="payment_method" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg">
+                            <option value="cash">نقدي (Cash)</option>
+                            <option value="cheque">شيك بنكي (Cheque)</option>
+                            <option value="bank_transfer">تحويل بنكي (Bank Transfer)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">رقم الشيك / المرجع (اختياري)</label>
+                        <input type="text" name="reference_number" placeholder="رقم الشيك أو الحوالة..."
+                               class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg">
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">ملاحظات الصرف (اختياري)</label>
+                        <textarea name="notes" rows="2" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg"></textarea>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex items-center justify-end gap-2 border-t border-slate-100 mt-4">
+                    <button type="button" onclick="closeExecuteModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">إلغاء</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700">تأكيد الصرف الآن</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal -->
+<div id="reject-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeRejectModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
+            <h3 class="text-sm font-bold text-slate-900">رفض طلب الصرف</h3>
+            <p class="text-slate-500">يرجى كتابة سبب رفض طلب الصرف ليتم حفظه في سجل التدقيق:</p>
+            <form method="POST" action="{% url 'vendor_payment_request_action' request_obj.id 'reject' %}">
+                {% csrf_token %}
+                <textarea name="rejection_reason" rows="3" required placeholder="سبب الرفض..."
+                          class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-red-500"></textarea>
+                <div class="pt-4 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">إلغاء</button>
+                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">تأكيد الرفض</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div id="cancel-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeCancelModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
+            <h3 class="text-sm font-bold text-slate-900">إلغاء طلب الصرف</h3>
+            <p class="text-slate-500">هل أنت متأكد من رغبتك في إلغاء طلب الصرف نهائياً؟</p>
+            <form method="POST" action="{% url 'vendor_payment_request_action' request_obj.id 'cancel' %}">
+                {% csrf_token %}
+                <input type="text" name="reason" placeholder="سبب الإلغاء (اختياري)..."
+                       class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-red-500 mb-4">
+                <div class="flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeCancelModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">تراجع</button>
+                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">نعم، إلغاء الطلب</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openExecuteModal() {
+    document.getElementById('execute-modal').classList.remove('hidden');
+}
+function closeExecuteModal() {
+    document.getElementById('execute-modal').classList.add('hidden');
+}
+function openRejectModal() {
+    document.getElementById('reject-modal').classList.remove('hidden');
+}
+function closeRejectModal() {
+    document.getElementById('reject-modal').classList.add('hidden');
+}
+function openCancelModal() {
+    document.getElementById('cancel-modal').classList.remove('hidden');
+}
+function closeCancelModal() {
+    document.getElementById('cancel-modal').classList.add('hidden');
+}
+</script>
+{% endblock %}

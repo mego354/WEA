@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 
 from master_data.excel_utils import export_to_excel_response
 from master_data.pagination_utils import paginate_queryset
+from master_data.search_utils import filter_by_arabic_search
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, is_accountant, is_manager_or_higher,
@@ -38,10 +39,7 @@ def inventory_stock_list(request):
         active_filters.append({'label': f'المخزن: {wh.name if wh else warehouse_id}', 'param': 'warehouse'})
 
     if search:
-        qs = qs.filter(
-            Q(product__name__icontains=search) |
-            Q(product__sku_code__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['product__name', 'product__sku_code'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     # Scoped warehouses available for filter dropdown
@@ -153,14 +151,30 @@ def warehouses_list(request):
             except Exception:
                 pass
 
-        if name and code:
-            Warehouse.objects.create(name=name, code=code, address=address, latitude=lat, longitude=lng)
-            messages.success(request, f"تم إنشاء المخزن '{name}' بنجاح.")
+        if not name or not code:
+            messages.error(request, "يرجى إدخال اسم وكود المخزن بشكل صحيح.")
+            return redirect('warehouses_list')
+
+        if Warehouse.objects.filter(Q(name__iexact=name) | Q(code__iexact=code)).exists():
+            messages.error(request, f"يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود ({name} / {code}).")
+            return redirect('warehouses_list')
+
+        wh = Warehouse.objects.create(name=name, code=code, address=address, latitude=lat, longitude=lng)
+        AuditLogService.log(
+            action_type='WAREHOUSE_CREATED',
+            module='inventory',
+            actor=request.user,
+            record_id=wh.id,
+            record_name=wh.name,
+            description=f"إنشاء مخزن جديد: {wh.name} ({wh.code})",
+            new_values={'name': wh.name, 'code': wh.code, 'address': wh.address}
+        )
+        messages.success(request, f"تم إنشاء المخزن '{name}' بنجاح.")
         return redirect('warehouses_list')
 
     active_filters = []
     if search:
-        qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+        qs = filter_by_arabic_search(qs, search, ['name', 'code'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
@@ -216,10 +230,7 @@ def inventory_memos_list(request):
         active_filters.append({'label': f'النوع: {type_label}', 'param': 'memo_type'})
 
     if search:
-        qs = qs.filter(
-            Q(memo_number__icontains=search) |
-            Q(statement__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['memo_number', 'statement'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
     warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
@@ -386,13 +397,9 @@ def product_transfers_list(request):
         active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
     if search:
-        qs = qs.filter(
-            Q(reference_number__icontains=search) |
-            Q(requesting_user__username__icontains=search) |
-            Q(requesting_user__first_name__icontains=search) |
-            Q(requesting_user__last_name__icontains=search) |
-            Q(destination_warehouse__name__icontains=search) |
-            Q(source_warehouse__name__icontains=search)
+        qs = filter_by_arabic_search(
+            qs, search,
+            ['reference_number', 'requesting_user__username', 'requesting_user__first_name', 'requesting_user__last_name', 'destination_warehouse__name', 'source_warehouse__name']
         )
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 

@@ -689,25 +689,16 @@ def user_toggle_status(request, pk):
 @require_super_admin(redirect_url='users_list')
 def user_toggle_bypass_location(request, pk):
     """
-    SuperAdmin-only control to toggle bypass_location_verification for a user.
+    Deprecated per-user toggle endpoint: GPS bypass permission is now configured
+    strictly through Role Settings (`activities:visits/bypass_gps`).
+    Does not mutate per-user flags and redirects to Roles Settings.
     """
-    target_user = get_object_or_404(User, pk=pk)
-    target_user.bypass_location_verification = not target_user.bypass_location_verification
-    target_user.save()
-
-    status_str = "تفعيل" if target_user.bypass_location_verification else "تعطيل"
-
-    SecurityAuditLog.objects.create(
-        actor=request.user,
-        action_type='USER_BYPASS_LOCATION_TOGGLED',
-        target_user=target_user,
-        description=f"{status_str} تجاوز التحقق من الموقع الجغرافي للمستخدم: {target_user.name}",
-        ip_address=_get_client_ip(request),
-        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+    get_object_or_404(User, pk=pk)
+    messages.info(
+        request,
+        "تم نقل إدارة صلاحية تجاوز قيد المسافة الجغرافية (GPS) إلى شاشة إعدادات الأدوار والصلاحيات (تجاوز قيد المسافة)."
     )
-
-    messages.success(request, f"تم {status_str} تجاوز التحقق من الموقع للمستخدم {target_user.name or target_user.username} بنجاح.")
-    return redirect('users_list')
+    return redirect('roles_list')
 
 
 @login_required

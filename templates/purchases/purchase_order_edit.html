@@ -38,10 +38,13 @@
                         جهة الاتصال (المورد) <span class="text-red-500">*</span>
                     </label>
                     <select name="supplier" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                            data-search-placeholder="ابحث باسم المورد، الكود، الرقم، أو المنطقة..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر المورد --</option>
                         {% for s in suppliers %}
-                        <option value="{{ s.id }}" {% if order.supplier_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.formatted_number }})</option>
+                        <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}{% if s.brick and s.brick != s.area %} - {{ s.brick.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.mobile }} {{ s.area.name|default:'' }} {{ s.brick.name|default:'' }}" {% if order.supplier_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.formatted_number }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -52,9 +55,12 @@
                         مخزن الاستلام <span class="text-red-500">*</span>
                     </label>
                     <select name="warehouse" required
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_warehouses_search_api' %}"
+                            data-search-placeholder="ابحث باسم المخزن أو الكود..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         {% for w in warehouses %}
-                        <option value="{{ w.id }}" {% if order.target_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                        <option value="{{ w.id }}" data-subtext="{{ w.code }}{% if w.area %} | {{ w.area.name }}{% endif %}" data-search="{{ w.code }} {{ w.area.name|default:'' }}" {% if order.target_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
                         {% endfor %}
                     </select>
                 </div>

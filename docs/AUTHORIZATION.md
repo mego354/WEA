@@ -148,14 +148,30 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Visit Creation | Yes | Yes | If granted | Own (Assigned Brick) |
 | Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
 | Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
+| GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | No (Request exception via `activities:visits/gps_request_exception`) |
 | GBS Exception Request | Yes | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) | No | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) |
 | Visit Approval | Yes | Subordinates (Not Self) | No | No |
+| Agreement Creation & Edit | Yes | Yes | If granted | Own (Assigned Brick) - Edit/Delete Unapproved Only |
+| Agreement Approval | Yes | Subordinates (Not Self) | No | No |
 | Sales Order Creation | Yes | Yes | If granted | Own Warehouse |
 | Sales Order Approval | Yes | Subordinates (Not Self) | View Only | No |
+| Sales Return Creation | Yes | Yes | If granted | Own Orders (Original order linkage) |
+| Sales Return Approval | Yes | Subordinates (Not Self) | View Only | No |
+| Sales Return Restock & Settle | Yes | Deliver (If inventory perm) | Settle (Accounts) | No |
 | Purchase Order Approval | Yes | Subordinates (Not Self) | View Only | No |
+| Purchase Return Creation | Yes | Yes | Yes | No |
+| Purchase Return Approval | Yes | Subordinates (Not Self) | View Only | No |
+| Vendor Payment Request Creation | Yes | Yes | Yes | No |
+| Vendor Payment Request Approval | Yes | Subordinates (Not Self) | View Only | No |
+| Vendor Payment Request Execution | Yes | No | Yes | No |
 | Inventory Stock In / Out | Yes | If role in settings | Yes | If role in settings |
 | Transfer Request | Yes | If role in settings | Yes | If role in settings |
 | Transfer Approval & Execution | Yes | No | Yes | No |
 | Vault Deposits & Withdrawals | Yes | Subordinates + Perm | Yes | Own Vault |
+| Performance Overview & Analysis | Yes | Assigned Main Area (`performance:overview/view`, `performance:analysis/view`) | If granted | Own Performance (`performance:overview/view`) |
+| Performance Daily & Detailed | Yes | Assigned Main Area (`performance:daily/view`, `performance:detailed/view`) | If granted | Own Daily Activity (`performance:daily/view`) |
+| Reports Hub & Financial Reports | Yes | Assigned Main Area | All Financials (`reports:financial/view`, `reports:sales/view`) | No |
+| Sales & Inventory Reports | Yes | Assigned Main Area | All Supply Chain & Sales (`reports:inventory/view`, `reports:sales/view`) | Own Sales (`reports:sales/view`) |
+| Activities & Samples Reports | Yes | Assigned Main Area | If granted | Own Activities (`reports:activities/view`) |
 
 

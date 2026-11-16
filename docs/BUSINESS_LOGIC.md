@@ -177,12 +177,61 @@ stateDiagram-v2
 
 ---
 
-## 6. Contacts, Communication Methods & Geographic Scoping (`contacts`, `master_data`)
+## 7. Agreements Lifecycle (`activities.Agreement`)
 
-- **Universal Customer Classification**: All organizational and individual contacts are classified as customers (`status='customer'`, `is_customer=True`). Legacy 'lead' classification is retired from contact workflows, and customer financial accounts (`CustomerAccount`) are guaranteed for all customer contacts.
-- **Communication Methods CRUD (`ContactCommunicationMethod`)**: Complete CRUD support in contact overview and edit screens for communication types (`mobile`, `phone`, `email`, `whatsapp`, `website`, `other`). Marking a communication method as primary automatically synchronizes with primary contact fields (`mobile`, `phone`, `email`, `website`).
-- **Unified Geographic Hierarchy**: Strict 2-level hierarchy where Governorate (`parent is None`) contains Bricks/Sub-areas (`parent is not None`). Duplicate governorates (Cairo/Giza) are unified and deduplicated.
-- **Multi-Area & Multi-Brick Selection**: Planned visits bulk planning drawer supports multiple governorate and multiple brick selection with cascading dependency filtering.
-- **Resilient Egyptian Geocoding (GBS)**: Address and location lookups are constrained to Egypt (`countrycodes=eg`, Egypt bounding box, `addressdetails=1`), with multi-tier fallback (Google Maps -> Nominatim Egypt -> Photon Komoot -> Local database Area matching). Result selection emits `erp:location-selected` event to auto-populate administrative address fields.
-- **Filtered Statistics**: Metric cards and list counters dynamically reflect active filters (search, status, relation, area, brick) evaluated over the filtered queryset prior to pagination.
+- **Approval Pipeline**: `new` (قيد الانتظار) → `approved` (معتمد) / `rejected` (مرفوض) → `done` (مكتمل).
+- **Client Scoping**: Agreement client dropdown is dynamically scoped using `get_visit_eligible_contacts_queryset(request.user)` (SuperAdmin = all, Manager = Main Area + child bricks, Rep = assigned Bricks).
+- **Unapproved-Only Edit and Deletion**:
+  - Agreements can be edited or deleted **only** while in unapproved state (`status in ['new', 'rejected']`).
+  - Once approved (`status in ['approved', 'done']`), edit and delete requests are rejected server-side on form submission and URL endpoint access.
+- **Anti-Self-Approval**: Creators cannot approve their own agreements (`can_user_access_object(user, agreement, 'approve')`).
+- **Complete Timeline**: Tracks creation, update, approval, rejection, and completion with localized Arabic descriptions.
+
+---
+
+## 8. Sales Returns & Purchase Returns
+
+### 8.1 Sales Return Orders (`sales.SalesReturnOrder`)
+- **Original Order Linkage**: Returns must reference an eligible delivered or invoiced sales order.
+- **Returnable Quantity Invariant**:
+  $$\text{Returnable Qty} = \text{Original Ordered Qty} - \text{Total Previously Returned Qty}$$
+  Over-returns exceeding returnable quantity are rejected on server-side validation.
+- **Stock Restocking Logic**:
+  - Resalable items (`condition='resalable'`) generate an inward memo and increment `InventoryStock.qty_on_hand` and batch lots.
+  - Damaged items (`condition='damaged'`) are logged in the inward memo for documentation but are excluded from sellable inventory.
+- **Financial Settlement**:
+  - Settle action generates a credit transaction on `CustomerAccount`, reducing customer debt.
+- **POST-Only Actions**: Approve, reject, cancel, deliver, and settle actions require POST requests with anti-self-approval.
+
+### 8.2 Purchase Return Orders (`purchases.PurchaseReturnOrder`)
+- **Original PO Linkage**: Strictly linked to an approved/picked/settled purchase order.
+- **Quantity Invariant**: Cannot return more than originally received quantity minus previous returns.
+- **Warehouse Dispatch**: Generates an outward memo and decrements `InventoryStock.qty_on_hand` and lot quantities.
+- **Financial Settlement**: Generates a debit note on `VendorAccount`, decrements accounts payable, and reconciles open installments.
+
+---
+
+## 9. Vendor Payment Requests (`treasury.VendorPaymentRequest`)
+
+- **Requisition Workflow**: `pending` → `approved` / `rejected` → `executed` / `cancelled`.
+- **Validation**:
+  - Amount cannot exceed the purchase order's outstanding balance (`purchase_order.outstanding_balance`).
+- **Anti-Self-Approval**: Creators cannot approve or reject their own payment requests.
+- **Execution & Duplicate Prevention**:
+  - Executing a request atomically generates `VendorPayment`, posts a debit entry in `VendorTransaction`, decrements vault funds, and settles installments.
+  - Row is locked with `select_for_update()`.
+  - `VendorPaymentRequest.vendor_payment` is a `OneToOneField`, preventing duplicate execution or multiple payments for a single request.
+- **Timeline**: Comprehensive event tracking rendered in Arabic via `build_payment_request_timeline`.
+
+---
+
+## 10. Arabic Search Normalization Service (`master_data.search_utils`)
+
+All search operations across contacts, catalog, purchases, sales, treasury, and activities utilize unified normalization:
+- **Alef Normalization**: `أ`, `إ`, `آ`, `ٱ` → `ا`.
+- **Ta Marbuta**: `ة` → `ه`.
+- **Ya / Alef Maqsura**: `ى` → `ي`.
+- **Diacritics & Tatweel**: Tashkeel (harakat) and Kashida (`ـ`) stripped.
+- **SQL Portability**: Sequential SQL `Replace` functions evaluated natively in SQLite and PostgreSQL.
+- **Signature Tolerance**: Accepts both `(queryset, fields, query)` and `(queryset, query, fields)` dynamically.
 

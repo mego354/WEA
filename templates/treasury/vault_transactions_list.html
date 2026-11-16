@@ -108,10 +108,14 @@
             </div>
 
             <div class="w-full md:w-56">
-                <select name="vault_id" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900 min-h-[44px]">
+                <select name="vault_id" onchange="this.form.submit()"
+                        data-smart-select="true"
+                        data-search-url="{% url 'purchases_vaults_search_api' %}"
+                        data-search-placeholder="بحث عن خزنة..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900 min-h-[44px]">
                     <option value="">-- كافة الخزن المتاحة --</option>
                     {% for v in vaults %}
-                    <option value="{{ v.id }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+                    <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
                     {% endfor %}
                 </select>
             </div>

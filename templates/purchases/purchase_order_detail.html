@@ -125,6 +125,11 @@
             </a>
             {% endif %}
 
+            <a href="{% url 'vendor_payment_request_create' %}?po={{ order.id }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-[#27bebe] border border-teal-200 rounded-lg text-xs font-bold transition-colors shadow-xs">
+                <span class="material-symbols-outlined text-base">request_quote</span>
+                <span>طلب سداد</span>
+            </a>
+
             <a href="{% url 'vendor_payment_create' %}?supplier_id={{ order.supplier.id }}&order_id={{ order.id }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">payments</span>
                 <span>تسجيل سداد</span>
@@ -355,6 +360,44 @@
                                     <td class="py-2.5 px-3 text-slate-500">{{ vp.get_payment_method_display }}</td>
                                     <td class="py-2.5 px-3 font-mono text-slate-500">{{ vp.created_at|date:"Y-m-d H:i" }}</td>
                                     <td class="py-2.5 px-3 font-mono font-bold text-emerald-700 text-left">{{ vp.amount|intcomma }} جنيه</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Linked Payment Requests -->
+                {% if order.payment_requests.all %}
+                <div class="pt-3 border-t border-slate-100">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-bold text-slate-700">طلبات الصرف المرتبطة (Payment Requests)</h3>
+                        <a href="{% url 'vendor_payment_request_create' %}?po={{ order.id }}" class="text-[11px] text-[#27bebe] font-bold hover:underline">
+                            + طلب صرف جديد
+                        </a>
+                    </div>
+                    <div class="overflow-x-auto border border-slate-100 rounded-lg">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 font-medium">
+                                <tr>
+                                    <th class="py-2 px-3">رقم الطلب</th>
+                                    <th class="py-2 px-3">تاريخ الطلب</th>
+                                    <th class="py-2 px-3">الحالة</th>
+                                    <th class="py-2 px-3 text-left">المبلغ المطلوب</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-700">
+                                {% for pr in order.payment_requests.all %}
+                                <tr class="hover:bg-slate-50/50 cursor-pointer" onclick="window.location='{% url 'vendor_payment_request_detail' pr.id %}'">
+                                    <td class="py-2.5 px-3 font-bold font-mono text-[#27bebe]">{{ pr.request_number }}</td>
+                                    <td class="py-2.5 px-3 font-mono text-slate-500">{{ pr.request_date|date:"Y-m-d" }}</td>
+                                    <td class="py-2.5 px-3">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ pr.status_badge_class }}">
+                                            {{ pr.status_display_ar }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2.5 px-3 font-mono font-bold text-emerald-700 text-left">{{ pr.amount|floatformat:2 }} ج.م</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

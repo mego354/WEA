@@ -19,10 +19,10 @@ class AgreementType(models.Model):
 
 class Agreement(models.Model):
     STATUS_CHOICES = [
-        ('new', 'New'),
-        ('approved', 'Approved'),
-        ('disapproved', 'Disapproved'),
-        ('done', 'Done'),
+        ('new', 'بانتظار الاعتماد'),
+        ('approved', 'معتمد'),
+        ('disapproved', 'مرفوض'),
+        ('done', 'منجز'),
     ]
 
     serial_num = models.IntegerField(unique=True, db_index=True, verbose_name="الرقم التعريفي")
@@ -36,6 +36,10 @@ class Agreement(models.Model):
     
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='agreements_created', verbose_name="المنشئ")
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='agreements_updated', verbose_name="محدث بواسطة")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='agreements_approved', verbose_name="معتمد بواسطة")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
+    approval_notes = models.TextField(blank=True, default='', verbose_name="ملاحظات الاعتماد / الرفض")
+    waiting_for_reapproval = models.BooleanField(default=False, verbose_name="بانتظار إعادة الاعتماد")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
 
@@ -56,7 +60,7 @@ class Agreement(models.Model):
     @property
     def status_display_ar(self):
         mapping = {
-            'new': 'جديد',
+            'new': 'بانتظار الاعتماد',
             'approved': 'معتمد',
             'disapproved': 'مرفوض',
             'done': 'منجز',
@@ -66,7 +70,7 @@ class Agreement(models.Model):
     @property
     def status_badge_class(self):
         mapping = {
-            'new': 'bg-sky-100 text-sky-800 border-sky-300',
+            'new': 'bg-amber-100 text-amber-800 border-amber-300',
             'approved': 'bg-emerald-100 text-emerald-800 border-emerald-300',
             'disapproved': 'bg-rose-100 text-rose-800 border-rose-300',
             'done': 'bg-slate-100 text-slate-800 border-slate-300',
@@ -642,30 +646,39 @@ class VisitExpense(models.Model):
 class ApprovalAuditLog(models.Model):
     RECORD_TYPES = [
         ('visit', 'زيارة ميدانية'),
+        ('agreement', 'اتفاقية'),
         ('sales_order', 'أمر بيع'),
         ('purchase_order', 'أمر شراء'),
+        ('sales_return', 'مرتجع بيع'),
+        ('purchase_return', 'مرتجع شراء'),
+        ('payment_request', 'طلب سداد'),
     ]
     ACTION_CHOICES = [
-        ('created', 'إنشاء الزيارة'),
+        ('created', 'إنشاء السجل / الزيارة'),
         ('submitted', 'تقديم للاعتماد'),
         ('approved', 'اعتماد'),
         ('rejected', 'رفض'),
         ('resubmitted', 'إعادة تقديم بعد التعديل'),
-        ('edited_reapproval_required', 'تعديل الزيارة (يتطلب اعتماد المدير)'),
-        ('edited_by_manager', 'تعديل بيانات الزيارة'),
+        ('edited_reapproval_required', 'تعديل السجل (يتطلب اعتماد المدير)'),
+        ('edited_by_manager', 'تعديل بيانات السجل'),
         ('distance_bypass', 'تجاوز شرط المسافة'),
         ('distance_exception_requested', 'طلب استثناء مسافة واعتماد المدير'),
         ('status_changed', 'تغيير الحالة'),
         ('sent_to_agenda', 'إرسال لجدول الأعمال'),
-        ('cancelled', 'إلغاء الزيارة'),
+        ('cancelled', 'إلغاء السجل'),
         ('answers_updated', 'تعديل إجابات الاستبيان'),
         ('visit_deleted', 'حذف الزيارة غير المنتهية'),
+        ('deleted', 'حذف'),
     ]
 
     record_type = models.CharField(max_length=20, choices=RECORD_TYPES, db_index=True, verbose_name="نوع السجل")
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="الزيارة")
+    agreement = models.ForeignKey(Agreement, on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="الاتفاقية")
     sales_order = models.ForeignKey('sales.SalesOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="أمر البيع")
     purchase_order = models.ForeignKey('purchases.PurchaseOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="أمر الشراء")
+    sales_return = models.ForeignKey('sales.SalesReturnOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="مرتجع البيع")
+    purchase_return = models.ForeignKey('purchases.PurchaseReturnOrder', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="مرتجع الشراء")
+    payment_request = models.ForeignKey('treasury.VendorPaymentRequest', on_delete=models.CASCADE, null=True, blank=True, related_name='approval_history', verbose_name="طلب سداد المورد")
     action = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True, verbose_name="نوع الإجراء")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approval_actions_logged', verbose_name="المستخدم المنفذ")
     status_before = models.CharField(max_length=50, blank=True, verbose_name="الحالة السابقة")
@@ -683,7 +696,22 @@ class ApprovalAuditLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        target = f"Visit #{self.visit.serial_num}" if self.visit else (f"Sales Order #{self.sales_order.order_number}" if self.sales_order else (f"Purchase Order #{self.purchase_order.order_number}" if self.purchase_order else "Record"))
+        if self.visit:
+            target = f"Visit #{self.visit.serial_num}"
+        elif self.agreement:
+            target = f"Agreement #{self.agreement.serial_num}"
+        elif self.sales_order:
+            target = f"Sales Order #{self.sales_order.order_number}"
+        elif self.purchase_order:
+            target = f"Purchase Order #{self.purchase_order.order_number}"
+        elif self.sales_return:
+            target = f"Sales Return #{self.sales_return.order_number}"
+        elif self.purchase_return:
+            target = f"Purchase Return #{self.purchase_return.order_number}"
+        elif self.payment_request:
+            target = f"Payment Request #{self.payment_request.request_number}"
+        else:
+            target = "Record"
         return f"[{self.get_action_display()}] {target} by {self.actor} at {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
 

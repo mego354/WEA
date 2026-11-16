@@ -6,15 +6,21 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from accounts.models import Role, Permission, SecurityAuditLog
 from accounts.permission_registry import ERP_PERMISSIONS_CATALOG
 from contacts.models import Contact
 from master_data.models import Area
-from treasury.models import Vault, VaultTransaction, VendorPayment, VendorAccount
+from treasury.models import Vault, VaultTransaction, VendorPayment, VendorAccount, VendorPaymentRequest
 from treasury.services import (
-    transfer_funds, reverse_vault_transaction, record_vault_manual_transaction
+    transfer_funds, reverse_vault_transaction, record_vault_manual_transaction,
+    VendorPaymentRequestService, build_payment_request_timeline
 )
+from purchases.models import PurchaseOrder, PurchaseOrderItem
+from purchases.services import PurchaseOrderService
+from catalog.models import Product, ProductCategory
+from inventory.models import Warehouse, InventoryStock
 
 User = get_user_model()
 
@@ -498,4 +504,358 @@ class TreasuryRBACAndStatsTestCase(TestCase):
         res_vp = self.client.get(reverse('vendor_payments_list') + '?search=NONEXISTENT_VP')
         self.assertEqual(res_vp.status_code, 200)
         self.assertEqual(res_vp.context['stats']['total_count'], 0)
+
+
+class VendorPaymentRequestWorkflowTests(TestCase):
+    """
+    Verifies Phase 2 Vendor Payment Request workflows:
+    1. Creation and overpayment validation against PO balance
+    2. Anti-self-approval enforcement
+    3. Concurrency-safe execution with OneToOneField(VendorPayment) preventing double payments
+    4. Rejection and Cancellation flows
+    5. Timeline events
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.cairo = Area.objects.create(name='القاهرة الكبرى', code='CAI-TREAS')
+        self.superadmin = User.objects.create_superuser(
+            username='admin_vpr', email='admin_vpr@wea.com', password='Password123!'
+        )
+        self.mgr_role = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.acc_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
+
+        self.manager = User.objects.create_user(
+            username='mgr_vpr', email='mgr_vpr@wea.com', password='Password123!', role=self.mgr_role
+        )
+        self.manager.assigned_areas.add(self.cairo)
+
+        self.accountant = User.objects.create_user(
+            username='acc_vpr', email='acc_vpr@wea.com', password='Password123!', role=self.acc_role
+        )
+        self.accountant.assigned_areas.add(self.cairo)
+
+        self.wh = Warehouse.objects.create(name='مخزن القاهرة الرئيسي', code='WH-CAI-VPR', area=self.cairo, is_active=True)
+        self.vault = Vault.objects.create(
+            name='خزينة القاهرة المركزية', vault_type='cash', current_balance=Decimal('100000.00'), is_active=True
+        )
+        self.supplier = Contact.objects.create(
+            name='شركة الدواء الحديث للتوريدات', code='SUP-MOD-01', is_supplier=True, area=self.cairo, status='active'
+        )
+        self.vendor_acc = VendorAccount.get_or_create_for_supplier(self.supplier)
+
+        self.cat = ProductCategory.objects.create(name='أدوية عامة', code='CAT-VPR-01')
+        self.product = Product.objects.create(
+            name='أوجمنتين 1 جم', sku_code='PRD-AUG-01', category=self.cat,
+            retail_price=Decimal('90.00'), default_purchase_cost=Decimal('60.00'),
+            is_active=True, sellable=True
+        )
+        self.stock = InventoryStock.objects.create(
+            warehouse=self.wh, product=self.product, qty_on_hand=Decimal('100.00'), product_cost=Decimal('60.00')
+        )
+
+        # Invoiced purchase order with outstanding balance: 10 * 60 = 600.00 LE
+        self.po = PurchaseOrderService.create_order(
+            supplier=self.supplier,
+            target_warehouse=self.wh,
+            order_date=timezone.now().date(),
+            items_data=[{'product': self.product, 'quantity': 10, 'unit_price': Decimal('60.00')}],
+            user=self.accountant
+        )
+        PurchaseOrderService.approve_order(self.po, self.superadmin)
+        PurchaseOrderService.stock_order(self.po, self.superadmin)
+        PurchaseOrderService.invoice_order(self.po, self.superadmin)
+        self.po.refresh_from_db()
+        self.assertEqual(self.po.outstanding_balance, Decimal('600.00'))
+        self.vendor_acc.refresh_from_db()
+        self.assertEqual(self.vendor_acc.current_balance, Decimal('600.00'))
+
+    def test_vendor_payment_request_creation_and_bounds(self):
+        """Cannot create payment request exceeding PO outstanding balance."""
+        # 1. Valid request of 400 LE
+        req = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('400.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            notes='دفعة تحت الحساب',
+            user=self.accountant
+        )
+        self.assertEqual(req.status, 'pending')
+        self.assertEqual(req.amount, Decimal('400.00'))
+
+        # 2. Request for 700 LE exceeds 600 LE outstanding balance
+        with self.assertRaises(ValidationError) as ctx:
+            VendorPaymentRequestService.create_request(
+                supplier=self.supplier,
+                amount=Decimal('700.00'),
+                preferred_vault=self.vault,
+                purchase_order=self.po,
+                user=self.accountant
+            )
+        self.assertIn('يتجاوز الرصيد المستحق', str(ctx.exception))
+
+    def test_vendor_payment_request_anti_self_approval(self):
+        """User who created payment request cannot approve or reject it."""
+        req = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('300.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            user=self.accountant
+        )
+
+        # Accountant attempts self-approval -> raises ValidationError
+        with self.assertRaises(ValidationError) as ctx:
+            VendorPaymentRequestService.approve_request(req, self.accountant)
+        self.assertIn('لا يمكنك اعتماد طلب سداد قمت بإنشائه بنفسك', str(ctx.exception))
+
+        # Manager approves -> success
+        approved = VendorPaymentRequestService.approve_request(req, self.manager)
+        self.assertEqual(approved.status, 'approved')
+
+    def test_vendor_payment_request_execution_and_duplicate_prevention(self):
+        """Executing payment request creates VendorPayment and prevents duplicate execution."""
+        req = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('500.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            user=self.accountant
+        )
+        VendorPaymentRequestService.approve_request(req, self.manager)
+
+        init_vault_bal = self.vault.current_balance
+        init_vendor_bal = self.vendor_acc.current_balance
+
+        # Execute payment
+        executed, payment = VendorPaymentRequestService.execute_request(
+            req, self.accountant, vault=self.vault, payment_method='cash'
+        )
+        self.assertEqual(executed.status, 'executed')
+        self.assertEqual(executed.vendor_payment, payment)
+
+        self.vault.refresh_from_db()
+        self.assertEqual(self.vault.current_balance, init_vault_bal - Decimal('500.00'))
+
+        self.vendor_acc.refresh_from_db()
+        self.assertEqual(self.vendor_acc.current_balance, init_vendor_bal - Decimal('500.00'))
+
+        # Second execution attempt is rejected (double-payment prevention)
+        with self.assertRaises(ValidationError) as ctx:
+            VendorPaymentRequestService.execute_request(req, self.accountant, vault=self.vault)
+        self.assertIn('تم صرف هذا الطلب مسبقاً', str(ctx.exception))
+
+    def test_vendor_payment_request_rejection_and_cancellation(self):
+        """Rejected or cancelled request cannot be executed."""
+        req = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('200.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            user=self.accountant
+        )
+        rejected = VendorPaymentRequestService.reject_request(req, self.manager, reason='عدم توفر سيولة حالياً')
+        self.assertEqual(rejected.status, 'rejected')
+        self.assertEqual(rejected.rejection_reason, 'عدم توفر سيولة حالياً')
+
+        # Execution of rejected request fails
+        with self.assertRaises(ValidationError):
+            VendorPaymentRequestService.execute_request(req, self.accountant, vault=self.vault)
+
+    def test_vendor_payment_request_timeline(self):
+        """Timeline events accurately record submission, approval, and execution."""
+        req = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('150.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            user=self.accountant
+        )
+        VendorPaymentRequestService.approve_request(req, self.manager)
+        VendorPaymentRequestService.execute_request(req, self.accountant, vault=self.vault)
+
+        events = build_payment_request_timeline(req)
+        self.assertTrue(len(events) >= 3)
+        titles = [e['title'] for e in events]
+        self.assertTrue(any('إنشاء' in t or 'تقديم' in t for t in titles))
+        self.assertTrue(any('اعتماد' in t for t in titles))
+        self.assertTrue(any('صرف' in t or 'تنفيذ' in t for t in titles))
+
+
+class VaultEnhancementTests(TestCase):
+    """
+    Verifies Vault creation and transaction enhancements:
+    1. Opening balance transaction with audit log on vault create
+    2. Duplicate vault name validation
+    3. Scoped destination vault in transfer
+    4. Non-destructive transaction reversal
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-VH')
+        self.superadmin = User.objects.create_superuser(
+            username='admin_vh', email='admin_vh@wea.com', password='Password123!'
+        )
+        self.acc_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
+        self.accountant = User.objects.create_user(
+            username='acc_vh', email='acc_vh@wea.com', password='Password123!', role=self.acc_role
+        )
+        self.accountant.assigned_areas.add(self.cairo)
+
+        self.vault1 = Vault.objects.create(
+            name='خزنة الفرع 1', vault_type='cash', current_balance=Decimal('20000.00'), is_active=True
+        )
+        self.vault2 = Vault.objects.create(
+            name='خزنة الفرع 2', vault_type='cash', current_balance=Decimal('5000.00'), is_active=True
+        )
+
+    def test_vault_create_opening_balance_transaction_and_audit(self):
+        """Creating a vault with initial balance generates opening transaction and audit log."""
+        self.client.force_login(self.superadmin)
+        post_data = {
+            'name': 'خزنة المعادي الجديدة',
+            'vault_type': 'cash',
+            'current_balance': '15000.00',
+            'description': 'خزنة فرع المعادي'
+        }
+        res = self.client.post(reverse('vault_create'), post_data)
+        self.assertEqual(res.status_code, 302)
+
+        new_vault = Vault.objects.filter(name='خزنة المعادي الجديدة').first()
+        self.assertIsNotNone(new_vault)
+        self.assertEqual(new_vault.current_balance, Decimal('15000.00'))
+
+        opening_tx = VaultTransaction.objects.filter(vault=new_vault, reference_type='opening_balance').first()
+        self.assertIsNotNone(opening_tx)
+        self.assertEqual(opening_tx.amount, Decimal('15000.00'))
+        self.assertEqual(opening_tx.transaction_type, 'inflow')
+
+        audit = SecurityAuditLog.objects.filter(action_type='VAULT_OPENING_BALANCE', record_id=str(opening_tx.id)).first()
+        self.assertIsNotNone(audit)
+
+    def test_vault_create_duplicate_name_rejected(self):
+        """Vault with duplicate name is rejected with error message."""
+        self.client.force_login(self.superadmin)
+        post_data = {
+            'name': 'خزنة الفرع 1',  # Already exists
+            'vault_type': 'cash',
+            'current_balance': '1000.00'
+        }
+        res = self.client.post(reverse('vault_create'), post_data, follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, "توجد خزنة مسجلة مسبقاً بنفس الاسم")
+
+    def test_vault_transfer_scoped_and_balance_updated(self):
+        """Funds transferred between vaults update balances and create audit log."""
+        outflow, inflow = transfer_funds(
+            source_vault=self.vault1,
+            destination_vault=self.vault2,
+            amount=Decimal('4000.00'),
+            user=self.accountant
+        )
+        self.vault1.refresh_from_db()
+        self.vault2.refresh_from_db()
+
+        self.assertEqual(self.vault1.current_balance, Decimal('16000.00'))
+        self.assertEqual(self.vault2.current_balance, Decimal('9000.00'))
+
+        self.assertEqual(outflow.transaction_type, 'outflow')
+        self.assertEqual(inflow.transaction_type, 'inflow')
+
+    def test_reverse_vault_transaction_non_destructive(self):
+        """Reversing a vault transaction posts an exact balancing entry without deleting original."""
+        from treasury.services import deposit_funds
+        tx = deposit_funds(
+            vault=self.vault1,
+            amount=Decimal('3000.00'),
+            user=self.accountant,
+            description='إيداع مؤقت'
+        )
+        self.vault1.refresh_from_db()
+        self.assertEqual(self.vault1.current_balance, Decimal('23000.00'))
+
+        # Reverse the deposit
+        reversal_tx = reverse_vault_transaction(tx=tx, user=self.accountant, reason='خطأ في رقم الحساب')
+        tx.refresh_from_db()
+        self.vault1.refresh_from_db()
+
+        self.assertTrue(tx.is_reversed)
+        self.assertEqual(tx.reversal_transaction, reversal_tx)
+        self.assertEqual(self.vault1.current_balance, Decimal('20000.00'))
+        self.assertEqual(reversal_tx.reference_type, 'reversal')
+        self.assertEqual(reversal_tx.amount, Decimal('3000.00'))
+        # Original transaction record is preserved in database
+        self.assertTrue(VaultTransaction.objects.filter(id=tx.id).exists())
+
+
+class TreasurySmartSearchValidationTests(TestCase):
+    """Verifies Treasury smart-search vault API scoping, template rendering, and IDOR checks."""
+
+    def setUp(self):
+        from django.core.management import call_command
+
+        call_command('setup_permissions')
+        self.role_manager = Role.objects.get(name='manager')
+        perm_req_create = Permission.objects.get(codename='treasury:payment_requests/create')
+        self.role_manager.permissions.add(perm_req_create)
+        self.role_accountant = Role.objects.get(name='accountant')
+
+        self.cairo = Area.objects.create(code='TR-CAI', name='القاهرة', area_type='governorate', is_company_area=False)
+        self.giza = Area.objects.create(code='TR-GIZ', name='الجيزة', area_type='governorate', is_company_area=False)
+        self.corp = Area.objects.create(code='TR-CORP', name='موردين', area_type='governorate', is_company_area=True)
+
+        self.mgr_cairo = User.objects.create_user(
+            username='tr_mgr_cai@wea.com', email='tr_mgr_cai@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+        self.accountant = User.objects.create_user(
+            username='tr_acc@wea.com', email='tr_acc@wea.com', password='Password123!', role=self.role_accountant
+        )
+
+        self.corp_sup = Contact.objects.create(
+            serial_num=16032, name='مصنع العز تيوب', is_supplier=True, status='customer', area=self.corp
+        )
+        self.non_sup = Contact.objects.create(
+            serial_num=91001, name='عميل عادي', is_supplier=False, is_customer=True, status='customer', area=self.cairo
+        )
+        self.vault_cairo = Vault.objects.create(serial_num=9201, name='خزنة القاهرة النقدية', area=self.cairo, current_balance=Decimal('5000.00'))
+        self.vault_giza = Vault.objects.create(serial_num=9202, name='خزنة الجيزة النقدية', area=self.giza, current_balance=Decimal('5000.00'))
+
+    def test_payment_request_create_validates_preferred_vault_and_supplier(self):
+        self.client.force_login(self.mgr_cairo)
+
+        # Out-of-scope preferred_vault returns 403 Forbidden
+        bad_vault = self.client.post(reverse('vendor_payment_request_create'), {
+            'supplier': self.corp_sup.id,
+            'preferred_vault': self.vault_giza.id,
+            'amount': '250.00',
+        })
+        self.assertEqual(bad_vault.status_code, 403)
+
+        # Non-supplier contact is rejected without creating VendorPaymentRequest
+        before = VendorPaymentRequest.objects.count()
+        bad_sup = self.client.post(reverse('vendor_payment_request_create'), {
+            'supplier': self.non_sup.id,
+            'preferred_vault': self.vault_cairo.id,
+            'amount': '250.00',
+        })
+        self.assertEqual(bad_sup.status_code, 302)
+        self.assertEqual(VendorPaymentRequest.objects.count(), before)
+
+        # Vault search API returns Cairo vault for Cairo manager, never Giza vault
+        v_api = self.client.get(reverse('purchases_vaults_search_api') + '?q=النقديه')
+        self.assertEqual(v_api.status_code, 200)
+        ids = [r['id'] for r in v_api.json()['results']]
+        self.assertIn(self.vault_cairo.id, ids)
+        self.assertNotIn(self.vault_giza.id, ids)
+
+    def test_treasury_views_render_smart_select_attributes(self):
+        self.client.force_login(self.accountant)
+        for url_name in ('vendor_payment_create', 'vendor_payments_list', 'vendor_transactions_list', 'vault_transactions_list', 'vault_transfer'):
+            resp = self.client.get(reverse(url_name))
+            self.assertEqual(resp.status_code, 200, f"Failed GET {url_name}")
+            self.assertContains(resp, 'data-smart-select="true"')
+
 

@@ -40,6 +40,7 @@ class ActivitiesModuleTestCase(TestCase):
         rep_perms = Permission.objects.filter(
             codename__in=[
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit', 'activities:visits/export',
+                'activities:visits/bypass_gps',
                 'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
                 'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create', 'activities:agreements/export',
                 'module:activities', 'module:contacts'
@@ -102,13 +103,13 @@ class ActivitiesModuleTestCase(TestCase):
 
         # 3. Approve Action
         self.client.login(username='testmanager', password='Password123!')
-        approve_res = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        approve_res = self.client.post(reverse('agreement_action', args=[agreement.pk, 'approve']))
         self.assertEqual(approve_res.status_code, 302)
         agreement.refresh_from_db()
         self.assertEqual(agreement.status, 'approved')
 
         # 4. Done Action
-        done_res = self.client.get(reverse('agreement_action', args=[agreement.pk, 'done']))
+        done_res = self.client.post(reverse('agreement_action', args=[agreement.pk, 'done']))
         self.assertEqual(done_res.status_code, 302)
         agreement.refresh_from_db()
         self.assertEqual(agreement.status, 'done')
@@ -274,7 +275,7 @@ class ActivitiesModuleTestCase(TestCase):
         )
 
         # Rep attempts to approve agreement -> should not change status
-        rep_client.get(reverse('agreement_action', args=[ag.pk, 'approve']))
+        rep_client.post(reverse('agreement_action', args=[ag.pk, 'approve']))
         ag.refresh_from_db()
         self.assertEqual(ag.status, 'new')
 
@@ -485,20 +486,32 @@ class VisitAndLocationParityTestCase(TestCase):
         self.assertEqual(res_rep.status_code, 403)
 
     def test_superuser_only_user_bypass_toggle(self):
-        """Only superusers can toggle bypass_location_verification on users."""
-        # Rep tries to toggle bypass on self -> denied
+        """Legacy per-user bypass toggle no longer toggles user flag; GPS bypass is managed in Role Settings."""
+        # Rep tries to access legacy toggle URL -> denied (redirect to users_list without mutating)
         self.client.login(username='rep_user', password='RepPassword123!')
         res = self.client.get(f'/auth/users/{self.rep.id}/toggle-bypass-location/')
         self.assertEqual(res.status_code, 302)
         self.rep.refresh_from_db()
         self.assertFalse(self.rep.bypass_location_verification)
 
-        # Superuser toggles bypass on rep -> allowed
+        # Superuser accessing legacy URL is redirected to Role Settings without mutating per-user flag
         self.client.login(username='admin_user', password='AdminPassword123!')
         res_admin = self.client.get(f'/auth/users/{self.rep.id}/toggle-bypass-location/')
         self.assertEqual(res_admin.status_code, 302)
+        self.assertIn('/roles/', res_admin.url)
         self.rep.refresh_from_db()
-        self.assertTrue(self.rep.bypass_location_verification)
+        self.assertFalse(self.rep.bypass_location_verification)
+
+        # GPS bypass is controlled via Role Settings (`activities:visits/bypass_gps`)
+        from master_data.models import LocationSettings
+        from django.contrib.auth.models import Permission
+        loc = LocationSettings.get_settings()
+        self.assertFalse(loc.can_user_bypass_without_approval(self.rep, stage='end'))
+        bypass_perm = Permission.objects.filter(codename='activities:visits/bypass_gps').first()
+        if bypass_perm:
+            self.rep.role.permissions.add(bypass_perm)
+            self.rep.clear_perm_cache()
+            self.assertTrue(loc.can_user_bypass_without_approval(self.rep, stage='end'))
 
     def test_anti_duplicate_visit_prevention(self):
         """Duplicate visit on the same date displays confirmation warning and does not silently create duplicates."""
@@ -1968,6 +1981,7 @@ class VisitManagementImprovementsTestCase(TestCase):
             codename__in=[
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
                 'activities:visits/edit', 'activities:visits/approve', 'activities:visits/export',
+                'activities:visits/bypass_gps', 'activities:visits/gps_request_exception',
                 'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
                 'module:activities', 'module:contacts', 'settings:location/manage', 'module:settings'
             ]
@@ -1980,7 +1994,7 @@ class VisitManagementImprovementsTestCase(TestCase):
         self.rep_role = Role.objects.create(
             name='med_rep_imp', display_name='مندوب دعاية', is_rep=True, is_area_manager=False
         )
-        self.rep_role.permissions.set(perms.exclude(codename__in=['activities:visits/approve', 'settings:location/manage']))
+        self.rep_role.permissions.set(perms.exclude(codename__in=['activities:visits/approve', 'settings:location/manage', 'activities:visits/bypass_gps']))
 
         # Users
         self.superadmin = User.objects.create_superuser(
@@ -2581,6 +2595,7 @@ class RefinedVisitRequirementsTestCase(TestCase):
         all_perms = Permission.objects.filter(
             codename__in=[
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create', 'activities:visits/edit',
+                'activities:visits/bypass_gps',
                 'activities:planned/list', 'activities:planned/manage',
                 'settings:visitsTemplates/manage',
                 'module:activities', 'module:contacts'
@@ -5292,13 +5307,13 @@ class AgreementWorkflowTests(TestCase):
 
         # 2. Cairo rep attempts to approve own agreement -> Blocked
         self.client.force_login(self.rep_cairo)
-        resp_rep = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        resp_rep = self.client.post(reverse('agreement_action', args=[agreement.pk, 'approve']))
         agreement.refresh_from_db()
         self.assertEqual(agreement.status, 'new')
 
         # 3. Cairo manager approves Cairo rep's agreement -> Allowed
         self.client.force_login(self.manager_cairo)
-        resp_mgr = self.client.get(reverse('agreement_action', args=[agreement.pk, 'approve']))
+        resp_mgr = self.client.post(reverse('agreement_action', args=[agreement.pk, 'approve']))
         self.assertEqual(resp_mgr.status_code, 302)
         agreement.refresh_from_db()
         self.assertEqual(agreement.status, 'approved')
@@ -5319,7 +5334,7 @@ class AgreementWorkflowTests(TestCase):
             status='new',
             created_by=self.manager_cairo
         )
-        resp_self_mgr = self.client.get(reverse('agreement_action', args=[mgr_agreement.pk, 'approve']))
+        resp_self_mgr = self.client.post(reverse('agreement_action', args=[mgr_agreement.pk, 'approve']))
         self.assertEqual(resp_self_mgr.status_code, 403)
         mgr_agreement.refresh_from_db()
         self.assertEqual(mgr_agreement.status, 'new')
@@ -5348,13 +5363,14 @@ class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
         rep_perms = Permission.objects.filter(
             codename__in=[
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
-                'activities:visits/edit', 'module:activities', 'module:contacts'
+                'activities:visits/edit', 'activities:visits/bypass_gps', 'module:activities', 'module:contacts'
             ]
         )
         mgr_perms = Permission.objects.filter(
             codename__in=[
                 'activities:visits/list', 'activities:visits/view', 'activities:visits/create',
-                'activities:visits/edit', 'activities:visits/approve', 'module:activities', 'module:contacts'
+                'activities:visits/edit', 'activities:visits/approve', 'activities:visits/bypass_gps',
+                'module:activities', 'module:contacts'
             ]
         )
         self.rep_role.permissions.set(rep_perms)
@@ -5527,6 +5543,10 @@ class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
         self.assertTrue(visit.waiting_for_reapproval)
         # Per Requirement D, visit_edit only updates visit metadata and preserves questionnaire_answers
         self.assertEqual(visit.questionnaire_answers.get(str(self.q_start_req.id)), 'نعم')
+        # Questionnaire answer editing is strictly permitted after visit ends (Requirement E)
+        visit.status = 'finished'
+        visit.ended_at = timezone.now()
+        visit.save(update_fields=['status', 'ended_at'])
         res_rep_answers = self.client.post(reverse('visit_update_answers', args=[visit.pk]), {
             f'question_{self.q_start_req.id}': 'لا'
         })
@@ -5544,6 +5564,9 @@ class VisitWorkflowAndEditingImprovementsTestCase(TestCase):
         self.assertFalse(visit.waiting_for_reapproval)
 
         # 3. Manager edits critical fields -> approval retained, logged as edited_by_manager
+        visit.status = 'started'
+        visit.ended_at = None
+        visit.save(update_fields=['status', 'ended_at'])
         res_mgr_edit = self.client.post(reverse('visit_edit', args=[visit.pk]), {
             'contact': self.customer.id,
             'template': self.template.id,
