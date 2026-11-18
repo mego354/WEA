@@ -187,10 +187,17 @@ def validate_assigned_areas_for_user(request_user, area_ids):
 
 def _get_filtered_users_queryset(request):
     from master_data.search_utils import filter_by_arabic_search
+    from master_data.filter_utils import parse_multi_int, parse_single_int, resolve_scoped_area_brick_filters
     query = request.GET.get('q', '').strip()
-    role_filter = request.GET.get('role', '').strip()
+    role_ids = parse_multi_int(request.GET, 'role')
+    role_filter = str(role_ids[0]) if len(role_ids) == 1 else ''
     status_filter = request.GET.get('status', '').strip()
-    area_filter = request.GET.get('area', '').strip()
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'accounts',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_filter = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
 
     users_qs = (
         User.objects.select_related('role')
@@ -206,16 +213,18 @@ def _get_filtered_users_queryset(request):
             query,
             raw_fields=['username', 'code', 'mobile'],
         )
-    if role_filter:
-        users_qs = users_qs.filter(role__id=role_filter)
+    if role_ids:
+        users_qs = users_qs.filter(role__id__in=role_ids)
     if status_filter == 'active':
         users_qs = users_qs.filter(is_active=True)
     elif status_filter == 'inactive':
         users_qs = users_qs.filter(is_active=False)
-    if area_filter:
+    if main_area_ids:
         users_qs = users_qs.filter(
-            Q(assigned_areas__id=area_filter) | Q(assigned_areas__parent_id=area_filter)
+            Q(assigned_areas__id__in=main_area_ids) | Q(assigned_areas__parent_id__in=main_area_ids)
         ).distinct()
+    if brick_ids:
+        users_qs = users_qs.filter(assigned_areas__id__in=brick_ids).distinct()
 
     return users_qs, query, role_filter, status_filter, area_filter
 
@@ -256,7 +265,11 @@ def users_list(request):
         roles = roles.exclude(name__iexact='superadmin').exclude(is_super=True)
 
     hierarchical_areas = get_hierarchical_areas(request.user)
-    areas = Area.objects.all().order_by('name')
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_user_managed_areas(
+        request.user,
+        ScopeResolutionService.get_user_scope(request.user, 'accounts', 'view')
+    ).order_by('name')
 
     users_agg = users_qs.aggregate(
         total_users=Count('id', distinct=True),
@@ -270,11 +283,27 @@ def users_list(request):
         'roles_count': roles.count(),
     }
 
+    from master_data.filter_utils import parse_multi_int, resolve_scoped_area_brick_filters
+    selected_role_ids = parse_multi_int(request.GET, 'role')
+    role_options = [{'value': str(r.id), 'label': r.display_name} for r in roles]
+    selected_role_str = [str(x) for x in selected_role_ids]
+    selected_role_items = [o for o in role_options if o['value'] in selected_role_str]
+    _, _, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'accounts',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+
     context = {
         'users': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'roles': roles,
+        'role_options': role_options,
+        'selected_role_items': selected_role_items,
+        'selected_roles': selected_role_str,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
         'areas': areas,
         'hierarchical_areas': hierarchical_areas,
         'query': query,
@@ -1307,24 +1336,30 @@ def audit_logs_list(request):
     """
     from datetime import datetime, time
     from django.utils import timezone
+    from master_data.filter_utils import parse_multi_str, parse_single_int
 
-    module_filter = request.GET.get('module', '').strip()
-    action_filter = request.GET.get('action', '').strip()
-    user_filter = request.GET.get('user', '').strip()
+    mod_dict = dict(SecurityAuditLog.MODULE_CHOICES)
+    act_dict = dict(SecurityAuditLog.ACTION_CHOICES)
+    selected_modules = parse_multi_str(request.GET, 'module')
+    selected_actions = parse_multi_str(request.GET, 'action')
+    module_filter = selected_modules[0] if len(selected_modules) == 1 else ''
+    action_filter = selected_actions[0] if len(selected_actions) == 1 else ''
+    user_id_int = parse_single_int(request.GET, 'user')
+    user_filter = str(user_id_int) if user_id_int else ''
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
     query = request.GET.get('q', '').strip()
 
     logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
 
-    if module_filter:
-        logs_qs = logs_qs.filter(module=module_filter)
+    if selected_modules:
+        logs_qs = logs_qs.filter(module__in=selected_modules)
 
-    if action_filter:
-        logs_qs = logs_qs.filter(action_type=action_filter)
+    if selected_actions:
+        logs_qs = logs_qs.filter(action_type__in=selected_actions)
 
-    if user_filter and user_filter.isdigit():
-        logs_qs = logs_qs.filter(actor_id=int(user_filter))
+    if user_id_int:
+        logs_qs = logs_qs.filter(actor_id=user_id_int)
 
     if date_from:
         try:
@@ -1354,12 +1389,11 @@ def audit_logs_list(request):
         )
 
     active_filters = []
-    if module_filter:
-        mod_dict = dict(SecurityAuditLog.MODULE_CHOICES)
-        active_filters.append({'label': 'الموديول', 'value': mod_dict.get(module_filter, module_filter), 'param': 'module'})
-    if action_filter:
-        action_lbl = SecurityAuditLog.get_label_for_action(action_filter)
-        active_filters.append({'label': 'نوع العملية', 'value': action_lbl, 'param': 'action'})
+    for m in selected_modules:
+        active_filters.append({'label': 'الموديول', 'value': mod_dict.get(m, m), 'param': 'module', 'remove_value': m})
+    for a in selected_actions:
+        action_lbl = SecurityAuditLog.get_label_for_action(a)
+        active_filters.append({'label': 'نوع العملية', 'value': action_lbl, 'param': 'action', 'remove_value': a})
     if user_filter and user_filter.isdigit():
         u_obj = User.objects.filter(pk=int(user_filter)).first()
         if u_obj:
@@ -1375,12 +1409,23 @@ def audit_logs_list(request):
 
     all_users = User.objects.filter(is_active=True).order_by('name')
 
+    module_options = [{'value': k, 'label': v} for k, v in SecurityAuditLog.MODULE_CHOICES]
+    selected_module_items = [o for o in module_options if o['value'] in selected_modules]
+    action_options = [{'value': k, 'label': v} for k, v in SecurityAuditLog.ACTION_CHOICES]
+    selected_action_items = [o for o in action_options if o['value'] in selected_actions]
+
     return render(request, 'accounts/audit_logs.html', {
         'logs': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'module_choices': SecurityAuditLog.MODULE_CHOICES,
         'action_choices': SecurityAuditLog.ACTION_CHOICES,
+        'module_options': module_options,
+        'selected_module_items': selected_module_items,
+        'selected_modules': selected_modules,
+        'action_options': action_options,
+        'selected_action_items': selected_action_items,
+        'selected_actions': selected_actions,
         'module_filter': module_filter,
         'action_filter': action_filter,
         'user_filter': user_filter,

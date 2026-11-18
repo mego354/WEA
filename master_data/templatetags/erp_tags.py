@@ -29,24 +29,33 @@ def url_replace(context, **kwargs):
 
 
 @register.simple_tag(takes_context=True)
-def url_remove_param(context, param_name, **kwargs):
+def url_remove_param(context, param_name, value=None, **kwargs):
     """
-    Safely remove a dynamic parameter by name while preserving other parameters.
+    Safely remove a dynamic parameter (or a single value from a multi-value parameter)
+    by name while preserving other parameters.
     Usage:
-        <a href="{% url_remove_param filter.param page=1 %}">إزالة</a>
+        <a href="{% url_remove_param filter.param value=filter.remove_value page=1 %}">إزالة</a>
     """
     request = context.get('request')
     if not request:
         return "?"
     dict_ = request.GET.copy()
     if param_name and param_name in dict_:
-        del dict_[param_name]
-    for key, value in kwargs.items():
-        if value is None or value == '':
+        if value is not None and value != '':
+            target = str(value)
+            remaining = [v for v in dict_.getlist(param_name) if v != target]
+            if remaining:
+                dict_.setlist(param_name, remaining)
+            else:
+                del dict_[param_name]
+        else:
+            del dict_[param_name]
+    for key, val in kwargs.items():
+        if val is None or val == '':
             if key in dict_:
                 del dict_[key]
         else:
-            dict_[key] = str(value)
+            dict_[key] = str(val)
     encoded = dict_.urlencode()
     return f"?{encoded}" if encoded else "?"
 

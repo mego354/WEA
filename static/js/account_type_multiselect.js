@@ -14,6 +14,31 @@
         global.ERPAccountTypeInstances = {};
     }
 
+    function cssEscape(val) {
+        if (global.CSS && typeof global.CSS.escape === 'function') {
+            return global.CSS.escape(String(val));
+        }
+        return String(val).replace(/["\\]/g, '\\$&');
+    }
+
+    function matchesQuery(candidate, query) {
+        if (typeof global.matchesNormalizedArabic === 'function') {
+            return global.matchesNormalizedArabic(candidate, query);
+        }
+        const norm = s => String(s || '')
+            .toLowerCase()
+            .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+            .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627')
+            .replace(/\u0629/g, '\u0647')
+            .replace(/\u0649/g, '\u064A')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const nq = norm(query);
+        if (!nq) return true;
+        const nc = norm(candidate);
+        return nq.split(' ').filter(Boolean).every(t => nc.includes(t));
+    }
+
     function escapeHtml(text) {
         if (!text) return '';
         return String(text)
@@ -45,7 +70,7 @@
         }
 
         function getSelectedValues() {
-            return Array.from(chipsContainer.querySelectorAll(`input[name="${fieldName}"]`)).map(el => el.value);
+            return Array.from(chipsContainer.querySelectorAll(`input[name="${cssEscape(fieldName)}"]`)).map(el => el.value);
         }
 
         function syncOptionChecks() {
@@ -67,7 +92,7 @@
 
         function addChip(val) {
             val = String(val).trim();
-            if (!val || chipsContainer.querySelector(`[data-account-type="${val}"]`)) return;
+            if (!val || chipsContainer.querySelector(`[data-account-type="${cssEscape(val)}"]`)) return;
 
             const chip = document.createElement('span');
             chip.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold shadow-2xs';
@@ -86,7 +111,7 @@
 
         function removeChip(val) {
             val = String(val).trim();
-            const chip = chipsContainer.querySelector(`[data-account-type="${val}"]`);
+            const chip = chipsContainer.querySelector(`[data-account-type="${cssEscape(val)}"]`);
             if (chip) {
                 chip.remove();
                 syncOptionChecks();
@@ -101,10 +126,9 @@
         }
 
         function filterOptions(query) {
-            const q = (query || '').toLowerCase().trim();
             dropdown.querySelectorAll('.account-type-option').forEach(opt => {
-                const val = (opt.getAttribute('data-value') || '').toLowerCase();
-                if (!q || val.includes(q)) {
+                const val = opt.getAttribute('data-value') || '';
+                if (matchesQuery(val, query)) {
                     opt.classList.remove('hidden');
                 } else {
                     opt.classList.add('hidden');

@@ -31,9 +31,12 @@ User = get_user_model()
 
 @require_permission('treasury:payments/list')
 def vendor_payments_list(request):
+    from master_data.filter_utils import parse_single_int
     search = request.GET.get('search', '').strip()
-    supplier_id = request.GET.get('supplier')
-    vault_id = request.GET.get('vault')
+    supplier_id_int = parse_single_int(request.GET, 'supplier')
+    supplier_id = str(supplier_id_int) if supplier_id_int else ''
+    vault_id_int = parse_single_int(request.GET, 'vault')
+    vault_id = str(vault_id_int) if vault_id_int else ''
     payment_method = request.GET.get('payment_method')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -448,12 +451,20 @@ def vaults_list(request):
     """
     Vaults & Cash Safes Listing with Dedicated Scoped Statistics Cards and Advanced Filter Drawer.
     """
+    from master_data.filter_utils import parse_multi_str, parse_single_int, resolve_scoped_area_brick_filters
     search = request.GET.get('search', '').strip()
-    vault_type = request.GET.get('vault_type', '').strip()
+    selected_vault_types = [v for v in parse_multi_str(request.GET, 'vault_type') if v in ('cash', 'bank')]
+    vault_type = selected_vault_types[0] if len(selected_vault_types) == 1 else ''
     custody_type = request.GET.get('custody_type', '').strip()
     status = request.GET.get('status', '').strip()
-    area_id = request.GET.get('area', '').strip()
-    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'treasury',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    assigned_user_int = parse_single_int(request.GET, 'assigned_user')
+    assigned_user_id = str(assigned_user_int) if assigned_user_int else ''
     balance_min = request.GET.get('balance_min', '').strip()
     balance_max = request.GET.get('balance_max', '').strip()
 
@@ -465,10 +476,11 @@ def vaults_list(request):
         qs = filter_by_arabic_search(qs, search, ['name', 'serial_num'])
         active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
-    if vault_type in ['cash', 'bank']:
-        qs = qs.filter(vault_type=vault_type)
-        v_label = 'خزينة نقدية' if vault_type == 'cash' else 'حساب بنكي'
-        active_filters.append({'label': 'نوع الخزنة', 'value': v_label, 'param': 'vault_type'})
+    if selected_vault_types:
+        qs = qs.filter(vault_type__in=selected_vault_types)
+        vt_map = {'cash': 'خزينة نقدية', 'bank': 'حساب بنكي'}
+        for vt in selected_vault_types:
+            active_filters.append({'label': 'نوع الخزنة', 'value': vt_map.get(vt, vt), 'param': 'vault_type', 'remove_value': vt})
 
     if custody_type == 'rep':
         qs = qs.filter(is_rep_vault=True)
@@ -485,10 +497,14 @@ def vaults_list(request):
         active_filters.append({'label': 'الحالة', 'value': 'معطلة', 'param': 'status'})
 
     from master_data.models import Area
-    if area_id:
-        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
-        area_obj = Area.objects.filter(id=area_id).first()
-        active_filters.append({'label': 'المنطقة', 'value': area_obj.name if area_obj else area_id, 'param': 'area'})
+    if main_area_ids:
+        qs = qs.filter(Q(area_id__in=main_area_ids) | Q(area__parent_id__in=main_area_ids))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(area_id__in=brick_ids)
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
     if assigned_user_id:
         qs = qs.filter(assigned_user_id=assigned_user_id)
@@ -536,11 +552,19 @@ def vaults_list(request):
     areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
     assignees = get_visible_assignees_queryset(request.user, 'treasury')
 
+    vault_type_options = [{'value': 'cash', 'label': 'خزينة نقدية (Cash Safe)'}, {'value': 'bank', 'label': 'حساب بنكي (Bank Account)'}]
+    selected_vault_type_items = [o for o in vault_type_options if o['value'] in selected_vault_types]
+
     context = {
         'vaults': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'search_query': search,
+        'vault_type_options': vault_type_options,
+        'selected_vault_type_items': selected_vault_type_items,
+        'selected_vault_types': selected_vault_types,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
         'selected_vault_type': vault_type,
         'selected_custody_type': custody_type,
         'selected_status': status,
@@ -563,12 +587,20 @@ def vaults_list(request):
 @require_permission('treasury:vaults/export')
 def vaults_export(request):
     """Export filtered and scoped vaults to Excel."""
+    from master_data.filter_utils import parse_multi_str, parse_single_int, resolve_scoped_area_brick_filters
     search = request.GET.get('search', '').strip()
-    vault_type = request.GET.get('vault_type', '').strip()
+    selected_vault_types = [v for v in parse_multi_str(request.GET, 'vault_type') if v in ('cash', 'bank')]
+    vault_type = selected_vault_types[0] if len(selected_vault_types) == 1 else ''
     custody_type = request.GET.get('custody_type', '').strip()
     status = request.GET.get('status', '').strip()
-    area_id = request.GET.get('area', '').strip()
-    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'treasury',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    assigned_user_int = parse_single_int(request.GET, 'assigned_user')
+    assigned_user_id = str(assigned_user_int) if assigned_user_int else ''
     balance_min = request.GET.get('balance_min', '').strip()
     balance_max = request.GET.get('balance_max', '').strip()
 
@@ -962,11 +994,16 @@ def vault_delete(request, pk):
 
 @require_permission(['treasury:payment_requests/list', 'treasury:payments/requests'])
 def vendor_payment_requests_list(request):
-    status_filter = request.GET.get('status', 'all')
-    supplier_filter = request.GET.get('supplier')
+    from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
+
+    status_labels = dict(VendorPaymentRequest.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_labels]
+    status_filter = selected_statuses[0] if len(selected_statuses) == 1 else 'all'
+    supplier_id_int = parse_single_int(request.GET, 'supplier')
+    supplier_filter = str(supplier_id_int) if supplier_id_int else ''
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
 
     qs = VendorPaymentRequest.objects.select_related(
         'supplier', 'purchase_order', 'preferred_vault', 'created_by', 'vendor_payment'
@@ -975,27 +1012,27 @@ def vendor_payment_requests_list(request):
 
     active_filters = []
 
-    if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
-        status_labels = dict(VendorPaymentRequest.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for st in selected_statuses:
+            active_filters.append({'label': 'الحالة', 'value': status_labels.get(st, st), 'param': 'status', 'remove_value': st})
 
-    if supplier_filter:
-        qs = qs.filter(supplier_id=supplier_filter)
-        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'treasury').filter(id=supplier_filter).first()
-        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
+    if supplier_id_int:
+        qs = qs.filter(supplier_id=supplier_id_int)
+        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'treasury').filter(id=supplier_id_int).first()
+        active_filters.append({'label': 'المورد', 'value': s_obj.name if s_obj else supplier_filter, 'param': 'supplier'})
 
-    if date_from:
-        qs = qs.filter(request_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if parsed_from:
+        qs = qs.filter(request_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
 
-    if date_to:
-        qs = qs.filter(request_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_to:
+        qs = qs.filter(request_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['request_number', 'supplier__name', 'purchase_order__order_number'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     suppliers = get_bounded_select_options(
         ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'treasury'),
@@ -1018,10 +1055,17 @@ def vendor_payment_requests_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    vpr_status_options = [{'value': k, 'label': v} for k, v in VendorPaymentRequest.STATUS_CHOICES]
+    selected_vpr_status_items = [o for o in vpr_status_options if o['value'] in selected_statuses]
+
     context = {
         'requests': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
+        'vpr_status_options': vpr_status_options,
+        'selected_vpr_status_items': selected_vpr_status_items,
+        'selected_statuses': selected_statuses,
+        'active_preset': active_preset,
         'current_status': status_filter,
         'selected_supplier': supplier_filter,
         'search_query': search,

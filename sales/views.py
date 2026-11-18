@@ -43,38 +43,71 @@ from accounts.scope_service import ScopeResolutionService
 
 @require_permission('sales:orders/list')
 def sales_orders_list(request):
-    payment_status_filter = request.GET.get('payment_status', 'all')
-    customer_filter = request.GET.get('customer')
+    from master_data.filter_utils import (
+        parse_multi_str,
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
+
+    status_choices_dict = dict(SalesOrder.STATUS_CHOICES)
+    payment_choices_dict = dict(SalesOrder.PAYMENT_STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
+    selected_payment_statuses = [p for p in parse_multi_str(request.GET, 'payment_status') if p in payment_choices_dict]
+    payment_status_filter = selected_payment_statuses[0] if len(selected_payment_statuses) == 1 else 'all'
+
+    customer_id_int = parse_single_int(request.GET, 'customer')
+    customer_filter = str(customer_id_int) if customer_id_int else ''
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
     remaining_min = request.GET.get('remaining_min', '').strip()
     remaining_max = request.GET.get('remaining_max', '').strip()
 
-    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
+    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'customer__brick', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
     qs = get_scoped_queryset(qs, request.user, 'salesorder')
     qs = SalesOrder.with_payment_totals(qs)
 
     active_filters = []
 
-    if payment_status_filter != 'all' and payment_status_filter in dict(SalesOrder.PAYMENT_STATUS_CHOICES):
-        qs = qs.filter(payment_status=payment_status_filter)
-        ps_labels = dict(SalesOrder.PAYMENT_STATUS_CHOICES)
-        active_filters.append({'label': 'حالة السداد', 'value': ps_labels.get(payment_status_filter, payment_status_filter), 'param': 'payment_status'})
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for s in selected_statuses:
+            active_filters.append({'label': 'حالة الطلب', 'value': status_choices_dict.get(s, s), 'param': 'status', 'remove_value': s})
 
-    if customer_filter:
-        qs = qs.filter(customer_id=customer_filter)
-        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_filter).first()
+    if selected_payment_statuses:
+        qs = qs.filter(payment_status__in=selected_payment_statuses)
+        for ps in selected_payment_statuses:
+            active_filters.append({'label': 'حالة السداد', 'value': payment_choices_dict.get(ps, ps), 'param': 'payment_status', 'remove_value': ps})
+
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_id_int).first()
         active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_filter, 'param': 'customer'})
 
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
+
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
         active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
 
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
         active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     # Financial Total Amount Range Filters (Requirement B1)
@@ -142,12 +175,28 @@ def sales_orders_list(request):
         'pending_count': 0,
     }
 
+    order_status_options = [{'value': k, 'label': v} for k, v in SalesOrder.STATUS_CHOICES]
+    selected_order_status_items = [o for o in order_status_options if o['value'] in selected_statuses]
+    payment_status_options = [{'value': k, 'label': v} for k, v in SalesOrder.PAYMENT_STATUS_CHOICES]
+    selected_payment_status_items = [o for o in payment_status_options if o['value'] in selected_payment_statuses]
+
     context = {
         'orders': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'current_payment_status': payment_status_filter,
         'payment_statuses': SalesOrder.PAYMENT_STATUS_CHOICES,
+        'order_status_options': order_status_options,
+        'selected_order_status_items': selected_order_status_items,
+        'selected_statuses': selected_statuses,
+        'payment_status_options': payment_status_options,
+        'selected_payment_status_items': selected_payment_status_items,
+        'selected_payment_statuses': selected_payment_statuses,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'active_preset': active_preset,
+        'date_from': date_from,
+        'date_to': date_to,
         'selected_customer': customer_filter,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
@@ -643,44 +692,77 @@ def sales_order_delete(request, pk):
 
 @require_permission('sales:collections/list')
 def collections_list(request):
-    search = request.GET.get('search', '').strip()
-    customer_id = request.GET.get('customer')
-    vault_id = request.GET.get('vault')
-    payment_method = request.GET.get('payment_method')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    from master_data.filter_utils import (
+        parse_multi_int,
+        parse_multi_str,
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
 
-    qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+    search = request.GET.get('search', '').strip()
+    customer_id_int = parse_single_int(request.GET, 'customer')
+    customer_id = str(customer_id_int) if customer_id_int else ''
+    selected_vault_ids = parse_multi_int(request.GET, 'vault')
+    vault_id = str(selected_vault_ids[0]) if len(selected_vault_ids) == 1 else ''
+    pm_choices = Collection._meta.get_field('payment_method').choices
+    method_labels = dict(pm_choices)
+    selected_payment_methods = [m for m in parse_multi_str(request.GET, 'payment_method') if m in method_labels]
+    payment_method = selected_payment_methods[0] if len(selected_payment_methods) == 1 else ''
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
+
+    qs = Collection.objects.select_related('customer', 'customer__area', 'customer__brick', 'vault', 'created_by').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'collection')
 
     active_filters = []
 
-    if customer_id:
-        qs = qs.filter(customer_id=customer_id)
-        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_id).first()
-        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer'})
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_id_int).first()
+        active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_id, 'param': 'customer'})
 
-    if vault_id:
-        qs = qs.filter(vault_id=vault_id)
-        v_obj = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales').filter(id=vault_id).first()
-        active_filters.append({'label': f'الخزنة: {v_obj.name if v_obj else vault_id}', 'param': 'vault'})
+    if selected_vault_ids:
+        auth_vaults = list(ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales').filter(id__in=selected_vault_ids))
+        auth_v_ids = [v.id for v in auth_vaults]
+        if auth_v_ids:
+            qs = qs.filter(vault_id__in=auth_v_ids)
+            for v_obj in auth_vaults:
+                active_filters.append({'label': 'الخزنة', 'value': v_obj.name, 'param': 'vault', 'remove_value': str(v_obj.id)})
+        else:
+            qs = qs.none()
 
-    if payment_method:
-        qs = qs.filter(payment_method=payment_method)
-        method_labels = dict(Collection.PAYMENT_METHOD_CHOICES)
-        active_filters.append({'label': f'طريقة التحصيل: {method_labels.get(payment_method, payment_method)}', 'param': 'payment_method'})
+    if selected_payment_methods:
+        qs = qs.filter(payment_method__in=selected_payment_methods)
+        for pm in selected_payment_methods:
+            active_filters.append({'label': 'طريقة التحصيل', 'value': method_labels.get(pm, pm), 'param': 'payment_method', 'remove_value': pm})
 
-    if date_from:
-        qs = qs.filter(collection_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
-    if date_to:
-        qs = qs.filter(collection_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(collection_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+
+    if parsed_to:
+        qs = qs.filter(collection_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial_num', 'customer__name', 'notes'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     customers = get_bounded_select_options(
         ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
@@ -706,12 +788,29 @@ def collections_list(request):
         'vaults_count': col_agg['vaults_count'] or 0,
     }
 
+    vault_options = [{'value': str(v.id), 'label': v.name} for v in vaults]
+    selected_vault_str = [str(x) for x in selected_vault_ids]
+    selected_vault_items = [o for o in vault_options if o['value'] in selected_vault_str]
+    pm_options = [{'value': k, 'label': v} for k, v in pm_choices]
+    selected_pm_items = [o for o in pm_options if o['value'] in selected_payment_methods]
+
     context = {
         'collections': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'customers': customers,
         'vaults': vaults,
+        'vault_options': vault_options,
+        'selected_vault_items': selected_vault_items,
+        'selected_vault_ids': selected_vault_str,
+        'pm_options': pm_options,
+        'selected_pm_items': selected_pm_items,
+        'selected_payment_methods': selected_payment_methods,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'active_preset': active_preset,
+        'date_from': date_from,
+        'date_to': date_to,
         'search_query': search,
         'selected_customer_id': customer_id,
         'selected_vault_id': vault_id,
@@ -815,26 +914,55 @@ def sales_customers_list(request):
     Sales Customer Directory & Profiles (دليل وبيانات العملاء).
     Fully scoped by user role and geographic territory.
     """
+    from master_data.filter_utils import (
+        parse_multi_str,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from contacts.constants import ACCOUNT_TYPES
+
     search = request.GET.get('search', '').strip() or request.GET.get('q', '').strip()
     status = request.GET.get('status', 'all').strip()
-    area_id = request.GET.get('area_id', '').strip()
     category = request.GET.get('category', 'all').strip()
+    selected_account_types = parse_multi_str(request.GET, 'account_type')
 
-    qs = Contact.objects.filter(is_customer=True).select_related('area', 'customer_account', 'created_by').prefetch_related('addresses__area')
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+
+    qs = Contact.objects.filter(is_customer=True).select_related('area', 'brick', 'customer_account', 'created_by').prefetch_related('addresses__area', 'addresses__brick')
     qs = get_scoped_queryset(qs, request.user, 'contact')
 
+    active_filters = []
     if status and status != 'all':
         qs = qs.filter(status=status)
-    if area_id:
-        qs = qs.filter(Q(area_id=area_id) | Q(addresses__area_id=area_id)).distinct()
+        active_filters.append({'label': 'الحالة', 'value': status, 'param': 'status'})
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, include_addresses=True)).distinct()
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, include_addresses=True)).distinct()
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
+    if selected_account_types:
+        qs = qs.filter(account_type__in=selected_account_types)
+        for at in selected_account_types:
+            active_filters.append({'label': 'نوع الحساب', 'value': at, 'param': 'account_type', 'remove_value': at})
     if category and category != 'all':
         qs = qs.filter(customer_category=category)
+        active_filters.append({'label': 'التصنيف', 'value': category, 'param': 'category'})
 
     if search:
         qs = filter_by_arabic_search(
             qs, search,
             ['name', 'serial_num', 'mobile', 'phone', 'code', 'contact_person', 'tax_id']
         ).distinct()
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     qs = qs.order_by('name')
 
@@ -868,6 +996,11 @@ def sales_customers_list(request):
         'selected_status': status,
         'current_area_id': area_id,
         'selected_area_id': area_id,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'account_types': ACCOUNT_TYPES,
+        'selected_account_types': selected_account_types,
+        'active_filters': active_filters,
         'current_category': category,
         'selected_category': category,
         'governorates': governorates,
@@ -910,34 +1043,48 @@ def accounting_customers_list(request):
     """
     Customer Statements & Balances (حسابات العملاء).
     """
-    search = request.GET.get('search', '').strip()
-    customer_id = (request.GET.get('customer_id') or request.GET.get('customer') or '').strip()
-    area_id = (request.GET.get('area') or request.GET.get('area_id') or '').strip()
+    from master_data.filter_utils import (
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
 
-    qs = CustomerAccount.objects.select_related('customer', 'customer__area').order_by('-current_balance')
+    search = request.GET.get('search', '').strip()
+    customer_id_int = parse_single_int(request.GET, 'customer_id', 'customer')
+    customer_id = str(customer_id_int) if customer_id_int else ''
+
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+
+    qs = CustomerAccount.objects.select_related('customer', 'customer__area', 'customer__brick').order_by('-current_balance')
     qs = get_scoped_queryset(qs, request.user, 'customeraccount')
 
     active_filters = []
 
-    if customer_id:
-        if customer_id.isdigit():
-            qs = qs.filter(customer_id=int(customer_id))
-            c_acc = qs.first()
-            c_label = c_acc.customer.name if c_acc else customer_id
-        else:
-            qs = qs.none()
-            c_label = customer_id
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+        c_acc = qs.first()
+        c_label = c_acc.customer.name if c_acc else customer_id
         param_name = 'customer_id' if request.GET.get('customer_id') else 'customer'
-        active_filters.append({'label': f'العميل: {c_label}', 'param': param_name})
+        active_filters.append({'label': 'العميل', 'value': c_label, 'param': param_name})
 
-    if area_id and area_id.isdigit():
-        qs = qs.filter(Q(customer__area_id=int(area_id)) | Q(customer__brick_id=int(area_id)))
-        a_obj = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales').filter(id=int(area_id)).first()
-        active_filters.append({'label': f'المنطقة: {a_obj.name if a_obj else area_id}', 'param': 'area'})
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['customer__name', 'customer__code'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     acc_agg = qs.aggregate(
         total_customers=Count('id'),
@@ -960,6 +1107,8 @@ def accounting_customers_list(request):
         'paginator': paginator,
         'selected_customer_id': customer_id,
         'selected_area_id': area_id,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
@@ -999,39 +1148,61 @@ def customer_transactions_list(request):
     """
     Customer Ledger Transactions (عمليات العملاء).
     """
-    customer_id = request.GET.get('customer_id') or request.GET.get('customer')
+    from master_data.filter_utils import (
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
+
+    customer_id_int = parse_single_int(request.GET, 'customer_id', 'customer')
+    customer_id = str(customer_id_int) if customer_id_int else ''
     tx_type = request.GET.get('type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
-    qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial')
+    qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'account__customer__area', 'account__customer__brick', 'created_by').order_by('-serial')
     scoped_contacts = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
     qs = qs.filter(account__customer__in=scoped_contacts)
 
     active_filters = []
 
-    if customer_id:
-        qs = qs.filter(account__customer_id=customer_id)
-        c_obj = scoped_contacts.filter(id=customer_id).first()
-        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer_id'})
+    if customer_id_int:
+        qs = qs.filter(account__customer_id=customer_id_int)
+        c_obj = scoped_contacts.filter(id=customer_id_int).first()
+        active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_id, 'param': 'customer_id'})
 
     if tx_type in ['debit', 'credit']:
         qs = qs.filter(transaction_type=tx_type)
         tx_label = 'مدين (فاتورة)' if tx_type == 'debit' else 'دائن (تحصيل / مرتجع)'
-        active_filters.append({'label': f'النوع: {tx_label}', 'param': 'type'})
+        active_filters.append({'label': 'النوع', 'value': tx_label, 'param': 'type'})
 
-    if date_from:
-        qs = qs.filter(transaction_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='account__customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='account__customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
-    if date_to:
-        qs = qs.filter(transaction_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(transaction_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+
+    if parsed_to:
+        qs = qs.filter(transaction_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__customer__name'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     customers = get_bounded_select_options(
         ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
@@ -1060,6 +1231,11 @@ def customer_transactions_list(request):
         'customers': customers,
         'selected_customer_id': customer_id,
         'selected_type': tx_type,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'active_preset': active_preset,
+        'date_from': date_from,
+        'date_to': date_to,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
         'search_query': search,
@@ -1224,32 +1400,62 @@ def collections_export(request):
 
 @require_permission('sales:returns/list')
 def sales_return_orders_list(request):
-    customer_filter = request.GET.get('customer')
+    from master_data.filter_utils import (
+        parse_multi_str,
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
+
+    customer_id_int = parse_single_int(request.GET, 'customer')
+    customer_filter = str(customer_id_int) if customer_id_int else ''
+    status_choices_dict = dict(SalesReturnOrder.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
 
     qs = SalesReturnOrder.objects.select_related(
-        'customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by'
+        'customer', 'customer__area', 'customer__brick', 'sales_order', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'salesreturnorder')
 
     active_filters = []
 
-    if customer_filter:
-        qs = qs.filter(customer_id=customer_filter)
-        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_filter).first()
-        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_filter}', 'param': 'customer'})
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for s in selected_statuses:
+            active_filters.append({'label': 'الحالة', 'value': status_choices_dict.get(s, s), 'param': 'status', 'remove_value': s})
 
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+        c_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=customer_id_int).first()
+        active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_filter, 'param': 'customer'})
 
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
+
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if total_min:
         try:
@@ -1288,10 +1494,19 @@ def sales_return_orders_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    status_options = [{'value': k, 'label': v} for k, v in SalesReturnOrder.STATUS_CHOICES]
+    selected_status_items = [o for o in status_options if o['value'] in selected_statuses]
+
     context = {
         'returns': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
+        'status_options': status_options,
+        'selected_status_items': selected_status_items,
+        'selected_statuses': selected_statuses,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'active_preset': active_preset,
         'selected_customer': customer_filter,
         'selected_date_from': date_from,
         'selected_date_to': date_to,

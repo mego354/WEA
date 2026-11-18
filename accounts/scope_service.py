@@ -1122,7 +1122,7 @@ class ScopeResolutionService:
         elif target_choice_type == 'suppliers':
             base_sup = Contact.objects.filter(is_supplier=True).exclude(status='inactive').select_related('area', 'brick', 'vendor_account')
             scoped_sup = cls.get_scoped_queryset(base_sup, user, 'contact', 'view')
-            scope = cls.get_user_scope(user, 'contact', 'view')
+            scope = cls.get_user_scope(user, 'contacts', 'view')
             if getattr(user, 'is_super_admin', False) or user.is_superuser or scope == 'all':
                 return scoped_sup.order_by('name')
             if scope == 'area':

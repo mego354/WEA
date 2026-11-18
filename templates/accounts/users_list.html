@@ -90,37 +90,63 @@
     </div>
 
     <!-- Search & Filter Bar -->
-    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <form method="GET" action="{% url 'users_list' %}" class="w-full sm:w-auto flex-1 min-w-[180px] sm:max-w-xs relative">
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+            {% for rid in selected_roles %}<input type="hidden" name="role" value="{{ rid }}">{% endfor %}
+            {% for ma in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ ma.id }}">{% endfor %}
+            {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
             <input type="text" name="q" value="{{ query }}" placeholder="بحث"
                    data-smart-search-module="users"
                    class="w-full pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all shadow-xs">
             <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
         </form>
 
-        <!-- Status Filter Dropdown -->
-        <div class="w-full sm:w-auto relative flex-1 sm:flex-initial">
-            <select onchange="window.location.href='{% url 'users_list' %}?status=' + this.value + '&role={{ role_filter }}&q={{ query }}'"
-                    class="w-full sm:w-auto py-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
-                <option value="">جميع الحالات</option>
-                <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
-                <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
-            </select>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')"
+                    class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
+                <span>فلتر</span>
+                {% if active_filters|length > 0 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">{{ active_filters|length }}</span>
+                {% endif %}
+            </button>
+            <!-- Column Picker -->
+            {% include 'components/table_column_picker.html' with table_id='users_table' %}
         </div>
+    </div>
 
-        <!-- Role Filter Dropdown -->
-        <div class="w-full sm:w-auto relative flex-1 sm:flex-initial">
-            <select onchange="window.location.href='{% url 'users_list' %}?role=' + this.value + '&status={{ status_filter }}&q={{ query }}'"
-                    class="w-full sm:w-auto py-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
-                <option value="">جميع الأدوار</option>
-                {% for r in roles %}
-                <option value="{{ r.id }}" {% if role_filter == r.id|stringformat:"i" %}selected{% endif %}>{{ r.display_name }}</option>
-                {% endfor %}
-            </select>
+    <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
+    <div id="filterDrawer" class="erp-filter-drawer">
+        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
+                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+            </div>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            </button>
         </div>
-
-        <!-- Column Picker -->
-        {% include 'components/table_column_picker.html' with table_id='users_table' %}
+        <form method="GET" action="{% url 'users_list' %}" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            <div>
+                <label class="mat-like-label">الحالة</label>
+                <select name="status" class="mat-like-control">
+                    <option value="">جميع الحالات</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
+                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
+                </select>
+            </div>
+            {% include 'components/choice_multiselect.html' with component_id='users_role' field_name='role' label='الأدوار (اختيار متعدد)' options=role_options selected_items=selected_role_items selected_values=selected_roles placeholder='جميع الأدوار...' %}
+            {% url 'contacts_search_areas_api' as users_areas_url %}
+            {% url 'contacts_search_bricks_api' as users_bricks_url %}
+            {% include 'components/area_brick_multiselect.html' with component_id='users_area' area_field_name='main_area' brick_field_name='brick' areas_api_url=users_areas_url bricks_api_url=users_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
+            <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+                <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
+                <a href="{% url 'users_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
+            </div>
+        </form>
     </div>
 
     <!-- Active Filters Chips -->

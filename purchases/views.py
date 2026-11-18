@@ -35,11 +35,19 @@ from master_data.search_utils import (
 
 @require_permission('purchases:orders/list')
 def purchase_orders_list(request):
-    payment_status_filter = request.GET.get('payment_status', 'all')
-    supplier_filter = request.GET.get('supplier')
+    from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
+
+    status_choices_dict = dict(PurchaseOrder.STATUS_CHOICES)
+    payment_choices_dict = dict(PurchaseOrder.PAYMENT_STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
+    selected_payment_statuses = [p for p in parse_multi_str(request.GET, 'payment_status') if p in payment_choices_dict]
+    payment_status_filter = selected_payment_statuses[0] if len(selected_payment_statuses) == 1 else 'all'
+
+    supplier_id_int = parse_single_int(request.GET, 'supplier')
+    supplier_filter = str(supplier_id_int) if supplier_id_int else ''
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
     remaining_min = request.GET.get('remaining_min', '').strip()
@@ -53,23 +61,28 @@ def purchase_orders_list(request):
 
     active_filters = []
 
-    if payment_status_filter != 'all' and payment_status_filter in dict(PurchaseOrder.PAYMENT_STATUS_CHOICES):
-        qs = qs.filter(payment_status=payment_status_filter)
-        ps_labels = dict(PurchaseOrder.PAYMENT_STATUS_CHOICES)
-        active_filters.append({'label': f'حالة السداد: {ps_labels.get(payment_status_filter, payment_status_filter)}', 'param': 'payment_status'})
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for s in selected_statuses:
+            active_filters.append({'label': 'حالة الطلب', 'value': status_choices_dict.get(s, s), 'param': 'status', 'remove_value': s})
 
-    if supplier_filter:
-        qs = qs.filter(supplier_id=supplier_filter)
-        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_filter).first()
-        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
+    if selected_payment_statuses:
+        qs = qs.filter(payment_status__in=selected_payment_statuses)
+        for ps in selected_payment_statuses:
+            active_filters.append({'label': 'حالة السداد', 'value': payment_choices_dict.get(ps, ps), 'param': 'payment_status', 'remove_value': ps})
 
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if supplier_id_int:
+        qs = qs.filter(supplier_id=supplier_id_int)
+        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_id_int).first()
+        active_filters.append({'label': 'المورد', 'value': s_obj.name if s_obj else supplier_filter, 'param': 'supplier'})
 
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     # Financial Total Amount Range Filters (Requirement B1)
     if total_min:
@@ -134,12 +147,24 @@ def purchase_orders_list(request):
     # Bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    po_status_options = [{'value': k, 'label': v} for k, v in PurchaseOrder.STATUS_CHOICES]
+    selected_po_status_items = [o for o in po_status_options if o['value'] in selected_statuses]
+    po_payment_options = [{'value': k, 'label': v} for k, v in PurchaseOrder.PAYMENT_STATUS_CHOICES]
+    selected_po_payment_items = [o for o in po_payment_options if o['value'] in selected_payment_statuses]
+
     context = {
         'orders': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'current_payment_status': payment_status_filter,
         'payment_statuses': PurchaseOrder.PAYMENT_STATUS_CHOICES,
+        'po_status_options': po_status_options,
+        'selected_po_status_items': selected_po_status_items,
+        'selected_statuses': selected_statuses,
+        'po_payment_options': po_payment_options,
+        'selected_po_payment_items': selected_po_payment_items,
+        'selected_payment_statuses': selected_payment_statuses,
+        'active_preset': active_preset,
         'selected_supplier': supplier_filter,
         'search_query': search,
         'selected_date_from': date_from,
@@ -762,10 +787,15 @@ def purchase_order_split(request, pk):
 @require_permission('purchases:returns/list')
 def purchase_return_orders_list(request):
     """View matching /purchase-return-orders in reference ERP."""
-    supplier_filter = request.GET.get('supplier')
+    from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
+
+    supplier_id_int = parse_single_int(request.GET, 'supplier')
+    supplier_filter = str(supplier_id_int) if supplier_id_int else ''
+    status_choices_dict = dict(PurchaseReturnOrder.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
 
@@ -776,18 +806,23 @@ def purchase_return_orders_list(request):
 
     active_filters = []
 
-    if supplier_filter:
-        qs = qs.filter(supplier_id=supplier_filter)
-        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_filter).first()
-        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_filter}', 'param': 'supplier'})
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for s in selected_statuses:
+            active_filters.append({'label': 'الحالة', 'value': status_choices_dict.get(s, s), 'param': 'status', 'remove_value': s})
 
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if supplier_id_int:
+        qs = qs.filter(supplier_id=supplier_id_int)
+        s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases').filter(id=supplier_id_int).first()
+        active_filters.append({'label': 'المورد', 'value': s_obj.name if s_obj else supplier_filter, 'param': 'supplier'})
 
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if total_min:
         try:
@@ -832,10 +867,17 @@ def purchase_return_orders_list(request):
     # Bounded server-side pagination (default 25)
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    ret_status_options = [{'value': k, 'label': v} for k, v in PurchaseReturnOrder.STATUS_CHOICES]
+    selected_ret_status_items = [o for o in ret_status_options if o['value'] in selected_statuses]
+
     context = {
         'returns': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
+        'ret_status_options': ret_status_options,
+        'selected_ret_status_items': selected_ret_status_items,
+        'selected_statuses': selected_statuses,
+        'active_preset': active_preset,
         'selected_supplier': supplier_filter,
         'search_query': search,
         'selected_date_from': date_from,

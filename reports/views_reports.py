@@ -49,23 +49,37 @@ def reports_hub(request):
 # REPORT 1: AR AGING (أعمار الديون)
 # ==============================================================================
 
-@login_required
-@require_permission('reports:financial/view')
-def report_ar_aging(request):
-    area_id = request.GET.get('area')
-    brick_id = request.GET.get('brick')
-    rep_id = request.GET.get('rep')
+def _parse_ar_aging_filters(request):
+    from accounts.scope_service import ScopeResolutionService
+    from master_data.filter_utils import parse_single_int
+    area_id = parse_single_int(request.GET, 'area', 'area_id')
+    brick_id = parse_single_int(request.GET, 'brick', 'brick_id')
+    rep_id = parse_single_int(request.GET, 'rep', 'rep_id')
     overdue_only = request.GET.get('overdue_only') == '1'
 
-    filters = {
+    if area_id and not ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales').filter(id=area_id).exists():
+        area_id = None
+    if brick_id and not ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'sales').filter(id=brick_id).exists():
+        brick_id = None
+    if rep_id and not get_scoped_queryset(User.objects.filter(is_active=True), request.user).filter(id=rep_id).exists():
+        rep_id = None
+
+    return {
         'area_id': area_id,
         'brick_id': brick_id,
         'rep_id': rep_id,
         'overdue_only': overdue_only,
     }
+
+
+@login_required
+@require_permission('reports:financial/view')
+def report_ar_aging(request):
+    from accounts.scope_service import ScopeResolutionService
+    filters = _parse_ar_aging_filters(request)
     data = get_ar_aging_report_data(request.user, filters)
 
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales')
     reps = get_scoped_queryset(User.objects.filter(is_active=True), request.user).filter(role__is_sales_team=True)
 
     context = {
@@ -73,9 +87,10 @@ def report_ar_aging(request):
         'summary': data['summary'],
         'areas': areas,
         'reps': reps,
-        'selected_area': int(area_id) if area_id and area_id.isdigit() else '',
-        'selected_rep': int(rep_id) if rep_id and rep_id.isdigit() else '',
-        'overdue_only': overdue_only,
+        'selected_area': filters['area_id'] or '',
+        'selected_brick': filters['brick_id'] or '',
+        'selected_rep': filters['rep_id'] or '',
+        'overdue_only': filters['overdue_only'],
     }
     return render(request, 'reports/report_ar_aging.html', context)
 
@@ -83,7 +98,7 @@ def report_ar_aging(request):
 @login_required
 @require_permission('reports:financial/export')
 def report_ar_aging_export(request):
-    data = get_ar_aging_report_data(request.user, request.GET)
+    data = get_ar_aging_report_data(request.user, _parse_ar_aging_filters(request))
     headers = [
         "كود العميل", "اسم العميل", "التصنيف", "المنطقة / المربع", "المندوب",
         "الحد الائتماني", "إجمالي المديونية", "إجمالي المتأخرات", "متأخر (1-30 يوم)",
@@ -109,7 +124,7 @@ def report_ar_aging_export(request):
 @login_required
 @require_permission('reports:financial/view')
 def report_ar_aging_print(request):
-    data = get_ar_aging_report_data(request.user, request.GET)
+    data = get_ar_aging_report_data(request.user, _parse_ar_aging_filters(request))
     return render(request, 'reports/report_ar_aging_print.html', {'rows': data['rows'], 'summary': data['summary']})
 
 
@@ -128,7 +143,8 @@ def report_trial_balance(request):
     start_date, end_date, _, _, period_label = parse_date_range(period, start_str, end_str)
     data = get_trial_balance_report_data(request.user, start_date, end_date, {'area_id': area_id})
 
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales')
 
     context = {
         'rows': data['rows'],
@@ -221,7 +237,8 @@ def report_customer_360(request):
     area_id = request.GET.get('area')
 
     data = get_customer_360_report_data(request.user, start_date, end_date, {'area_id': area_id})
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales')
 
     context = {
         'rows': data['rows'],

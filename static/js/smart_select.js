@@ -172,10 +172,10 @@
             this.trigger.appendChild(this.triggerLabel);
             this.trigger.appendChild(this.triggerActions);
 
-            // Dropdown panel
+            // Dropdown panel (portaled to body with fixed positioning so overflow-x-auto tables never clip it)
             this.dropdown = document.createElement('div');
             this.dropdown.className = [
-                'erp-smart-select-dropdown hidden absolute right-0 left-0 z-[70]',
+                'erp-smart-select-dropdown hidden fixed z-[9999]',
                 'bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden',
             ].join(' ');
 
@@ -218,7 +218,7 @@
             this.dropdown.appendChild(this.statusFooter);
 
             this.wrapper.appendChild(this.trigger);
-            this.wrapper.appendChild(this.dropdown);
+            document.body.appendChild(this.dropdown);
         }
 
         _bindEvents() {
@@ -296,11 +296,19 @@
 
             // Close when clicking outside
             this._onDocClick = (e) => {
-                if (this.isOpen && !this.wrapper.contains(e.target)) {
+                if (this.isOpen && !this.wrapper.contains(e.target) && !this.dropdown.contains(e.target)) {
                     this.close(false);
                 }
             };
             document.addEventListener('click', this._onDocClick);
+
+            this._onViewportChange = () => {
+                if (this.isOpen) {
+                    this._positionDropdown();
+                }
+            };
+            window.addEventListener('scroll', this._onViewportChange, true);
+            window.addEventListener('resize', this._onViewportChange);
 
             // Watch dynamic <option> changes / visibility toggles (coalesced per animation frame)
             if (typeof MutationObserver !== 'undefined') {
@@ -368,12 +376,24 @@
             const rect = this.trigger.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const spaceAbove = rect.top;
+            const minWidth = Math.max(rect.width, 260);
+            const width = Math.min(minWidth, window.innerWidth - 16);
+            let left = rect.left;
+            if (left + width > window.innerWidth - 8) {
+                left = Math.max(8, window.innerWidth - width - 8);
+            }
+            left = Math.max(8, left);
 
-            this.dropdown.classList.remove('top-full', 'mt-1', 'bottom-full', 'mb-1');
-            if (spaceBelow < 260 && spaceAbove > spaceBelow) {
-                this.dropdown.classList.add('bottom-full', 'mb-1');
+            this.dropdown.style.width = `${width}px`;
+            this.dropdown.style.left = `${left}px`;
+            this.dropdown.style.right = 'auto';
+
+            if (spaceBelow < 280 && spaceAbove > spaceBelow) {
+                this.dropdown.style.top = 'auto';
+                this.dropdown.style.bottom = `${window.innerHeight - rect.top + 4}px`;
             } else {
-                this.dropdown.classList.add('top-full', 'mt-1');
+                this.dropdown.style.bottom = 'auto';
+                this.dropdown.style.top = `${rect.bottom + 4}px`;
             }
         }
 

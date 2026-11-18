@@ -828,8 +828,15 @@ function updateActiveFilterBadge() {
     }
 }
 
+let drawerFilterAbortController = null;
+
 async function applyDrawerFilterAjax(e) {
     if (e && e.preventDefault) e.preventDefault();
+
+    if (drawerFilterAbortController) {
+        drawerFilterAbortController.abort();
+    }
+    drawerFilterAbortController = new AbortController();
 
     const submitBtn = document.getElementById('drawer-filter-submit-btn');
     const originalContent = submitBtn ? submitBtn.innerHTML : '';
@@ -859,7 +866,8 @@ async function applyDrawerFilterAjax(e) {
 
     try {
         const resp = await fetch(`${window.location.pathname}?${params.toString()}`, {
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            signal: drawerFilterAbortController.signal,
         });
         const data = await resp.json();
         if (data.success && data.contacts) {
@@ -878,6 +886,7 @@ async function applyDrawerFilterAjax(e) {
             }
         }
     } catch (err) {
+        if (err && err.name === 'AbortError') return;
         console.error('Error applying client filter via AJAX:', err);
     } finally {
         if (submitBtn) {

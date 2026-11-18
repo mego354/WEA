@@ -115,10 +115,14 @@
     <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
         <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
             <form method="GET" class="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
-                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-                {% if selected_approval_status %}<input type="hidden" name="approval_status" value="{{ selected_approval_status }}">{% endif %}
+                {% for s in selected_statuses %}<input type="hidden" name="status" value="{{ s }}">{% endfor %}
+                {% for a in selected_approval_statuses %}<input type="hidden" name="approval_status" value="{{ a }}">{% endfor %}
                 {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
-                {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
+                {% for o in selected_owners %}<input type="hidden" name="owner" value="{{ o }}">{% endfor %}
+                {% for ma in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ ma.id }}">{% endfor %}
+                {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
+                {% for at in selected_account_types %}<input type="hidden" name="account_type" value="{{ at }}">{% endfor %}
+                {% for tp in selected_templates %}<input type="hidden" name="template" value="{{ tp }}">{% endfor %}
                 {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
                 {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
                 {% if selected_distance_ignored %}<input type="hidden" name="distance_ignored" value="{{ selected_distance_ignored }}">{% endif %}
@@ -503,42 +507,33 @@
 
 </div>
 
-<!-- Filter Drawer -->
-<div id="filter-drawer" class="fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeFilterDrawer()"></div>
-    <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-        <div class="w-screen max-w-sm bg-white shadow-xl flex flex-col">
-            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h2 class="text-base font-bold text-slate-900">تنقية الزيارات</h2>
-                <button type="button" onclick="closeFilterDrawer()" class="text-slate-400 hover:text-slate-600 p-1">
-                    <span class="material-symbols-outlined text-xl">close</span>
-                </button>
-            </div>
-            <form method="GET" class="p-6 space-y-4 flex-1 overflow-y-auto">
+<!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
+<div id="filterDrawerBackdrop" onclick="closeFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
+<div id="filter-drawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+        <div class="flex items-center gap-2">
+            <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
+            <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+        </div>
+        <button type="button" onclick="closeFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+            <span class="material-symbols-outlined text-xl">arrow_forward</span>
+        </button>
+    </div>
+    <form method="GET" class="p-5 space-y-4 flex-1 overflow-y-auto">
                 {% if selected_q %}<input type="hidden" name="q" value="{{ selected_q }}">{% endif %}
                 <input type="hidden" name="view" value="{{ view_mode }}">
 
                 {% if can_filter_owner %}
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول</label>
-                    <select name="owner" data-smart-select="true" data-search-placeholder="ابحث عن المسؤول..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                        <option value="">جميع المسؤولين</option>
-                        {% for u in users %}
-                        <option value="{{ u.id }}" {% if selected_owner == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                {% include 'components/choice_multiselect.html' with component_id='visits_owner' field_name='owner' label='المسؤول (اختيار متعدد)' options=owner_options selected_items=selected_owner_items selected_values=selected_owners placeholder='اختر المسؤول...' %}
                 {% endif %}
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الاعتماد</label>
-                    <select name="approval_status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                        <option value="">جميع حالات الاعتماد</option>
-                        <option value="pending" {% if selected_approval_status == 'pending' %}selected{% endif %}>قيد الاعتماد (Pending)</option>
-                        <option value="approved" {% if selected_approval_status == 'approved' %}selected{% endif %}>معتمدة (Approved)</option>
-                        <option value="disapproved" {% if selected_approval_status == 'disapproved' %}selected{% endif %}>مرفوضة (Disapproved)</option>
-                    </select>
-                </div>
+                {% include 'components/account_type_multiselect.html' with component_id='visits' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types label='نوع العميل / Account Type (اختيار متعدد)' %}
+
+                {% url 'planned_visits_search_areas_api' as visits_areas_url %}
+                {% url 'planned_visits_search_bricks_api' as visits_bricks_url %}
+                {% include 'components/area_brick_multiselect.html' with component_id='visits' area_field_name='main_area' brick_field_name='brick' areas_api_url=visits_areas_url bricks_api_url=visits_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
+
+                {% include 'components/choice_multiselect.html' with component_id='visits_approval' field_name='approval_status' label='حالة الاعتماد (اختيار متعدد)' options=approval_options selected_items=selected_approval_items selected_values=selected_approval_statuses placeholder='اختر حالة الاعتماد...' %}
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">تصنيف التخطيط (النوع)</label>
@@ -549,16 +544,9 @@
                     </select>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الزيارة</label>
-                    <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-                        <option value="">جميع الحالات</option>
-                        <option value="finished" {% if selected_status == 'finished' %}selected{% endif %}>منتهية (Finished)</option>
-                        <option value="started" {% if selected_status == 'started' %}selected{% endif %}>جارية (Started)</option>
-                        <option value="planned" {% if selected_status == 'planned' %}selected{% endif %}>مخططة (Planned)</option>
-                        <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>ملغاة (Cancelled)</option>
-                    </select>
-                </div>
+                {% include 'components/choice_multiselect.html' with component_id='visits_status' field_name='status' label='حالة الزيارة (اختيار متعدد)' options=status_options selected_items=selected_status_items selected_values=selected_statuses placeholder='اختر حالة الزيارة...' %}
+
+                {% include 'components/choice_multiselect.html' with component_id='visits_template' field_name='template' label='نموذج الزيارة (اختيار متعدد)' options=template_options selected_items=selected_template_items selected_values=selected_templates placeholder='اختر نموذج الزيارة...' %}
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">تجاوز المسافة (GPS)</label>
@@ -597,16 +585,18 @@
                     </a>
                 </div>
             </form>
-        </div>
-    </div>
 </div>
 
 <script>
 function openFilterDrawer() {
-    document.getElementById('filter-drawer').classList.remove('hidden');
+    document.getElementById('filter-drawer').classList.add('open');
+    const bd = document.getElementById('filterDrawerBackdrop');
+    if (bd) bd.classList.remove('hidden');
 }
 function closeFilterDrawer() {
-    document.getElementById('filter-drawer').classList.add('hidden');
+    document.getElementById('filter-drawer').classList.remove('open');
+    const bd = document.getElementById('filterDrawerBackdrop');
+    if (bd) bd.classList.add('hidden');
 }
 function openVisitListRejectModal(visitId, serialNum) {
     const modal = document.getElementById('visit-list-reject-modal');

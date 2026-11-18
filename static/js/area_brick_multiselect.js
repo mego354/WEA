@@ -42,6 +42,12 @@
 
         let areaTimer = null;
         let brickTimer = null;
+        let areaAbortController = null;
+        let brickAbortController = null;
+        const areaCache = new Map();
+        const brickCache = new Map();
+        let lastAreaResults = null;
+        let lastBrickResults = null;
 
         function notifyChange() {
             if (typeof onChangeCallback === 'string' && typeof global[onChangeCallback] === 'function') {
@@ -136,51 +142,67 @@
             }
         }
 
+        function renderAreasDropdown(results, query) {
+            if (!areaDropdown) return;
+            const selectedIds = new Set(getSelectedAreaIds());
+            areaDropdown.innerHTML = '';
+            if (results.length === 0) {
+                areaDropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">${query ? `لا توجد مناطق مطابقة لـ "${escapeHtml(query)}"` : 'لا توجد مناطق متاحة ضمن نطاقك.'}</div>`;
+            } else {
+                results.forEach(r => {
+                    const isSelected = selectedIds.has(String(r.id));
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = `ab-suggestion-item w-full text-right px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors min-h-[36px] ${isSelected ? 'bg-teal-50/60 font-bold text-teal-900' : ''}`;
+                    row.innerHTML = `
+                        <span class="flex items-center gap-2 min-w-0">
+                            <input type="checkbox" tabindex="-1" ${isSelected ? 'checked' : ''} class="pointer-events-none w-3.5 h-3.5 rounded border-slate-300 text-[#27bebe]">
+                            <span class="truncate text-xs">${escapeHtml(r.name)}</span>
+                        </span>
+                        ${r.code ? `<span class="text-[10px] text-slate-400 font-mono shrink-0 ms-2">${escapeHtml(r.code)}</span>` : ''}
+                    `;
+                    row.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (getSelectedAreaIds().includes(String(r.id))) {
+                            removeAreaChip(r.id);
+                        } else {
+                            addAreaChip(r.id, r.name);
+                        }
+                        renderAreasDropdown(results, query);
+                    });
+                    areaDropdown.appendChild(row);
+                });
+            }
+            areaDropdown.classList.remove('hidden');
+        }
+
         async function fetchAndRenderAreas() {
             if (!areaInput || !areaDropdown || !areasApiUrl) return;
             const query = areaInput.value.trim();
+            const cacheKey = query;
+            if (areaCache.has(cacheKey)) {
+                lastAreaResults = areaCache.get(cacheKey);
+                renderAreasDropdown(lastAreaResults, query);
+                return;
+            }
+            if (areaAbortController) areaAbortController.abort();
+            areaAbortController = new AbortController();
             setSpinner(areaSpinner, areaIcon, true);
             try {
                 const params = new URLSearchParams();
                 if (query) params.set('q', query);
                 const resp = await fetch(`${areasApiUrl}?${params.toString()}`, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' }
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' },
+                    signal: areaAbortController.signal,
                 });
                 const data = await resp.json();
                 const results = data.results || [];
-                const selectedIds = new Set(getSelectedAreaIds());
-
-                areaDropdown.innerHTML = '';
-                if (results.length === 0) {
-                    areaDropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">${query ? `لا توجد مناطق مطابقة لـ "${escapeHtml(query)}"` : 'لا توجد مناطق متاحة ضمن نطاقك.'}</div>`;
-                } else {
-                    results.forEach(r => {
-                        const isSelected = selectedIds.has(String(r.id));
-                        const row = document.createElement('button');
-                        row.type = 'button';
-                        row.className = `ab-suggestion-item w-full text-right px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors min-h-[36px] ${isSelected ? 'bg-teal-50/60 font-bold text-teal-900' : ''}`;
-                        row.innerHTML = `
-                            <span class="flex items-center gap-2 min-w-0">
-                                <input type="checkbox" tabindex="-1" ${isSelected ? 'checked' : ''} class="pointer-events-none w-3.5 h-3.5 rounded border-slate-300 text-[#27bebe]">
-                                <span class="truncate text-xs">${escapeHtml(r.name)}</span>
-                            </span>
-                            ${r.code ? `<span class="text-[10px] text-slate-400 font-mono shrink-0 ms-2">${escapeHtml(r.code)}</span>` : ''}
-                        `;
-                        row.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (selectedIds.has(String(r.id))) {
-                                removeAreaChip(r.id);
-                            } else {
-                                addAreaChip(r.id, r.name);
-                            }
-                            fetchAndRenderAreas();
-                        });
-                        areaDropdown.appendChild(row);
-                    });
-                }
-                areaDropdown.classList.remove('hidden');
+                areaCache.set(cacheKey, results);
+                lastAreaResults = results;
+                renderAreasDropdown(results, query);
             } catch (err) {
+                if (err && err.name === 'AbortError') return;
                 console.error('Error loading areas:', err);
                 areaDropdown.innerHTML = '<div class="p-2.5 text-center text-rose-500 text-xs">تعذر تحميل المناطق.</div>';
                 areaDropdown.classList.remove('hidden');
@@ -189,56 +211,72 @@
             }
         }
 
+        function renderBricksDropdown(results, query) {
+            if (!brickDropdown) return;
+            const selectedIds = new Set(getSelectedBrickIds());
+            brickDropdown.innerHTML = '';
+            if (results.length === 0) {
+                brickDropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">${query ? `لا توجد خطوط مطابقة لـ "${escapeHtml(query)}"` : 'لا توجد خطوط جغرافية متاحة.'}</div>`;
+            } else {
+                results.forEach(r => {
+                    const isSelected = selectedIds.has(String(r.id));
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = `ab-suggestion-item w-full text-right px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors min-h-[36px] ${isSelected ? 'bg-teal-50/60 font-bold text-teal-900' : ''}`;
+                    row.innerHTML = `
+                        <span class="flex items-center gap-2 min-w-0">
+                            <input type="checkbox" tabindex="-1" ${isSelected ? 'checked' : ''} class="pointer-events-none w-3.5 h-3.5 rounded border-slate-300 text-[#27bebe] shrink-0">
+                            <span class="min-w-0 truncate text-xs">
+                                ${escapeHtml(r.name)}
+                                ${r.parent_name ? `<span class="text-[10px] text-slate-400 font-normal"> (${escapeHtml(r.parent_name)})</span>` : ''}
+                            </span>
+                        </span>
+                        ${r.code ? `<span class="text-[10px] text-slate-400 font-mono shrink-0 ms-2">${escapeHtml(r.code)}</span>` : ''}
+                    `;
+                    row.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (getSelectedBrickIds().includes(String(r.id))) {
+                            removeBrickChip(r.id);
+                        } else {
+                            addBrickChip(r.id, r.name, r.parent_id, r.parent_name);
+                        }
+                        renderBricksDropdown(results, query);
+                    });
+                    brickDropdown.appendChild(row);
+                });
+            }
+            brickDropdown.classList.remove('hidden');
+        }
+
         async function fetchAndRenderBricks() {
             if (!brickInput || !brickDropdown || !bricksApiUrl) return;
             const query = brickInput.value.trim();
             const selectedAreaIds = getSelectedAreaIds();
+            const cacheKey = `${selectedAreaIds.slice().sort().join(',')}::${query}`;
+            if (brickCache.has(cacheKey)) {
+                lastBrickResults = brickCache.get(cacheKey);
+                renderBricksDropdown(lastBrickResults, query);
+                return;
+            }
+            if (brickAbortController) brickAbortController.abort();
+            brickAbortController = new AbortController();
             setSpinner(brickSpinner, brickIcon, true);
             try {
                 const params = new URLSearchParams();
                 if (query) params.set('q', query);
                 selectedAreaIds.forEach(aid => params.append('main_area', aid));
                 const resp = await fetch(`${bricksApiUrl}?${params.toString()}`, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' }
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' },
+                    signal: brickAbortController.signal,
                 });
                 const data = await resp.json();
                 const results = data.results || [];
-                const selectedIds = new Set(getSelectedBrickIds());
-
-                brickDropdown.innerHTML = '';
-                if (results.length === 0) {
-                    brickDropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 text-xs">${query ? `لا توجد خطوط مطابقة لـ "${escapeHtml(query)}"` : 'لا توجد خطوط جغرافية متاحة.'}</div>`;
-                } else {
-                    results.forEach(r => {
-                        const isSelected = selectedIds.has(String(r.id));
-                        const row = document.createElement('button');
-                        row.type = 'button';
-                        row.className = `ab-suggestion-item w-full text-right px-2.5 py-2 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between text-slate-700 transition-colors min-h-[36px] ${isSelected ? 'bg-teal-50/60 font-bold text-teal-900' : ''}`;
-                        row.innerHTML = `
-                            <span class="flex items-center gap-2 min-w-0">
-                                <input type="checkbox" tabindex="-1" ${isSelected ? 'checked' : ''} class="pointer-events-none w-3.5 h-3.5 rounded border-slate-300 text-[#27bebe] shrink-0">
-                                <span class="min-w-0 truncate text-xs">
-                                    ${escapeHtml(r.name)}
-                                    ${r.parent_name ? `<span class="text-[10px] text-slate-400 font-normal"> (${escapeHtml(r.parent_name)})</span>` : ''}
-                                </span>
-                            </span>
-                            ${r.code ? `<span class="text-[10px] text-slate-400 font-mono shrink-0 ms-2">${escapeHtml(r.code)}</span>` : ''}
-                        `;
-                        row.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (selectedIds.has(String(r.id))) {
-                                removeBrickChip(r.id);
-                            } else {
-                                addBrickChip(r.id, r.name, r.parent_id, r.parent_name);
-                            }
-                            fetchAndRenderBricks();
-                        });
-                        brickDropdown.appendChild(row);
-                    });
-                }
-                brickDropdown.classList.remove('hidden');
+                brickCache.set(cacheKey, results);
+                lastBrickResults = results;
+                renderBricksDropdown(results, query);
             } catch (err) {
+                if (err && err.name === 'AbortError') return;
                 console.error('Error loading bricks:', err);
                 brickDropdown.innerHTML = '<div class="p-2.5 text-center text-rose-500 text-xs">تعذر تحميل الخطوط الجغرافية.</div>';
                 brickDropdown.classList.remove('hidden');

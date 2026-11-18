@@ -27,7 +27,14 @@ from .services import ProductTransferService, InventoryMemoService, AuditLogServ
 
 @require_permission('inventory:stocks/view')
 def inventory_stock_list(request):
-    warehouse_id = request.GET.get('warehouse')
+    from master_data.filter_utils import parse_multi_int, parse_multi_str
+    from catalog.models import ProductCategory
+
+    selected_warehouse_ids = parse_multi_int(request.GET, 'warehouse')
+    warehouse_id = str(selected_warehouse_ids[0]) if len(selected_warehouse_ids) == 1 else ''
+    selected_category_ids = parse_multi_int(request.GET, 'category')
+    selected_stock_statuses = [s for s in parse_multi_str(request.GET, 'stock_status') if s in ('low_stock', 'out_of_stock', 'in_stock')]
+    stock_status = selected_stock_statuses[0] if len(selected_stock_statuses) == 1 else ''
     search = request.GET.get('search', '').strip()
 
     qs = InventoryStock.objects.select_related('warehouse', 'product', 'product__category').order_by('warehouse__name', 'product__name')
@@ -35,27 +42,31 @@ def inventory_stock_list(request):
 
     active_filters = []
 
-    if warehouse_id:
-        qs = qs.filter(warehouse_id=warehouse_id)
-        wh = Warehouse.objects.filter(id=warehouse_id).first()
-        active_filters.append({'label': f'المخزن: {wh.name if wh else warehouse_id}', 'param': 'warehouse'})
+    if selected_warehouse_ids:
+        qs = qs.filter(warehouse_id__in=selected_warehouse_ids)
+        for wh in Warehouse.objects.filter(id__in=selected_warehouse_ids):
+            active_filters.append({'label': 'المخزن', 'value': wh.name, 'param': 'warehouse', 'remove_value': str(wh.id)})
 
-    stock_status = request.GET.get('stock_status')
-    if stock_status == 'low_stock':
+    if selected_category_ids:
+        qs = qs.filter(product__category_id__in=selected_category_ids)
+        for cat in ProductCategory.objects.filter(id__in=selected_category_ids):
+            active_filters.append({'label': 'التصنيف', 'value': cat.name, 'param': 'category', 'remove_value': str(cat.id)})
+
+    if selected_stock_statuses:
         qs = qs.annotate(
             avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
-        ).filter(avail__gt=0, avail__lte=5)
-        active_filters.append({'label': 'الحالة: مخزون منخفض (≤ 5)', 'param': 'stock_status'})
-    elif stock_status == 'out_of_stock':
-        qs = qs.annotate(
-            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
-        ).filter(avail__lte=0)
-        active_filters.append({'label': 'الحالة: نفد المخزون', 'param': 'stock_status'})
-    elif stock_status == 'in_stock':
-        qs = qs.annotate(
-            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
-        ).filter(avail__gt=0)
-        active_filters.append({'label': 'الحالة: متوفر بالمخزن', 'param': 'stock_status'})
+        )
+        stock_q = Q()
+        ss_labels = {'low_stock': 'مخزون منخفض (≤ 5)', 'out_of_stock': 'نفد المخزون', 'in_stock': 'متوفر بالمخزن'}
+        if 'low_stock' in selected_stock_statuses:
+            stock_q |= Q(avail__gt=0, avail__lte=5)
+        if 'out_of_stock' in selected_stock_statuses:
+            stock_q |= Q(avail__lte=0)
+        if 'in_stock' in selected_stock_statuses:
+            stock_q |= Q(avail__gt=0)
+        qs = qs.filter(stock_q)
+        for ss in selected_stock_statuses:
+            active_filters.append({'label': 'الحالة', 'value': ss_labels.get(ss, ss), 'param': 'stock_status', 'remove_value': ss})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['product__name', 'product__sku_code'])
@@ -92,11 +103,36 @@ def inventory_stock_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    categories = ProductCategory.objects.all().order_by('name')
+    warehouse_options = [{'value': str(w.id), 'label': w.name} for w in warehouses]
+    selected_wh_str = [str(x) for x in selected_warehouse_ids]
+    selected_warehouse_items = [o for o in warehouse_options if o['value'] in selected_wh_str]
+
+    category_options = [{'value': str(c.id), 'label': c.name} for c in categories]
+    selected_cat_str = [str(x) for x in selected_category_ids]
+    selected_category_items = [o for o in category_options if o['value'] in selected_cat_str]
+
+    stock_status_options = [
+        {'value': 'in_stock', 'label': 'متوفر بالمخزن'},
+        {'value': 'low_stock', 'label': 'مخزون منخفض (≤ 5)'},
+        {'value': 'out_of_stock', 'label': 'نفد المخزون'},
+    ]
+    selected_ss_items = [o for o in stock_status_options if o['value'] in selected_stock_statuses]
+
     context = {
         'stocks': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'warehouses': warehouses,
+        'warehouse_options': warehouse_options,
+        'selected_warehouse_items': selected_warehouse_items,
+        'selected_warehouse_ids': selected_wh_str,
+        'category_options': category_options,
+        'selected_category_items': selected_category_items,
+        'selected_category_ids': selected_cat_str,
+        'stock_status_options': stock_status_options,
+        'selected_ss_items': selected_ss_items,
+        'selected_stock_statuses': selected_stock_statuses,
         'selected_warehouse_id': warehouse_id,
         'selected_stock_status': stock_status,
         'search_query': search,
@@ -164,11 +200,19 @@ def warehouses_list(request):
     if not has_perm_or_admin(request.user, ['inventory:warehouses/manage', 'inventory:stocks/view']):
         return render_forbidden_response(request, "لا تملك صلاحية عرض قائمة المخازن.")
 
+    from master_data.filter_utils import parse_multi_str, parse_single_int, resolve_scoped_area_brick_filters
     search = request.GET.get('search', '').strip()
-    wh_type = request.GET.get('type', '').strip()
+    selected_wh_types = [t for t in parse_multi_str(request.GET, 'type') if t in ('main', 'rep', 'standard')]
+    wh_type = selected_wh_types[0] if len(selected_wh_types) == 1 else ''
     status = request.GET.get('status', '').strip()
-    area_id = request.GET.get('area', '').strip()
-    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'inventory',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    assigned_user_int = parse_single_int(request.GET, 'assigned_user')
+    assigned_user_id = str(assigned_user_int) if assigned_user_int else ''
 
     qs = Warehouse.objects.select_related('manager', 'assigned_user', 'area', 'area__parent').all().order_by('-is_main', 'name')
     qs = get_scoped_queryset(qs, request.user, 'warehouse')
@@ -178,15 +222,18 @@ def warehouses_list(request):
         qs = filter_by_arabic_search(qs, search, ['name', 'code'])
         active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
-    if wh_type == 'main':
-        qs = qs.filter(is_main=True)
-        active_filters.append({'label': 'النوع', 'value': 'مستودع رئيسي', 'param': 'type'})
-    elif wh_type == 'rep':
-        qs = qs.filter(is_rep_warehouse=True)
-        active_filters.append({'label': 'النوع', 'value': 'عهدة مندوب', 'param': 'type'})
-    elif wh_type == 'standard':
-        qs = qs.filter(is_main=False, is_rep_warehouse=False)
-        active_filters.append({'label': 'النوع', 'value': 'مخزن فرعي عادي', 'param': 'type'})
+    if selected_wh_types:
+        wh_q = Q()
+        wt_labels = {'main': 'مستودع رئيسي', 'rep': 'عهدة مندوب', 'standard': 'مخزن فرعي عادي'}
+        if 'main' in selected_wh_types:
+            wh_q |= Q(is_main=True)
+        if 'rep' in selected_wh_types:
+            wh_q |= Q(is_rep_warehouse=True)
+        if 'standard' in selected_wh_types:
+            wh_q |= Q(is_main=False, is_rep_warehouse=False)
+        qs = qs.filter(wh_q)
+        for wt in selected_wh_types:
+            active_filters.append({'label': 'النوع', 'value': wt_labels.get(wt, wt), 'param': 'type', 'remove_value': wt})
 
     if status == 'active':
         qs = qs.filter(is_active=True)
@@ -196,10 +243,14 @@ def warehouses_list(request):
         active_filters.append({'label': 'الحالة', 'value': 'معطل', 'param': 'status'})
 
     from master_data.models import Area
-    if area_id:
-        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
-        area_obj = Area.objects.filter(id=area_id).first()
-        active_filters.append({'label': 'المنطقة', 'value': area_obj.name if area_obj else area_id, 'param': 'area'})
+    if main_area_ids:
+        qs = qs.filter(Q(area_id__in=main_area_ids) | Q(area__parent_id__in=main_area_ids))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المنطقة', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(area_id__in=brick_ids)
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
     from django.contrib.auth import get_user_model
     UserModel = get_user_model()
@@ -241,11 +292,23 @@ def warehouses_list(request):
     areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
     assignees = get_visible_assignees_queryset(request.user, 'inventory')
 
+    wh_type_options = [
+        {'value': 'main', 'label': 'مستودع رئيسي مركزي'},
+        {'value': 'rep', 'label': 'مخزن عهدة مندوب'},
+        {'value': 'standard', 'label': 'مخزن فرعي عادي'},
+    ]
+    selected_wh_type_items = [o for o in wh_type_options if o['value'] in selected_wh_types]
+
     context = {
         'warehouses': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'search_query': search,
+        'wh_type_options': wh_type_options,
+        'selected_wh_type_items': selected_wh_type_items,
+        'selected_wh_types': selected_wh_types,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
         'selected_type': wh_type,
         'selected_status': status,
         'selected_area': area_id,
@@ -263,11 +326,19 @@ def warehouses_list(request):
 @require_permission('inventory:warehouses/export')
 def warehouses_export(request):
     """Export filtered and scoped warehouses to Excel."""
+    from master_data.filter_utils import parse_multi_str, parse_single_int, resolve_scoped_area_brick_filters
     search = request.GET.get('search', '').strip()
-    wh_type = request.GET.get('type', '').strip()
+    selected_wh_types = [t for t in parse_multi_str(request.GET, 'type') if t in ('main', 'rep', 'standard')]
+    wh_type = selected_wh_types[0] if len(selected_wh_types) == 1 else ''
     status = request.GET.get('status', '').strip()
-    area_id = request.GET.get('area', '').strip()
-    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'inventory',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    assigned_user_int = parse_single_int(request.GET, 'assigned_user')
+    assigned_user_id = str(assigned_user_int) if assigned_user_int else ''
 
     qs = Warehouse.objects.select_related('manager', 'assigned_user', 'area', 'area__parent').all().order_by('-is_main', 'name')
     qs = get_scoped_queryset(qs, request.user, 'warehouse')

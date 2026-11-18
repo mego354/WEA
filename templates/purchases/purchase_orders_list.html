@@ -343,16 +343,11 @@
                 </select>
             </div>
 
-            <!-- Payment Status (Requirement B3) -->
-            <div>
-                <label class="block font-bold text-slate-700 mb-2">حالة السداد التجارية</label>
-                <select name="payment_status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
-                    <option value="all">كافة حالات السداد</option>
-                    {% for val, label in payment_statuses %}
-                    <option value="{{ val }}" {% if current_payment_status == val %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <!-- Order Status (Multi-select) -->
+            {% include 'components/choice_multiselect.html' with component_id='po_status' field_name='status' label='حالة الطلب (اختيار متعدد)' options=po_status_options selected_items=selected_po_status_items selected_values=selected_statuses placeholder='اختر حالة الطلب...' %}
+
+            <!-- Payment Status (Multi-select) -->
+            {% include 'components/choice_multiselect.html' with component_id='po_payment_status' field_name='payment_status' label='حالة السداد التجارية (اختيار متعدد)' options=po_payment_options selected_items=selected_po_payment_items selected_values=selected_payment_statuses placeholder='اختر حالة السداد...' %}
 
             <!-- Financial Total Range (Requirement B1) -->
             <div>

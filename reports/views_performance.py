@@ -45,7 +45,8 @@ def performance_overview(request):
     reps = get_scoped_queryset(User.objects.filter(is_active=True), request.user).filter(
         role__is_sales_team=True
     ).order_by('name')
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
 
     context = {
         'period': period,
@@ -80,7 +81,8 @@ def performance_analysis(request):
     filters = {'area_id': area_id}
 
     data = get_performance_analysis_data(request.user, start_date, end_date, filters)
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
 
     context = {
         'period': period,
@@ -233,7 +235,8 @@ def performance_detailed(request):
     start_date, end_date, _, _, period_label = parse_date_range(period, start_str, end_str)
     data = get_performance_detailed_matrix(request.user, start_date, end_date, {'area_id': area_id})
 
-    areas = get_scoped_queryset(Area.objects.filter(parent__isnull=True), request.user)
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
 
     context = {
         'period': period,

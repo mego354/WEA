@@ -17,8 +17,10 @@ from master_data.search_utils import filter_by_arabic_search
 
 @require_permission('catalog:products/list')
 def products_list(request):
+    from master_data.filter_utils import parse_multi_int
     search = request.GET.get('search', '').strip()
-    category_id = request.GET.get('category')
+    selected_category_ids = parse_multi_int(request.GET, 'category')
+    category_id = str(selected_category_ids[0]) if len(selected_category_ids) == 1 else ''
     sellable_filter = request.GET.get('sellable')
     min_price = request.GET.get('min_price')
     max_price = request.GET.get('max_price')
@@ -27,11 +29,10 @@ def products_list(request):
 
     active_filters = []
 
-    if category_id:
-        qs = qs.filter(category_id=category_id)
-        cat_obj = ProductCategory.objects.filter(pk=category_id).first()
-        if cat_obj:
-            active_filters.append({'label': 'التصنيف', 'value': cat_obj.name, 'param': 'category'})
+    if selected_category_ids:
+        qs = qs.filter(category_id__in=selected_category_ids)
+        for cat_obj in ProductCategory.objects.filter(pk__in=selected_category_ids):
+            active_filters.append({'label': 'التصنيف', 'value': cat_obj.name, 'param': 'category', 'remove_value': str(cat_obj.id)})
 
     if sellable_filter in ['true', '1', 'yes']:
         qs = qs.filter(sellable=True)
@@ -76,11 +77,18 @@ def products_list(request):
         'categories_count': prod_agg['categories_count'] or 0,
     }
 
+    category_options = [{'value': str(c.id), 'label': c.name} for c in categories]
+    selected_category_str = [str(x) for x in selected_category_ids]
+    selected_category_items = [o for o in category_options if o['value'] in selected_category_str]
+
     context = {
         'products': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'categories': categories,
+        'category_options': category_options,
+        'selected_category_items': selected_category_items,
+        'selected_categories': selected_category_str,
         'selected_category': category_id,
         'sellable_filter': sellable_filter,
         'min_price': min_price,

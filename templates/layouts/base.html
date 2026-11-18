@@ -248,8 +248,58 @@
         body.erp-loading-lock {
             overflow: hidden !important;
         }
+        /* Unified Contacts-Style Slide-Out Filter Drawer */
+        .erp-filter-drawer {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 320px;
+            max-width: 92vw;
+            background: #ffffff;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            z-index: 50;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .erp-filter-drawer.open {
+            transform: translateX(0);
+        }
+        .mat-like-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        .mat-like-control {
+            width: 100%;
+            height: 40px;
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 0 0.75rem;
+            font-size: 0.8125rem;
+        }
     </style>
 
+    <script>
+        window.toggleErpFilterDrawer = function(drawerId, backdropId) {
+            const drawer = document.getElementById(drawerId || 'filterDrawer');
+            const backdrop = document.getElementById(backdropId || 'filterDrawerBackdrop');
+            if (!drawer) return;
+            const isOpen = drawer.classList.contains('open');
+            if (isOpen) {
+                drawer.classList.remove('open');
+                if (backdrop) backdrop.classList.add('hidden');
+            } else {
+                drawer.classList.add('open');
+                if (backdrop) backdrop.classList.remove('hidden');
+            }
+        };
+    </script>
     <!-- Leaflet Maps CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

@@ -233,10 +233,10 @@ def contacts_list(request):
         active_filters.append({'label': 'الحالة', 'value': status, 'param': 'status'})
     if area_ids:
         for area_obj in Area.objects.filter(pk__in=area_ids).order_by('name'):
-            active_filters.append({'label': 'المحافظة/المنطقة', 'value': area_obj.name, 'param': 'area_id'})
+            active_filters.append({'label': 'المحافظة/المنطقة', 'value': area_obj.name, 'param': 'area_id', 'remove_value': str(area_obj.id)})
     if brick_ids:
         for brick_obj in Area.objects.filter(pk__in=brick_ids).order_by('name'):
-            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': brick_obj.name, 'param': 'brick_id'})
+            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': brick_obj.name, 'param': 'brick_id', 'remove_value': str(brick_obj.id)})
     if sub_area:
         active_filters.append({'label': 'المنطقة الفرعية', 'value': sub_area, 'param': 'sub_area'})
     if category and category != 'all':
@@ -245,7 +245,7 @@ def contacts_list(request):
         active_filters.append({'label': 'التخصص', 'value': specialty, 'param': 'specialty'})
     if account_types_selected:
         for at in account_types_selected:
-            active_filters.append({'label': 'نوع الحساب', 'value': at, 'param': 'account_type'})
+            active_filters.append({'label': 'نوع الحساب', 'value': at, 'param': 'account_type', 'remove_value': at})
     elif account_type and account_type != 'all':
         active_filters.append({'label': 'نوع الحساب', 'value': account_type, 'param': 'account_type'})
     if user_id:

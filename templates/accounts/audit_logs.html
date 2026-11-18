@@ -42,67 +42,69 @@
     <!-- Active Filters Chips -->
     {% include 'components/active_filters.html' %}
 
-    <!-- Filters Bar -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4">
-        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-            <!-- Search -->
-            <div class="relative lg:col-span-2">
+    <!-- Compact Search & Filter Drawer Trigger Toolbar -->
+    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+                {% for m in selected_modules %}<input type="hidden" name="module" value="{{ m }}">{% endfor %}
+                {% for a in selected_actions %}<input type="hidden" name="action" value="{{ a }}">{% endfor %}
+                {% if user_filter %}<input type="hidden" name="user" value="{{ user_filter }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
                 <input type="text" name="q" value="{{ query }}" placeholder="بحث (المسؤول، السجل، IP، الوصف)..."
                        data-smart-search-module="audit_logs"
-                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[38px]">
                 <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
-            </div>
+            </form>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')"
+                    class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[38px]">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
+                <span>فلتر</span>
+                {% if active_filters|length > 0 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">{{ active_filters|length }}</span>
+                {% endif %}
+            </button>
+        </div>
+    </div>
 
-            <!-- Module Filter -->
-            <div>
-                <select name="module" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
-                    <option value="">جميع الموديولات</option>
-                    {% for code, label in module_choices %}
-                    <option value="{{ code }}" {% if module_filter == code %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
+    <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
+    <div id="filterDrawer" class="erp-filter-drawer">
+        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
+                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
             </div>
-
-            <!-- Action Type Filter -->
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            </button>
+        </div>
+        <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            {% include 'components/choice_multiselect.html' with component_id='audit_module' field_name='module' label='الموديول (اختيار متعدد)' options=module_options selected_items=selected_module_items selected_values=selected_modules placeholder='جميع الموديولات...' %}
+            {% include 'components/choice_multiselect.html' with component_id='audit_action' field_name='action' label='نوع العملية (اختيار متعدد)' options=action_options selected_items=selected_action_items selected_values=selected_actions placeholder='جميع العمليات...' %}
             <div>
-                <select name="action" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
-                    <option value="">جميع العمليات</option>
-                    {% for code, label in action_choices %}
-                    <option value="{{ code }}" {% if action_filter == code %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- User Filter -->
-            <div>
-                <select name="user" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+                <label class="mat-like-label">المستخدم</label>
+                <select name="user" data-smart-select="true" data-search-placeholder="ابحث عن المستخدم..." class="mat-like-control">
                     <option value="">جميع المستخدمين</option>
                     {% for u in users %}
                     <option value="{{ u.id }}" {% if user_filter == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
                     {% endfor %}
                 </select>
             </div>
-
-            <!-- Date Range Inputs -->
-            <div class="flex items-center gap-1 sm:col-span-2 lg:col-span-2">
-                <input type="date" name="date_from" value="{{ date_from }}" title="من تاريخ"
-                       class="w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
-                <span class="text-slate-400 text-xs">إلى</span>
-                <input type="date" name="date_to" value="{{ date_to }}" title="إلى تاريخ"
-                       class="w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="mat-like-label">من تاريخ</label>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="mat-like-control">
+                </div>
+                <div>
+                    <label class="mat-like-label">إلى تاريخ</label>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="mat-like-control">
+                </div>
             </div>
-
-            <!-- Actions -->
-            <div class="flex items-center gap-2 sm:col-span-2 lg:col-span-1">
-                <button type="submit" class="flex-1 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 min-h-[42px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>تصفية</span>
-                </button>
-                {% if query or module_filter or action_filter or user_filter or date_from or date_to %}
-                <a href="{% url 'audit_logs_list' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all flex items-center justify-center min-h-[42px]" title="إلغاء التصفية">
-                    <span class="material-symbols-outlined text-base">close</span>
-                </a>
-                {% endif %}
+            <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+                <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
+                <a href="{% url 'audit_logs_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
             </div>
         </form>
     </div>

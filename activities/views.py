@@ -162,7 +162,16 @@ def agreements_list(request):
     List agreements with search, filters, pagination, sum aggregation, and create modal.
     Matches https://weapharma.bricks-rep.com/agreements
     """
-    qs = Agreement.objects.select_related('customer', 'type', 'created_by').all().order_by('-serial_num')
+    from master_data.filter_utils import (
+        parse_multi_int,
+        parse_multi_str,
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+
+    qs = Agreement.objects.select_related('customer', 'customer__area', 'customer__brick', 'type', 'created_by').all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'agreement')
 
     # Search with Arabic normalization
@@ -177,46 +186,57 @@ def agreements_list(request):
             raw_fields=['customer__code'],
             numeric_id_field='serial_num'
         )
-        active_filters.append({'label': f'بحث: {q}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': q, 'param': 'search'})
 
-    # Type Filter
-    type_id = request.GET.get('type')
-    if type_id:
-        qs = qs.filter(type_id=type_id)
-        t_obj = AgreementType.objects.filter(id=type_id).first()
-        active_filters.append({'label': f'النوع: {t_obj.name if t_obj else type_id}', 'param': 'type'})
+    # Type Filter (multi-select)
+    selected_types = parse_multi_int(request.GET, 'type')
+    type_id = str(selected_types[0]) if len(selected_types) == 1 else ''
+    if selected_types:
+        qs = qs.filter(type_id__in=selected_types)
+        for t_obj in AgreementType.objects.filter(id__in=selected_types):
+            active_filters.append({'label': 'النوع', 'value': t_obj.name, 'param': 'type', 'remove_value': str(t_obj.id)})
 
     # Status Filter (Exact 2-status lifecycle: new and done)
     status = request.GET.get('status')
     if status:
         if status == 'done':
             qs = qs.filter(status__in=['done', 'approved'])
-            active_filters.append({'label': 'الحالة: منجزة', 'param': 'status'})
+            active_filters.append({'label': 'الحالة', 'value': 'منجزة', 'param': 'status'})
         elif status == 'new':
             qs = qs.filter(status__in=['new', 'disapproved'])
-            active_filters.append({'label': 'الحالة: جديدة', 'param': 'status'})
+            active_filters.append({'label': 'الحالة', 'value': 'جديدة', 'param': 'status'})
         else:
             qs = qs.filter(status=status)
             status_labels = dict(Agreement.STATUS_CHOICES)
-            active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
+            active_filters.append({'label': 'الحالة', 'value': status_labels.get(status, status), 'param': 'status'})
 
-    # Customer Filter
-    customer_id = request.GET.get('customer')
-    if customer_id:
-        qs = qs.filter(customer_id=customer_id)
-        c_obj = Contact.objects.filter(id=customer_id).first()
-        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer'})
+    # Customer Filter (safe int parsing)
+    customer_id_int = parse_single_int(request.GET, 'customer')
+    customer_id = str(customer_id_int) if customer_id_int else ''
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+        c_obj = Contact.objects.filter(id=customer_id_int).first()
+        active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_id, 'param': 'customer'})
 
-    # Assignee Filter (created_by)
-    creator_id = request.GET.get('creator')
-    if creator_id:
-        visible_users_qs = get_visible_assignees_queryset(request.user, 'activities')
-        if visible_users_qs.filter(id=creator_id).exists():
-            qs = qs.filter(created_by_id=creator_id)
-            u_obj = visible_users_qs.filter(id=creator_id).first()
-            active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else creator_id}', 'param': 'creator'})
+    # Assignee Filter (created_by, multi-select, strictly scoped)
+    visible_users_qs = get_visible_assignees_queryset(request.user, 'activities')
+    raw_creator_ids = parse_multi_int(request.GET, 'creator')
+    selected_creators = []
+    if raw_creator_ids:
+        auth_creators = list(visible_users_qs.filter(id__in=raw_creator_ids))
+        selected_creators = [u.id for u in auth_creators]
+        if selected_creators:
+            qs = qs.filter(created_by_id__in=selected_creators)
+            for u_obj in auth_creators:
+                active_filters.append({
+                    'label': 'المسؤول',
+                    'value': u_obj.get_full_name() or u_obj.username,
+                    'param': 'creator',
+                    'remove_value': str(u_obj.id),
+                })
         else:
-            creator_id = None
+            qs = qs.none()
+    creator_id = str(selected_creators[0]) if len(selected_creators) == 1 else ''
 
     # Amount Range Filters (Min & Max with partial boundaries support)
     amount_min = request.GET.get('amount_min', '').strip()
@@ -225,49 +245,50 @@ def agreements_list(request):
         try:
             amt_min_val = Decimal(amount_min)
             qs = qs.filter(amount__gte=amt_min_val)
-            active_filters.append({'label': f'الحد الأدنى للمبلغ: {amt_min_val:,.2f} ج.م', 'param': 'amount_min'})
+            active_filters.append({'label': 'الحد الأدنى للمبلغ', 'value': f'{amt_min_val:,.2f} ج.م', 'param': 'amount_min'})
         except Exception:
             amount_min = ''
     if amount_max:
         try:
             amt_max_val = Decimal(amount_max)
             qs = qs.filter(amount__lte=amt_max_val)
-            active_filters.append({'label': f'الحد الأقصى للمبلغ: {amt_max_val:,.2f} ج.م', 'param': 'amount_max'})
+            active_filters.append({'label': 'الحد الأقصى للمبلغ', 'value': f'{amt_max_val:,.2f} ج.م', 'param': 'amount_max'})
         except Exception:
             amount_max = ''
 
-    # Governorate (Main Area) Filter
-    gov_id = request.GET.get('governorate', '').strip()
-    if gov_id:
-        try:
-            gov_id_int = int(gov_id)
-            qs = qs.filter(Q(customer__area_id=gov_id_int) | Q(customer__area__parent_id=gov_id_int))
-            from master_data.models import Area
-            g_obj = Area.objects.filter(id=gov_id_int).first()
-            active_filters.append({'label': f'المحافظة: {g_obj.name if g_obj else gov_id}', 'param': 'governorate'})
-        except Exception:
-            gov_id = ''
+    # Scoped Main Area & Brick multi-select filters (supports main_area/governorate & brick)
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'activities',
+        area_params=('main_area', 'governorate', 'area_id'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    gov_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
+    brick_id = str(brick_ids[0]) if len(brick_ids) == 1 else ''
 
-    # Brick (Sub-Area) Filter
-    brick_id = request.GET.get('brick', '').strip()
-    if brick_id:
-        try:
-            brick_id_int = int(brick_id)
-            qs = qs.filter(customer__area_id=brick_id_int)
-            from master_data.models import Area
-            b_obj = Area.objects.filter(id=brick_id_int).first()
-            active_filters.append({'label': f'المنطقة (Brick): {b_obj.name if b_obj else brick_id}', 'param': 'brick'})
-        except Exception:
-            brick_id = ''
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({'label': 'المحافظة', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({'label': 'المنطقة (Brick)', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
+
+    # Account Type multi-select filter
+    selected_account_types = parse_multi_str(request.GET, 'account_type')
+    if selected_account_types:
+        qs = qs.filter(customer__account_type__in=selected_account_types)
+        for at in selected_account_types:
+            active_filters.append({'label': 'نوع العميل', 'value': at, 'param': 'account_type', 'remove_value': at})
 
     # Date Range Filters (Unified resolve_date_range)
     parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     if parsed_from:
         qs = qs.filter(date__gte=parsed_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
     if parsed_to:
         qs = qs.filter(date__lte=parsed_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     # Summary Metrics (matches reference aggregate API - committed amount is done/approved)
     agreements_agg = qs.aggregate(
@@ -372,6 +393,13 @@ def agreements_list(request):
             and can_user_access_object(request.user, a, 'delete')
         )
 
+    type_options = [{'value': str(t.id), 'label': t.name} for t in agreement_types]
+    selected_type_str = [str(x) for x in selected_types]
+    selected_type_items = [o for o in type_options if o['value'] in selected_type_str]
+    creator_options = [{'value': str(u.id), 'label': u.get_full_name() or u.username} for u in users]
+    selected_creator_str = [str(x) for x in selected_creators]
+    selected_creator_items = [o for o in creator_options if o['value'] in selected_creator_str]
+
     context = {
         'page_obj': page_obj,
         'paginator': paginator,
@@ -380,9 +408,19 @@ def agreements_list(request):
         'total_amount': total_amount,
         'form': form,
         'agreement_types': agreement_types,
+        'type_options': type_options,
+        'selected_type_items': selected_type_items,
+        'selected_types': selected_type_str,
         'users': users,
+        'creator_options': creator_options,
+        'selected_creator_items': selected_creator_items,
+        'selected_creators': selected_creator_str,
         'governorates': governorates,
         'bricks': bricks,
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'account_types': ACCOUNT_TYPES,
+        'selected_account_types': selected_account_types,
         'customers': customers,
         'can_filter_creator': can_filter_creator,
         'selected_q': q,
@@ -1974,6 +2012,15 @@ def planned_visits_export(request):
 
 def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
     """Shared filter pipeline for visits_list and visits_export (respecting DataScope and permissions)."""
+    from master_data.filter_utils import (
+        parse_multi_str,
+        parse_multi_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.models import Area
+
     q = (request.GET.get('search') or request.GET.get('q') or '').strip()
     active_filters = []
 
@@ -1987,17 +2034,21 @@ def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
         )
         active_filters.append({'label': 'بحث', 'value': q, 'param': 'search'})
 
-    status = request.GET.get('status')
-    if status:
-        qs = qs.filter(status=status)
-        status_labels = dict(Visit.STATUS_CHOICES)
-        active_filters.append({'label': 'الحالة', 'value': status_labels.get(status, status), 'param': 'status'})
+    status_labels = dict(Visit.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_labels]
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
+        for s in selected_statuses:
+            active_filters.append({'label': 'الحالة', 'value': status_labels.get(s, s), 'param': 'status', 'remove_value': s})
+    status = selected_statuses[0] if len(selected_statuses) == 1 else ''
 
-    approval_status = request.GET.get('approval_status')
-    if approval_status:
-        qs = qs.filter(approval_status=approval_status)
-        approval_labels = dict(Visit.APPROVAL_CHOICES)
-        active_filters.append({'label': 'حالة الاعتماد', 'value': approval_labels.get(approval_status, approval_status), 'param': 'approval_status'})
+    approval_labels = dict(Visit.APPROVAL_CHOICES)
+    selected_approval_statuses = [a for a in parse_multi_str(request.GET, 'approval_status') if a in approval_labels]
+    if selected_approval_statuses:
+        qs = qs.filter(approval_status__in=selected_approval_statuses)
+        for a in selected_approval_statuses:
+            active_filters.append({'label': 'حالة الاعتماد', 'value': approval_labels.get(a, a), 'param': 'approval_status', 'remove_value': a})
+    approval_status = selected_approval_statuses[0] if len(selected_approval_statuses) == 1 else ''
 
     plan_type = request.GET.get('plan_type')
     if plan_type == 'planned':
@@ -2007,11 +2058,63 @@ def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
         qs = qs.filter(is_planned=False)
         active_filters.append({'label': 'النوع', 'value': 'زيارة خارج الخطة', 'param': 'plan_type'})
 
-    rep_id = request.GET.get('owner')
-    if rep_id:
-        qs = qs.filter(owner_id=rep_id)
-        u_obj = get_visible_assignees_queryset(request.user, 'activities').filter(id=rep_id).first()
-        active_filters.append({'label': 'المسؤول', 'value': (u_obj.name or u_obj.username) if u_obj else rep_id, 'param': 'owner'})
+    visible_users_qs = get_visible_assignees_queryset(request.user, 'activities')
+    raw_owner_ids = parse_multi_int(request.GET, 'owner')
+    selected_owners = []
+    if raw_owner_ids:
+        auth_owners = list(visible_users_qs.filter(id__in=raw_owner_ids))
+        selected_owners = [u.id for u in auth_owners]
+        if selected_owners:
+            qs = qs.filter(owner_id__in=selected_owners)
+            for u_obj in auth_owners:
+                active_filters.append({
+                    'label': 'المسؤول',
+                    'value': u_obj.name or u_obj.username,
+                    'param': 'owner',
+                    'remove_value': str(u_obj.id),
+                })
+        else:
+            qs = qs.none()
+    rep_id = str(selected_owners[0]) if len(selected_owners) == 1 else ''
+
+    # Scoped Area & Brick multi-select filters
+    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'activities',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='contact', include_addresses=False))
+        for a_chip in selected_main_areas_chips:
+            active_filters.append({
+                'label': 'المنطقة الرئيسية',
+                'value': a_chip['name'],
+                'param': 'main_area',
+                'remove_value': str(a_chip['id']),
+            })
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='contact', include_addresses=False))
+        for b_chip in selected_bricks_chips:
+            active_filters.append({
+                'label': 'الخط الجغرافي / Brick',
+                'value': b_chip['name'],
+                'param': 'brick',
+                'remove_value': str(b_chip['id']),
+            })
+
+    # Account Type multi-select filter
+    selected_account_types = parse_multi_str(request.GET, 'account_type')
+    if selected_account_types:
+        qs = qs.filter(contact__account_type__in=selected_account_types)
+        for at in selected_account_types:
+            active_filters.append({'label': 'نوع العميل', 'value': at, 'param': 'account_type', 'remove_value': at})
+
+    # Visit Template multi-select filter
+    selected_templates = parse_multi_int(request.GET, 'template')
+    if selected_templates:
+        qs = qs.filter(template_id__in=selected_templates)
+        for tpl in VisitTemplate.objects.filter(id__in=selected_templates):
+            active_filters.append({'label': 'نموذج الزيارة', 'value': tpl.name, 'param': 'template', 'remove_value': str(tpl.id)})
 
     parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     if parsed_from:
@@ -2050,9 +2153,16 @@ def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
     return qs, {
         'q': q,
         'status': status,
+        'selected_statuses': selected_statuses,
         'approval_status': approval_status,
+        'selected_approval_statuses': selected_approval_statuses,
         'plan_type': plan_type,
         'owner': rep_id,
+        'selected_owners': [str(x) for x in selected_owners],
+        'selected_main_areas_chips': selected_main_areas_chips,
+        'selected_bricks_chips': selected_bricks_chips,
+        'selected_account_types': selected_account_types,
+        'selected_templates': [str(x) for x in selected_templates],
         'date_from': date_from,
         'date_to': date_to,
         'active_preset': active_preset,
@@ -2127,6 +2237,15 @@ def visits_list(request):
     planned_count = visits_agg['planned_count'] or 0
     unplanned_count = visits_agg['unplanned_count'] or 0
 
+    owner_options = [{'value': str(u.id), 'label': u.name or u.username} for u in users]
+    selected_owner_items = [o for o in owner_options if o['value'] in f_state['selected_owners']]
+    status_options = [{'value': k, 'label': v} for k, v in Visit.STATUS_CHOICES]
+    selected_status_items = [o for o in status_options if o['value'] in f_state['selected_statuses']]
+    approval_options = [{'value': k, 'label': v} for k, v in Visit.APPROVAL_CHOICES]
+    selected_approval_items = [o for o in approval_options if o['value'] in f_state['selected_approval_statuses']]
+    template_options = [{'value': str(t.id), 'label': t.name} for t in templates]
+    selected_template_items = [o for o in template_options if o['value'] in f_state['selected_templates']]
+
     context = {
         'page_obj': page_obj,
         'paginator': paginator,
@@ -2140,6 +2259,22 @@ def visits_list(request):
         'users': users,
         'can_filter_owner': users.count() > 1 or getattr(request.user, 'is_super_admin', False) or request.user.is_superuser,
         'templates': templates,
+        'account_types': ACCOUNT_TYPES,
+        'selected_account_types': f_state['selected_account_types'],
+        'selected_main_areas_chips': f_state['selected_main_areas_chips'],
+        'selected_bricks_chips': f_state['selected_bricks_chips'],
+        'owner_options': owner_options,
+        'selected_owner_items': selected_owner_items,
+        'selected_owners': f_state['selected_owners'],
+        'status_options': status_options,
+        'selected_status_items': selected_status_items,
+        'selected_statuses': f_state['selected_statuses'],
+        'approval_options': approval_options,
+        'selected_approval_items': selected_approval_items,
+        'selected_approval_statuses': f_state['selected_approval_statuses'],
+        'template_options': template_options,
+        'selected_template_items': selected_template_items,
+        'selected_templates': f_state['selected_templates'],
         'selected_q': q,
         'selected_status': status,
         'selected_approval_status': approval_status,

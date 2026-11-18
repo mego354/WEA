@@ -16,7 +16,7 @@
         <span class="font-bold text-slate-900">{{ filter.label }}</span>
         {% endif %}
         {% if filter.param %}
-        <a href="{% url_remove_param filter.param page=1 %}"
+        <a href="{% url_remove_param filter.param value=filter.remove_value page=1 %}"
            class="w-4 h-4 rounded flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
            title="إزالة الفلتر">
             <span class="material-symbols-outlined text-xs">close</span>

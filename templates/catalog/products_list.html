@@ -95,7 +95,7 @@
     <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <form method="GET" class="flex-1 max-w-md relative">
-                {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+                {% for cat_id in selected_categories %}<input type="hidden" name="category" value="{{ cat_id }}">{% endfor %}
                 {% if sellable_filter %}<input type="hidden" name="sellable" value="{{ sellable_filter }}">{% endif %}
                 <input type="text" name="search" value="{{ search_query }}" data-smart-search-module="products" placeholder="بحث بالاسم، كود الصنف (SKU)، الباركود..."
                        class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
@@ -265,16 +265,8 @@
         <form method="GET" class="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-slate-700">
             {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
-            <!-- Category -->
-            <div>
-                <label class="block font-bold text-slate-700 mb-2">التصنيف</label>
-                <select name="category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
-                    <option value="">كافة التصنيفات</option>
-                    {% for cat in categories %}
-                    <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <!-- Category (Multi-select) -->
+            {% include 'components/choice_multiselect.html' with component_id='prod_category' field_name='category' label='التصنيف (اختيار متعدد)' options=category_options selected_items=selected_category_items selected_values=selected_categories placeholder='كافة التصنيفات...' %}
 
             <!-- Sellable Toggle -->
             <div>

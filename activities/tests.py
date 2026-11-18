@@ -6651,3 +6651,59 @@ class VisitGpsIntegrityAndPermissionTests(TestCase):
         self.assertNotContains(res, 'sticky bottom-4')
         self.assertNotContains(res, 'gps-integrity-card')
 
+    def test_visits_and_agreements_multiselect_filters_and_scope_isolation(self):
+        from django.urls import reverse
+        from activities.models import Visit, Agreement, AgreementType
+
+        giza = Area.objects.create(name='الجيزة', code='GIZ-FLT', area_type='governorate')
+        giza_brick = Area.objects.create(name='الدقي', code='DOK-FLT', area_type='subarea', parent=giza)
+        c_giza = Contact.objects.create(
+            name='صيدلية الدقي', code='PH-GIZ-1', is_customer=True, account_type='صيدلية',
+            area=giza, brick=giza_brick, status='active'
+        )
+        self.contact_a.account_type = 'عيادة'
+        self.contact_a.save(update_fields=['account_type'])
+
+        v1 = Visit.objects.create(
+            contact=self.contact_a, owner=self.rep, date=timezone.localdate(),
+            status='finished', approval_status='approved'
+        )
+        v2 = Visit.objects.create(
+            contact=self.contact_a, owner=self.rep, date=timezone.localdate(),
+            status='planned', approval_status='pending'
+        )
+        v_giza = Visit.objects.create(
+            contact=c_giza, owner=self.manager, date=timezone.localdate(),
+            status='finished', approval_status='approved'
+        )
+
+        # Superadmin / Manager filtering by multi-select status & account_type
+        sa = User.objects.create_superuser(username='sa_vflt', email='sa_vflt@wea.com', password='Password123!')
+        self.client.force_login(sa)
+        res_multi = self.client.get(reverse('visits_list'), {'status': ['finished', 'planned'], 'account_type': ['عيادة']})
+        self.assertEqual(res_multi.status_code, 200)
+        self.assertEqual(res_multi.context['total_count'], 2)
+
+        # Malformed owner ID does not 500
+        res_bad = self.client.get(reverse('visits_list') + '?owner=invalid_id')
+        self.assertEqual(res_bad.status_code, 200)
+
+        # Rep attempting to filter by Giza brick is blocked by scope (ignored, only own visits shown)
+        self.client.force_login(self.rep)
+        res_rep = self.client.get(reverse('visits_list'), {'brick': [giza_brick.id]})
+        self.assertEqual(res_rep.status_code, 200)
+        visit_pks = [v.pk for v in res_rep.context['visits']]
+        self.assertNotIn(v_giza.pk, visit_pks)
+
+        # Agreements multi-select & malformed customer ID safety
+        atype = AgreementType.objects.create(name='اتفاقية علمية')
+        Agreement.objects.create(
+            title='اتفاقية أ', type=atype, customer=self.contact_a,
+            amount=Decimal('500.00'), date=timezone.localdate(), created_by=self.rep
+        )
+        self.client.force_login(sa)
+        res_ag = self.client.get(reverse('agreements_list'), {'type': [atype.id], 'account_type': ['عيادة'], 'customer': 'bad'})
+        self.assertEqual(res_ag.status_code, 200)
+        self.assertEqual(res_ag.context['total_count'], 1)
+
+

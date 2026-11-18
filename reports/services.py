@@ -133,7 +133,7 @@ def get_performance_overview_data(user, start_date, end_date, prior_start, prior
         collections_qs = collections_qs.filter(created_by_id=rep_id)
         expenses_qs = expenses_qs.filter(visit__owner_id=rep_id)
         coaching_qs = coaching_qs.filter(rep_id=rep_id)
-        contacts_qs = contacts_qs.filter(Q(assigned_team__id=rep_id) | Q(created_by_id=rep_id))
+        contacts_qs = contacts_qs.filter(Q(assigned_team__id=rep_id) | Q(created_by_id=rep_id)).distinct()
         planned_items_qs = planned_items_qs.filter(plan_day__assignee_id=rep_id)
 
     if area_id:
@@ -846,7 +846,7 @@ def get_ar_aging_report_data(user, filters=None):
     if brick_id:
         accounts_qs = accounts_qs.filter(customer__brick_id=brick_id)
     if rep_id:
-        accounts_qs = accounts_qs.filter(Q(customer__assigned_team__id=rep_id) | Q(customer__created_by_id=rep_id))
+        accounts_qs = accounts_qs.filter(Q(customer__assigned_team__id=rep_id) | Q(customer__created_by_id=rep_id)).distinct()
     if overdue_only:
         accounts_qs = accounts_qs.filter(current_balance__gt=0, overdue_balance__gt=0)
     else:

@@ -1410,3 +1410,55 @@ class PDFInvoicesAndStatementsTests(TestCase):
         res_home = self.client.get(reverse('home'))
         self.assertEqual(res_home.status_code, 200)
         self.assertEqual(res_home.context['start_date_str'], today.replace(day=1).strftime('%Y-%m-%d'))
+
+
+class StandardizedFilteringUtilitiesTests(TestCase):
+    """Verifies shared filter parsing, multi-value chip removal, and AR Aging export parity."""
+
+    def test_parse_multi_int_and_str_and_malformed_tokens(self):
+        from django.http import QueryDict
+        from master_data.filter_utils import parse_multi_int, parse_multi_str, parse_single_int
+
+        qd = QueryDict('status=pending&status=approved,finished&status=all&owner=12&owner=abc&owner=12&brick[]=5')
+        self.assertEqual(parse_multi_str(qd, 'status'), ['pending', 'approved', 'finished'])
+        self.assertEqual(parse_multi_int(qd, 'owner'), [12])
+        self.assertEqual(parse_multi_int(qd, 'brick'), [5])
+        self.assertIsNone(parse_single_int(QueryDict('owner=abc'), 'owner'))
+        self.assertEqual(parse_single_int(QueryDict('owner=42'), 'owner'), 42)
+
+    def test_url_remove_param_single_value_from_multi_select(self):
+        from django.test import RequestFactory
+        from master_data.templatetags.erp_tags import url_remove_param
+
+        rf = RequestFactory()
+        req = rf.get('/contacts/?area_id=1&area_id=2&status=active&page=3')
+        ctx = {'request': req}
+        out = url_remove_param(ctx, 'area_id', value='1', page=1)
+        self.assertIn('area_id=2', out)
+        self.assertNotIn('area_id=1', out)
+        self.assertIn('status=active', out)
+        self.assertIn('page=1', out)
+
+    def test_ar_aging_export_respects_area_and_rep_filters(self):
+        from sales.models import CustomerAccount
+        cairo = Area.objects.create(name='القاهرة', code='AR-CAI', area_type='governorate')
+        giza = Area.objects.create(name='الجيزة', code='AR-GIZ', area_type='governorate')
+        c1 = Contact.objects.create(name='عميل القاهرة', code='C-AR-1', is_customer=True, area=cairo, status='active')
+        c2 = Contact.objects.create(name='عميل الجيزة', code='C-AR-2', is_customer=True, area=giza, status='active')
+        CustomerAccount.objects.update_or_create(customer=c1, defaults={'current_balance': Decimal('1000.00'), 'overdue_balance': Decimal('500.00')})
+        CustomerAccount.objects.update_or_create(customer=c2, defaults={'current_balance': Decimal('2000.00'), 'overdue_balance': Decimal('0.00')})
+
+        admin = User.objects.create_superuser(username='sa_ar_flt', email='sa_ar@wea.com', password='Password123!')
+        self.client.force_login(admin)
+        resp_html = self.client.get(reverse('report_ar_aging'), {'area': cairo.id})
+        self.assertEqual(resp_html.status_code, 200)
+        self.assertEqual(len(resp_html.context['rows']), 1)
+
+        resp_exp = self.client.get(reverse('report_ar_aging_export'), {'area': cairo.id})
+        self.assertEqual(resp_exp.status_code, 200)
+        self.assertIn('spreadsheetml', resp_exp['Content-Type'])
+        resp_prt = self.client.get(reverse('report_ar_aging_print'), {'area': cairo.id})
+        self.assertEqual(resp_prt.status_code, 200)
+        self.assertContains(resp_prt, 'عميل القاهرة')
+        self.assertNotContains(resp_prt, 'عميل الجيزة')
+
