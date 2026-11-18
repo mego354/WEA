@@ -30,6 +30,8 @@ urlpatterns = [
     path('planned-visits/export/', views.planned_visits_export, name='planned_visits_export'),
     path('planned-visits/item/<int:pk>/delete/', views.planned_visit_item_delete, name='planned_visit_item_delete'),
     path('planned-visits/item/<int:pk>/execute/', views.planned_visit_item_execute, name='planned_visit_item_execute'),
+    path('planned-visits/plan/<int:pk>/action/<str:action>/', views.plan_action, name='plan_action'),
+    path('plans/<int:pk>/action/<str:action>/', views.plan_action, name='plan_action_alias'),
 
     # Visits
     path('visits/', views.visits_list, name='visits_list'),
@@ -40,8 +42,6 @@ urlpatterns = [
     path('visits/<int:pk>/edit/', views.visit_edit, name='visit_edit'),
     path('visits/<int:pk>/delete/', views.visit_delete, name='visit_delete'),
     path('visits/<int:pk>/answers/edit/', views.visit_update_answers, name='visit_update_answers'),
-    path('visits/<int:pk>/set-time/', views.visit_set_time, name='visit_set_time'),
-    path('visits/<int:pk>/evidence/photo/', views.visit_evidence_photo, name='visit_evidence_photo'),
     path('visits/<int:pk>/action/<str:action>/', views.visit_action, name='visit_action'),
 
     # APIs

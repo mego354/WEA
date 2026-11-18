@@ -9,7 +9,12 @@ class AgreementForm(forms.ModelForm):
         model = Agreement
         fields = ['customer', 'title', 'type', 'amount', 'date', 'description']
         widgets = {
-            'customer': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
+            'customer': forms.Select(attrs={
+                'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500',
+                'data-smart-select': 'true',
+                'data-search-url': '/sales/api/search/customers/',
+                'data-search-placeholder': 'ابحث باسم العميل أو الكود أو المنطقة...',
+            }),
             'title': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'عنوان الاتفاقية'}),
             'type': forms.Select(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500'}),
             'amount': forms.NumberInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'step': '0.01'}),
@@ -21,9 +26,12 @@ class AgreementForm(forms.ModelForm):
         self.user = user
         super().__init__(*args, **kwargs)
         if user:
-            from accounts.permissions import get_visit_eligible_contacts_queryset
+            from accounts.permissions import get_scoped_queryset
             base_qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')
-            self.fields['customer'].queryset = get_visit_eligible_contacts_queryset(base_qs, user).order_by('name')
+            scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
+            if self.instance and self.instance.pk and self.instance.customer_id:
+                scoped_qs = Contact.objects.filter(Q(pk__in=scoped_qs.values_list('pk', flat=True)) | Q(pk=self.instance.customer_id))
+            self.fields['customer'].queryset = scoped_qs.order_by('name')
         else:
             self.fields['customer'].queryset = Contact.objects.none()
 
@@ -73,6 +81,9 @@ class VisitForm(forms.ModelForm):
         widget=forms.Select(attrs={
             'id': 'visit-contact-select',
             'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]',
+            'data-smart-select': 'true',
+            'data-search-url': '/contacts/api/search/',
+            'data-search-placeholder': 'ابحث باسم العميل أو الكود أو المنطقة أو التخصص...',
             'onchange': 'onCustomerSelected(this.value)'
         }),
         label="جهة الاتصال (العميل) *"
@@ -81,21 +92,10 @@ class VisitForm(forms.ModelForm):
     longitude = forms.DecimalField(required=False, widget=forms.HiddenInput(attrs={'id': 'id_longitude'}))
     device_accuracy = forms.DecimalField(required=False, widget=forms.HiddenInput(attrs={'id': 'id_device_accuracy'}))
     planned_item_id = forms.IntegerField(required=False, widget=forms.HiddenInput(attrs={'id': 'id_planned_item_id'}))
-    location_photo = forms.ImageField(
-        required=False,
-        widget=forms.FileInput(attrs={
-            'accept': 'image/*',
-            'capture': 'environment',
-            'id': 'id_location_photo',
-            'class': 'hidden',
-            'onchange': 'handleLocationPhotoSelected(event)'
-        }),
-        label="صورة إثبات الموقع"
-    )
 
     class Meta:
         model = Visit
-        fields = ['contact', 'template', 'owner', 'date', 'is_successful', 'doubled', 'feedback', 'latitude', 'longitude', 'device_accuracy', 'location_photo']
+        fields = ['contact', 'template', 'owner', 'date', 'is_successful', 'doubled', 'latitude', 'longitude', 'device_accuracy']
         widgets = {
             'contact': forms.Select(attrs={'id': 'visit-contact-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'template': forms.Select(attrs={'id': 'visit-template-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'onchange': 'onTemplateSelected(this.value)'}),
@@ -103,15 +103,12 @@ class VisitForm(forms.ModelForm):
             'date': forms.DateInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'type': 'date'}),
             'is_successful': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]'}),
             'doubled': forms.CheckboxInput(attrs={'class': 'w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]'}),
-            'feedback': forms.Textarea(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'rows': 4, 'placeholder': 'ملاحظات ونتائج الزيارة...'}),
         }
 
     def __init__(self, *args, user=None, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
-        base_qs = Contact.objects.filter(
-            Q(is_customer=True) | Q(status='customer') | Q(account_type__gt='')
-        ).exclude(status='inactive')
+        base_qs = Contact.objects.exclude(status='inactive')
 
         from django.contrib.auth import get_user_model
         UserModel = get_user_model()
@@ -254,51 +251,6 @@ class VisitForm(forms.ModelForm):
                     raise forms.ValidationError("إحداثيات الموقع الجغرافي غير صالحة (0, 0).")
             except (ValueError, TypeError):
                 raise forms.ValidationError("صيغة إحداثيات الموقع غير صالحة.")
-
-        if not is_editing and not is_planned_visit and settings.verify_visits and settings.verify_unplanned_visit_distance:
-            can_bypass_directly = settings.can_user_bypass_without_approval(user, stage='create')
-            force_bypass = str(self.data.get('force_bypass_location', '')).strip().lower() in ('1', 'true', 'on')
-            request_exception = str(self.data.get('request_distance_exception', '')).strip().lower() in ('1', 'true', 'on')
-            bypass_reason = (self.data.get('bypass_reason') or '').strip()
-
-            if force_bypass and not can_bypass_directly:
-                raise forms.ValidationError(
-                    "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
-                )
-
-            if not has_coords:
-                if not can_bypass_directly and not request_exception:
-                    raise forms.ValidationError(
-                        "تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لتسجيل الزيارة. يرجى تفعيل إذن الموقع في المتصفح والمحاولة مجدداً."
-                    )
-                if not can_bypass_directly and request_exception and not bypass_reason:
-                    raise forms.ValidationError(
-                        "يرجى توضيح سبب عدم توفر الموقع أو التواجد خارج المسافة المسموح بها لطلب استثناء واعتماد المدير."
-                    )
-                if can_bypass_directly and force_bypass and settings.bypass_reason_mandatory and not bypass_reason:
-                    raise forms.ValidationError(
-                        "يرجى إدخال سبب تجاوز التحقق من المسافة (ذكر السبب إلزامي حسب إعدادات النظام)."
-                    )
-            elif contact and contact.latitude is not None and contact.longitude is not None:
-                allowed_dist = settings.get_effective_tolerance(template)
-                dist = calculate_haversine_distance(lat_float, lng_float, float(contact.latitude), float(contact.longitude))
-                if dist is not None and dist > allowed_dist:
-                    if can_bypass_directly:
-                        is_super = bool(user and (user.is_superuser or getattr(user, 'is_super_admin', False)))
-                        if settings.bypass_reason_mandatory and (force_bypass or not is_super) and not bypass_reason:
-                            raise forms.ValidationError(
-                                f"المسافة الحالية ({dist:.0f} متر) تتجاوز المسافة المسموح بها ({allowed_dist} متر). يرجى إدخال سبب التجاوز للمتابعة."
-                            )
-                    else:
-                        if not request_exception:
-                            raise forms.ValidationError(
-                                f"أنت خارج النطاق الجغرافي المسموح به للعميل (المسافة الفعلية: {dist:.0f} متر، المسافة المسموح بها: {allowed_dist} متر). "
-                                "يرجى التواجد ضمن النطاق المسموح أو طلب استثناء مع كتابة السبب لاعتماد المدير."
-                            )
-                        if not bypass_reason:
-                            raise forms.ValidationError(
-                                "يرجى كتابة سبب واضح للتواجد خارج المسافة المسموح بها لتقديم طلب استثناء لاعتماد المدير."
-                            )
 
         return cleaned_data
 

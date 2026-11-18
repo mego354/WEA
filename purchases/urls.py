@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from master_data import pdf_views
 
 urlpatterns = [
     path('', views.purchase_orders_list, name='purchase_orders_list'),
@@ -11,16 +12,24 @@ urlpatterns = [
     path('api/search/suppliers/', views.purchases_suppliers_search_api, name='purchases_suppliers_search_api'),
     path('api/search/warehouses/', views.purchases_warehouses_search_api, name='purchases_warehouses_search_api'),
     path('api/search/vaults/', views.purchases_vaults_search_api, name='purchases_vaults_search_api'),
+    path('api/search/orders/', views.purchases_orders_search_api, name='purchases_orders_search_api'),
+    path('api/order-details/<int:order_id>/', views.purchases_order_return_details_api, name='purchases_order_return_details_api'),
     path('returns/<int:pk>/', views.purchase_return_order_detail, name='purchase_return_order_detail'),
+    path('returns/<int:pk>/delete/', views.purchase_return_order_delete, name='purchase_return_order_delete'),
     path('returns/<int:pk>/action/<str:action>/', views.purchase_return_order_action, name='purchase_return_order_action'),
     path('returns/<int:pk>/print/', views.purchase_return_order_print, name='purchase_return_order_print'),
+    path('returns/<int:pk>/pdf/', pdf_views.purchase_return_order_pdf, name='purchase_return_order_pdf'),
+    path('vendors/<int:pk>/statement/pdf/', pdf_views.vendor_statement_pdf, name='vendor_statement_pdf'),
     path('<int:pk>/', views.purchase_order_detail, name='purchase_order_detail'),
     path('<int:pk>/edit/', views.purchase_order_edit, name='purchase_order_edit'),
+    path('<int:pk>/delete/', views.purchase_order_delete, name='purchase_order_delete'),
+    path('<int:pk>/payment-status/', views.purchase_order_update_payment_status, name='purchase_order_update_payment_status'),
     path('<int:pk>/split/', views.purchase_order_split, name='purchase_order_split'),
     path('<int:pk>/action/<str:action>/', views.purchase_order_action, name='purchase_order_action'),
     path('<int:pk>/status/update/', views.purchase_order_update_status_ajax, name='purchase_order_update_status_ajax'),
     path('<int:pk>/comments/add/', views.purchase_order_add_comment, name='purchase_order_add_comment'),
     path('<int:pk>/attachments/upload/', views.purchase_order_upload_attachment, name='purchase_order_upload_attachment'),
     path('<int:pk>/print/', views.purchase_order_print, name='purchase_order_print'),
+    path('<int:pk>/pdf/', pdf_views.purchase_order_pdf, name='purchase_order_pdf'),
 
 ]

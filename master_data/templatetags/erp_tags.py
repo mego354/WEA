@@ -293,4 +293,15 @@ def get_admin_dashboard_metrics():
     }
 
 
+@register.simple_tag
+def get_erp_attachments(obj):
+    """Returns ERPAttachment queryset for any model instance."""
+    if not obj or not getattr(obj, 'pk', None):
+        return []
+    from django.contrib.contenttypes.models import ContentType
+    from master_data.models import ERPAttachment
+    ct = ContentType.objects.get_for_model(obj.__class__)
+    return ERPAttachment.objects.filter(content_type=ct, object_id=obj.pk).select_related('uploaded_by')
+
+
 

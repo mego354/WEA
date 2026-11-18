@@ -8,15 +8,15 @@ Optional params:
 <div class="relative inline-block text-right" data-table-column-picker="{{ table_id }}">
     <button type="button"
             onclick="TableColumnManager.toggleDropdown('{{ table_id }}')"
-            class="{{ btn_class|default:'inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold rounded-xl shadow-xs hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[38px]' }}"
+            class="{{ btn_class|default:'inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold rounded-xl shadow-xs hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[38px] min-w-[38px]' }}"
             title="تخصيص الأعمدة المعروضة"
             aria-label="تخصيص الأعمدة">
         <span class="material-symbols-outlined text-base text-brand-600">view_column</span>
         <span class="hidden sm:inline">الأعمدة</span>
-        <span class="material-symbols-outlined text-xs text-slate-400">expand_more</span>
+        <span class="hidden sm:inline material-symbols-outlined text-xs text-slate-400">expand_more</span>
     </button>
     <div id="col-picker-dropdown-{{ table_id }}"
-         class="hidden absolute left-0 sm:right-auto sm:left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 transition-all animate-fadeIn">
+         class="hidden fixed inset-x-4 top-20 sm:top-auto sm:absolute sm:inset-x-auto sm:left-0 mt-2 max-w-sm sm:max-w-none sm:w-64 mx-auto sm:mx-0 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[75] p-3.5 transition-all animate-fadeIn">
         <!-- Header -->
         <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
             <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">

@@ -93,6 +93,7 @@
     <div class="flex flex-wrap items-center gap-2 sm:gap-3">
         <form method="GET" action="{% url 'users_list' %}" class="w-full sm:w-auto flex-1 min-w-[180px] sm:max-w-xs relative">
             <input type="text" name="q" value="{{ query }}" placeholder="بحث"
+                   data-smart-search-module="users"
                    class="w-full pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all shadow-xs">
             <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
         </form>
@@ -210,11 +211,20 @@
                                 </a>
                                 {% endif %}
 
+                                {% if u.pk != request.user.pk %}
                                 <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'user_toggle_status' u.pk %}', title: '{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}', itemName: '{{ u.name|escapejs }}', message: 'هل أنت متأكد من تغيير حالة تفعيل المستخدم <span class=\'font-bold text-slate-800\'>{{ u.name|escapejs }}</span>؟', submitText: 'تأكيد التغيير', submitColor: '{% if u.is_active %}bg-red-600 hover:bg-red-700{% else %}bg-emerald-600 hover:bg-emerald-700{% endif %}', icon: '{% if u.is_active %}person_off{% else %}how_to_reg{% endif %}', iconColor: '{% if u.is_active %}text-red-600 bg-red-50{% else %}text-emerald-600 bg-emerald-50{% endif %}' })"
                                         class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
                                         title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
                                     <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
                                 </button>
+                                {% endif %}
+                                {% if request.user|has_permission:'users:users/delete' and u.pk != request.user.pk %}
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'user_delete' u.pk %}', title: 'حذف حساب المستخدم', itemName: '{{ u.name|default:u.username|escapejs }}', message: 'هل أنت متأكد من حذف حساب المستخدم <span class=\'font-bold text-slate-800\'>{{ u.name|default:u.username|escapejs }}</span>؟ سيتم سحب الجلسات النشطة والحفاظ على سلامة السجلات المالية والتاريخية.' })"
+                                        class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                        title="حذف المستخدم">
+                                    <span class="material-symbols-outlined text-lg">delete</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

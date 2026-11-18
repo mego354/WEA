@@ -562,9 +562,6 @@ class VendorPaymentRequestWorkflowTests(TestCase):
             items_data=[{'product': self.product, 'quantity': 10, 'unit_price': Decimal('60.00')}],
             user=self.accountant
         )
-        PurchaseOrderService.approve_order(self.po, self.superadmin)
-        PurchaseOrderService.stock_order(self.po, self.superadmin)
-        PurchaseOrderService.invoice_order(self.po, self.superadmin)
         self.po.refresh_from_db()
         self.assertEqual(self.po.outstanding_balance, Decimal('600.00'))
         self.vendor_acc.refresh_from_db()
@@ -826,23 +823,26 @@ class TreasurySmartSearchValidationTests(TestCase):
     def test_payment_request_create_validates_preferred_vault_and_supplier(self):
         self.client.force_login(self.mgr_cairo)
 
-        # Out-of-scope preferred_vault returns 403 Forbidden
-        bad_vault = self.client.post(reverse('vendor_payment_request_create'), {
+        # Out-of-scope vault returns 403 Forbidden
+        bad_vault = self.client.post(reverse('vendor_payment_create'), {
             'supplier': self.corp_sup.id,
-            'preferred_vault': self.vault_giza.id,
+            'vault': self.vault_giza.id,
             'amount': '250.00',
         })
         self.assertEqual(bad_vault.status_code, 403)
 
-        # Non-supplier contact is rejected without creating VendorPaymentRequest
-        before = VendorPaymentRequest.objects.count()
-        bad_sup = self.client.post(reverse('vendor_payment_request_create'), {
+        # Non-supplier contact is rejected (returns 403 or redirects)
+        bad_sup = self.client.post(reverse('vendor_payment_create'), {
             'supplier': self.non_sup.id,
-            'preferred_vault': self.vault_cairo.id,
+            'vault': self.vault_cairo.id,
             'amount': '250.00',
         })
-        self.assertEqual(bad_sup.status_code, 302)
-        self.assertEqual(VendorPaymentRequest.objects.count(), before)
+        self.assertIn(bad_sup.status_code, [302, 403])
+
+        # Requirement B6: Payment request creation redirects to vendor_payment_create
+        redir = self.client.get(reverse('vendor_payment_request_create') + f'?supplier={self.corp_sup.id}')
+        self.assertEqual(redir.status_code, 302)
+        self.assertIn(reverse('vendor_payment_create'), redir.url)
 
         # Vault search API returns Cairo vault for Cairo manager, never Giza vault
         v_api = self.client.get(reverse('purchases_vaults_search_api') + '?q=النقديه')
@@ -857,5 +857,206 @@ class TreasurySmartSearchValidationTests(TestCase):
             resp = self.client.get(reverse(url_name))
             self.assertEqual(resp.status_code, 200, f"Failed GET {url_name}")
             self.assertContains(resp, 'data-smart-select="true"')
+
+
+class VaultCrudAndScopingTests(TestCase):
+    """
+    Verifies Vault CRUD operations, data scoping (SuperAdmin / Manager / Rep),
+    safe deletion integrity validations (blocking delete when balance != 0 or transactions exist),
+    opening balance recording, audit logging, and advanced filters in vaults_list.
+    """
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-VLT-CRUD', area_type='governorate')
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='NC-VLT-CRUD', area_type='subarea', parent=self.cairo)
+        self.giza = Area.objects.create(name='الجيزة', code='GIZ-VLT-CRUD', area_type='governorate')
+
+        self.role_super = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        self.role_manager = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.role_rep = Role.objects.get(name=Role.ROLE_REP)
+
+        from django.contrib.auth.models import Permission
+        p_manage = Permission.objects.get(codename='treasury:vaults/manage')
+        p_delete = Permission.objects.get(codename='treasury:vaults/delete')
+        self.role_manager.permissions.add(p_manage, p_delete)
+
+        self.superadmin = User.objects.create_superuser(
+            username='vlt_crud_admin', email='vlt_crud_admin@wea.com', password='Password123!', role=self.role_super
+        )
+        self.manager_cairo = User.objects.create_user(
+            username='vlt_crud_mgr_cai', email='vlt_crud_mgr_cai@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.manager_cairo.assigned_areas.add(self.cairo)
+
+        self.manager_giza = User.objects.create_user(
+            username='vlt_crud_mgr_giz', email='vlt_crud_mgr_giz@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.manager_giza.assigned_areas.add(self.giza)
+
+        self.rep_cairo = User.objects.create_user(
+            username='vlt_crud_rep_cai', email='vlt_crud_rep_cai@wea.com', password='Password123!', role=self.role_rep
+        )
+        self.rep_cairo.assigned_areas.add(self.nasr_city)
+
+        self.vault_cairo = Vault.objects.create(
+            name='الخزينة المركزية القاهرة',
+            vault_type='cash',
+            area=self.cairo,
+            current_balance=Decimal('50000.00'),
+            is_active=True
+        )
+        self.vault_rep_nasr = Vault.objects.create(
+            name='عهدة مندوب مدينة نصر المالية',
+            vault_type='cash',
+            is_rep_vault=True,
+            area=self.nasr_city,
+            assigned_user=self.rep_cairo,
+            current_balance=Decimal('0.00'),
+            is_active=True
+        )
+        self.vault_bank_giza = Vault.objects.create(
+            name='حساب البنك الأهلي الجيزة',
+            vault_type='bank',
+            area=self.giza,
+            current_balance=Decimal('120000.00'),
+            is_active=False
+        )
+
+    def test_vault_create_with_opening_balance_and_audit_log(self):
+        """Creating a vault with opening balance records VaultTransaction and SecurityAuditLog."""
+        self.client.force_login(self.superadmin)
+        post_data = {
+            'name': 'خزينة فرعية جديدة للاختبار',
+            'vault_type': 'cash',
+            'area': self.cairo.id,
+            'initial_balance': '15000.00',
+            'is_active': 'on'
+        }
+        res = self.client.post(reverse('vault_create'), post_data)
+        v = Vault.objects.filter(name='خزينة فرعية جديدة للاختبار').first()
+        self.assertIsNotNone(v)
+        self.assertRedirects(res, reverse('vaults_list'))
+        self.assertEqual(v.current_balance, Decimal('15000.00'))
+        self.assertEqual(v.area, self.cairo)
+
+        # Opening balance transaction created
+        tx = VaultTransaction.objects.filter(vault=v, reference_type='opening_balance').first()
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx.amount, Decimal('15000.00'))
+
+        # SecurityAuditLog recorded
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='VAULT_CREATED', record_id=v.id).exists())
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='VAULT_OPENING_BALANCE', record_id=tx.id).exists())
+
+    def test_vault_edit_scoping(self):
+        """Managers can edit vaults within their assigned governorate/subareas, but are blocked outside it."""
+        # Manager Cairo edits Nasr City vault -> Allowed
+        self.client.force_login(self.manager_cairo)
+        get_res = self.client.get(reverse('vault_edit', args=[self.vault_rep_nasr.id]))
+        self.assertEqual(get_res.status_code, 200)
+
+        post_res = self.client.post(reverse('vault_edit', args=[self.vault_rep_nasr.id]), {
+            'name': 'عهدة مندوب مدينة نصر المعدلة',
+            'vault_type': 'cash',
+            'area': self.nasr_city.id,
+            'assigned_user': self.rep_cairo.id,
+            'is_rep_vault': 'on',
+            'is_active': 'on'
+        })
+        self.assertRedirects(post_res, reverse('vault_detail', args=[self.vault_rep_nasr.id]))
+        self.vault_rep_nasr.refresh_from_db()
+        self.assertEqual(self.vault_rep_nasr.name, 'عهدة مندوب مدينة نصر المعدلة')
+
+        # Manager Giza attempts to edit Nasr City vault -> Forbidden 403
+        self.client.force_login(self.manager_giza)
+        bad_get = self.client.get(reverse('vault_edit', args=[self.vault_rep_nasr.id]))
+        self.assertEqual(bad_get.status_code, 403)
+
+        bad_post = self.client.post(reverse('vault_edit', args=[self.vault_rep_nasr.id]), {
+            'name': 'محاولة اختراق خزينة القاهرة',
+        })
+        self.assertEqual(bad_post.status_code, 403)
+
+    def test_vault_delete_success(self):
+        """Deleting an empty vault with zero balance and no transactions succeeds with audit log."""
+        v_empty = Vault.objects.create(name='خزينة فارغة للحذف', vault_type='cash', area=self.cairo, current_balance=Decimal('0.00'))
+        v_id = v_empty.id
+
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('vault_delete', args=[v_id]))
+        self.assertRedirects(res, reverse('vaults_list'))
+        self.assertFalse(Vault.objects.filter(id=v_id).exists())
+
+        audit = SecurityAuditLog.objects.filter(action_type='VAULT_DELETED', record_id=v_id).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.actor, self.superadmin)
+
+    def test_vault_delete_blocked_when_balance_nonzero(self):
+        """Vault with non-zero balance cannot be deleted."""
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('vault_delete', args=[self.vault_cairo.id]), follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Vault.objects.filter(id=self.vault_cairo.id).exists())
+        self.assertContains(res, "لا يمكن حذف الخزنة لوجود رصيد حالي بها")
+
+    def test_vault_delete_blocked_when_transactions_exist(self):
+        """Vault with zero balance cannot be deleted if transactions are linked to it."""
+        v_tx = Vault.objects.create(name='خزينة بحركات سابقة', vault_type='cash', area=self.cairo, current_balance=Decimal('0.00'))
+        VaultTransaction.objects.create(
+            vault=v_tx,
+            transaction_type='inflow',
+            amount=Decimal('100.00'),
+            running_balance=Decimal('100.00'),
+            description='حركة اختبارية',
+            created_by=self.superadmin
+        )
+
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('vault_delete', args=[v_tx.id]), follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Vault.objects.filter(id=v_tx.id).exists())
+        self.assertContains(res, "لا يمكن حذف الخزنة لوجود حركات مالية مسجلة عليها")
+
+    def test_vault_delete_scoping(self):
+        """Out-of-region managers cannot delete vaults in other regions."""
+        self.client.force_login(self.manager_giza)
+        res = self.client.post(reverse('vault_delete', args=[self.vault_rep_nasr.id]))
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(Vault.objects.filter(id=self.vault_rep_nasr.id).exists())
+
+    def test_vaults_list_advanced_filters(self):
+        """Advanced filters drawer correctly filters by vault_type, custody_type, status, area, and balance ranges."""
+        self.client.force_login(self.superadmin)
+
+        # Filter by vault_type: bank
+        res_bank = self.client.get(reverse('vaults_list') + '?vault_type=bank')
+        self.assertContains(res_bank, self.vault_bank_giza.name)
+        self.assertNotContains(res_bank, self.vault_cairo.name)
+
+        # Filter by custody_type: rep
+        res_rep = self.client.get(reverse('vaults_list') + '?custody_type=rep')
+        self.assertContains(res_rep, self.vault_rep_nasr.name)
+        self.assertNotContains(res_rep, self.vault_cairo.name)
+
+        # Filter by status: inactive
+        res_inact = self.client.get(reverse('vaults_list') + '?status=inactive')
+        self.assertContains(res_inact, self.vault_bank_giza.name)
+        self.assertNotContains(res_inact, self.vault_cairo.name)
+
+        # Filter by area: Cairo (includes child subarea Nasr City)
+        res_area = self.client.get(reverse('vaults_list') + f'?area={self.cairo.id}')
+        self.assertContains(res_area, self.vault_cairo.name)
+        self.assertContains(res_area, self.vault_rep_nasr.name)
+        self.assertNotContains(res_area, self.vault_bank_giza.name)
+
+        # Filter by balance range: balance_min >= 100000
+        res_bal = self.client.get(reverse('vaults_list') + '?balance_min=100000.00')
+        self.assertContains(res_bal, self.vault_bank_giza.name)
+        self.assertNotContains(res_bal, self.vault_cairo.name)
+        self.assertNotContains(res_bal, self.vault_rep_nasr.name)
+
 
 

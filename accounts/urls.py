@@ -15,6 +15,7 @@ urlpatterns = [
     path('users/<int:pk>/effective-permissions/', views.user_effective_permissions, name='user_effective_permissions'),
     path('users/<int:pk>/reset-password/', views.user_reset_password, name='user_reset_password'),
     path('users/<int:pk>/toggle-status/', views.user_toggle_status, name='user_toggle_status'),
+    path('users/<int:pk>/delete/', views.user_delete, name='user_delete'),
     path('users/<int:pk>/toggle-bypass-location/', views.user_toggle_bypass_location, name='user_toggle_bypass_location'),
     path('users/export/', views.users_export, name='users_export'),
 
@@ -27,5 +28,6 @@ urlpatterns = [
 
     # Security & Operations Audit Logs
     path('audit-logs/', views.audit_logs_list, name='audit_logs_list'),
+    path('audit-logs/export/', views.audit_logs_export, name='audit_logs_export'),
     path('audit-logs/<int:pk>/detail/', views.audit_log_detail, name='audit_log_detail'),
 ]

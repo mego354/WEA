@@ -192,7 +192,7 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'reports/reports_hub.html')
         self.assertIn('reports', response.context)
-        self.assertEqual(len(response.context['reports']), 13)
+        self.assertEqual(len(response.context['reports']), 8)
 
     def test_report_ar_aging(self):
         url = reverse('report_ar_aging')
@@ -238,16 +238,6 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
         self.assertEqual(res_export.status_code, 200)
         self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-    def test_report_calls(self):
-        url = reverse('report_calls')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'reports/report_calls.html')
-
-        res_export = self.client.get(reverse('report_calls_export'))
-        self.assertEqual(res_export.status_code, 200)
-        self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
     def test_report_customer_360(self):
         url = reverse('report_customer_360')
         response = self.client.get(url)
@@ -255,29 +245,6 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
         self.assertTemplateUsed(response, 'reports/report_customer_360.html')
 
         res_export = self.client.get(reverse('report_customer_360_export'))
-        self.assertEqual(res_export.status_code, 200)
-        self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-    def test_report_promotions(self):
-        url = reverse('report_promotions')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'reports/report_promotions.html')
-
-        res_export = self.client.get(reverse('report_promotions_export'))
-        self.assertEqual(res_export.status_code, 200)
-        self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-    def test_report_order_deliveries(self):
-        url = reverse('report_order_deliveries')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'reports/report_order_deliveries.html')
-
-        res_print = self.client.get(reverse('report_order_deliveries_print'))
-        self.assertEqual(res_print.status_code, 200)
-
-        res_export = self.client.get(reverse('report_order_deliveries_export'))
         self.assertEqual(res_export.status_code, 200)
         self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
@@ -318,25 +285,5 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
         self.assertTemplateUsed(response, 'reports/report_item_sales_by_customer.html')
 
         res_export = self.client.get(reverse('report_item_sales_by_customer_export'))
-        self.assertEqual(res_export.status_code, 200)
-        self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-    def test_report_target_achievement(self):
-        url = reverse('report_target_achievement')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'reports/report_target_achievement.html')
-
-        res_export = self.client.get(reverse('report_target_achievement_export'))
-        self.assertEqual(res_export.status_code, 200)
-        self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-    def test_report_samples(self):
-        url = reverse('report_samples')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'reports/report_samples.html')
-
-        res_export = self.client.get(reverse('report_samples_export'))
         self.assertEqual(res_export.status_code, 200)
         self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

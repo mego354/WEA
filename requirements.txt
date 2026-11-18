@@ -19,6 +19,14 @@ six==1.17.0
 # Image Evidence & Geotagging
 Pillow==10.4.0
 
+# Cloudflare R2 S3-Compatible Storage
+boto3==1.44.5
+
+# PDF Invoices & Account Statements (Arabic RTL)
+reportlab==4.4.4
+arabic-reshaper==3.0.0
+python-bidi==0.6.6
+
 # Localization & Timezones
 pytz==2025.2
 tzdata==2025.2

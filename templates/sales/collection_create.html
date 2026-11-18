@@ -21,7 +21,7 @@
 
     <!-- Form Card -->
     <div class="bg-white rounded-3xl border border-slate-200/80 p-6 md:p-8 shadow-sm">
-        <form method="POST" action="{% url 'collection_create' %}" class="space-y-5">
+        <form method="POST" enctype="multipart/form-data" action="{% url 'collection_create' %}" class="space-y-5">
             {% csrf_token %}
 
             <div>
@@ -49,10 +49,12 @@
                         class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
                     <option value="">-- تحصيل حر / بدون ربط بأمر محدد --</option>
                     {% for o in orders %}
-                    <option value="{{ o.id }}" data-customer="{{ o.customer_id }}" data-outstanding="{{ o.outstanding_balance }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
+                    {% with bal=o.outstanding_balance %}
+                    <option value="{{ o.id }}" data-customer="{{ o.customer_id }}" data-outstanding="{{ bal }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
                             {% if selected_order_id == o.id %}selected{% endif %}>
-                        أمر بيع #{{ o.order_number }} - الإجمالي: {{ o.grand_total }} ج.م - المتبقي: {{ o.outstanding_balance }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
+                        أمر بيع #{{ o.order_number }} - الإجمالي: {{ o.grand_total }} ج.م - المتبقي: {{ bal }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
                     </option>
+                    {% endwith %}
                     {% endfor %}
                 </select>
                 <div id="orderBalanceNotice" class="hidden mt-1.5 text-xs font-bold text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100 flex items-center justify-between">
@@ -106,6 +108,8 @@
                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
             </div>
 
+            {% include 'components/attachments_uploader.html' with title='مرفقات سند التحصيل (إيصال / شيك / PDF)' %}
+
             <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                 <a href="{% url 'collections_list' %}" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
                     إلغاء
@@ -121,33 +125,101 @@
 </div>
 
 <script>
+let _colOrderFetchCtrl = null;
+const _salesOrdersSearchUrl = "{% url 'sales_orders_search_api' %}";
+
 function filterSalesOrders() {
     const custId = document.getElementById('customerSelect').value;
     const orderSelect = document.getElementById('salesOrderSelect');
-    const options = orderSelect.querySelectorAll('option');
+    const prevOrderId = orderSelect.value;
+
+    if (!custId) {
+        if (_colOrderFetchCtrl) {
+            _colOrderFetchCtrl.abort();
+            _colOrderFetchCtrl = null;
+        }
+        Array.from(orderSelect.options).forEach(opt => {
+            if (opt.value) opt.remove();
+        });
+        orderSelect.value = '';
+        if (window.ERPSmartSelect) {
+            window.ERPSmartSelect.refresh(orderSelect);
+        }
+        onOrderSelected();
+        return;
+    }
 
     let currentValStillValid = false;
-    options.forEach(opt => {
+    Array.from(orderSelect.options).forEach(opt => {
         if (!opt.value) {
             opt.style.display = '';
             return;
         }
         const optCust = opt.getAttribute('data-customer');
-        if (!custId || optCust === custId) {
+        if (optCust === custId) {
             opt.style.display = '';
-            if (opt.value === orderSelect.value) currentValStillValid = true;
+            if (opt.value === prevOrderId) currentValStillValid = true;
         } else {
             opt.style.display = 'none';
         }
     });
-
-    if (!currentValStillValid && orderSelect.value) {
+    if (!currentValStillValid && prevOrderId) {
         orderSelect.value = '';
     }
     if (window.ERPSmartSelect) {
         window.ERPSmartSelect.refresh(orderSelect);
     }
     onOrderSelected();
+
+    if (_colOrderFetchCtrl) {
+        _colOrderFetchCtrl.abort();
+    }
+    _colOrderFetchCtrl = new AbortController();
+    const url = new URL(_salesOrdersSearchUrl, window.location.origin);
+    url.searchParams.set('customer', custId);
+    url.searchParams.set('limit', '50');
+
+    fetch(url.toString(), {
+        method: 'GET',
+        signal: _colOrderFetchCtrl.signal,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-Skip-Global-Loader': '1',
+            'Accept': 'application/json',
+        },
+    })
+    .then(res => res.ok ? res.json() : null)
+    .then(data => {
+        if (!data || !Array.isArray(data.results)) return;
+        const selectedVal = orderSelect.value || prevOrderId;
+        orderSelect.innerHTML = '';
+        const defaultOpt = new Option('-- تحصيل حر / بدون ربط بأمر محدد --', '');
+        orderSelect.add(defaultOpt);
+
+        let restored = false;
+        data.results.forEach(item => {
+            const opt = new Option(item.text, String(item.id));
+            opt.setAttribute('data-customer', String(item.customer_id));
+            opt.setAttribute('data-outstanding', item.outstanding_balance);
+            opt.setAttribute('data-due', item.due_date || '');
+            if (item.subtext) opt.setAttribute('data-subtext', item.subtext);
+            if (String(item.id) === String(selectedVal)) {
+                opt.selected = true;
+                restored = true;
+            }
+            orderSelect.add(opt);
+        });
+        if (!restored) orderSelect.value = '';
+        if (window.ERPSmartSelect) {
+            window.ERPSmartSelect.refresh(orderSelect);
+        }
+        onOrderSelected();
+    })
+    .catch(err => {
+        if (!err || err.name !== 'AbortError') {
+            onOrderSelected();
+        }
+    });
 }
 
 function onOrderSelected() {

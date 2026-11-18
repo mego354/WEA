@@ -450,11 +450,11 @@
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">مرحلة السؤال *</label>
-                    <select id="modal_stage" name="stage" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                        <option value="all">كامل الزيارة (All Stages)</option>
-                        <option value="start_only">البدء فقط ▶ (Check-in)</option>
-                        <option value="end_only">الإنهاء فقط ■ (Check-out)</option>
-                    </select>
+                    <input type="hidden" id="modal_stage" name="stage" value="end_only">
+                    <div class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-purple-600">stop_circle</span>
+                        <span>الإنهاء فقط ■ (نهاية الزيارة)</span>
+                    </div>
                 </div>
             </div>
 
@@ -578,7 +578,7 @@ function openAddQuestionModal() {
     document.getElementById('modal_text_ar').value = '';
     document.getElementById('modal_text_en').value = '';
     document.getElementById('modal_question_type').value = 'single_choice';
-    document.getElementById('modal_stage').value = 'all';
+    document.getElementById('modal_stage').value = 'end_only';
     document.getElementById('modal_is_required').checked = true;
     document.getElementById('modal_is_conditional').checked = false;
     document.getElementById('modal_conditional_parent').value = '';
@@ -603,7 +603,7 @@ function openEditQuestionModal(id, textAr, textEn, type, stage, isRequired, isCo
     document.getElementById('modal_text_ar').value = textAr;
     document.getElementById('modal_text_en').value = textEn;
     document.getElementById('modal_question_type').value = type;
-    document.getElementById('modal_stage').value = stage;
+    document.getElementById('modal_stage').value = 'end_only';
     document.getElementById('modal_is_required').checked = isRequired;
     document.getElementById('modal_is_conditional').checked = isConditional;
     document.getElementById('modal_conditional_parent').value = parentId;

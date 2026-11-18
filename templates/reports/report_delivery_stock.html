@@ -22,14 +22,15 @@
             </p>
         </div>
 
-        {% if request.user|has_permission:'reports:inventory/export' %}
-        <div class="self-start sm:self-auto">
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            {% include 'components/table_column_picker.html' with table_id='report_delivery_stock_table' %}
+            {% if request.user|has_permission:'reports:inventory/export' %}
             <a href="{% url 'report_delivery_stock_export' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">download</span>
                 <span>تصدير Excel</span>
             </a>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- Summary KPI Cards -->
@@ -55,17 +56,17 @@
     <!-- Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs whitespace-nowrap">
+            <table id="report_delivery_stock_table" data-col-table="report_delivery_stock_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-3">كود الصنف</th>
-                        <th class="py-3 px-3">اسم المنتج / الصنف</th>
-                        <th class="py-3 px-3 text-center">الكمية المطلوبة بالطلبيات</th>
-                        <th class="py-3 px-3 text-center">المتوفر بالمخزن (On-Hand)</th>
-                        <th class="py-3 px-3 text-center">الرصيد المحجوز</th>
-                        <th class="py-3 px-3 text-center font-bold text-slate-900">الرصيد الحر المتاح</th>
-                        <th class="py-3 px-3 text-center">حالة التوفر</th>
-                        <th class="py-3 px-3 text-center">الطلبيات المعلقة المتأثرة</th>
+                        <th class="py-3 px-3" data-col="code">كود الصنف</th>
+                        <th class="py-3 px-3" data-col="name" data-col-required="true">اسم المنتج / الصنف</th>
+                        <th class="py-3 px-3 text-center" data-col="ordered_qty" data-col-required="true">الكمية المطلوبة بالطلبيات</th>
+                        <th class="py-3 px-3 text-center" data-col="on_hand">المتوفر بالمخزن (On-Hand)</th>
+                        <th class="py-3 px-3 text-center" data-col="reserved">الرصيد المحجوز</th>
+                        <th class="py-3 px-3 text-center font-bold text-slate-900" data-col="available">الرصيد الحر المتاح</th>
+                        <th class="py-3 px-3 text-center" data-col="status">حالة التوفر</th>
+                        <th class="py-3 px-3 text-center" data-col="pending_orders">الطلبيات المعلقة المتأثرة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">

@@ -35,23 +35,28 @@ from master_data.search_utils import (
 
 @require_permission('purchases:orders/list')
 def purchase_orders_list(request):
-    status_filter = request.GET.get('status', 'all')
+    payment_status_filter = request.GET.get('payment_status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    total_min = request.GET.get('total_min', '').strip()
+    total_max = request.GET.get('total_max', '').strip()
+    remaining_min = request.GET.get('remaining_min', '').strip()
+    remaining_max = request.GET.get('remaining_max', '').strip()
 
     qs = PurchaseOrder.objects.select_related(
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
+    qs = PurchaseOrder.with_payment_totals(qs)
 
     active_filters = []
 
-    if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
-        status_labels = dict(PurchaseOrder.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
+    if payment_status_filter != 'all' and payment_status_filter in dict(PurchaseOrder.PAYMENT_STATUS_CHOICES):
+        qs = qs.filter(payment_status=payment_status_filter)
+        ps_labels = dict(PurchaseOrder.PAYMENT_STATUS_CHOICES)
+        active_filters.append({'label': f'حالة السداد: {ps_labels.get(payment_status_filter, payment_status_filter)}', 'param': 'payment_status'})
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
@@ -66,22 +71,58 @@ def purchase_orders_list(request):
         qs = qs.filter(order_date__lte=date_to)
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
+    # Financial Total Amount Range Filters (Requirement B1)
+    if total_min:
+        try:
+            val_min = Decimal(total_min)
+            qs = qs.filter(grand_total__gte=val_min)
+            active_filters.append({'label': f'الحد الأدنى للقيمة: {val_min:,.2f} ج.م', 'param': 'total_min'})
+        except Exception:
+            total_min = ''
+
+    if total_max:
+        try:
+            val_max = Decimal(total_max)
+            qs = qs.filter(grand_total__lte=val_max)
+            active_filters.append({'label': f'الحد الأقصى للقيمة: {val_max:,.2f} ج.م', 'param': 'total_max'})
+        except Exception:
+            total_max = ''
+
+    # Remaining Outstanding Balance Range Filters (Requirement B1)
+    from django.db.models import F
+    if remaining_min:
+        try:
+            rem_min = Decimal(remaining_min)
+            qs = qs.filter(grand_total__gte=F('_annotated_total_paid') + rem_min)
+            active_filters.append({'label': f'الحد الأدنى للمتبقي: {rem_min:,.2f} ج.م', 'param': 'remaining_min'})
+        except Exception:
+            remaining_min = ''
+
+    if remaining_max:
+        try:
+            rem_max = Decimal(remaining_max)
+            qs = qs.filter(grand_total__lte=F('_annotated_total_paid') + rem_max)
+            active_filters.append({'label': f'الحد الأقصى للمتبقي: {rem_max:,.2f} ج.م', 'param': 'remaining_max'})
+        except Exception:
+            remaining_max = ''
+
     if search:
         qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name', 'supplier__area__name'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
 
-    stats_qs = qs if status_filter == 'cancelled' else qs.exclude(status='cancelled')
-    po_agg = stats_qs.aggregate(
+    po_agg = qs.aggregate(
         total_orders=Count('id'),
         total_value=Sum('grand_total'),
-        total_pending=Count('id', filter=Q(status='pending')),
-        total_settled=Count('id', filter=Q(status='settled')),
+        total_paid=Sum('_annotated_total_paid'),
     )
+    tot_val = po_agg['total_value'] or Decimal('0.00')
+    tot_paid = po_agg['total_paid'] or Decimal('0.00')
+    tot_rem = max(Decimal('0.00'), tot_val - tot_paid)
     stats = {
         'total_orders': po_agg['total_orders'] or 0,
-        'total_value': po_agg['total_value'] or Decimal('0.00'),
-        'total_pending': po_agg['total_pending'] or 0,
-        'total_settled': po_agg['total_settled'] or 0,
+        'total_value': tot_val,
+        'total_paid': tot_paid,
+        'total_remaining': tot_rem,
     }
 
     suppliers = get_bounded_select_options(
@@ -97,9 +138,16 @@ def purchase_orders_list(request):
         'orders': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
-        'current_status': status_filter,
+        'current_payment_status': payment_status_filter,
+        'payment_statuses': PurchaseOrder.PAYMENT_STATUS_CHOICES,
         'selected_supplier': supplier_filter,
         'search_query': search,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
+        'selected_total_min': total_min,
+        'selected_total_max': total_max,
+        'selected_remaining_min': remaining_min,
+        'selected_remaining_max': remaining_max,
         'date_from': date_from,
         'date_to': date_to,
         'suppliers': suppliers,
@@ -141,8 +189,8 @@ def purchase_order_create(request):
             prod = Product.objects.filter(id=p_id).first()
             if not prod:
                 continue
-            qty = Decimal(quantities[i] or '1')
-            price = Decimal(unit_prices[i] or '0')
+            qty = Decimal(quantities[i] or '1') if i < len(quantities) else Decimal('1')
+            price = Decimal(unit_prices[i] or '0') if i < len(unit_prices) else Decimal('0')
             batch = batch_numbers[i] if i < len(batch_numbers) else ''
             exp = expiry_dates[i] if (i < len(expiry_dates) and expiry_dates[i]) else None
             disc = Decimal(discounts[i] or '0') if i < len(discounts) else Decimal('0')
@@ -187,6 +235,9 @@ def purchase_order_create(request):
                 order.delivery_agent = delivery_agent
                 order.delivery_time = delivery_time
                 order.save(update_fields=['delivery_agent', 'delivery_time'])
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(order, request)
 
             messages.success(request, f"تم إنشاء أمر الشراء بنجاح ({order.order_number}) بإجمالي {order.grand_total:,.2f} ج.م.")
             return redirect('purchase_order_detail', pk=order.pk)
@@ -251,8 +302,8 @@ def purchase_order_edit(request, pk):
             prod = Product.objects.filter(id=p_id).first()
             if not prod:
                 continue
-            qty = Decimal(quantities[i] or '1')
-            price = Decimal(unit_prices[i] or '0')
+            qty = Decimal(quantities[i] or '1') if i < len(quantities) else Decimal('1')
+            price = Decimal(unit_prices[i] or '0') if i < len(unit_prices) else Decimal('0')
             batch = batch_numbers[i] if i < len(batch_numbers) else ''
             exp = expiry_dates[i] if (i < len(expiry_dates) and expiry_dates[i]) else None
             disc = Decimal(discounts[i] or '0') if i < len(discounts) else Decimal('0')
@@ -298,6 +349,9 @@ def purchase_order_edit(request, pk):
                 order.delivery_agent = delivery_agent
                 order.delivery_time = delivery_time
                 order.save(update_fields=['delivery_agent', 'delivery_time'])
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(order, request)
 
             messages.success(request, f"تم تعديل أمر الشراء بنجاح ({order.order_number}) بإجمالي {order.grand_total:,.2f} ج.م.")
             return redirect('purchase_order_detail', pk=order.pk)
@@ -354,7 +408,9 @@ def purchase_order_detail(request, pk):
 
     is_super = request.user.is_superuser or getattr(request.user, 'is_super_admin', False)
     can_approve = has_perm_or_admin(request.user, 'purchases:orders/approve') and (is_super or order.created_by_id != request.user.id)
-    can_edit = has_perm_or_admin(request.user, 'purchases:orders/edit') and can_user_access_object(request.user, order, 'edit') and order.status in ['pending', 'rejected', 'approved']
+    can_edit = has_perm_or_admin(request.user, 'purchases:orders/edit') and can_user_access_object(request.user, order, 'edit')
+    can_delete = has_perm_or_admin(request.user, 'purchases:orders/delete') and can_user_access_object(request.user, order, 'delete')
+    can_manage_payment = has_perm_or_admin(request.user, 'purchases:orders/manage_payment_status')
     can_resubmit = (order.status == 'rejected') and (order.created_by_id == request.user.id or is_super)
     approval_history = order.approval_history.select_related('actor').order_by('-created_at')
 
@@ -365,12 +421,56 @@ def purchase_order_detail(request, pk):
         'total_credit': total_credit,
         'current_vendor_balance': current_vendor_balance,
         'status_choices': PurchaseOrder.STATUS_CHOICES,
+        'payment_status_choices': PurchaseOrder.PAYMENT_STATUS_CHOICES,
         'can_approve': can_approve,
         'can_edit': can_edit,
+        'can_delete': can_delete,
+        'can_manage_payment': can_manage_payment,
         'can_resubmit': can_resubmit,
         'approval_history': approval_history,
     }
     return render(request, 'purchases/purchase_order_detail.html', context)
+
+
+@require_permission('purchases:orders/delete')
+def purchase_order_delete(request, pk):
+    order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'delete'):
+        return render_forbidden_response(request, "لا يمكنك حذف هذا الطلب خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة للحذف. يلزم استخدام POST.")
+        return redirect('purchase_order_detail', pk=pk)
+
+    try:
+        PurchaseOrderService.delete_order(order, request.user)
+        messages.success(request, f"تم حذف أمر المشتريات {order.order_number} بنجاح وعكس الحركات المخزنية والمالية.")
+        return redirect('purchase_orders_list')
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        return redirect('purchase_order_detail', pk=pk)
+
+
+@require_permission('purchases:orders/manage_payment_status')
+def purchase_order_update_payment_status(request, pk):
+    order = get_object_or_404(PurchaseOrder, pk=pk)
+    if not can_user_access_object(request.user, order, 'edit'):
+        return render_forbidden_response(request, "لا يمكنك تحديث حالة السداد لأمر شراء خارج نطاق اختصاصك.")
+
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة. يلزم استخدام POST.")
+        return redirect('purchase_order_detail', pk=pk)
+
+    new_status = (request.POST.get('payment_status') or '').strip()
+    notes = (request.POST.get('notes') or '').strip()
+
+    try:
+        PurchaseOrderService.update_payment_status(order, new_status, request.user, notes=notes)
+        messages.success(request, f"تم تحديث حالة السداد لأمر الشراء {order.order_number} بنجاح إلى '{order.payment_status_display_ar}'.")
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+
+    return redirect('purchase_order_detail', pk=pk)
 
 
 @login_required
@@ -559,21 +659,53 @@ def purchase_order_print(request, pk):
 
 @require_permission('purchases:orders/export')
 def purchase_orders_export(request):
-    status_filter = request.GET.get('status', 'all')
+    payment_status_filter = request.GET.get('payment_status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    total_min = request.GET.get('total_min', '').strip()
+    total_max = request.GET.get('total_max', '').strip()
+    remaining_min = request.GET.get('remaining_min', '').strip()
+    remaining_max = request.GET.get('remaining_max', '').strip()
 
     qs = PurchaseOrder.objects.select_related(
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
+    qs = PurchaseOrder.with_payment_totals(qs)
 
-    if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
+    if payment_status_filter != 'all' and payment_status_filter in dict(PurchaseOrder.PAYMENT_STATUS_CHOICES):
+        qs = qs.filter(payment_status=payment_status_filter)
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
+    if date_from:
+        qs = qs.filter(order_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(order_date__lte=date_to)
+    if total_min:
+        try:
+            qs = qs.filter(grand_total__gte=Decimal(total_min))
+        except Exception:
+            pass
+    if total_max:
+        try:
+            qs = qs.filter(grand_total__lte=Decimal(total_max))
+        except Exception:
+            pass
+    from django.db.models import F
+    if remaining_min:
+        try:
+            qs = qs.filter(grand_total__gte=F('_annotated_total_paid') + Decimal(remaining_min))
+        except Exception:
+            pass
+    if remaining_max:
+        try:
+            qs = qs.filter(grand_total__lte=F('_annotated_total_paid') + Decimal(remaining_max))
+        except Exception:
+            pass
     if search:
-        qs = filter_by_arabic_search(qs, search, ['order_number', 'supplier__name'])
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name', 'supplier__area__name'])
 
     columns = [
         {'header': 'رقم الطلب', 'key': 'order_number', 'width': 16, 'align': 'center'},
@@ -588,7 +720,14 @@ def purchase_orders_export(request):
         {'header': 'وقت التوصيل', 'key': lambda o: o.delivery_time or '', 'width': 20, 'align': 'center'},
     ]
 
-    return export_to_excel_response(qs, columns, filename="purchase_orders_export", sheet_title="طلبات الشراء")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="purchase_orders_export",
+        sheet_title="طلبات الشراء",
+        report_title="سجل طلبات وأوامر الشراء",
+        user=request.user,
+    )
 
 
 @require_permission('purchases:orders/edit')
@@ -623,11 +762,12 @@ def purchase_order_split(request, pk):
 @require_permission('purchases:returns/list')
 def purchase_return_orders_list(request):
     """View matching /purchase-return-orders in reference ERP."""
-    status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    total_min = request.GET.get('total_min', '').strip()
+    total_max = request.GET.get('total_max', '').strip()
 
     qs = PurchaseReturnOrder.objects.select_related(
         'supplier', 'supplier__area', 'warehouse', 'created_by'
@@ -635,11 +775,6 @@ def purchase_return_orders_list(request):
     qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
     active_filters = []
-
-    if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
-        status_labels = dict(PurchaseReturnOrder.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
@@ -653,6 +788,22 @@ def purchase_return_orders_list(request):
     if date_to:
         qs = qs.filter(order_date__lte=date_to)
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+
+    if total_min:
+        try:
+            val_min = Decimal(total_min)
+            qs = qs.filter(grand_total__gte=val_min)
+            active_filters.append({'label': f'الحد الأدنى للقيمة: {val_min:,.2f} ج.م', 'param': 'total_min'})
+        except Exception:
+            total_min = ''
+
+    if total_max:
+        try:
+            val_max = Decimal(total_max)
+            qs = qs.filter(grand_total__lte=val_max)
+            active_filters.append({'label': f'الحد الأقصى للقيمة: {val_max:,.2f} ج.م', 'param': 'total_max'})
+        except Exception:
+            total_max = ''
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name'])
@@ -685,9 +836,12 @@ def purchase_return_orders_list(request):
         'returns': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
-        'current_status': status_filter,
         'selected_supplier': supplier_filter,
         'search_query': search,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
+        'selected_total_min': total_min,
+        'selected_total_max': total_max,
         'date_from': date_from,
         'date_to': date_to,
         'suppliers': suppliers,
@@ -725,8 +879,8 @@ def purchase_return_order_create(request):
             prod = Product.objects.filter(id=p_id).first()
             if not prod:
                 continue
-            qty = Decimal(quantities[i] or '1')
-            price = Decimal(unit_prices[i] or '0')
+            qty = Decimal(quantities[i] or '1') if i < len(quantities) else Decimal('1')
+            price = Decimal(unit_prices[i] or '0') if i < len(unit_prices) else Decimal('0')
             batch = batch_numbers[i] if i < len(batch_numbers) else ''
             exp = expiry_dates[i] if (i < len(expiry_dates) and expiry_dates[i]) else None
 
@@ -738,16 +892,58 @@ def purchase_return_order_create(request):
                 'expiry_date': exp,
             })
 
+        def render_purchase_return_form_error(err_text):
+            messages.error(request, err_text)
+            sub_items = []
+            for idx, p_id in enumerate(product_ids):
+                if not p_id:
+                    continue
+                sub_items.append({
+                    'product_id': p_id,
+                    'quantity': quantities[idx] if idx < len(quantities) else '1',
+                    'unit_price': unit_prices[idx] if idx < len(unit_prices) else '0.00',
+                    'batch_number': batch_numbers[idx] if idx < len(batch_numbers) else '',
+                    'expiry_date': expiry_dates[idx] if idx < len(expiry_dates) else '',
+                })
+            suppliers = get_bounded_select_options(
+                ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'purchases'),
+                selected_id=supplier_id,
+                limit=100,
+            )
+            warehouses = get_bounded_select_options(
+                ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'purchases'),
+                selected_id=warehouse_id,
+                limit=100,
+            )
+            products = Product.objects.filter(is_active=True).order_by('name')
+            po_candidate = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
+            ctx = {
+                'suppliers': suppliers,
+                'warehouses': warehouses,
+                'products': products,
+                'selected_po': po_candidate,
+                'form_data': {
+                    'supplier': supplier_id,
+                    'warehouse': warehouse_id,
+                    'purchase_order': po_id,
+                    'order_date': order_date,
+                    'delivery_agent': delivery_agent,
+                    'delivery_time': delivery_time,
+                    'notes': notes,
+                },
+                'submitted_items': sub_items,
+            }
+            return render(request, 'purchases/purchase_return_order_create.html', ctx)
+
         if not supplier_id or not warehouse_id:
-            messages.error(request, "يرجى تحديد المورد والمخزن المنصرف منه.")
-            return redirect('purchase_return_order_create')
+            return render_purchase_return_form_error("يرجى تحديد المورد والمخزن المنصرف منه.")
 
         supplier = get_object_or_404(Contact, id=supplier_id)
         if not ScopeResolutionService.can_user_access_supplier(request.user, supplier):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر شراء لمورد خارج نطاق منطقتك الجغرافية.")
         if not supplier.is_supplier or supplier.status == 'inactive':
-            messages.error(request, "جهة الاتصال المحددة غير مصنفة كمورد نشط.")
-            return redirect('purchase_return_order_create')
+            return render_purchase_return_form_error("جهة الاتصال المحددة غير مصنفة كمورد نشط.")
+
         warehouse = get_object_or_404(Warehouse, id=warehouse_id)
         if not can_user_access_object(request.user, warehouse, 'operate'):
             return render_forbidden_response(request, "غير مصرح لك باستخدام هذا المخزن المستلم.")
@@ -767,11 +963,13 @@ def purchase_return_order_create(request):
                 delivery_time=delivery_time,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(return_order, request)
             messages.success(request, f"تم إنشاء أمر إرجاع المشتريات {return_order.order_number} بنجاح.")
             return redirect('purchase_return_order_detail', pk=return_order.pk)
         except ValidationError as e:
-            messages.error(request, str(e.message if hasattr(e, 'message') else e))
-            return redirect('purchase_return_order_create')
+            return render_purchase_return_form_error(str(e.message if hasattr(e, 'message') else e))
 
     po_id = request.GET.get('po')
     selected_po = PurchaseOrder.objects.filter(id=po_id).first() if po_id else None
@@ -827,6 +1025,7 @@ def purchase_return_order_detail(request, pk):
     can_deliver = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status == 'approved'
     can_settle = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status == 'delivered'
     can_cancel = has_perm_or_admin(request.user, 'purchases:returns/manage') and return_order.status in ['pending', 'approved']
+    can_delete = has_perm_or_admin(request.user, 'purchases:returns/delete') and can_user_access_object(request.user, return_order, 'delete')
 
     context = {
         'return_order': return_order,
@@ -837,8 +1036,28 @@ def purchase_return_order_detail(request, pk):
         'can_deliver': can_deliver,
         'can_settle': can_settle,
         'can_cancel': can_cancel,
+        'can_delete': can_delete,
     }
     return render(request, 'purchases/purchase_return_order_detail.html', context)
+
+
+@require_permission('purchases:returns/delete')
+def purchase_return_order_delete(request, pk):
+    return_order = get_object_or_404(PurchaseReturnOrder, pk=pk)
+    if not can_user_access_object(request.user, return_order, 'delete'):
+        return render_forbidden_response(request, "لا يمكنك حذف هذا المرتجع خارج نطاق اختصاصك أو منطقتك الجغرافية.")
+
+    if request.method != 'POST':
+        messages.error(request, "طريقة طلب غير صالحة للحذف. يلزم استخدام POST.")
+        return redirect('purchase_return_order_detail', pk=pk)
+
+    try:
+        PurchaseReturnOrderService.delete_return_order(return_order, request.user)
+        messages.success(request, f"تم حذف أمر إرجاع المشتريات {return_order.order_number} بنجاح وعكس الحركات المخزنية والمالية.")
+        return redirect('purchase_return_orders_list')
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        return redirect('purchase_return_order_detail', pk=pk)
 
 
 @require_permission('purchases:returns/manage')
@@ -896,21 +1115,36 @@ def purchase_return_order_print(request, pk):
 
 @require_permission('purchases:returns/export')
 def purchase_return_orders_export(request):
-    status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    total_min = request.GET.get('total_min', '').strip()
+    total_max = request.GET.get('total_max', '').strip()
 
     qs = PurchaseReturnOrder.objects.select_related(
         'supplier', 'supplier__area', 'warehouse', 'created_by'
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
-    if status_filter != 'all':
-        qs = qs.filter(status=status_filter)
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
+    if date_from:
+        qs = qs.filter(order_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(order_date__lte=date_to)
+    if total_min:
+        try:
+            qs = qs.filter(grand_total__gte=Decimal(total_min))
+        except Exception:
+            pass
+    if total_max:
+        try:
+            qs = qs.filter(grand_total__lte=Decimal(total_max))
+        except Exception:
+            pass
     if search:
-        qs = filter_by_arabic_search(qs, search, ['order_number', 'supplier__name'])
+        qs = filter_by_arabic_search(qs, search, ['order_number', 'serial_num', 'supplier__name'])
 
     columns = [
         {'header': 'رقم أمر الإرجاع', 'key': 'order_number', 'width': 18, 'align': 'center'},
@@ -925,7 +1159,14 @@ def purchase_return_orders_export(request):
         {'header': 'وقت الاستلام', 'key': lambda r: r.delivery_time or '', 'width': 20, 'align': 'center'},
     ]
 
-    return export_to_excel_response(qs, columns, filename="purchase_returns_export", sheet_title="مرتجعات الشراء")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="purchase_returns_export",
+        sheet_title="مرتجعات الشراء",
+        report_title="سجل مرتجعات المشتريات",
+        user=request.user,
+    )
 
 
 @require_permission([
@@ -1010,7 +1251,101 @@ def purchases_vaults_search_api(request):
             numeric_id_field='serial_num',
         )
 
+    total_count = qs.count()
     results = [serialize_vault_option(v) for v in qs[:limit]]
-    return JsonResponse({'results': results, 'count': len(results)})
+    return JsonResponse({'results': results, 'count': len(results), 'total_count': total_count})
+
+
+@require_permission([
+    'purchases:orders/list',
+    'purchases:returns/create',
+    'treasury:payments/create',
+    'treasury:payment_requests/create',
+])
+def purchases_orders_search_api(request):
+    """Scoped supplier-filtered smart-search API for PurchaseOrder dropdowns."""
+    q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    limit = parse_search_limit(request)
+    supplier_id = request.GET.get('supplier_id') or request.GET.get('supplier')
+    for_return = request.GET.get('for_return') == '1'
+    unsettled = request.GET.get('unsettled') == '1'
+
+    qs = get_scoped_queryset(
+        PurchaseOrder.objects.select_related('supplier', 'target_warehouse').order_by('-order_date'),
+        request.user,
+        'purchaseorder',
+    )
+    if supplier_id and str(supplier_id).isdigit():
+        qs = qs.filter(supplier_id=int(supplier_id))
+
+    if for_return:
+        qs = qs.filter(status__in=['picked', 'settled'])
+    elif unsettled:
+        qs = qs.filter(status__in=['approved', 'received'])
+
+    if q:
+        qs = filter_by_arabic_search(
+            qs,
+            ['supplier__name', 'target_warehouse__name'],
+            q,
+            raw_fields=['order_number', 'serial_num'],
+            numeric_id_field='serial_num',
+        )
+
+    total_count = qs.count()
+    results = []
+    for o in qs[:limit]:
+        out_bal = getattr(o, 'outstanding_balance', o.grand_total)
+        results.append({
+            'id': o.id,
+            'order_number': o.order_number,
+            'supplier_id': o.supplier_id,
+            'grand_total': f"{o.grand_total:.2f}",
+            'outstanding_balance': f"{out_bal:.2f}",
+            'warehouse_id': o.target_warehouse_id,
+            'text': f"{o.order_number} — {o.supplier.name} ({o.order_date.strftime('%Y-%m-%d') if o.order_date else ''})",
+            'subtext': f"الإجمالي: {o.grand_total:,.2f} ج.م | المخزن: {o.target_warehouse.name if o.target_warehouse else '—'}" + (f" | متبقي: {out_bal:,.2f} ج.م" if unsettled else ""),
+        })
+    return JsonResponse({'results': results, 'count': len(results), 'total_count': total_count})
+
+
+@require_permission('purchases:returns/create')
+def purchases_order_return_details_api(request, order_id):
+    """API returning items of a purchase order with remaining returnable quantity for auto-population."""
+    from .models import PurchaseOrder, PurchaseReturnOrderItem
+    order = get_object_or_404(PurchaseOrder.objects.select_related('supplier', 'target_warehouse'), id=order_id)
+    if not can_user_access_object(request.user, order, 'view'):
+        return JsonResponse({'error': 'غير مصرح لك بعرض تفاصيل هذا الطلب.'}, status=403)
+
+    items_data = []
+    for itm in order.items.select_related('product').all():
+        ret_sum = PurchaseReturnOrderItem.objects.filter(
+            return_order__purchase_order=order,
+            original_item=itm
+        ).exclude(return_order__status__in=['cancelled', 'rejected']).aggregate(s=Sum('quantity'))['s'] or Decimal('0.00')
+        rem_qty = max(Decimal('0.00'), itm.quantity - ret_sum)
+        items_data.append({
+            'item_id': itm.id,
+            'product_id': itm.product_id,
+            'product_name': itm.product.name,
+            'product_code': itm.product.sku_code,
+            'unit_price': str(itm.unit_price),
+            'tax_percentage': str(itm.tax_percentage or '0.00'),
+            'original_quantity': str(itm.quantity),
+            'returned_so_far': str(ret_sum),
+            'remaining_returnable': str(rem_qty),
+            'batch_number': itm.product_batch_number or '',
+            'expiry_date': str(itm.product_expiry_date) if itm.product_expiry_date else '',
+        })
+
+    return JsonResponse({
+        'order_id': order.id,
+        'order_number': order.order_number,
+        'supplier_name': order.supplier.name,
+        'supplier_id': order.supplier_id,
+        'warehouse_id': order.target_warehouse_id,
+        'warehouse_name': order.target_warehouse.name if order.target_warehouse else '',
+        'items': items_data
+    })
 
 

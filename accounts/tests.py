@@ -183,7 +183,12 @@ class UserManagementViewTests(TestCase):
         self.client.login(username='admin@example.com', password='AdminPassword123!')
         response = self.client.get(reverse('users_export'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        all_values = [str(cell) for row in wb.active.iter_rows(values_only=True) for cell in row if cell is not None]
+        self.assertIn('admin@example.com', all_values)
+        return  # Replaced legacy CSV assertions below
         content = response.content.decode('utf-8')
         self.assertTrue(content.startswith('\ufeff')) # UTF-8 BOM
         self.assertIn('admin@example.com', content)
@@ -1005,6 +1010,59 @@ class ConfigurableAuthorizationScopeTests(TestCase):
         self.assertFalse(can_user_access_object(self.rep_maadi, self.contact_nasr, 'edit'))
         # Can rep_nasr edit their own contact? Yes
         self.assertTrue(can_user_access_object(self.rep_nasr, self.contact_nasr, 'edit'))
+
+    def test_null_area_records_visible_only_to_all_scope_and_superadmin(self):
+        """
+        Records with null area and null brick (empty values) must ONLY be shown to
+        superadmins or users who have 'all' access, otherwise stick strictly to the datascope.
+        """
+        contact_no_area = Contact.objects.create(
+            name='صيدلية بدون منطقة',
+            area=None,
+            brick=None,
+            is_customer=True,
+            status='active',
+            created_by=self.rep_nasr
+        )
+        visit_no_area = Visit.objects.create(
+            contact=contact_no_area,
+            owner=self.rep_nasr,
+            created_by=self.rep_nasr,
+            date=timezone.localdate(),
+            status='planned'
+        )
+
+        # 1. Superadmin MUST see them
+        super_contacts = get_scoped_queryset(Contact.objects.all(), self.super_user, 'contact', 'view')
+        self.assertIn(contact_no_area, super_contacts)
+        super_visits = get_scoped_queryset(Visit.objects.all(), self.super_user, 'visit', 'view')
+        self.assertIn(visit_no_area, super_visits)
+        self.assertTrue(can_user_access_object(self.super_user, contact_no_area, 'view'))
+        self.assertTrue(can_user_access_object(self.super_user, visit_no_area, 'view'))
+
+        # 2. User with 'all' scope (e.g. Accountant for contacts) MUST see the contact
+        accountant_user = User.objects.create_user(
+            username='acc_test_null', email='acc_null@wea.com', password='password123',
+            name='محاسب اختبار', role=self.accountant_role
+        )
+        acc_contacts = get_scoped_queryset(Contact.objects.all(), accountant_user, 'contact', 'view')
+        self.assertIn(contact_no_area, acc_contacts)
+
+        # 3. Representative (brick scope) must NOT see them (even though created_by=rep_nasr)
+        rep_contacts = get_scoped_queryset(Contact.objects.all(), self.rep_nasr, 'contact', 'view')
+        self.assertNotIn(contact_no_area, rep_contacts)
+        rep_visits = get_scoped_queryset(Visit.objects.all(), self.rep_nasr, 'visit', 'view')
+        self.assertNotIn(visit_no_area, rep_visits)
+        self.assertFalse(can_user_access_object(self.rep_nasr, contact_no_area, 'view'))
+        self.assertFalse(can_user_access_object(self.rep_nasr, visit_no_area, 'view'))
+
+        # 4. Area Manager (area scope) must NOT see them (even though rep_nasr is a subordinate)
+        mgr_contacts = get_scoped_queryset(Contact.objects.all(), self.cairo_manager, 'contact', 'view')
+        self.assertNotIn(contact_no_area, mgr_contacts)
+        mgr_visits = get_scoped_queryset(Visit.objects.all(), self.cairo_manager, 'visit', 'view')
+        self.assertNotIn(visit_no_area, mgr_visits)
+        self.assertFalse(can_user_access_object(self.cairo_manager, contact_no_area, 'view'))
+        self.assertFalse(can_user_access_object(self.cairo_manager, visit_no_area, 'view'))
 
     # =========================================================================
     # C. Sales Orders & Anti-Self-Approval Tests
@@ -2702,7 +2760,7 @@ class UserPermissionsGranularControlTestCase(TestCase):
         res = self.client.post(reverse('sales_order_action', kwargs={'pk': order.pk, 'action': 'approve'}))
         self.assertEqual(res.status_code, 302)
         order.refresh_from_db()
-        self.assertEqual(order.status, 'manager_approval')
+        self.assertEqual(order.status, 'invoiced')
 
     # =========================================================================
     # 4. Whole Process Verification: Inventory Transfers
@@ -2925,3 +2983,206 @@ class UserPermissionsGranularControlTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.context['stats']['total_users'], 0)
 
+
+class CustomerAccountsTransactionsRoleSettingsTests(TestCase):
+    """Verifies Role Settings UI, permission registry grouping, and alias normalization for Customer Accounts & Transactions."""
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+        self.role_super = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        self.admin = User.objects.create_superuser(
+            username='cat_rbac_admin@wea.com', email='cat_rbac_admin@wea.com', password='Password123!', role=self.role_super
+        )
+
+    def test_role_settings_displays_and_saves_customer_accounting_permissions(self):
+        self.client.force_login(self.admin)
+        resp_create = self.client.get(reverse('role_create'))
+        self.assertEqual(resp_create.status_code, 200)
+        for codename in (
+            'sales:customers/accounting',
+            'sales:customers/accounting_export',
+            'sales:customers/transactions',
+            'sales:customers/transactions_export',
+        ):
+            self.assertContains(resp_create, codename)
+
+        # Grant view-only page permissions to a custom test role (without export)
+        test_role = Role.objects.create(name='CustomSalesAudit', display_name='مراجع مبيعات مخصص', is_active=True)
+        p_mod = Permission.objects.get(codename='module:sales')
+        p_acc = Permission.objects.get(codename='sales:customers/accounting')
+        p_tx = Permission.objects.get(codename='sales:customers/transactions')
+        edit_resp = self.client.post(reverse('role_edit', args=[test_role.pk]), {
+            'display_name': 'مراجع مبيعات مخصص',
+            'is_active': 'on',
+            'permissions': [str(p_mod.id), str(p_acc.id), str(p_tx.id)],
+            'view_scope_sales': 'area',
+            'manage_scope_sales': 'own',
+        })
+        self.assertEqual(edit_resp.status_code, 302)
+
+        from accounts.permissions import has_perm_or_admin
+        u = User.objects.create_user(username='custom_audit_u@wea.com', email='custom_audit_u@wea.com', password='Password123!', role=test_role)
+        self.assertTrue(has_perm_or_admin(u, 'sales:customers/accounting'))
+        self.assertTrue(has_perm_or_admin(u, 'sales:customers/transactions'))
+        self.assertTrue(has_perm_or_admin(u, 'sales:customer_accounts/list'))  # alias normalization
+        self.assertFalse(has_perm_or_admin(u, 'sales:customers/accounting_export'))
+        self.assertFalse(has_perm_or_admin(u, 'sales:customers/transactions_export'))
+
+
+class UserEditLinkedAssetsTests(TestCase):
+    """Verifies assigning and updating linked warehouse and vault from User Account Edit view with data scoping and audit logging."""
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-USR-EDIT', area_type='governorate')
+        self.role_super = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        self.role_rep = Role.objects.get(name=Role.ROLE_REP)
+
+        self.superadmin = User.objects.create_superuser(
+            username='user_edit_adm@wea.com', email='user_edit_adm@wea.com', password='Password123!', role=self.role_super
+        )
+        self.rep_user = User.objects.create_user(
+            username='rep_linked_assets@wea.com', email='rep_linked_assets@wea.com', password='Password123!',
+            first_name='أحمد', last_name='محمود', role=self.role_rep
+        )
+        self.rep_user.assigned_areas.add(self.cairo)
+
+        from inventory.models import Warehouse
+        from treasury.models import Vault
+
+        self.wh = Warehouse.objects.create(
+            name='مخزن عهدة المندوب أحمد',
+            code='WH-REP-AHMED',
+            area=self.cairo,
+            is_rep_warehouse=True,
+            is_active=True
+        )
+        self.vault = Vault.objects.create(
+            name='خزينة عهدة المندوب أحمد',
+            vault_type='cash',
+            area=self.cairo,
+            is_rep_vault=True,
+            is_active=True
+        )
+
+    def test_user_edit_get_context_contains_scoped_assets(self):
+        self.client.force_login(self.superadmin)
+        res = self.client.get(reverse('user_edit', args=[self.rep_user.id]))
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('scoped_warehouses', res.context)
+        self.assertIn('scoped_vaults', res.context)
+        self.assertContains(res, self.wh.name)
+        self.assertContains(res, self.vault.name)
+
+    def test_user_edit_post_assigns_warehouse_and_vault_with_audit_log(self):
+        from accounts.models import SecurityAuditLog
+        self.client.force_login(self.superadmin)
+
+        post_data = {
+            'name': 'أحمد محمود',
+            'email': 'rep_linked_assets@wea.com',
+            'role': self.role_rep.id,
+            'is_active': 'on',
+            'assigned_warehouse': self.wh.id,
+            'assigned_vault': self.vault.id,
+        }
+        res = self.client.post(reverse('user_edit', args=[self.rep_user.id]), post_data)
+        self.assertRedirects(res, reverse('user_detail', args=[self.rep_user.id]))
+
+        self.wh.refresh_from_db()
+        self.vault.refresh_from_db()
+        self.assertEqual(self.wh.assigned_user, self.rep_user)
+        self.assertEqual(self.vault.assigned_user, self.rep_user)
+
+        # Audit log verification
+        audit = SecurityAuditLog.objects.filter(action_type='USER_UPDATED', target_user=self.rep_user).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.new_values.get('warehouse'), self.wh.name)
+        self.assertEqual(audit.new_values.get('vault'), self.vault.name)
+
+
+
+
+
+class Phase2SafeUserDeletionAndExportsTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from accounts.models import Role, Permission
+        from master_data.models import Area, CompanyProfile
+
+        User = get_user_model()
+        CompanyProfile.objects.get_or_create(pk=1, defaults={'company_name': 'WEA Test Pharma'})
+        self.cairo = Area.objects.create(name='القاهرة حسابات P2', code='CAI-ACC2')
+        self.giza = Area.objects.create(name='الجيزة حسابات P2', code='GIZ-ACC2')
+
+        self.super_role, _ = Role.objects.get_or_create(name='superadmin', defaults={'display_name': 'Super Admin', 'is_super': True})
+        self.mgr_role, _ = Role.objects.get_or_create(name='manager', defaults={'display_name': 'Manager'})
+        self.rep_role, _ = Role.objects.get_or_create(name='rep', defaults={'display_name': 'Rep'})
+
+        perms = Permission.objects.filter(codename__in=[
+            'module:accounts', 'users:users/list', 'users:users/export', 'users:users/delete',
+        ])
+        self.mgr_role.permissions.add(*perms)
+
+        self.superadmin = User.objects.create_superuser(username='acc_p2_super', email='acc_p2_super@wea.com', password='TestPassword123!', role=self.super_role)
+        self.mgr_cairo = User.objects.create_user(username='acc_p2_mgr_c', email='acc_p2_mgr_c@wea.com', password='TestPassword123!', role=self.mgr_role)
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+        self.rep_cairo = User.objects.create_user(username='acc_p2_rep_c', email='acc_p2_rep_c@wea.com', password='TestPassword123!', role=self.rep_role)
+        self.rep_cairo.assigned_areas.add(self.cairo)
+        self.rep_giza = User.objects.create_user(username='acc_p2_rep_g', email='acc_p2_rep_g@wea.com', password='TestPassword123!', role=self.rep_role)
+        self.rep_giza.assigned_areas.add(self.giza)
+
+    def test_delete_user_safely_blocks_custody_and_reassigns_history(self):
+        from django.core.exceptions import ValidationError
+        from django.contrib.auth import get_user_model
+        from accounts.models import SecurityAuditLog
+        from accounts.services import delete_user_safely
+        from contacts.models import Contact
+        from activities.models import Visit
+        from inventory.models import Warehouse, InventoryStock
+        from catalog.models import Product, ProductCategory
+
+        User = get_user_model()
+        # Self-delete blocked
+        with self.assertRaises(ValidationError):
+            delete_user_safely(self.superadmin, self.superadmin)
+
+        # User with active warehouse stock cannot be deleted
+        cat = ProductCategory.objects.create(name='تصنيف عهدة', code='CAT-CUST')
+        prod = Product.objects.create(name='صنف عهدة', sku_code='SKU-CUST', category=cat)
+        wh = Warehouse.objects.create(name='مخزن عهدة', code='WH-CUST', area=self.cairo, assigned_user=self.rep_cairo, is_rep_warehouse=True)
+        InventoryStock.objects.create(warehouse=wh, product=prod, qty_on_hand=Decimal('5.00'))
+
+        with self.assertRaises(ValidationError):
+            delete_user_safely(self.rep_cairo, self.superadmin)
+
+        # User without custody but with historical Visit is safely archived & deleted
+        contact = Contact.objects.create(name='عميل أرشيف', is_customer=True, area=self.giza)
+        visit = Visit.objects.create(contact=contact, owner=self.rep_giza, created_by=self.rep_giza, status='ended')
+
+        deleted_id = self.rep_giza.id
+        delete_user_safely(self.rep_giza, self.superadmin)
+
+        self.assertFalse(User.objects.filter(pk=deleted_id).exists())
+        archive_user = User.objects.get(email='historical_archive@wea.com')
+        visit.refresh_from_db()
+        self.assertEqual(visit.owner, archive_user)
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='USER_DELETED').exists())
+
+    def test_users_export_scoping_and_audit_logs_export(self):
+        from django.urls import reverse
+        self.client.force_login(self.mgr_cairo)
+        resp = self.client.get(reverse('users_export'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('spreadsheetml.sheet', resp['Content-Type'])
+
+        # Manager without settings:auditLogs/export gets 403
+        self.assertEqual(self.client.get(reverse('audit_logs_export')).status_code, 403)
+
+        self.client.force_login(self.superadmin)
+        audit_exp = self.client.get(reverse('audit_logs_export'))
+        self.assertEqual(audit_exp.status_code, 200)
+        self.assertIn('spreadsheetml.sheet', audit_exp['Content-Type'])

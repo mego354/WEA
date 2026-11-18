@@ -14,16 +14,27 @@ class ScopeResolutionService:
         'contactaddress': 'contacts',
         'contactactivity': 'contacts',
         'visit': 'activities',
+        'visitplan': 'activities',
         'plannedvisitday': 'activities',
         'plannedvisititem': 'activities',
         'agreement': 'activities',
         'visittemplate': 'activities',
+        'visitsampleitem': 'activities',
+        'visitexpense': 'activities',
+        'salestarget': 'activities',
+        'customercall': 'activities',
+        'coachingevaluation': 'activities',
         'salesorder': 'sales',
+        'salesorderitem': 'sales',
         'salesreturnorder': 'sales',
+        'salesreturnorderitem': 'sales',
         'collection': 'sales',
         'customeraccount': 'sales',
+        'customertransaction': 'sales',
         'purchaseorder': 'purchases',
+        'purchaseorderitem': 'purchases',
         'purchasereturnorder': 'purchases',
+        'purchasereturnorderitem': 'purchases',
         'warehouse': 'inventory',
         'inventorystock': 'inventory',
         'inventorymemo': 'inventory',
@@ -37,6 +48,7 @@ class ScopeResolutionService:
         'stocklot': 'inventory',
         'productlot': 'inventory',
         'user': 'accounts',
+        'area': 'contacts',
     }
 
     @classmethod
@@ -352,26 +364,23 @@ class ScopeResolutionService:
                 if user_bricks.exists():
                     return qs.filter(
                         Q(contact__brick__in=user_bricks) |
-                        Q(contact__area__in=user_bricks) |
-                        (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                        Q(contact__area__in=user_bricks)
                     ).distinct()
-                return qs.filter(contact__area__isnull=True, contact__brick__isnull=True).distinct()
+                return qs.distinct()
 
             elif scope == 'brick':
                 if not user_bricks.exists():
-                    return queryset.filter(
-                        (Q(owner=user) | Q(created_by=user)) &
-                        Q(contact__area__isnull=True, contact__brick__isnull=True)
-                    ).distinct()
+                    return queryset.none()
                 return queryset.filter(
                     Q(owner__in=managed_subordinates) |
                     Q(created_by__in=managed_subordinates) |
+                    Q(owner=user) |
+                    Q(created_by=user) |
                     Q(contact__brick__in=user_bricks) |
                     Q(contact__area__in=user_bricks)
                 ).filter(
                     Q(contact__brick__in=user_bricks) |
-                    Q(contact__area__in=user_bricks) |
-                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                    Q(contact__area__in=user_bricks)
                 ).distinct()
 
             elif scope == 'area':
@@ -380,59 +389,108 @@ class ScopeResolutionService:
                 return queryset.filter(
                     Q(owner__in=managed_subordinates) |
                     Q(created_by__in=managed_subordinates) |
+                    Q(owner=user) |
+                    Q(created_by=user) |
                     Q(contact__brick__in=managed_areas) |
                     Q(contact__area__in=managed_areas)
                 ).filter(
                     Q(contact__brick__in=managed_areas) |
-                    Q(contact__area__in=managed_areas) |
-                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                    Q(contact__area__in=managed_areas)
                 ).distinct()
 
-        # 2. Activities: PlannedVisitDay & PlannedVisitItem
+        # 2. Activities: VisitPlan, PlannedVisitDay & PlannedVisitItem
+        elif m_name == 'visitplan':
+            if scope == 'own':
+                return queryset.filter(Q(assignee=user) | Q(created_by=user)).distinct()
+            elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(assignee=user) | Q(created_by=user) |
+                    Q(assignee__assigned_areas__in=user_bricks) |
+                    Q(planned_items__contact__brick__in=user_bricks) |
+                    Q(visits__contact__brick__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(assignee=user) | Q(created_by=user) |
+                    Q(assignee__in=managed_subordinates) |
+                    Q(created_by__in=managed_subordinates) |
+                    Q(planned_items__contact__brick__in=managed_areas) |
+                    Q(planned_items__contact__area__in=managed_areas) |
+                    Q(visits__contact__brick__in=managed_areas) |
+                    Q(visits__contact__area__in=managed_areas)
+                ).distinct()
+            return queryset.filter(
+                Q(assignee__in=managed_subordinates) |
+                Q(created_by__in=managed_subordinates)
+            ).distinct()
+
         elif m_name == 'plannedvisitday':
             if scope == 'own':
                 return queryset.filter(assignee=user)
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(assignee=user) | Q(assignee__assigned_areas__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
                 if not managed_areas.exists():
-                    return queryset.filter(assignee=user)
+                    return queryset.none()
                 return queryset.filter(assignee__in=managed_subordinates).distinct()
             return queryset.filter(assignee__in=managed_subordinates).distinct()
 
         elif m_name == 'plannedvisititem':
             if scope == 'own':
-                return queryset.filter(plan_day__assignee=user)
+                qs = queryset.filter(plan_day__assignee=user)
+                if user_bricks.exists():
+                    return qs.filter(
+                        Q(contact__brick__in=user_bricks) |
+                        Q(contact__area__in=user_bricks)
+                    ).distinct()
+                return qs.distinct()
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(plan_day__assignee=user) |
                     Q(plan_day__assignee__assigned_areas__in=user_bricks)
                 ).filter(
                     Q(contact__brick__in=user_bricks) |
-                    Q(contact__area__in=user_bricks) |
-                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                    Q(contact__area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
                 if not managed_areas.exists():
-                    return queryset.filter(plan_day__assignee=user)
+                    return queryset.none()
                 return queryset.filter(
                     Q(plan_day__assignee__in=managed_subordinates)
                 ).filter(
                     Q(contact__brick__in=managed_areas) |
-                    Q(contact__area__in=managed_areas) |
-                    (Q(contact__area__isnull=True) & Q(contact__brick__isnull=True))
+                    Q(contact__area__in=managed_areas)
                 ).distinct()
 
         # 3. Activities: Agreement
         elif m_name == 'agreement':
             from accounts.permissions import is_representative
             if scope == 'own' or is_representative(user):
-                return queryset.filter(created_by=user)
+                qs = queryset.filter(created_by=user)
+                if user_bricks.exists():
+                    return qs.filter(
+                        Q(customer__brick__in=user_bricks) |
+                        Q(customer__area__in=user_bricks)
+                    ).distinct()
+                return qs.distinct()
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(created_by=user) |
+                    Q(customer__brick__in=user_bricks) |
+                    Q(customer__area__in=user_bricks)
+                ).filter(
                     Q(customer__brick__in=user_bricks) |
                     Q(customer__area__in=user_bricks)
                 ).distinct()
@@ -441,6 +499,10 @@ class ScopeResolutionService:
                     return queryset.none()
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
+                    Q(created_by=user) |
+                    Q(customer__brick__in=managed_areas) |
+                    Q(customer__area__in=managed_areas)
+                ).filter(
                     Q(customer__brick__in=managed_areas) |
                     Q(customer__area__in=managed_areas)
                 ).distinct()
@@ -449,28 +511,31 @@ class ScopeResolutionService:
         # 4. Contacts: Contact
         elif m_name == 'contact':
             if scope == 'own':
-                return queryset.filter(
+                qs = queryset.filter(
                     Q(created_by=user) | Q(assigned_team=user)
-                ).distinct()
+                )
+                if user_bricks.exists():
+                    return qs.filter(
+                        Q(brick__in=user_bricks) | Q(area__in=user_bricks)
+                    ).distinct()
+                return qs.distinct()
 
             elif scope == 'brick':
-                if user_bricks.exists():
-                    return queryset.filter(
-                        Q(brick__in=user_bricks) |
-                        Q(area__in=user_bricks) |
-                        Q(addresses__brick__in=user_bricks) |
-                        Q(addresses__area__in=user_bricks) |
-                        (Q(area__isnull=True) & Q(brick__isnull=True))
-                    ).exclude(
-                        brick__isnull=False,
-                        pk__in=queryset.exclude(brick__in=user_bricks).values('pk')
-                    ).exclude(
-                        brick__isnull=True,
-                        area__isnull=False,
-                        pk__in=queryset.exclude(area__in=user_bricks).values('pk')
-                    ).distinct()
-                # Representative with no assigned brick: can access area-less contacts (e.g. non-geographic unit tests)
-                return queryset.filter(area__isnull=True, brick__isnull=True).distinct()
+                if not user_bricks.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(brick__in=user_bricks) |
+                    Q(area__in=user_bricks) |
+                    Q(addresses__brick__in=user_bricks) |
+                    Q(addresses__area__in=user_bricks)
+                ).exclude(
+                    brick__isnull=False,
+                    pk__in=queryset.exclude(brick__in=user_bricks).values('pk')
+                ).exclude(
+                    brick__isnull=True,
+                    area__isnull=False,
+                    pk__in=queryset.exclude(area__in=user_bricks).values('pk')
+                ).distinct()
 
             elif scope == 'area':
                 if not managed_areas.exists():
@@ -479,10 +544,7 @@ class ScopeResolutionService:
                     Q(brick__in=managed_areas) |
                     Q(area__in=managed_areas) |
                     Q(addresses__area__in=managed_areas) |
-                    Q(addresses__brick__in=managed_areas) |
-                    Q(created_by__in=managed_subordinates) |
-                    Q(assigned_team__in=managed_subordinates) |
-                    (Q(area__isnull=True, brick__isnull=True) & (Q(created_by__in=managed_subordinates) | Q(assigned_team__in=managed_subordinates) | Q(created_by__isnull=True)))
+                    Q(addresses__brick__in=managed_areas)
                 ).distinct()
 
         # 5. Sales: SalesOrder & SalesReturnOrder
@@ -490,14 +552,26 @@ class ScopeResolutionService:
             if scope == 'own':
                 return queryset.filter(created_by=user)
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
+                    Q(created_by=user) |
+                    Q(customer__brick__in=user_bricks) |
+                    Q(customer__area__in=user_bricks)
+                ).filter(
                     Q(customer__brick__in=user_bricks) |
                     Q(customer__area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
+                    Q(created_by=user) |
+                    Q(customer__brick__in=managed_areas) |
+                    Q(customer__area__in=managed_areas)
+                ).filter(
                     Q(customer__brick__in=managed_areas) |
                     Q(customer__area__in=managed_areas)
                 ).distinct()
@@ -507,14 +581,26 @@ class ScopeResolutionService:
             if scope == 'own':
                 return queryset.filter(created_by=user)
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
+                    Q(created_by=user) |
+                    Q(customer__brick__in=user_bricks) |
+                    Q(customer__area__in=user_bricks)
+                ).filter(
                     Q(customer__brick__in=user_bricks) |
                     Q(customer__area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
+                    Q(created_by=user) |
+                    Q(customer__brick__in=managed_areas) |
+                    Q(customer__area__in=managed_areas)
+                ).filter(
                     Q(customer__brick__in=managed_areas) |
                     Q(customer__area__in=managed_areas)
                 ).distinct()
@@ -522,22 +608,72 @@ class ScopeResolutionService:
         # 7. Sales: CustomerAccount
         elif m_name == 'customeraccount':
             if scope == 'own':
-                from contacts.models import Contact
-                scoped_contacts = cls.get_scoped_queryset(Contact.objects.all(), user, 'contact', scope_type)
-                return queryset.filter(customer__in=scoped_contacts).distinct()
+                qs = queryset.filter(
+                    Q(customer__created_by=user) |
+                    Q(customer__assigned_team=user) |
+                    Q(customer__sales_orders__created_by=user) |
+                    Q(customer__collections__created_by=user)
+                )
+                if user_bricks.exists():
+                    return qs.filter(
+                        Q(customer__brick__in=user_bricks) |
+                        Q(customer__area__in=user_bricks)
+                    ).distinct()
+                return qs.distinct()
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(customer__brick__in=user_bricks) |
-                    Q(customer__area__in=user_bricks) |
-                    Q(customer__created_by=user) |
-                    Q(customer__assigned_team=user)
+                    Q(customer__area__in=user_bricks)
+                ).exclude(
+                    customer__brick__isnull=False,
+                    pk__in=queryset.exclude(
+                        Q(customer__brick__in=user_bricks)
+                    ).values('pk')
                 ).distinct()
             elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(customer__brick__in=managed_areas) |
-                    Q(customer__area__in=managed_areas) |
-                    Q(customer__created_by__in=managed_subordinates) |
-                    Q(customer__assigned_team__in=managed_subordinates)
+                    Q(customer__area__in=managed_areas)
+                ).distinct()
+
+        # 7b. Sales: CustomerTransaction
+        elif m_name == 'customertransaction':
+            if scope == 'own':
+                qs = queryset.filter(
+                    Q(created_by=user) |
+                    Q(account__customer__created_by=user) |
+                    Q(account__customer__assigned_team=user) |
+                    Q(account__customer__sales_orders__created_by=user) |
+                    Q(account__customer__collections__created_by=user)
+                )
+                if user_bricks.exists():
+                    return qs.filter(
+                        Q(account__customer__brick__in=user_bricks) |
+                        Q(account__customer__area__in=user_bricks)
+                    ).distinct()
+                return qs.distinct()
+            elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(account__customer__brick__in=user_bricks) |
+                    Q(account__customer__area__in=user_bricks)
+                ).exclude(
+                    account__customer__brick__isnull=False,
+                    pk__in=queryset.exclude(
+                        Q(account__customer__brick__in=user_bricks)
+                    ).values('pk')
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(account__customer__brick__in=managed_areas) |
+                    Q(account__customer__area__in=managed_areas)
                 ).distinct()
 
         # 8. Purchases: PurchaseOrder & PurchaseReturnOrder
@@ -564,22 +700,46 @@ class ScopeResolutionService:
         # 9. Inventory: Warehouse
         elif m_name == 'warehouse':
             if scope == 'own':
+                if scope_type == 'view':
+                    return queryset.filter(
+                         Q(assigned_user=user) | Q(is_main=True)
+                    ).distinct()
                 return queryset.filter(
-                    Q(assigned_user=user) | Q(is_main=True) | (Q(area__isnull=True) & Q(assigned_user__isnull=True))
+                    Q(assigned_user=user)
                 ).distinct()
             elif scope == 'brick':
+                if scope_type == 'view':
+                    return queryset.filter(
+                        Q(assigned_user=user) |
+                        Q(is_main=True) |
+                        Q(area__in=user_bricks)
+                    ).distinct()
                 return queryset.filter(
                     Q(assigned_user=user) |
-                    Q(is_main=True) |
-                    Q(area__in=user_bricks) |
-                    (Q(area__isnull=True) & Q(assigned_user__isnull=True))
+                    Q(area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
+                if not managed_areas.exists():
+                    if scope_type == 'view':
+                        return queryset.filter(
+                            Q(assigned_user=user) | Q(is_main=True)
+                        ).distinct()
+                    return queryset.filter(
+                        Q(assigned_user=user)
+                    ).distinct()
+                if scope_type == 'view':
+                    return queryset.filter(
+                        Q(assigned_user=user) |
+                        Q(is_main=True) |
+                        Q(assigned_user__in=managed_subordinates) |
+                        Q(area__in=managed_areas) |
+                        Q(area__parent__in=managed_areas)
+                    ).distinct()
                 return queryset.filter(
-                    Q(is_main=True) |
+                    Q(assigned_user=user) |
                     Q(assigned_user__in=managed_subordinates) |
                     Q(area__in=managed_areas) |
-                    (Q(area__isnull=True) & Q(assigned_user__isnull=True))
+                    Q(area__parent__in=managed_areas)
                 ).distinct()
 
         # 10. Inventory: InventoryStock
@@ -632,7 +792,8 @@ class ScopeResolutionService:
                 return queryset.filter(
                     Q(assigned_user=user) |
                     Q(assigned_user__in=managed_subordinates) |
-                    Q(area__in=managed_areas)
+                    Q(area__in=managed_areas) |
+                    Q(area__parent__in=managed_areas)
                 ).distinct()
 
         # 14. Treasury: VaultTransaction
@@ -698,20 +859,18 @@ class ScopeResolutionService:
             if scope == 'own':
                 return queryset.filter(Q(supplier__created_by=user) | Q(supplier__assigned_team=user)).distinct()
             elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
                 return queryset.filter(
                     Q(supplier__brick__in=user_bricks) |
-                    Q(supplier__area__in=user_bricks) |
-                    Q(supplier__created_by=user) |
-                    Q(supplier__assigned_team=user)
+                    Q(supplier__area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
                 if not managed_areas.exists():
                     return queryset.none()
                 return queryset.filter(
                     Q(supplier__brick__in=managed_areas) |
-                    Q(supplier__area__in=managed_areas) |
-                    Q(supplier__created_by__in=managed_subordinates) |
-                    Q(supplier__assigned_team__in=managed_subordinates)
+                    Q(supplier__area__in=managed_areas)
                 ).distinct()
 
         # 18. Activities: VisitTemplate
@@ -721,6 +880,80 @@ class ScopeResolutionService:
             if user_role:
                 return qs.filter(Q(restricted_roles__isnull=True) | Q(restricted_roles=user_role)).distinct()
             return qs
+
+        # 19. Activities: VisitSampleItem & VisitExpense
+        elif m_name in ['visitsampleitem', 'visitexpense']:
+            from activities.models import Visit
+            scoped_visits = cls.get_scoped_queryset(Visit.objects.all(), user, 'visit', scope_type)
+            return queryset.filter(visit__in=scoped_visits)
+
+        # 20. Reports: SalesTarget, CustomerCall, CoachingEvaluation
+        elif m_name == 'salestarget':
+            if scope == 'own':
+                return queryset.filter(user=user)
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(user=user) | Q(user__in=managed_subordinates) | Q(area__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                return queryset.filter(
+                    Q(user__in=managed_subordinates) | Q(area__in=managed_areas)
+                ).distinct()
+
+        elif m_name == 'customercall':
+            if scope == 'own':
+                return queryset.filter(performed_by=user)
+            elif scope == 'brick':
+                if not user_bricks.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(performed_by=user) | Q(contact__brick__in=user_bricks) | Q(contact__area__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                if not managed_areas.exists():
+                    return queryset.none()
+                return queryset.filter(
+                    Q(performed_by__in=managed_subordinates) | Q(contact__brick__in=managed_areas) | Q(contact__area__in=managed_areas)
+                ).distinct()
+
+        elif m_name == 'coachingevaluation':
+            if scope == 'own':
+                return queryset.filter(Q(rep=user) | Q(manager=user)).distinct()
+            elif scope == 'brick':
+                return queryset.filter(
+                    Q(rep=user) | Q(manager=user) | Q(rep__in=managed_subordinates) | Q(customer__brick__in=user_bricks)
+                ).distinct()
+            elif scope == 'area':
+                return queryset.filter(
+                    Q(rep__in=managed_subordinates) | Q(manager__in=managed_subordinates) |
+                    Q(customer__brick__in=managed_areas) | Q(customer__area__in=managed_areas)
+                ).distinct()
+
+        # 21. Sales & Purchases Line Items
+        elif m_name == 'salesorderitem':
+            from sales.models import SalesOrder
+            scoped_orders = cls.get_scoped_queryset(SalesOrder.objects.all(), user, 'salesorder', scope_type)
+            return queryset.filter(order__in=scoped_orders)
+
+        elif m_name == 'salesreturnorderitem':
+            from sales.models import SalesReturnOrder
+            scoped_returns = cls.get_scoped_queryset(SalesReturnOrder.objects.all(), user, 'salesreturnorder', scope_type)
+            return queryset.filter(order__in=scoped_returns)
+
+        elif m_name == 'purchaseorderitem':
+            from purchases.models import PurchaseOrder
+            scoped_orders = cls.get_scoped_queryset(PurchaseOrder.objects.all(), user, 'purchaseorder', scope_type)
+            return queryset.filter(order__in=scoped_orders)
+
+        elif m_name == 'purchasereturnorderitem':
+            from purchases.models import PurchaseReturnOrder
+            scoped_returns = cls.get_scoped_queryset(PurchaseReturnOrder.objects.all(), user, 'purchasereturnorder', scope_type)
+            return queryset.filter(order__in=scoped_returns)
+
+        # 22. Master Data: Area
+        elif m_name == 'area':
+            managed = cls.get_user_managed_areas(user, scope)
+            return queryset.filter(pk__in=managed.values('pk'))
 
         # Fail closed for any unhandled model
         return queryset.none()
@@ -748,38 +981,54 @@ class ScopeResolutionService:
         m_name = model_class.__name__.lower()
 
         # Anti-self-approval rule across all models
-        if action in ['approve', 'reject', 'disapprove'] or (action == 'execute' and m_name != 'vendorpaymentrequest'):
+        if action in ['approve', 'reject', 'disapprove', 'done'] or (action == 'execute' and m_name != 'vendorpaymentrequest'):
             owner_id = (
                 getattr(obj, 'owner_id', None) or
                 getattr(obj, 'created_by_id', None) or
-                getattr(obj, 'requesting_user_id', None)
+                getattr(obj, 'requesting_user_id', None) or
+                getattr(obj, 'assignee_id', None)
             )
             if owner_id == user.id:
                 return False
 
         # Determine scope type: 'manage' for mutations/approvals, 'view' for reading
         scope_type = 'manage' if action in [
-            'edit', 'delete', 'approve', 'reject', 'disapprove', 'execute', 'manage', 'operate'
+            'edit', 'delete', 'approve', 'reject', 'disapprove', 'done', 'reopen', 'execute', 'manage', 'operate'
         ] else 'view'
 
         # Handle specific model rules:
         # 1. Warehouse: editing/deleting reserved for superadmin or inventory:warehouses/manage
         if m_name == 'warehouse':
-            if action in ['edit', 'delete', 'manage']:
+            if action in ['edit', 'manage']:
                 from accounts.permissions import has_perm_or_admin
-                if not has_perm_or_admin(user, 'inventory:warehouses/manage'):
+                if not (has_perm_or_admin(user, 'inventory:warehouses/manage') or has_perm_or_admin(user, 'inventory:warehouses/edit')):
+                    return False
+            elif action == 'delete':
+                from accounts.permissions import has_perm_or_admin
+                if not (has_perm_or_admin(user, 'inventory:warehouses/manage') or has_perm_or_admin(user, 'inventory:warehouses/delete')):
                     return False
             elif action == 'operate':
-                if obj.is_main or obj.assigned_user_id == user.id:
+                from accounts.permissions import has_perm_or_admin, is_accountant
+                if is_accountant(user) or has_perm_or_admin(user, 'inventory:memos/manage') or cls.get_user_scope(user, 'inventory', 'manage') == 'all':
+                    return True
+                if obj.assigned_user_id == user.id:
+                    return True
+                # Central warehouse allowed
+                if obj.is_main:
                     return True
                 if obj.assigned_user_id is not None and obj.assigned_user_id != user.id:
-                    return False
+                    from accounts.permissions import is_manager_eligible_for_user
+                    if not is_manager_eligible_for_user(user, obj.assigned_user):
+                        return False
 
         # 2. Vault: transacting requires treasury/collection permissions and ownership/manage scope
         elif m_name == 'vault':
             from accounts.permissions import has_perm_or_admin
-            if action in ['edit', 'manage', 'delete']:
-                if not has_perm_or_admin(user, 'treasury:vaults/manage'):
+            if action in ['edit', 'manage']:
+                if not (has_perm_or_admin(user, 'treasury:vaults/manage') or has_perm_or_admin(user, 'treasury:vaults/edit')):
+                    return False
+            elif action == 'delete':
+                if not (has_perm_or_admin(user, 'treasury:vaults/manage') or has_perm_or_admin(user, 'treasury:vaults/delete')):
                     return False
             elif action == 'transfer':
                 if not has_perm_or_admin(user, 'treasury:vaults/transfer'):
@@ -871,7 +1120,7 @@ class ScopeResolutionService:
             ).order_by('name')
 
         elif target_choice_type == 'suppliers':
-            base_sup = Contact.objects.filter(is_supplier=True).exclude(status='inactive').select_related('area', 'brick')
+            base_sup = Contact.objects.filter(is_supplier=True).exclude(status='inactive').select_related('area', 'brick', 'vendor_account')
             scoped_sup = cls.get_scoped_queryset(base_sup, user, 'contact', 'view')
             scope = cls.get_user_scope(user, 'contact', 'view')
             if getattr(user, 'is_super_admin', False) or user.is_superuser or scope == 'all':

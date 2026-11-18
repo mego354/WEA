@@ -22,14 +22,15 @@
             </p>
         </div>
 
-        {% if request.user|has_permission:'reports:activities/export' %}
-        <div class="self-start sm:self-auto">
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            {% include 'components/table_column_picker.html' with table_id='report_agreements_roi_table' %}
+            {% if request.user|has_permission:'reports:activities/export' %}
             <a href="{% url 'report_agreements_roi_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">download</span>
                 <span>تصدير Excel</span>
             </a>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- Summary KPI Cards -->
@@ -66,7 +67,16 @@
                     <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
                     <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي</option>
                     <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة</option>
                 </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
+                <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
+                <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
             </div>
 
             <div>
@@ -81,20 +91,20 @@
     <!-- Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs whitespace-nowrap">
+            <table id="report_agreements_roi_table" data-col-table="report_agreements_roi_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-3">رقم الاتفاقية</th>
-                        <th class="py-3 px-3">عنوان الاتفاقية</th>
-                        <th class="py-3 px-3">العميل</th>
-                        <th class="py-3 px-3">النوع</th>
-                        <th class="py-3 px-3">المندوب</th>
-                        <th class="py-3 px-3">تاريخ البدء</th>
-                        <th class="py-3 px-3 text-left">الميزانية (ج.م)</th>
-                        <th class="py-3 px-3 text-left">المبيعات المحققة (ج.م)</th>
-                        <th class="py-3 px-3 text-center">التحقيق %</th>
-                        <th class="py-3 px-3 text-center">عائد الاستثمار ROI %</th>
-                        <th class="py-3 px-3 text-center">الحالة</th>
+                        <th class="py-3 px-3" data-col="serial_num" data-col-required="true">رقم الاتفاقية</th>
+                        <th class="py-3 px-3" data-col="title" data-col-required="true">عنوان الاتفاقية</th>
+                        <th class="py-3 px-3" data-col="customer">العميل</th>
+                        <th class="py-3 px-3" data-col="type">النوع</th>
+                        <th class="py-3 px-3" data-col="rep">المندوب</th>
+                        <th class="py-3 px-3" data-col="start_date">تاريخ البدء</th>
+                        <th class="py-3 px-3 text-left" data-col="budget">الميزانية (ج.م)</th>
+                        <th class="py-3 px-3 text-left" data-col="achieved_sales">المبيعات المحققة (ج.م)</th>
+                        <th class="py-3 px-3 text-center" data-col="achievement_pct">التحقيق %</th>
+                        <th class="py-3 px-3 text-center" data-col="roi_pct">عائد الاستثمار ROI %</th>
+                        <th class="py-3 px-3 text-center" data-col="status">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">

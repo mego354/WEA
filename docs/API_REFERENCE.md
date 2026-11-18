@@ -126,25 +126,26 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
   }
   ```
 
-### 3.2 Scheduled Visit Time Quick Action (`set_visit_time_api`)
-- **URL**: `/activities/visits/<pk>/set-time/`
+### 3.2 Visit Plan Action Endpoint (`plan_action`)
+- **URL**: `POST /planned-visits/plan/<pk>/action/<action>/` (or `/plans/<pk>/action/<action>/`)
 - **Method**: `POST`
-- **Permission**: `@require_permission('activities:visits/edit')`
+- **Actions**: `approve`, `disapprove`
+- **Permission**: `@require_permission('activities:visits/approve')` plus scoped data access
 - **Payload (`application/x-www-form-urlencoded` or JSON)**:
-  - `time` (string `HH:MM`, required): New 24-hour time.
+  - `approval_notes` (string, optional): Decision notes
 - **Response Format**:
   ```json
   {
     "success": true,
-    "time": "14:30",
-    "formatted_time": "02:30 م"
+    "approval_status": "approved",
+    "message": "تم اعتماد الخطة رقم PLAN-20261117-0001 بنجاح (10 زيارات)."
   }
   ```
 
 ### 3.3 Planned Visits Selection & Bulk Creation
 - `GET /planned-visits/?action=select_all_ids` (with active filters): returns `{ "success": true, "total_count": N, "contacts": [{"id": 1, "account_type": "..."}] }` across all filtered scoped results.
 - `GET /planned-visits/?action=load_contacts&show_all=1`: returns all matching scoped contacts in one batch for "عرض جميع العملاء المؤهلين".
-- `POST /planned-visits/bulk-add/`: atomically creates `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records, returning `created_visit_ids`.
+- `POST /planned-visits/bulk-add/`: atomically creates a `VisitPlan` entity (with unique `plan_id` and plan-level comment), `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records. Visits are created as `pending` approval if the creator lacks `activities:visits/approve`. Returns `plan_id`, `created_count`, and `created_visit_ids`.
 
 ### 3.4 Unended Visit Deletion (`visit_delete`)
 - **URL**: `POST /visits/<pk>/delete/`
@@ -183,6 +184,20 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
     - Evaluates approval: if unplanned, or distance exception requested, or questionnaire answered, flags for approval (`pending`); if planned without exceptions, auto-approves (`approved`).
   - `cancel`: Legacy cancellation action (retained for backward compatibility; unended visits are deleted via `/visits/<pk>/delete/` per Requirement J).
 
+### 3.7 Agreements CRUD & Lifecycle Endpoints
+- **List & Filters**: `GET /activities/agreements/`
+  - Scoped via `get_scoped_queryset(Agreement.objects.all(), request.user, 'agreement')`.
+  - Filters: `customer`, `status` (`new`, `done`), `amount_min`, `amount_max`, `date_from`, `date_to`, `governorate`, `brick`.
+- **Status Action**: `POST /activities/agreements/<pk>/action/<action>/`
+  - Actions: `done` (mark agreement done/completed), `reopen` (reopen to `new`).
+  - Permission: `@require_permission('activities:agreements/approve')` and `can_user_access_object(request.user, agreement, action)`.
+  - Anti-self-approval: Creators cannot approve or complete their own agreements.
+- **Edit**: `GET|POST /activities/agreements/<pk>/edit/`
+  - Permission: `@require_permission('activities:agreements/create')` and `can_user_access_object(request.user, agreement, 'edit')`.
+- **Delete**: `POST /activities/agreements/<pk>/delete/`
+  - Permission: `@require_permission('activities:agreements/delete')` and `can_user_access_object(request.user, agreement, 'delete')`.
+  - Writes `AGREEMENT_DELETED` to `SecurityAuditLog`.
+
 ---
 
 ## 4. Purchases & Sales Scoped Endpoints
@@ -196,12 +211,43 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
   - Enforces `can_user_access_object(request.user, order, 'edit')`. Out-of-scope access returns HTTP 403.
 - **Create & Edit Views**: `POST /purchases/orders/create/` and `POST /purchases/orders/<pk>/edit/`
   - Enforces object-level access checks on submitted `supplier` (`can_user_access_object(request.user, supplier, 'view')`) and `warehouse` (`can_user_access_object(request.user, warehouse, 'operate')`).
+- **Delete View**: `POST /purchases/orders/<pk>/delete/`
+  - Permission: `@require_permission('purchases:orders/delete')` and `can_user_access_object(request.user, order, 'delete')`.
+  - Verifies no payments, settled installments, or return orders exist before safely reversing stock, lot allocations, and vendor balance.
+- **Payment Status Update**: `POST /purchases/orders/<pk>/update-payment-status/`
+  - Permission: `@require_permission('purchases:orders/manage_payment_status')` and `can_user_access_object(request.user, order, 'edit')`.
+  - Updates operational status (`credit`, `partial`, `paid`, `returned`) with `ApprovalAuditLog` and `SecurityAuditLog` entries.
+- **Payment Request Redirection**: `GET /purchases/orders/payment-requests/create/`
+  - Automatically redirects (HTTP 302) with query parameters (`?supplier=...&purchase_order=...`) to `/treasury/payments/create/`.
 
-### 4.2 Sales Order Client Scoping
+### 4.2 Sales Order Client & Warehouse Scoping, Payment Status Update, and Deletion
 - **Create & Edit Views**: `POST /sales/orders/create/` and `POST /sales/orders/<pk>/edit/`
-  - Enforces object-level access check on submitted `customer` (`can_user_access_object(request.user, customer, 'view')`). Prevent selecting clients outside the representative's assigned Brick or manager's assigned Main Area.
+  - Enforces object-level access check on submitted `customer` (`can_user_access_object(request.user, customer, 'view')`). Prevents selecting clients outside the representative's assigned Brick or manager's assigned Main Area.
+  - Enforces object-level access check on submitted `warehouse` (`can_user_access_object(request.user, warehouse, 'operate')`). Prevents unauthorized warehouse submissions.
+  - Edit view blocks changes if collections exist (`order.collections.exists()`).
+- **Delete View**: `POST /sales/orders/<pk>/delete/`
+  - Permission: `@require_permission('sales:orders/delete')` and `can_user_access_object(request.user, order, 'delete')`.
+  - Strictly blocks deletion if collections exist. Atomically restores deducted inventory, reverses customer account debt, deletes memo and transaction, and logs `SALES_ORDER_DELETED`.
+- **Payment Status Update**: `POST /sales/orders/<int:pk>/update-payment-status/`
+  - **Permission**: `@require_permission('sales:orders/manage_payment_status')`
+  - **Scope**: validates `can_user_access_object(request.user, order, 'edit')`
+  - **Payload (`application/x-www-form-urlencoded` or JSON)**:
+    - `payment_status` (string, required): `credit` (آجل), `partial` (جزئي), `paid` (مدفوع بالكامل), `returned` (مرتجع)
+    - `notes` (string, optional): Update note
+  - **Response Format**:
+    ```json
+    {
+      "success": true,
+      "payment_status": "paid",
+      "payment_status_display": "مدفوع بالكامل",
+      "message": "تم تحديث حالة السداد بنجاح"
+    }
+    ```
 
 ### 4.3 Sales Return Order APIs
+- **Delete View**: `POST /sales/returns/<pk>/delete/`
+  - Permission: `@require_permission('sales:returns/delete')` and `can_user_access_object(request.user, return_order, 'delete')`.
+  - Atomically deducts restocked inventory, reverts customer credit, deletes memo and transaction, and logs `SALES_RETURN_DELETED`.
 - **Eligible Delivered Orders API**: `GET /sales/api/eligible-orders/`
   - **Permission**: `@login_required`, scoped via `get_scoped_queryset(..., 'salesorder')`.
   - **Query Parameters**:
@@ -224,9 +270,107 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
       ]
     }
     ```
-- **Order Details for Return API**: `GET /sales/api/order-details/<int:order_id>/`
+- **Order Details for Return API**:
+  - **URLs**: `GET /sales/api/orders/<int:order_id>/return-details/` and `GET /sales/api/order-details/<int:order_id>/`
   - **Permission**: `@login_required`, validates object-level access (`can_user_access_object(..., 'view')`).
-  - **Returns**: Original order items, previously returned quantities, unit prices, discounts, and returnable quantity bounds.
+  - **Response Format**:
+    ```json
+    {
+      "order_id": 142,
+      "order_number": "SO-501",
+      "customer_id": 88,
+      "customer_name": "صيدلية السلامة",
+      "warehouse_id": 3,
+      "warehouse_name": "مخزن القاهرة الرئيسي",
+      "items": [
+        {
+          "product_id": 10,
+          "product_name": "بانادول إكسترا",
+          "product_code": "PAN-EXT-500",
+          "original_quantity": 50.0,
+          "returned_quantity": 10.0,
+          "remaining_returnable": 40.0,
+          "unit_price": 45.0,
+          "discount": 0.0,
+          "tax_rate": 14.0
+        }
+      ]
+    }
+    ```
+
+### 4.4 Purchase Return Order APIs
+- **Delete View**: `POST /purchases/returns/<pk>/delete/`
+  - Permission: `@require_permission('purchases:returns/delete')` and `can_user_access_object(request.user, return_order, 'delete')`.
+  - Atomically restores deducted stock and lot quantities to the warehouse, restores vendor accounts payable balance, deletes debit transaction and memo, and logs `PURCHASE_RETURN_DELETED`.
+- **Order Details for Return API**: `GET /purchases/api/orders/<int:order_id>/return-details/`
+  - **Permission**: `@login_required`, validates object-level access (`can_user_access_object(..., 'view')`).
+  - **Response Format**:
+    ```json
+    {
+      "order_id": 42,
+      "order_number": "PO-202611-001",
+      "supplier_id": 5,
+      "supplier_name": "شركة الأدوية المتحدة",
+      "warehouse_id": 2,
+      "warehouse_name": "المخزن المركزي",
+      "items": [
+        {
+          "product_id": 10,
+          "product_name": "بانادول إكسترا",
+          "product_code": "PAN-EXT-500",
+          "original_quantity": 100.0,
+          "returned_quantity": 20.0,
+          "remaining_returnable": 80.0,
+          "unit_cost": 25.5
+        }
+      ]
+    }
+    ```
+
+### 4.5 Inventory Stock API
+- **Warehouse Available Stock API**: `GET /inventory/api/warehouse-stock/?warehouse_id=<id>`
+  - **URL**: `/inventory/api/warehouse-stock/`
+  - **Permission**: `@login_required`, validates object-level access (`can_user_access_object(request.user, warehouse, 'view')`).
+  - **Query Parameters**:
+    - `warehouse_id` (integer, required): ID of the warehouse.
+  - **Response Format**:
+    ```json
+    {
+      "warehouse_id": 2,
+      "warehouse_name": "المخزن المركزي",
+      "count": 15,
+      "products": {
+        "10": {
+          "product_name": "بانادول إكسترا",
+          "sku_code": "PAN-EXT-500",
+          "qty_available": 120.0,
+          "qty_on_hand": 120.0,
+          "qty_reserved": 0.0
+        }
+      }
+    }
+    ```
+
+### 4.6 Warehouse CRUD Endpoints
+- **Warehouse Create**: `GET|POST /inventory/warehouses/add/`
+  - **Permission**: `inventory:warehouses/manage`
+  - **POST Payload**: `name`, `code`, `area`, `address`, `assigned_user`, `manager`, `latitude`, `longitude`, `is_main`, `is_rep_warehouse`, `is_active`
+- **Warehouse Edit**: `GET|POST /inventory/warehouses/<pk>/edit/`
+  - **Permission**: `inventory:warehouses/manage` + `can_user_access_object(request.user, warehouse, 'edit')`
+- **Warehouse Delete**: `POST /inventory/warehouses/<pk>/delete/`
+  - **Permission**: `inventory:warehouses/delete` (or `manage`) + `can_user_access_object(request.user, warehouse, 'delete')`
+  - Validates stock on hand = 0, no memos, transfers, or orders.
+
+### 4.7 Vault CRUD Endpoints
+- **Vault Create**: `GET|POST /treasury/vaults/add/`
+  - **Permission**: `treasury:vaults/manage`
+  - **POST Payload**: `name`, `vault_type`, `area`, `assigned_user`, `initial_balance`, `is_rep_vault`, `is_active`
+  - Posts initial opening balance transaction atomically if `initial_balance > 0`.
+- **Vault Edit**: `GET|POST /treasury/vaults/<pk>/edit/`
+  - **Permission**: `treasury:vaults/manage` + `can_user_access_object(request.user, vault, 'edit')`
+- **Vault Delete**: `POST /treasury/vaults/<pk>/delete/`
+  - **Permission**: `treasury:vaults/delete` (or `manage`) + `can_user_access_object(request.user, vault, 'delete')`
+  - Validates current balance = 0, no transactions, vendor payments, or collections.
 
 ---
 
@@ -308,18 +452,25 @@ All performance and reporting views provide standard OpenXML Excel downloads (`.
 
 All smart-search endpoints enforce `@require_permission([...])`, use `ScopeResolutionService.get_scoped_choices(...)`, normalize Arabic queries via `master_data.search_utils.filter_by_arabic_search`, clamp `limit` (`1..50`, default `30`), and return `{"results": [...], "count": <int>}`. Background requests include `X-Skip-Global-Loader: 1` (and matching paths in `templates/layouts/base.html`).
 
-### 7.1 Sales Smart Search Endpoints
-- `GET /sales/api/search/customers/?q=<query>&limit=30` (`sales_customers_search_api`)
+### 7.1 Sales Smart Search & Customer Accounting Endpoints
+- `GET /sales/api/search/customers/?q=<query>&scope_model=<optional>&limit=30` (`sales_customers_search_api`)
   - **Permissions**: `sales:orders/list`, `sales:orders/create`, `sales:orders/edit`, `sales:collections/list`, `sales:collections/create`, `sales:returns/list`, `sales:customers/transactions`, `sales:customers/accounting`
-  - **Scope**: Active (`status != 'inactive'`, `is_customer=True`) scoped via `ScopeResolutionService.get_scoped_choices(user, 'customers', 'sales')`
+  - **Scope**: Active (`status != 'inactive'`, `is_customer=True`) scoped via `ScopeResolutionService.get_scoped_choices(user, 'customers', 'sales')`. Passing `scope_model=customeraccount` scopes results to customers present in `get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')`.
   - **Fields searched**: Normalized `name`, `area__name`, `brick__name` + raw `code`, `mobile`, `serial_num` (plus exact numeric `serial_num`).
   - **Item keys**: `id`, `text`, `name`, `serial_num`, `code`, `mobile`, `area`, `brick`, `subtext`
+- `GET /sales/api/search/orders/?customer=<id>&q=<query>&unpaid_only=1&limit=50` (`sales_orders_search_api`)
+  - **Permissions**: `sales:collections/create`, `sales:collections/list`, `sales:orders/list`, `sales:returns/create`
+  - **Scope**: Uses `SalesOrder.with_payment_totals(...)` (SQL-annotated paid totals eliminating N+1 queries) and `get_scoped_queryset(..., user, 'salesorder')`; filters out cancelled/rejected orders and optionally unpaid (`unpaid_only=1`) and by `customer`.
+  - **Item keys**: `id`, `order_number`, `customer_id`, `grand_total`, `outstanding_balance`, `due_date`, `text`, `subtext`
 - `GET /sales/api/search/warehouses/?q=<query>&limit=30` (`sales_warehouses_search_api`)
   - **Permissions**: `sales:orders/list`, `sales:orders/create`, `sales:orders/edit`, `sales:returns/create`
   - **Item keys**: `id`, `text`, `name`, `code`, `subtext`
 - `GET /sales/api/search/vaults/?q=<query>&limit=30` (`sales_vaults_search_api`)
   - **Permissions**: `sales:collections/list`, `sales:collections/create`
   - **Item keys**: `id`, `text`, `name`, `serial_num`, `balance`, `subtext`
+- **Customer Accounts & Transactions Exports**:
+  - `GET /sales/customers/accounts/export/?search=...&customer=...&area=...` (`accounting_customers_export`) — Permission: `sales:customers/accounting_export`
+  - `GET /sales/customer-transactions/export/?search=...&customer_id=...&type=...` (`customer_transactions_export`) — Permission: `sales:customers/transactions_export`
 
 ### 7.2 Purchases & Treasury Smart Search Endpoints
 - `GET /purchases/api/search/suppliers/?q=<query>&limit=30` (`purchases_suppliers_search_api`)
@@ -330,4 +481,38 @@ All smart-search endpoints enforce `@require_permission([...])`, use `ScopeResol
 - `GET /purchases/api/search/vaults/?q=<query>&limit=30` (`purchases_vaults_search_api`)
   - **Permissions**: `treasury:payments/*`, `treasury:payment_requests/*`, `treasury:vaults/view`, `treasury:vaults/transfer`, `treasury:transactions/list`, `treasury:transactions/create`
 
+---
 
+## 8. Unified List Smart Search & New Export Endpoints
+
+- **List Search Suggestions**: `GET /api/list-suggestions/?module=<module>&q=<query>&limit=10` (`list_suggestions_api`)
+  - **Modules**: `sales_orders`, `sales_returns`, `collections`, `customers`, `purchase_orders`, `purchase_returns`, `products`, `inventory_stocks`, `inventory_memos`, `product_transfers`, `warehouses`, `vaults`, `visits`, `agreements`, `users`, `vendor_payments`, `vendor_payment_requests`, `vendor_transactions`, `categories`, `roles`, `audit_logs`.
+  - **Security**: Enforces module read permission (`403` on unauthorized), `get_scoped_queryset`, and Arabic-normalized partial matching.
+- **Additional Scoped Excel Exports**:
+  - `GET /accounts/users/export/` (`users_export`, `users:users/export`)
+  - `GET /accounts/audit-logs/export/` (`audit_logs_export`, `settings:auditLogs/export`)
+  - `GET /catalog/categories/export/` (`categories_export`, `catalog:categories/export`)
+  - `GET /inventory/warehouses/export/` (`warehouses_export`, `inventory:warehouses/export`)
+  - `GET /inventory/memos/export/` (`inventory_memos_export`, `inventory:memos/export`)
+  - `GET /inventory/transfers/export/` (`product_transfers_export`, `inventory:transfers/export`)
+  - `GET /treasury/vaults/export/` (`vaults_export`, `treasury:vaults/export`)
+  - `GET /treasury/vault-transactions/export/` (`vault_transactions_export`, `treasury:transactions/export`)
+  - `GET /treasury/vendors/export/` (`accounting_vendors_export`, `treasury:vendors/accounting_export`)
+  - `GET /treasury/vendor-transactions/export/` (`vendor_transactions_export`, `treasury:vendors/transactions_export`)
+
+
+
+
+## Attachments, Storage & PDF Endpoints
+
+- `GET/POST /settings/storage/` — SuperAdmin Cloudflare R2 pricing calculator & cleanup tools (`r2_storage_settings`).
+- `POST /attachments/<model_key>/<int:object_id>/upload/` — Upload images/PDFs onto a scoped ERP record (`erp_attachment_upload`).
+- `GET /attachments/<model_key>/<int:object_id>/list/` — JSON attachment list for modal display (`erp_attachment_list_json`).
+- `GET /attachments/<int:pk>/view/` & `/attachments/<int:pk>/download/` — Protected inline/attachment file delivery (`erp_attachment_view`, `erp_attachment_download`).
+- `POST /attachments/<int:pk>/delete/` — Reference-counted attachment deletion (`erp_attachment_delete`).
+- `GET /sales/<int:pk>/pdf/` — Customizable Sales Order PDF (`sales_order_pdf`).
+- `GET /sales/returns/<int:pk>/pdf/` — Customizable Sales Return PDF (`sales_return_order_pdf`).
+- `GET /sales/customers/<int:pk>/statement/pdf/` — Customer Account Statement PDF (`customer_statement_pdf`).
+- `GET /purchases/<int:pk>/pdf/` — Customizable Purchase Order PDF (`purchase_order_pdf`).
+- `GET /purchases/returns/<int:pk>/pdf/` — Customizable Purchase Return PDF (`purchase_return_order_pdf`).
+- `GET /purchases/vendors/<int:pk>/statement/pdf/` — Supplier Account Statement PDF (`vendor_statement_pdf`).

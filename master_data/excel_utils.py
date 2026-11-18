@@ -39,62 +39,105 @@ def sanitize_excel_cell(val):
     return val_str
 
 
-def export_to_excel_response(data, columns, filename="export", sheet_title="البيانات"):
+def export_to_excel_response(
+    data,
+    columns,
+    filename="export",
+    sheet_title="البيانات",
+    report_title=None,
+    user=None,
+):
     """
-    Generate a styled, secure .xlsx Excel file response.
-    
-    Args:
-        data: Iterable of dicts, model instances, or tuples/lists.
-        columns: List of dicts specifying column mapping:
-            [
-                {
-                    'header': 'اسم الحقل',
-                    'key': 'field_name' | callable | int,
-                    'format': '#,##0.00' | 'YYYY-MM-DD' | '@' (optional),
-                    'width': 20 (optional),
-                    'align': 'right' | 'center' | 'left' (optional)
-                }, ...
-            ]
-        filename: Base name of output file (without extension).
-        sheet_title: Arabic/English name for the worksheet.
-    
-    Returns:
-        HttpResponse with proper MIME type and Content-Disposition.
+    Generate a styled, secure .xlsx Excel file response with CompanyProfile branding.
     """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = str(sheet_title)[:31]  # Excel limits sheet titles to 31 chars
-    
+
     # Enable Right-to-Left for Arabic layout
     ws.sheet_view.rightToLeft = True
 
+    # Load CompanyProfile dynamically (never hardcode company info)
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+    company_name = getattr(profile, 'company_name', '') or 'WEA Pharma'
+    reg_info = " | ".join(
+        part for part in [
+            getattr(profile, 'commercial_registry', ''),
+            getattr(profile, 'tax_id', ''),
+            getattr(profile, 'phone', ''),
+        ] if part
+    )
+    addr_info = getattr(profile, 'address', '') or ''
+    title_text = report_title or sheet_title or 'تقرير البيانات'
+    now_str = timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M')
+    actor_name = ''
+    if user and getattr(user, 'is_authenticated', False):
+        actor_name = getattr(user, 'name', '') or getattr(user, 'username', '')
+
+    num_cols = max(1, len(columns))
+    last_col_letter = get_column_letter(num_cols)
+
     # Styling Palettes (WEA Brand Teal #27BEBE)
+    brand_banner_fill = PatternFill(start_color="FFF0FDFD", end_color="FFF0FDFD", fill_type="solid")
+    title_font = Font(name="Cairo", size=13, bold=True, color="FF0F766E")
+    meta_font = Font(name="Cairo", size=9, color="FF475569")
+
     header_fill = PatternFill(start_color="FF27BEBE", end_color="FF27BEBE", fill_type="solid")
     header_font = Font(name="Cairo", size=11, bold=True, color="FFFFFFFF")
     header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     alt_row_fill = PatternFill(start_color="FFF8FAFC", end_color="FFF8FAFC", fill_type="solid")
     white_row_fill = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
-    
+
     thin_border_side = Side(border_style="thin", color="FFE2E8F0")
     cell_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
-    
+
     regular_font = Font(name="Cairo", size=10, color="FF0F172A")
 
-    # Write Header Row
-    headers = [col.get('header', '') for col in columns]
-    ws.append(headers)
-    ws.row_dimensions[1].height = 28
+    # Company Branding & Report Title Header Rows (Rows 1..3)
+    ws.cell(row=1, column=1, value=f"{company_name} — {title_text}")
+    if num_cols > 1:
+        ws.merge_cells(f"A1:{last_col_letter}1")
+    c1 = ws.cell(row=1, column=1)
+    c1.font = title_font
+    c1.fill = brand_banner_fill
+    c1.alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[1].height = 26
 
-    for col_idx in range(1, len(columns) + 1):
-        cell = ws.cell(row=1, column=col_idx)
+    meta_parts = [p for p in [reg_info, addr_info] if p]
+    ws.cell(row=2, column=1, value=" | ".join(meta_parts))
+    if num_cols > 1:
+        ws.merge_cells(f"A2:{last_col_letter}2")
+    c2 = ws.cell(row=2, column=1)
+    c2.font = meta_font
+    c2.fill = brand_banner_fill
+    c2.alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    export_meta = f"تاريخ التصدير: {now_str}" + (f" | بواسطة: {actor_name}" if actor_name else "")
+    ws.cell(row=3, column=1, value=export_meta)
+    if num_cols > 1:
+        ws.merge_cells(f"A3:{last_col_letter}3")
+    c3 = ws.cell(row=3, column=1)
+    c3.font = meta_font
+    c3.alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[3].height = 18
+
+    # Write Table Header Row at Row 5
+    header_row_idx = 5
+    headers = [col.get('header', '') for col in columns]
+    for col_idx, h_val in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row_idx, column=col_idx, value=h_val)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = header_alignment
         cell.border = cell_border
+    ws.row_dimensions[header_row_idx].height = 28
+    ws.freeze_panes = f"A{header_row_idx + 1}"
 
     # Write Data Rows
-    row_idx = 2
+    row_idx = header_row_idx + 1
     for item in data:
         row_values = []
         for col in columns:
@@ -126,7 +169,8 @@ def export_to_excel_response(data, columns, filename="export", sheet_title="ال
             
             row_values.append(sanitize_excel_cell(val))
 
-        ws.append(row_values)
+        for col_idx, val in enumerate(row_values, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=val)
         ws.row_dimensions[row_idx].height = 22
         
         # Style Data Cells
@@ -166,7 +210,7 @@ def export_to_excel_response(data, columns, filename="export", sheet_title="ال
         else:
             header_len = len(str(col.get('header', '')))
             max_len = header_len
-            for r in range(1, min(row_idx, 100)):
+            for r in range(header_row_idx, min(row_idx, header_row_idx + 100)):
                 cell_val = str(ws.cell(row=r, column=col_idx).value or '')
                 max_len = max(max_len, len(cell_val))
             ws.column_dimensions[col_letter].width = max(max_len + 4, 12)

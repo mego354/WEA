@@ -57,6 +57,20 @@
                 <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
                 <span>سجل الحركات التفصيلي</span>
             </a>
+            {% if can_manage %}
+            <a href="{% url 'vault_edit' vault.id %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span>تعديل</span>
+            </a>
+            {% endif %}
+            {% if can_delete %}
+            <button type="button"
+                    onclick="showConfirmDeleteModal({ action: '{% url 'vault_delete' vault.id %}', title: 'حذف الخزنة', itemName: '{{ vault.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف الخزنة <span class=\'font-bold text-slate-800\'>{{ vault.name|escapejs }}</span> نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف الخزنة إذا كانت بها حركات مالية مسجلة أو رصيد غير صفري.' })"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl border border-rose-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">delete</span>
+                <span>حذف</span>
+            </button>
+            {% endif %}
             <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px]" title="العودة لقائمة الخزن">
                 <span class="material-symbols-outlined text-base">arrow_forward</span>
                 <span class="hidden sm:inline">العودة</span>
@@ -196,6 +210,7 @@
                         <th class="py-3 px-4">البيان / التوصيف</th>
                         <th class="py-3 px-4">المسئول</th>
                         <th class="py-3 px-4">التاريخ والوقت</th>
+                        <th class="py-3 px-4 text-center">المرفقات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -235,10 +250,17 @@
                         <td class="py-3 px-4 font-mono text-slate-500 text-[11px]">
                             {{ tx.created_at|date:"Y-m-d H:i" }}
                         </td>
+                        <td class="py-3 px-4 text-center">
+                            <button type="button" onclick="openAttachmentsModal('vaulttransaction', {{ tx.id }}, 'حركة خزنة #{{ tx.id }}')"
+                                    class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-teal-50 text-slate-600 hover:text-[#27bebe] text-[11px] font-bold transition-colors">
+                                <span class="material-symbols-outlined text-sm">attach_file</span>
+                                <span>عرض</span>
+                            </button>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="py-8 text-center text-slate-400">
+                        <td colspan="8" class="py-8 text-center text-slate-400">
                             لا توجد حركات مسجلة لهذه الخزنة حتى الآن.
                         </td>
                     </tr>

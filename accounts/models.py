@@ -386,6 +386,7 @@ class SecurityAuditLog(models.Model):
         # Users
         'USER_CREATED': {'ar': 'إنشاء حساب مستخدم', 'en': 'User Created'},
         'USER_UPDATED': {'ar': 'تعديل بيانات المستخدم', 'en': 'User Updated'},
+        'USER_DELETED': {'ar': 'حذف حساب مستخدم', 'en': 'User Deleted'},
         'USER_ROLE_CHANGED': {'ar': 'تغيير الدور الوظيفي', 'en': 'User Role Changed'},
         'USER_STATUS_TOGGLED': {'ar': 'تفعيل/تعطيل حساب مستخدم', 'en': 'User Status Toggled'},
         'USER_PASSWORD_RESET': {'ar': 'إعادة تعيين كلمة المرور', 'en': 'Password Reset'},
@@ -552,6 +553,10 @@ class SecurityAuditLog(models.Model):
         ('AREA_UPDATED', 'تعديل منطقة جغرافية'),
         ('AREA_DELETED', 'حذف منطقة جغرافية'),
         ('SETTINGS_UPDATED', 'تحديث إعدادات النظام'),
+        ('STORAGE_SETTINGS_UPDATED', 'تحديث إعدادات وحاسبة التخزين السحابي (R2)'),
+        ('ATTACHMENT_UPLOADED', 'رفع مرفق معاملة'),
+        ('ATTACHMENT_DELETED', 'حذف مرفق معاملة'),
+        ('PDF_GENERATED', 'إصدار مستند / كشف حساب PDF'),
         ('BULK_IMPORT', 'عملية استيراد جماعي'),
         ('BULK_EXPORT', 'عملية تصدير بيانات'),
     ]

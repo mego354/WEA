@@ -33,59 +33,80 @@
             </div>
         </div>
 
-        <!-- Workflow Action Buttons -->
+        <!-- Action Buttons -->
         <div class="flex items-center gap-2 flex-wrap">
-            {% if can_approve %}
-            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'approve' %}">
+            {% if return_order.status == 'pending' and request.user|has_permission:'sales:returns/approve' and return_order.created_by_id != request.user.id %}
+            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'approve' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
                     <span class="material-symbols-outlined text-base">check_circle</span>
                     <span>اعتماد المرتجع</span>
                 </button>
             </form>
-            <button type="button" onclick="openRejectModal()"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">cancel</span>
-                <span>رفض</span>
-            </button>
-            {% endif %}
-
-            {% if can_deliver %}
-            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'deliver' %}">
+            {% elif return_order.status == 'approved' and request.user|has_permission:'sales:returns/approve' %}
+            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'deliver' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" onclick="return confirm('تأكيد استلام البضاعة في المخزن وتوليد إذن الإضافة؟');"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">input</span>
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-base">inventory</span>
                     <span>استلام بالمخزن</span>
                 </button>
             </form>
-            {% endif %}
-
-            {% if can_settle %}
-            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'settle' %}">
+            {% elif return_order.status == 'delivered' and request.user|has_permission:'sales:returns/approve' %}
+            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'settle' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" onclick="return confirm('تأكيد ترحيل إشعار الدائن للحسابات وتخفيض مديونية العميل؟');"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
                     <span class="material-symbols-outlined text-base">receipt_long</span>
                     <span>ترحيل للحسابات</span>
                 </button>
             </form>
             {% endif %}
 
-            {% if can_cancel %}
-            <button type="button" onclick="openCancelModal()"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">close</span>
-                <span>إلغاء</span>
-            </button>
-            {% endif %}
+            <!-- Secondary Actions Dropdown -->
+            <div class="relative inline-block text-right" data-detail-action-menu>
+                <button type="button" onclick="toggleDetailActionMenu(this)" aria-haspopup="true" aria-expanded="false"
+                        class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors" title="إجراءات إضافية">
+                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                </button>
+                <div class="detail-action-dropdown hidden fixed sm:absolute left-0 mt-1.5 w-52 rounded-xl bg-white border border-slate-200 shadow-xl py-1.5 z-[90] text-xs font-semibold text-slate-700">
+                    {% if request.user|has_permission:'sales:returns/pdf' %}
+                    <button type="button" onclick="openOrderPdfModal('{% url 'sales_return_order_pdf' return_order.id %}', '{{ return_order.order_number|escapejs }}', 'salesreturnorder')"
+                            class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                        <span>تصدير PDF مخصص</span>
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'sales_return_order_print' return_order.id %}" target="_blank"
+                       class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-slate-500">print</span>
+                        <span>نسخة للطباعة</span>
+                    </a>
+                    {% if return_order.status == 'pending' and request.user|has_permission:'sales:returns/approve' and return_order.created_by_id != request.user.id %}
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_action' return_order.id 'reject' %}', title: 'رفض مرتجع المبيعات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من رفض هذا المرتجع؟', submitText: 'تأكيد الرفض', icon: 'cancel' })"
+                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">cancel</span>
+                        <span>رفض المرتجع</span>
+                    </button>
+                    {% endif %}
+                    {% if return_order.status not in 'settled,cancelled' %}
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء مرتجع المبيعات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من إلغاء هذا المرتجع؟', submitText: 'تأكيد الإلغاء', icon: 'block' })"
+                            class="w-full text-right px-3.5 py-2 text-amber-700 hover:bg-amber-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">block</span>
+                        <span>إلغاء المرتجع</span>
+                    </button>
+                    {% endif %}
+                    {% if can_delete %}
+                    <div class="h-px bg-slate-100 my-1"></div>
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_delete' return_order.id %}', title: 'حذف مرتجع المبيعات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر مرتجع المبيعات {{ return_order.order_number|escapejs }}؟ سيتم عكس حركات المخزن وتعديل رصيد العميل.', submitText: 'تأكيد الحذف' })"
+                            class="w-full text-right px-3.5 py-2 text-rose-700 hover:bg-rose-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                        <span>حذف المرتجع</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
 
-            <a href="{% url 'sales_return_order_print' return_order.id %}" target="_blank"
-               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="طباعة">
-                <span class="material-symbols-outlined text-lg">print</span>
-            </a>
             <a href="{% url 'sales_return_orders_list' %}"
-               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="العودة">
+               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة">
                 <span class="material-symbols-outlined text-lg">arrow_back</span>
             </a>
         </div>
@@ -155,7 +176,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="py-3 px-4 text-center font-mono font-bold text-slate-900">
-                                    {{ item.quantity|floatformat:2 }}
+                                    {{ item.quantity|floatformat:0 }}
                                 </td>
                                 <td class="py-3 px-4 font-mono text-slate-700">
                                     {{ item.unit_price|floatformat:2 }} ج.م
@@ -182,7 +203,7 @@
                         <tfoot class="bg-slate-50/80 font-bold border-t border-slate-200 text-slate-900">
                             <tr>
                                 <td colspan="3" class="py-3 px-4 text-left">الإجمالي:</td>
-                                <td class="py-3 px-4 text-center font-mono text-[#27bebe] font-black">{{ return_order.items_quantity|floatformat:2 }}</td>
+                                <td class="py-3 px-4 text-center font-mono text-[#27bebe] font-black">{{ return_order.items_quantity|floatformat:0 }}</td>
                                 <td colspan="3"></td>
                                 <td class="py-3 px-4 text-left font-mono font-black text-emerald-700">{{ return_order.grand_total|stat_number }} ج.م</td>
                             </tr>
@@ -330,72 +351,21 @@
                         <span class="text-slate-700 font-mono">{{ return_order.customer.phone|default:"—" }}</span>
                     </div>
                 </div>
+                {% if request.user|has_permission:'sales:customers/accounting' %}
                 <div class="pt-2 border-t border-slate-100">
                     <a href="{% url 'accounting_customers_list' %}?customer={{ return_order.customer.id }}" class="text-[#27bebe] hover:underline font-bold text-xs inline-flex items-center gap-1">
                         <span>معاينة كشف حساب العميل</span>
                         <span class="material-symbols-outlined text-sm">chevron_left</span>
                     </a>
                 </div>
+                {% endif %}
             </div>
 
         </div>
 
     </div>
 
-</div>
+    {% include 'components/attachments_gallery.html' with target_obj=return_order model_key='salesreturnorder' %}
 
-<!-- Reject Modal -->
-<div id="reject-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
-    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeRejectModal()"></div>
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
-            <h3 class="text-sm font-bold text-slate-900">رفض مرتجع المبيعات</h3>
-            <p class="text-slate-500">يرجى توضيح سبب رفض إشعار المرتجع ليتم إخطار المنشئ به:</p>
-            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'reject' %}">
-                {% csrf_token %}
-                <textarea name="rejection_reason" rows="3" required placeholder="سبب الرفض الإداري..."
-                          class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-red-500"></textarea>
-                <div class="pt-4 flex items-center justify-end gap-2">
-                    <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">إلغاء</button>
-                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">تأكيد الرفض</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
-
-<!-- Cancel Modal -->
-<div id="cancel-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
-    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeCancelModal()"></div>
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
-            <h3 class="text-sm font-bold text-slate-900">إلغاء مرتجع المبيعات</h3>
-            <p class="text-slate-500">هل أنت متأكد من رغبتك في إلغاء مرتجع المبيعات نهائياً؟</p>
-            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'cancel' %}">
-                {% csrf_token %}
-                <input type="text" name="reason" placeholder="سبب الإلغاء (اختياري)..."
-                       class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-red-500 mb-4">
-                <div class="flex items-center justify-end gap-2">
-                    <button type="button" onclick="closeCancelModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">تراجع</button>
-                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">نعم، إلغاء المرتجع</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-function openRejectModal() {
-    document.getElementById('reject-modal').classList.remove('hidden');
-}
-function closeRejectModal() {
-    document.getElementById('reject-modal').classList.add('hidden');
-}
-function openCancelModal() {
-    document.getElementById('cancel-modal').classList.remove('hidden');
-}
-function closeCancelModal() {
-    document.getElementById('cancel-modal').classList.add('hidden');
-}
-</script>
 {% endblock %}

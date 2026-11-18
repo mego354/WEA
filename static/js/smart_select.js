@@ -100,6 +100,7 @@
             this.isLoading = false;
             this.loadError = '';
             this.suppressNextSelectSync = false;
+            this.lastTotalCount = null;
 
             this._buildDOM();
             this._bindEvents();
@@ -210,7 +211,7 @@
             this.listbox.setAttribute('role', 'listbox');
 
             this.statusFooter = document.createElement('div');
-            this.statusFooter.className = 'hidden px-3 py-1.5 text-[11px] text-slate-400 bg-slate-50 border-t border-slate-100 text-center';
+            this.statusFooter.className = 'hidden px-3 py-1.5 text-[11px] text-slate-500 bg-slate-50 border-t border-slate-100 flex items-center justify-between font-medium select-none';
 
             this.dropdown.appendChild(searchWrap);
             this.dropdown.appendChild(this.listbox);
@@ -301,12 +302,22 @@
             };
             document.addEventListener('click', this._onDocClick);
 
-            // Watch dynamic <option> changes / visibility toggles (e.g. customer -> orders cascade)
+            // Watch dynamic <option> changes / visibility toggles (coalesced per animation frame)
             if (typeof MutationObserver !== 'undefined') {
+                this._observerRaf = null;
                 this._observer = new MutationObserver(() => {
-                    this.syncFromSelect();
-                    if (this.isOpen) {
-                        this._renderCurrentResults(this.searchInput.value);
+                    if (this._observerRaf) return;
+                    const flush = () => {
+                        this._observerRaf = null;
+                        this.syncFromSelect();
+                        if (this.isOpen) {
+                            this._renderCurrentResults(this.searchInput.value);
+                        }
+                    };
+                    if (typeof requestAnimationFrame === 'function') {
+                        this._observerRaf = requestAnimationFrame(flush);
+                    } else {
+                        flush();
                     }
                 });
                 this._observer.observe(this.select, {
@@ -386,7 +397,7 @@
 
             this._renderCurrentResults('');
             // Trigger initial remote refresh if remote URL is available and no query needed
-            if (this.searchUrl && this.minChars === 0 && readLocalOptions(this.select).length === 0) {
+            if (this.searchUrl && this.minChars === 0 && !this.remoteCache.has('')) {
                 this._fetchRemote('');
             }
             setTimeout(() => this.searchInput.focus(), 10);
@@ -481,7 +492,11 @@
         async _fetchRemote(query) {
             const normKey = normalizeText(query);
             if (this.remoteCache.has(normKey)) {
-                this._mergeAndRender(this.remoteCache.get(normKey), query);
+                const cached = this.remoteCache.get(normKey);
+                const cachedItems = Array.isArray(cached) ? cached : (cached.items || []);
+                const cachedTotal = typeof cached.total === 'number' ? cached.total : cachedItems.length;
+                this.lastTotalCount = cachedTotal;
+                this._mergeAndRender(cachedItems, query, null, cachedTotal);
                 return;
             }
 
@@ -513,10 +528,14 @@
                 }
                 const data = await resp.json();
                 const items = Array.isArray(data.results) ? data.results : [];
-                this.remoteCache.set(normKey, items);
+                const total = typeof data.total_count === 'number'
+                    ? data.total_count
+                    : (typeof data.total === 'number' ? data.total : (typeof data.count === 'number' ? data.count : items.length));
+                this.remoteCache.set(normKey, { items, total });
+                this.lastTotalCount = total;
                 this._setLoading(false);
                 if (this.isOpen) {
-                    this._mergeAndRender(items, this.searchInput.value.trim());
+                    this._mergeAndRender(items, this.searchInput.value.trim(), null, total);
                 }
             } catch (err) {
                 if (err && err.name === 'AbortError') return;
@@ -537,13 +556,18 @@
 
             // Also include cached remote results if present for same query
             if (this.searchUrl && this.remoteCache.has(normQuery)) {
-                this._mergeAndRender(this.remoteCache.get(normQuery), query, filtered);
+                const cached = this.remoteCache.get(normQuery);
+                const cachedItems = Array.isArray(cached) ? cached : (cached.items || []);
+                const cachedTotal = typeof cached.total === 'number' ? cached.total : cachedItems.length;
+                this.lastTotalCount = cachedTotal;
+                this._mergeAndRender(cachedItems, query, filtered, cachedTotal);
             } else {
-                this._renderList(filtered, query);
+                this.lastTotalCount = filtered.length;
+                this._renderList(filtered, query, filtered.length);
             }
         }
 
-        _mergeAndRender(remoteItems, query, localPreFiltered) {
+        _mergeAndRender(remoteItems, query, localPreFiltered, totalCount) {
             const seen = new Set();
             const merged = [];
 
@@ -567,10 +591,10 @@
                 merged.push(item);
             });
 
-            this._renderList(merged, query);
+            this._renderList(merged, query, totalCount);
         }
 
-        _renderList(items, query) {
+        _renderList(items, query, totalCount) {
             const currentVal = String(this.select.value || '');
             this.renderedItems = items;
             this.activeIndex = items.findIndex((it) => String(it.id) === currentVal && !it.disabled);
@@ -652,11 +676,23 @@
                 });
             }
 
+            const effTotal = (typeof totalCount === 'number' ? totalCount : this.lastTotalCount) || items.length;
             if (this.loadError && items.length > 0) {
-                this.statusFooter.textContent = this.loadError;
+                this.statusFooter.innerHTML = `<span class="text-rose-600">${escapeHtml(this.loadError)}</span>`;
                 this.statusFooter.classList.remove('hidden');
-            } else if (this.searchUrl && !query && items.length >= 30) {
-                this.statusFooter.textContent = 'اكتب للبحث عن نتائج أخرى...';
+            } else if (items.length > 0) {
+                let countText = '';
+                if (query) {
+                    countText = `تم العثور على ${items.length}${effTotal > items.length ? ' من أصل ' + effTotal : ''} نتيجة`;
+                } else if (effTotal > items.length) {
+                    countText = `عرض ${items.length} من أصل ${effTotal} خيار متاح`;
+                } else {
+                    countText = `${items.length} خيار متاح`;
+                }
+                const hint = (this.searchUrl && effTotal > items.length)
+                    ? '<span class="text-[10px] text-slate-400">ابحث للمزيد...</span>'
+                    : '';
+                this.statusFooter.innerHTML = `<span>${countText}</span>${hint}`;
                 this.statusFooter.classList.remove('hidden');
             } else {
                 this.statusFooter.classList.add('hidden');

@@ -36,56 +36,19 @@ def calculate_haversine_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 
-def validate_and_save_photo_evidence(visit, photo_file, max_size_mb=10):
-    """
-    Business Rule (Requirement 7):
-    Validates uploaded location photo evidence:
-    - Allowed extensions: .jpg, .jpeg, .png, .webp
-    - File size <= 10MB
-    - Image format / integrity check via Pillow
-    - Generates a safe, non-guessable filename with UUID
-    - Stores file in visit.location_photo
-    """
-    if not photo_file:
-        return None
-
-    ext = os.path.splitext(photo_file.name)[1].lower()
-    allowed_exts = ['.jpg', '.jpeg', '.png', '.webp']
-    if ext not in allowed_exts:
-        raise ValidationError(f"نوع الملف غير مدعوم ({ext}). يُسمح فقط بالصور: JPG, JPEG, PNG, WEBP.")
-
-    max_bytes = max_size_mb * 1024 * 1024
-    if photo_file.size > max_bytes:
-        raise ValidationError(f"حجم ملف الصورة يتجاوز الحد المسموح به ({max_size_mb} ميجابايت).")
-
-    # Image integrity check
-    try:
-        img = Image.open(photo_file)
-        img.verify()
-        photo_file.seek(0)
-    except Exception:
-        raise ValidationError("ملف الصورة تالف أو لا يمثل صورة صالحة.")
-
-    # Generate safe filename
-    safe_name = f"{uuid.uuid4().hex}{ext}"
-    photo_file.name = safe_name
-    visit.location_photo = photo_file
-    visit.photo_captured_at = timezone.now()
-    return photo_file
-
-
 def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, device_accuracy=None,
                           photo_file=None, force_bypass=False, bypass_reason='',
-                          stage='create', request_distance_exception=False, strict_distance=False):
+                          stage='start', strict_distance=False, **kwargs):
     """
-    Applies the ERP location and distance verification policy across visit creation, start, and completion:
+    Applies the ERP location and distance verification policy across visit execution (start & end):
     1. Dynamically determines allowed distance threshold:
        - Uses template's special_tolerance if allow_template_distance_override is enabled and configured on template.
        - Otherwise uses default LocationSettings.tolerance.
     2. Compares user's current GPS coordinates against client's registered coordinates.
     3. Records actual distance, allowed threshold, and distance discrepancy on the visit.
-    4. Handles authorized bypass (Manager / Superadmin / configured roles) without requiring extra approval.
-    5. Handles unauthorized user (Representative) exception requests with mandatory reason and submits for manager approval.
+    4. Handles authorized bypass (users with activities:visits/bypass_gps / Superadmin):
+       - Bypassing distance will NOT make the visit need an approval (approval_status is untouched).
+    5. Unauthorized users outside distance threshold cannot start or end the visit.
     """
     settings = LocationSettings.get_settings()
     template = getattr(visit, 'template', None)
@@ -98,13 +61,7 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
 
     # Security check: unauthorized users must never force-bypass directly
     if force_bypass and not can_bypass_directly:
-        raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
-
-    if request_distance_exception and not can_bypass_directly:
-        if not settings.can_user_request_distance_exception(user):
-            raise ValidationError("عذراً، لا تملك صلاحية طلب استثناء لتجاوز المسافة الجغرافية للزيارة.")
-        if not settings.distance_bypass_requires_approval:
-            raise ValidationError("عذراً، طلب استثناء تجاوز المسافة غير مفعل في إعدادات النظام.")
+        raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS).")
 
     # Convert and validate coordinates if passed
     if visit_lat is not None and visit_lng is not None and str(visit_lat).strip() != '' and str(visit_lng).strip() != '':
@@ -145,57 +102,39 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
             visit.distance = Decimal(str(round(dist, 2)))
             visit.distance_discrepancy = max(Decimal('0.00'), visit.distance - visit.allowed_distance)
 
-    # Handle Photo Evidence if uploaded
-    if photo_file:
-        validate_and_save_photo_evidence(visit, photo_file)
+    # Handle explicit bypass:
+    # All users who have activities:visits/bypass_gps (or superadmin) can ignore distance.
+    # Bypassing distance will NOT make the visit need an approval.
+    if force_bypass:
+        if not can_bypass_directly:
+            raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS).")
+        if settings.bypass_reason_mandatory and not is_super and not bypass_reason_clean:
+            raise ValidationError("يرجى إدخال سبب تجاوز المسافة المسموح بها (ذكر السبب إلزامي حسب إعدادات النظام).")
+        visit.location_verified = True
+        visit.verification_status = 'force_bypassed'
+        if dist is not None and dist > tolerance:
+            visit.location_status = 'بعيد جدا عن الموقع المحدد (تم التجاوز بصلاحية إدارية)'
+        else:
+            visit.location_status = 'تم تجاهل التحقق بالقوة بواسطة المشرف'
+        visit.bypassed_by = user
+        visit.bypassed_at = timezone.now()
+        visit.bypass_reason = bypass_reason_clean or 'تجاوز مصرح به (صلاحية تجاوز GPS)'
+        if stage == 'start':
+            visit.gps_forced_start = True
+            visit.gps_forced_start_by = user
+            visit.gps_forced_start_at = timezone.now()
+        elif stage == 'end':
+            visit.gps_forced_end = True
+            visit.gps_forced_end_by = user
+            visit.gps_forced_end_at = timezone.now()
+        visit.requires_approval_due_to_distance = False
+        return visit
 
     # Check if verification is active for this stage
     stage_verify_enabled = settings.verify_visits
-    if stage == 'create':
-        if getattr(visit, 'is_planned', False):
-            # Planned visits do NOT require distance validation during creation, only at start/end
-            stage_verify_enabled = False
-        elif not settings.verify_unplanned_visit_distance:
-            stage_verify_enabled = False
-    elif stage == 'end':
-        if not settings.verify_end_visit_distance:
-            stage_verify_enabled = False
+    if stage == 'end' and not settings.verify_end_visit_distance:
+        stage_verify_enabled = False
 
-    # Handle explicit bypass / exception request
-    if force_bypass or request_distance_exception:
-        if can_bypass_directly:
-            if settings.bypass_reason_mandatory and not bypass_reason_clean:
-                raise ValidationError("يرجى إدخال سبب تجاوز المسافة المسموح بها (ذكر السبب إلزامي حسب إعدادات النظام).")
-            visit.location_verified = True
-            visit.verification_status = 'force_bypassed'
-            if dist is not None and dist > tolerance:
-                visit.location_status = 'بعيد جدا عن الموقع المحدد (تم التجاوز بصلاحية إدارية)'
-            else:
-                visit.location_status = 'تم تجاهل التحقق بالقوة بواسطة المشرف'
-            visit.bypassed_by = user
-            visit.bypassed_at = timezone.now()
-            visit.bypass_reason = bypass_reason_clean or 'تجاوز مصرح به من الإدارة / المشرف'
-            return visit
-        else:
-            # Representative / unauthorized user requesting an exception -> requires reason & manager approval
-            if not bypass_reason_clean:
-                raise ValidationError("يرجى توضيح سبب التواجد خارج المسافة المسموح بها لتقديم طلب استثناء لاعتماد المدير.")
-            visit.location_verified = False
-            visit.verification_status = 'unverified'
-            visit.location_status = (
-                f"خارج النطاق المسموح ({visit.distance}م / المسموح {tolerance}م) - بانتظار اعتماد الاستثناء"
-                if visit.distance is not None else
-                "طلب استثناء موقع جغرافي - بانتظار اعتماد المدير"
-            )
-            visit.bypassed_by = user
-            visit.bypassed_at = timezone.now()
-            visit.bypass_reason = bypass_reason_clean
-            if settings.distance_bypass_requires_approval:
-                visit.requires_approval_due_to_distance = True
-                visit.approval_status = 'pending'
-            return visit
-
-    # If verification is disabled for this stage or globally
     if not stage_verify_enabled:
         if dist is not None:
             if dist <= tolerance:
@@ -205,11 +144,11 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
             else:
                 visit.location_verified = False
                 visit.verification_status = 'unverified'
-                visit.location_status = 'تخطيط مسبق (يتم التحقق من المسافة عند إنهاء الزيارة)' if getattr(visit, 'is_planned', False) else 'التحقق معطل في الإعدادات العامة'
+                visit.location_status = 'التحقق معطل في الإعدادات العامة'
         else:
             visit.location_verified = True
             visit.verification_status = 'verified'
-            visit.location_status = 'زيارة مخططة (لا يتطلب التحقق من المسافة عند الإنشاء)' if getattr(visit, 'is_planned', False) else 'التحقق معطل في الإعدادات العامة'
+            visit.location_status = 'التحقق معطل في الإعدادات العامة'
         return visit
 
     # Case 1: Device location unavailable
@@ -223,13 +162,23 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
             visit.bypassed_by = user
             visit.bypassed_at = timezone.now()
             visit.bypass_reason = bypass_reason_clean or 'تعذر تحديد موقع الجهاز'
+            if stage == 'start':
+                visit.gps_forced_start = True
+                visit.gps_forced_start_by = user
+                visit.gps_forced_start_at = timezone.now()
+            elif stage == 'end':
+                visit.gps_forced_end = True
+                visit.gps_forced_end_by = user
+                visit.gps_forced_end_at = timezone.now()
+            visit.requires_approval_due_to_distance = False
+            return visit
         else:
             visit.location_verified = False
             visit.verification_status = 'unverified'
             visit.location_status = 'تعذر تحديد موقع الجهاز'
             if strict_distance:
-                raise ValidationError("تحديد الموقع الجغرافي (GPS) إلزامي للتحقق من المسافة. يرجى تفعيل الموقع أو طلب استثناء مع ذكر السبب.")
-        return visit
+                raise ValidationError("تحديد الموقع الجغرافي (GPS) إلزامي للتحقق من المسافة.")
+            return visit
 
     # Case 2: Customer has saved GPS coordinates
     if customer_lat is not None and customer_lng is not None:
@@ -240,26 +189,13 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
                 visit.location_status = 'ضمن النطاق المحدد'
                 visit.distance_discrepancy = Decimal('0.00')
             else:
-                if can_bypass_directly:
-                    if settings.bypass_reason_mandatory and not is_super and not bypass_reason_clean:
-                        raise ValidationError(
-                            f"المسافة الحالية ({visit.distance} متر) تتجاوز المسافة المسموح بها ({tolerance} متر). يرجى إدخال سبب التجاوز للمتابعة."
-                        )
-                    visit.location_verified = True
-                    visit.verification_status = 'force_bypassed'
-                    visit.location_status = 'بعيد جدا عن الموقع المحدد'
-                    visit.bypassed_by = user
-                    visit.bypassed_at = timezone.now()
-                    visit.bypass_reason = bypass_reason_clean or 'الموقع خارج النطاق المحدد'
-                else:
-                    visit.location_verified = False
-                    visit.verification_status = 'unverified'
-                    visit.location_status = 'بعيد جدا عن الموقع المحدد'
-                    if strict_distance:
-                        raise ValidationError(
-                            f"أنت خارج النطاق الجغرافي المسموح به للعميل (المسافة الحالية: {visit.distance} متر، المسافة المسموح بها: {tolerance} متر). "
-                            "للمتابعة، يرجى طلب استثناء تجاوز المسافة مع كتابة سبب واضح لاعتماد المدير."
-                        )
+                visit.location_verified = False
+                visit.verification_status = 'unverified'
+                visit.location_status = 'بعيد جدا عن الموقع المحدد'
+                if strict_distance:
+                    raise ValidationError(
+                        f"أنت خارج النطاق الجغرافي المسموح به للعميل (المسافة الحالية: {visit.distance} متر، المسافة المسموح بها: {tolerance} متر)."
+                    )
         return visit
 
     # Case 3: Customer has NO saved GPS coordinates
@@ -275,17 +211,9 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         visit.location_status = 'تم حفظ موقع العميل بشكل تلقائي مع أول زيارة'
         return visit
     else:
-        if can_bypass_directly:
-            visit.location_verified = True
-            visit.verification_status = 'force_bypassed'
-            visit.location_status = 'لا يوجد موقع مسجل للعميل (تم التجاوز)'
-            visit.bypassed_by = user
-            visit.bypassed_at = timezone.now()
-            visit.bypass_reason = bypass_reason_clean or 'لا يوجد موقع مسجل للعميل'
-        else:
-            visit.location_verified = False
-            visit.verification_status = 'unverified'
-            visit.location_status = 'لا يوجد موقع مسجل للعميل'
+        visit.location_verified = False
+        visit.verification_status = 'unverified'
+        visit.location_status = 'لا يوجد موقع مسجل للعميل'
         return visit
 
 
@@ -299,11 +227,16 @@ def can_start_visit(visit, user):
     Preconditions:
     1. Visit status must be 'planned'.
     2. Visit approval_status must be 'approved'.
-    3. User must be the assigned owner or creator (or superuser / authorized supervisor).
-    4. User's role must be eligible for the visit's template.
+    3. Visit date must be today (visit.date == timezone.localdate()).
+    4. User must be the assigned owner or creator (or superuser / authorized supervisor).
+    5. User's role must be eligible for the visit's template.
     """
     if not user or not user.is_authenticated:
         return False, "يجب تسجيل الدخول لبدء الزيارة."
+
+    today_dates = {timezone.localdate(), timezone.now().date()}
+    if visit.date not in today_dates:
+        return False, f"لا يمكن بدء الزيارة إلا في تاريخ اليوم ({timezone.localdate().strftime('%d/%m/%Y')})، وتاريخ الزيارة هو {visit.date.strftime('%d/%m/%Y')}."
 
     is_owner = (visit.owner_id == user.id or visit.created_by_id == user.id)
     can_override = user.is_superuser or getattr(user, 'is_super_admin', False)
@@ -323,7 +256,7 @@ def can_start_visit(visit, user):
 
 
 def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None,
-                force_bypass=False, bypass_reason='', checkin_answers=None, request_distance_exception=False):
+                force_bypass=False, bypass_reason='', checkin_answers=None, **kwargs):
     """
     Executes explicit Start Visit / Check-in transition:
     planned (approved) -> started
@@ -365,7 +298,7 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
         loc_settings = LocationSettings.get_settings()
         should_verify_start = bool(
             loc_settings.verify_visits or
-            lat is not None or lng is not None or photo_file or force_bypass or request_distance_exception
+            lat is not None or lng is not None or force_bypass
         )
         if should_verify_start:
             verify_visit_location(
@@ -373,8 +306,8 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
                 visit_lat=lat if lat is not None else visit.latitude,
                 visit_lng=lng if lng is not None else visit.longitude,
                 device_accuracy=accuracy if accuracy is not None else visit.device_accuracy,
-                photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason,
-                stage='start', request_distance_exception=request_distance_exception,
+                force_bypass=force_bypass, bypass_reason=bypass_reason,
+                stage='start',
                 strict_distance=bool(loc_settings.verify_visits)
             )
 
@@ -385,6 +318,17 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
         visit.save()
 
         ip = request.META.get('REMOTE_ADDR') if request else None
+        if force_bypass or visit.gps_forced_start:
+            ApprovalAuditLog.objects.create(
+                record_type='visit',
+                visit=visit,
+                action='bypass',
+                actor=user,
+                status_before=status_before,
+                status_after='started',
+                reason=f"تجاوز GPS عند بدء الزيارة: {bypass_reason or 'تجاوز بصلاحية تجاوز GPS'}",
+                ip_address=ip
+            )
         ApprovalAuditLog.objects.create(
             record_type='visit',
             visit=visit,
@@ -436,7 +380,7 @@ def can_submit_answers(visit, user):
     return True, ""
 
 
-def save_visit_answers(visit, user, answers, feedback='', detailed_product_ids=None):
+def save_visit_answers(visit, user, answers, detailed_product_ids=None):
     """
     Saves draft answers and detailing during an active visit without completing/ending it.
     Visit status strictly remains 'started'.
@@ -450,8 +394,6 @@ def save_visit_answers(visit, user, answers, feedback='', detailed_product_ids=N
 
     with transaction.atomic():
         visit.questionnaire_answers = answers or {}
-        if feedback:
-            visit.feedback = feedback
 
         if visit.template and visit.template.is_product_detailing_supported():
             if detailed_product_ids is not None:
@@ -524,14 +466,14 @@ def can_end_visit(visit, user, answers=None):
     return True, ""
 
 
-def end_visit(visit, user, request=None, answers=None, feedback='', detailed_product_ids=None,
-              lat=None, lng=None, accuracy=None, photo_file=None, force_bypass=False, bypass_reason='',
-              visit_outcome='', request_distance_exception=False):
+def end_visit(visit, user, request=None, answers=None, detailed_product_ids=None,
+              lat=None, lng=None, accuracy=None, force_bypass=False, bypass_reason='',
+              request_distance_exception=False, **kwargs):
     """
     Executes explicit End Visit / Check-out transition:
     started -> finished
     Captures server-side ended_at timestamp, calculates duration on the server,
-    verifies GPS and photo evidence, updates planned items if applicable, and logs audit.
+    verifies GPS, derives outcome from Question #1 in answers, updates planned items, and logs audit.
     """
     import datetime
     from django.db import transaction
@@ -547,12 +489,20 @@ def end_visit(visit, user, request=None, answers=None, feedback='', detailed_pro
         if answers is not None:
             visit.questionnaire_answers = answers
 
-        if feedback:
-            visit.feedback = feedback
-
-        if visit_outcome:
-            visit.visit_outcome = visit_outcome
-            visit.is_successful = (visit_outcome == 'successful')
+        # Derive is_successful from Question #1 in questionnaire answers
+        effective_answers = answers if answers is not None else (visit.questionnaire_answers or {})
+        if visit.template:
+            q1 = visit.template.questions.filter(order=1).first()
+            if q1 and str(q1.id) in effective_answers:
+                val = str(effective_answers[str(q1.id)]).strip().lower()
+                visit.is_successful = (val == 'successful' or ('ناجحة' in val and 'غير' not in val))
+            else:
+                for q in visit.template.questions.all():
+                    if 'نتيجة' in q.text_ar or 'outcome' in q.text_en.lower():
+                        if str(q.id) in effective_answers:
+                            val = str(effective_answers[str(q.id)]).strip().lower()
+                            visit.is_successful = (val == 'successful' or ('ناجحة' in val and 'غير' not in val))
+                            break
 
         # Product detailing
         if visit.template and visit.template.is_product_detailing_supported():
@@ -566,14 +516,14 @@ def end_visit(visit, user, request=None, answers=None, feedback='', detailed_pro
             visit.detailed_products.clear()
 
         approval_before = visit.approval_status
-        # Location & photo verification for completion stage
+        # Location verification for completion stage
         verify_visit_location(
             visit, user, visit.contact,
             visit_lat=lat if lat is not None else visit.latitude,
             visit_lng=lng if lng is not None else visit.longitude,
             device_accuracy=accuracy if accuracy is not None else visit.device_accuracy,
-            photo_file=photo_file, force_bypass=force_bypass, bypass_reason=bypass_reason,
-            stage='end', request_distance_exception=request_distance_exception, strict_distance=True
+            force_bypass=force_bypass, bypass_reason=bypass_reason,
+            stage='end', strict_distance=bool(LocationSettings.get_settings().verify_visits and LocationSettings.get_settings().verify_end_visit_distance)
         )
 
         status_before = visit.status
@@ -598,38 +548,17 @@ def end_visit(visit, user, request=None, answers=None, feedback='', detailed_pro
         ip = request.META.get('REMOTE_ADDR') if request else None
         from accounts.services import AuditLogService
 
-        if visit.requires_approval_due_to_distance:
+        if force_bypass or visit.gps_forced_end or visit.verification_status == 'force_bypassed':
             ApprovalAuditLog.objects.create(
                 record_type='visit',
                 visit=visit,
-                action='distance_exception_requested',
+                action='bypass',
                 actor=user,
-                status_before=approval_before,
-                status_after='pending',
-                reason=(
-                    f"طلب استثناء مسافة عند إنهاء الزيارة (المسافة الفعلية: {visit.distance}م، المسموح: {visit.allowed_distance}م). "
-                    f"السبب: {visit.bypass_reason}"
-                ),
+                status_before=status_before,
+                status_after='finished',
+                reason=f"تجاوز GPS عند إنهاء الزيارة: {bypass_reason or 'تجاوز بصلاحية تجاوز GPS'}",
                 ip_address=ip
             )
-            AuditLogService.log(
-                action_type='VISIT_DISTANCE_EXCEPTION_REQUESTED',
-                module='visits',
-                actor=user,
-                request=request,
-                record_id=visit.pk,
-                record_name=str(visit.serial_num),
-                description=f"طلب استثناء تجاوز المسافة للزيارة #{visit.serial_num} وتحويلها لاعتماد المدير",
-                previous_values={'approval_status': approval_before},
-                new_values={
-                    'approval_status': visit.approval_status,
-                    'distance': str(visit.distance or ''),
-                    'allowed_distance': str(visit.allowed_distance or ''),
-                    'bypass_reason': visit.bypass_reason,
-                },
-                status='SUCCESS',
-            )
-        elif visit.verification_status == 'force_bypassed':
             ApprovalAuditLog.objects.create(
                 record_type='visit',
                 visit=visit,
@@ -655,6 +584,7 @@ def end_visit(visit, user, request=None, answers=None, feedback='', detailed_pro
                     'distance': str(visit.distance or ''),
                     'allowed_distance': str(visit.allowed_distance or ''),
                     'bypass_reason': visit.bypass_reason,
+                    'approval_status': visit.approval_status,
                 },
                 status='SUCCESS',
             )
@@ -1339,9 +1269,11 @@ def build_agreement_timeline(agreement):
         })
 
     # 3. SecurityAuditLog entries for updates and transitions not captured in ApprovalAuditLog
+    # Filter strictly by action_type__startswith='AGREEMENT_' to prevent collision with other entities (e.g. VisitPlan)
     sec_logs = SecurityAuditLog.objects.filter(
         module='activities',
-        record_id=str(agreement.pk)
+        record_id=str(agreement.pk),
+        action_type__startswith='AGREEMENT_'
     ).select_related('actor').order_by('created_at', 'id')
 
     for slog in sec_logs:

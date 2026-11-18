@@ -62,6 +62,9 @@ class Command(BaseCommand):
             else:
                 updated_count += 1
 
+        # Remove obsolete permissions no longer registered
+        Permission.objects.filter(codename='activities:visits/evidence').delete()
+
         self.stdout.write(self.style.SUCCESS(
             f"Successfully processed {len(registered)} permissions (Created: {created_count}, Updated: {updated_count})."
         ))
@@ -148,7 +151,7 @@ class Command(BaseCommand):
         manager_codenames = [
             'module:activities', 'activities:visits/list', 'activities:visits/view',
             'activities:visits/create', 'activities:visits/edit', 'activities:visits/edit_answers',
-            'activities:visits/delete', 'activities:visits/approve', 'activities:visits/evidence',
+            'activities:visits/delete', 'activities:visits/approve',
             'activities:visits/export', 'activities:visits/bypass_gps', 'activities:visits/gps_request_exception',
             'activities:planned/list', 'activities:planned/manage', 'activities:planned/export',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create',
@@ -157,13 +160,15 @@ class Command(BaseCommand):
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create', 'sales:orders/edit', 'sales:orders/approve', 'sales:orders/export',
             'sales:returns/list', 'sales:returns/view', 'sales:returns/create', 'sales:returns/approve', 'sales:returns/manage', 'sales:returns/cancel', 'sales:returns/export',
             'sales:collections/list',
+            'sales:customers/accounting', 'sales:customers/accounting_export',
+            'sales:customers/transactions', 'sales:customers/transactions_export',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/create',
             'contacts:contacts/edit', 'contacts:contacts/export',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
             'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export', 'inventory:transfers/list', 'inventory:transfers/view',
             'module:purchases', 'purchases:orders/list', 'purchases:orders/view', 'purchases:orders/approve',
             'purchases:orders/export',
-            'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/approve', 'purchases:returns/manage', 'purchases:returns/export',
+            'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/create', 'purchases:returns/approve', 'purchases:returns/manage', 'purchases:returns/export',
             'module:treasury', 'treasury:payments/requests', 'treasury:payment_requests/approve', 'treasury:payment_requests/export',
             'module:performance', 'performance:overview/view', 'performance:analysis/view', 'performance:daily/view', 'performance:detailed/view',
             'performance:analysis/export', 'performance:daily/export', 'performance:detailed/export',
@@ -202,9 +207,10 @@ class Command(BaseCommand):
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/invoice',
             'sales:returns/list', 'sales:returns/view', 'sales:returns/manage', 'sales:returns/export',
             'sales:collections/list', 'sales:collections/create', 'sales:collections/export',
-            'sales:customers/accounting', 'sales:customers/transactions',
+            'sales:customers/accounting', 'sales:customers/accounting_export',
+            'sales:customers/transactions', 'sales:customers/transactions_export',
             'module:contacts', 'contacts:contacts/list', 'contacts:contacts/view', 'contacts:contacts/export',
-            'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export',
+            'module:inventory', 'inventory:stocks/view', 'inventory:stocks/export', 'inventory:memos/manage',
             'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/approve', 'inventory:transfers/execute',
             'module:reports', 'reports:hub/view', 'reports:financial/view', 'reports:financial/export', 'reports:sales/view', 'reports:sales/export', 'reports:inventory/view', 'reports:inventory/export',
         ]
@@ -238,7 +244,7 @@ class Command(BaseCommand):
         rep_codenames = [
             'module:activities', 'activities:visits/list', 'activities:visits/view',
             'activities:visits/create', 'activities:visits/edit', 'activities:visits/edit_answers',
-            'activities:visits/evidence', 'activities:visits/gps_request_exception',
+            'activities:visits/gps_request_exception',
             'activities:planned/list',
             'activities:agreements/list', 'activities:agreements/view', 'activities:agreements/create',
             'activities:agreements/edit', 'activities:agreements/delete',
@@ -246,6 +252,8 @@ class Command(BaseCommand):
             'module:sales', 'sales:orders/list', 'sales:orders/view', 'sales:orders/create',
             'sales:returns/list', 'sales:returns/view', 'sales:returns/create',
             'sales:collections/list', 'sales:collections/create',
+            'sales:customers/accounting', 'sales:customers/accounting_export',
+            'sales:customers/transactions', 'sales:customers/transactions_export',
             'module:catalog', 'catalog:products/list', 'catalog:products/view',
             'module:inventory', 'inventory:transfers/list', 'inventory:transfers/view', 'inventory:transfers/create',
             'module:performance', 'performance:overview/view', 'performance:daily/view',

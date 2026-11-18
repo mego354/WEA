@@ -222,14 +222,16 @@ class Phase2ComprehensiveVerificationTests(TestCase):
     # =========================================================================
     def test_req_c_planned_vs_unplanned_approval_lifecycle(self):
         """
-        1. Planned visits are auto-approved upon creation.
-        2. Unplanned visits require approval upon creation.
-        3. Subsequent edit triggers re-approval for either type.
+        Phase 2:
+        1. Planned visits created by rep require manager approval (pending).
+        2. Plan/visits can be approved by manager.
+        3. Unplanned visits are auto-approved upon creation.
+        4. Subsequent edit triggers re-approval.
         """
         tomorrow = timezone.now().date() + datetime.timedelta(days=1)
         today = timezone.now().date()
 
-        # 1. Planned visit creation -> auto-approved
+        # 1. Planned visit creation -> pending approval (creator lacks activities:visits/approve)
         self.client.force_login(self.rep_cairo)
         res_bulk = self.client.post(reverse('planned_visits_bulk_add'), {
             'date': tomorrow.strftime('%Y-%m-%d'),
@@ -239,10 +241,22 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         self.assertEqual(res_bulk.status_code, 200)
         planned_visit = Visit.objects.get(id=res_bulk.json()['created_visit_ids'][0])
         self.assertTrue(planned_visit.is_planned)
+        self.assertEqual(planned_visit.approval_status, 'pending')
+
+        # Manager approves the plan
+        self.client.force_login(self.mgr_cairo)
+        res_approve = self.client.post(
+            reverse('plan_action', args=[planned_visit.plan.pk, 'approve']),
+            {'approval_notes': 'خطة معتمدة'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_approve.status_code, 200)
+        planned_visit.refresh_from_db()
         self.assertEqual(planned_visit.approval_status, 'approved')
         self.assertFalse(planned_visit.waiting_for_reapproval)
 
-        # 2. Unplanned visit creation -> pending approval
+        # 2. Unplanned visit creation -> auto-approved
+        self.client.force_login(self.rep_cairo)
         res_unplanned = self.client.post(reverse('visit_create'), {
             'contact': self.contact_cairo.id,
             'template': self.template.id,
@@ -250,12 +264,11 @@ class Phase2ComprehensiveVerificationTests(TestCase):
             'latitude': '30.0444',
             'longitude': '31.2357',
             'device_accuracy': '10',
-            'feedback': 'زيارة غير مخططة',
         })
         self.assertEqual(res_unplanned.status_code, 302)
         unplanned_visit = Visit.objects.filter(contact=self.contact_cairo, is_planned=False).first()
         self.assertIsNotNone(unplanned_visit)
-        self.assertEqual(unplanned_visit.approval_status, 'pending')
+        self.assertEqual(unplanned_visit.approval_status, 'approved')
 
         # 3. Editing planned visit triggers re-approval
         new_date = (tomorrow + datetime.timedelta(days=2)).strftime('%Y-%m-%d')
@@ -290,11 +303,10 @@ class Phase2ComprehensiveVerificationTests(TestCase):
             'contact': self.contact_cairo.id,
             'template': self.template.id,
             'date': new_date.strftime('%Y-%m-%d'),
-            'feedback': 'محاولة تعديل غير مسموح بها',  # Should be ignored before start/end
         })
         visit.refresh_from_db()
         self.assertEqual(visit.date, new_date)
-        self.assertNotEqual(visit.feedback, 'محاولة تعديل غير مسموح بها')
+        self.assertFalse(hasattr(visit, 'feedback'))
 
         # Check ApprovalAuditLog entry has structured changes
         audit = ApprovalAuditLog.objects.filter(visit=visit, action='edited_reapproval_required').first()
@@ -376,21 +388,20 @@ class Phase2ComprehensiveVerificationTests(TestCase):
     def test_req_g_and_h_gbs_exception_permission_and_comma_formatting(self):
         """
         1. Haversine distance correctly parses comma decimal strings (e.g. '30,0444').
-        2. Users without activities:visits/gps_request_exception cannot request distance exception.
-        3. Users with permission can request exception with reason -> visit set to pending approval.
+        2. Users without activities:visits/bypass_gps cannot bypass distance.
+        3. Users with activities:visits/bypass_gps can bypass distance and that does NOT make the visit need approval.
         """
         # 1. Comma parsing test
         dist = calculate_haversine_distance('30,0444', '31,2357', '30,0380', '31,2120')
         self.assertIsNotNone(dist)
         self.assertGreater(dist, 0)
 
-        # 2. User without exception permission
+        # 2. User without bypass permission
         user_no_gps = User.objects.create_user(
             username='user_no_gps', email='nogps@wea.com', password='Password123!', role=self.rep_role
         )
         user_no_gps.assigned_areas.add(self.nasr_city)
-        # Remove exception permission
-        perm = Permission.objects.filter(codename='activities:visits/gps_request_exception').first()
+        perm = Permission.objects.filter(codename='activities:visits/bypass_gps').first()
         user_no_gps.user_permissions.remove(perm)
         self.rep_role.permissions.remove(perm)
 
@@ -400,21 +411,21 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         )
         self.client.force_login(user_no_gps)
 
-        # Far away location with request_distance_exception -> blocked because no permission
+        # Far away location with force_bypass_location -> blocked because no permission
         res_blocked = self.client.post(reverse('visit_action', args=[visit_far.pk, 'start']), {
             'latitude': '29.9000',  # Far from Cairo
             'longitude': '31.1000',
-            'request_distance_exception': '1',
+            'force_bypass_location': '1',
             'bypass_reason': 'العميل في اجتماع خارجي',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(res_blocked.status_code, 400)
 
-        # Grant exception permission
+        # Grant bypass permission
         user_no_gps.user_permissions.add(perm)
         res_allowed = self.client.post(reverse('visit_action', args=[visit_far.pk, 'start']), {
             'latitude': '29.9000',
             'longitude': '31.1000',
-            'request_distance_exception': '1',
+            'force_bypass_location': '1',
             'bypass_reason': 'العميل في اجتماع خارجي مصرح به',
             f'question_{self.q_start.id}': 'بدء الزيارة',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
@@ -422,7 +433,8 @@ class Phase2ComprehensiveVerificationTests(TestCase):
 
         visit_far.refresh_from_db()
         self.assertEqual(visit_far.status, 'started')
-        self.assertTrue(visit_far.requires_approval_due_to_distance)
+        self.assertFalse(visit_far.requires_approval_due_to_distance)
+        self.assertEqual(visit_far.approval_status, 'approved')  # Bypassing distance does not require approval!
 
     # =========================================================================
     # REQ I: Visit Template Ownership & Start/End Isolation

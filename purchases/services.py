@@ -6,6 +6,7 @@ from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, Purch
 from inventory.models import InventoryMemo, InventoryMemoItem, InventoryStock, InventoryLot
 from treasury.models import VendorAccount, VendorTransaction, VendorInstallment
 from accounts.services import AuditLogService
+from master_data.validation_utils import parse_positive_integer_quantity
 
 
 
@@ -37,9 +38,10 @@ class PurchaseOrderService:
             raise ValidationError("مصاريف الشحن لا يمكن أن تكون سالبة.")
 
         for idx, itm in enumerate(items_data, start=1):
-            qty = Decimal(str(itm.get('quantity', 0)))
-            if qty <= 0:
-                raise ValidationError(f"الكمية في البند #{idx} يجب أن تكون أكبر من الصفر.")
+            prod_obj = itm.get('product')
+            prod_label = getattr(prod_obj, 'name', '') or f"البند #{idx}"
+            qty = parse_positive_integer_quantity(itm.get('quantity'), item_label=prod_label)
+            itm['quantity'] = qty
             price = Decimal(str(itm.get('unit_price', 0)))
             if price < 0:
                 raise ValidationError(f"سعر الوحدة في البند #{idx} لا يمكن أن يكون سالباً.")
@@ -47,23 +49,41 @@ class PurchaseOrderService:
             if disc < 0 or disc > 100:
                 raise ValidationError(f"نسبة الخصم في البند #{idx} يجب أن تكون بين 0% و 100%.")
 
-        from master_data.models import PurchaseSettings
-        from accounts.permissions import has_perm_or_admin
-        purchase_settings = PurchaseSettings.get_settings()
+        # Financial credit limit check on supplier (Requirement B5)
+        account = VendorAccount.get_or_create_for_supplier(supplier)
+        subtotal = Decimal('0.00')
+        items_disc = Decimal('0.00')
+        items_tax = Decimal('0.00')
+        for itm in items_data:
+            q = Decimal(str(itm['quantity']))
+            p = Decimal(str(itm['unit_price']))
+            sub = (q * p).quantize(Decimal('0.01'))
+            dp = Decimal(str(itm.get('discount_percentage', 0)))
+            da = (sub * (dp / Decimal('100.0'))).quantize(Decimal('0.01'))
+            tp = Decimal(str(itm.get('tax_percentage', 0)))
+            ta = ((sub - da) * (tp / Decimal('100.0'))).quantize(Decimal('0.01'))
+            subtotal += sub
+            items_disc += da
+            items_tax += ta
 
-        initial_status = 'pending'
-        approved_by = None
-        approved_at = None
-        if not purchase_settings.require_manager_approval or has_perm_or_admin(user, 'purchases:orders/approve'):
-            initial_status = 'approved'
-            approved_by = user
-            approved_at = timezone.now()
+        after_items_disc = subtotal - items_disc
+        custom_disc_amt = (after_items_disc * (custom_discount_percentage / Decimal('100.0'))).quantize(Decimal('0.01')) if custom_discount_percentage > 0 else Decimal('0.00')
+        est_grand_total = max(Decimal('0.00'), after_items_disc - custom_disc_amt) + items_tax + shipping_fees
 
+        if account.credit_limit and account.credit_limit > Decimal('0.00'):
+            if (account.current_balance + est_grand_total) > account.credit_limit:
+                raise ValidationError(
+                    f"لا يمكن إنشاء أمر الشراء لتجاوز حد الائتمان المسموح للمورد ({account.credit_limit:,.2f} ج.م). "
+                    f"الرصيد الحالي: {account.current_balance:,.2f} ج.م، وقيمة الطلب: {est_grand_total:,.2f} ج.م."
+                )
+
+        # Immediate order execution: set status to settled and approved directly (Requirement B2)
+        now_dt = timezone.now()
         order = PurchaseOrder.objects.create(
             supplier=supplier,
             target_warehouse=target_warehouse,
             delivery_address=delivery_address,
-            order_date=order_date or timezone.now().date(),
+            order_date=order_date or now_dt.date(),
             expected_delivery_date=expected_delivery_date,
             due_date=due_date,
             custom_discount_percentage=Decimal(str(custom_discount_percentage or 0)),
@@ -71,9 +91,12 @@ class PurchaseOrderService:
             notes=notes,
             created_by=user,
             updated_by=user,
-            status=initial_status,
-            approved_by=approved_by,
-            approved_at=approved_at
+            status='settled',
+            payment_status='credit',
+            approved_by=user,
+            approved_at=now_dt,
+            stocked_at=now_dt,
+            invoiced_at=now_dt,
         )
 
         for idx, itm in enumerate(items_data, start=1):
@@ -90,6 +113,103 @@ class PurchaseOrderService:
             )
 
         order.recalculate_totals()
+
+        # Immediate warehouse stocking: generate inward InventoryMemo and increment stock (Requirement B2)
+        memo_number = f"MEMO-IN-{order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='inward',
+            warehouse=order.target_warehouse,
+            statement=f"إذن إضافة استلام أمر مشتريات #{order.order_number}",
+            status='applied',
+            applied_at=now_dt,
+            created_by=user
+        )
+
+        for item in order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=item.product,
+                quantity=item.quantity,
+                unit_cost=item.unit_price,
+                batch_number=item.product_batch_number,
+                expiry_date=item.product_expiry_date
+            )
+
+            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                warehouse=order.target_warehouse,
+                product=item.product,
+                defaults={'product_cost': item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+            )
+
+            stock_qty = Decimal(str(stock.qty_on_hand or '0'))
+            stock_cost = Decimal(str(stock.product_cost or '0'))
+            item_qty = Decimal(str(item.quantity))
+            item_price = Decimal(str(item.unit_price))
+
+            old_total_cost = stock_qty * stock_cost
+            new_item_cost = item_qty * item_price
+            new_total_qty = stock_qty + item_qty
+
+            if new_total_qty > 0:
+                weighted_avg_cost = (old_total_cost + new_item_cost) / new_total_qty
+                stock.product_cost = weighted_avg_cost.quantize(Decimal('0.01'))
+
+            stock.qty_on_hand = new_total_qty
+            stock.save(update_fields=['qty_on_hand', 'product_cost', 'updated_at'])
+
+            if item.product_batch_number or item.product_expiry_date:
+                lot, _ = InventoryLot.objects.get_or_create(
+                    stock=stock,
+                    batch_number=item.product_batch_number or "DEFAULT",
+                    expiry_date=item.product_expiry_date,
+                    defaults={'quantity': Decimal('0.00')}
+                )
+                lot.quantity += item.quantity
+                lot.save(update_fields=['quantity'])
+
+        order.memo = memo
+        order.save(update_fields=['memo'])
+
+        # Immediate financial execution: post credit to VendorTransaction & update VendorAccount (Requirement B2)
+        new_balance = account.current_balance + order.grand_total
+        tx = VendorTransaction.objects.create(
+            account=account,
+            purchase_order=order,
+            transaction_type='credit',
+            reason='purchase',
+            transaction_date=order.order_date or now_dt.date(),
+            due_date=order.due_date or (now_dt.date() + timezone.timedelta(days=account.credit_period_days)),
+            credit=order.grand_total,
+            debit=Decimal('0.00'),
+            running_balance=new_balance,
+            description=f"فاتورة مشتريات لأمر توريد #{order.order_number}",
+            created_by=user
+        )
+
+        VendorInstallment.objects.create(
+            transaction=tx,
+            total_amount=order.grand_total,
+            closed_amount=Decimal('0.00'),
+            open_amount=order.grand_total,
+            due_date=tx.due_date,
+            is_settled=False
+        )
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx.transaction_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_order',
+            purchase_order=order,
+            action='submitted',
+            actor=user,
+            status_before='',
+            status_after='settled',
+            reason="إنشاء وتنفيذ أمر الشراء مباشرة في المخزن والحسابات"
+        )
 
         # Audit Logging
         AuditLogService.log(
@@ -120,10 +240,19 @@ class PurchaseOrderService:
                      custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'),
                      delivery_agent="", delivery_time="", notes=""):
         """
-        Updates an editable purchase order (pending or rejected or approved before stocking).
+        Updates an editable purchase order with safe inventory and ledger reconciliation (Requirement B7).
         """
-        if order.status in ['picked', 'settled', 'cancelled']:
-            raise ValidationError(f"لا يمكن تعديل أمر مشتريات بحالة: {order.status_label_ar}")
+        if order.status == 'cancelled':
+            raise ValidationError("لا يمكن تعديل أمر شراء ملغي.")
+
+        if order.vendor_payments.exists():
+            raise ValidationError("لا يمكن تعديل أمر شراء مرتبط بسندات صرف مسجلة. يرجى إلغاء سندات الصرف أولاً.")
+
+        if VendorInstallment.objects.filter(transaction__purchase_order=order, closed_amount__gt=Decimal('0.00')).exists():
+            raise ValidationError("لا يمكن تعديل أمر شراء مرتبط بدفعات مسددة أو تسويات مالية.")
+
+        if order.return_orders.exclude(status='cancelled').exists():
+            raise ValidationError("لا يمكن تعديل أمر شراء مرتبط بمرتجعات مشتريات مسجلة.")
 
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر الشراء.")
@@ -143,9 +272,10 @@ class PurchaseOrderService:
             raise ValidationError("مصاريف الشحن لا يمكن أن تكون سالبة.")
 
         for idx, itm in enumerate(items_data, start=1):
-            qty = Decimal(str(itm.get('quantity', 0)))
-            if qty <= 0:
-                raise ValidationError(f"الكمية في البند #{idx} يجب أن تكون أكبر من الصفر.")
+            prod_obj = itm.get('product')
+            prod_label = getattr(prod_obj, 'name', '') or f"البند #{idx}"
+            qty = parse_positive_integer_quantity(itm.get('quantity'), item_label=prod_label)
+            itm['quantity'] = qty
             price = Decimal(str(itm.get('unit_price', 0)))
             if price < 0:
                 raise ValidationError(f"سعر الوحدة في البند #{idx} لا يمكن أن يكون سالباً.")
@@ -161,6 +291,19 @@ class PurchaseOrderService:
             'grand_total': str(order.grand_total),
             'due_date': str(order.due_date) if order.due_date else None,
         }
+
+        # 1. Reverse previous stock impact from target warehouse
+        old_wh = order.target_warehouse
+        for old_item in order.items.select_related('product'):
+            st = InventoryStock.objects.select_for_update().filter(warehouse=old_wh, product=old_item.product).first()
+            if st:
+                st.qty_on_hand = max(Decimal('0.00'), st.qty_on_hand - old_item.quantity)
+                st.save(update_fields=['qty_on_hand', 'updated_at'])
+            if old_item.product_batch_number or old_item.product_expiry_date:
+                lot = InventoryLot.objects.filter(stock=st, batch_number=old_item.product_batch_number or "DEFAULT").first()
+                if lot:
+                    lot.quantity = max(Decimal('0.00'), lot.quantity - old_item.quantity)
+                    lot.save(update_fields=['quantity'])
 
         order.supplier = supplier
         order.target_warehouse = target_warehouse
@@ -199,6 +342,66 @@ class PurchaseOrderService:
 
         order.recalculate_totals()
 
+        # 2. Add new items to target warehouse stock
+        new_wh = order.target_warehouse
+        for new_item in order.items.select_related('product'):
+            st, _ = InventoryStock.objects.select_for_update().get_or_create(
+                warehouse=new_wh,
+                product=new_item.product,
+                defaults={'product_cost': new_item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+            )
+            stock_qty = Decimal(str(st.qty_on_hand or '0'))
+            stock_cost = Decimal(str(st.product_cost or '0'))
+            item_qty = Decimal(str(new_item.quantity))
+            item_price = Decimal(str(new_item.unit_price))
+            new_total_qty = stock_qty + item_qty
+            if new_total_qty > 0:
+                weighted_avg_cost = (stock_qty * stock_cost + item_qty * item_price) / new_total_qty
+                st.product_cost = weighted_avg_cost.quantize(Decimal('0.01'))
+            st.qty_on_hand = new_total_qty
+            st.save(update_fields=['qty_on_hand', 'product_cost', 'updated_at'])
+            if new_item.product_batch_number or new_item.product_expiry_date:
+                lot, _ = InventoryLot.objects.get_or_create(
+                    stock=st,
+                    batch_number=new_item.product_batch_number or "DEFAULT",
+                    expiry_date=new_item.product_expiry_date,
+                    defaults={'quantity': Decimal('0.00')}
+                )
+                lot.quantity += new_item.quantity
+                lot.save(update_fields=['quantity'])
+
+        # 3. Update InventoryMemo items
+        if order.memo:
+            order.memo.items.all().delete()
+            order.memo.warehouse = new_wh
+            order.memo.save(update_fields=['warehouse'])
+            for itm in order.items.select_related('product'):
+                InventoryMemoItem.objects.create(
+                    memo=order.memo,
+                    product=itm.product,
+                    quantity=itm.quantity,
+                    unit_cost=itm.unit_price,
+                    batch_number=itm.product_batch_number,
+                    expiry_date=itm.product_expiry_date
+                )
+
+        # 4. Reconcile Vendor Account & Transactions
+        account = VendorAccount.get_or_create_for_supplier(order.supplier)
+        delta = order.grand_total - Decimal(prev_values['grand_total'])
+        account.current_balance = max(Decimal('0.00'), account.current_balance + delta)
+        account.save(update_fields=['current_balance', 'updated_at'])
+
+        tx = order.vendor_transactions.first()
+        if tx:
+            tx.credit = order.grand_total
+            tx.running_balance = account.current_balance
+            tx.save(update_fields=['credit', 'running_balance'])
+            inst = tx.installments.first()
+            if inst:
+                inst.total_amount = order.grand_total
+                inst.open_amount = max(Decimal('0.00'), order.grand_total - inst.closed_amount)
+                inst.save(update_fields=['total_amount', 'open_amount'])
+
         new_values = {
             'supplier': order.supplier.name,
             'target_warehouse': order.target_warehouse.name,
@@ -217,6 +420,124 @@ class PurchaseOrderService:
             description=f"تعديل بيانات وبنود أمر المشتريات {order.order_number} (الإجمالي الجديد: {order.grand_total:,.2f} ج.م)",
             previous_values=prev_values,
             new_values=new_values
+        )
+        return order
+
+    @classmethod
+    @transaction.atomic
+    def delete_order(cls, order: PurchaseOrder, user):
+        """
+        Deletes a purchase order safely with financial and inventory reversal (Requirement B7):
+        1. Checks no payments or settlements exist.
+        2. Checks no active return orders exist.
+        3. Verifies warehouse stock availability and reverses added stock and lots.
+        4. Reverses vendor ledger balance and deletes transactions/installments.
+        5. Deletes inventory memo and purchase order.
+        6. Logs deletion to SecurityAuditLog.
+        """
+        if order.vendor_payments.exists():
+            raise ValidationError("لا يمكن حذف أمر شراء مرتبط بسندات صرف مسجلة. يرجى إلغاء سندات الصرف أولاً.")
+
+        if VendorInstallment.objects.filter(transaction__purchase_order=order, closed_amount__gt=Decimal('0.00')).exists():
+            raise ValidationError("لا يمكن حذف أمر شراء مرتبط بدفعات مسددة أو تسويات مالية.")
+
+        if order.return_orders.exclude(status='cancelled').exists():
+            raise ValidationError("لا يمكن حذف أمر الشراء لوجود أوامر إرجاع مسجلة عليه. يجب حذف أو إلغاء المرتجعات أولاً.")
+
+        # 1. Verify warehouse stock and reverse
+        if order.target_warehouse:
+            for item in order.items.select_related('product'):
+                stock = InventoryStock.objects.select_for_update().filter(
+                    warehouse=order.target_warehouse,
+                    product=item.product
+                ).first()
+                if not stock or stock.qty_on_hand < item.quantity:
+                    avail = stock.qty_on_hand if stock else Decimal('0.00')
+                    raise ValidationError(
+                        f"لا يمكن حذف أمر الشراء لأن الرصيد الحالي بالمخزن من الصنف '{item.product.name}' ({avail:,.2f}) أقل من الكمية المضافة بالطلب ({item.quantity:,.2f})."
+                    )
+
+            for item in order.items.select_related('product'):
+                stock = InventoryStock.objects.select_for_update().get(
+                    warehouse=order.target_warehouse,
+                    product=item.product
+                )
+                stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
+                if item.product_batch_number or item.product_expiry_date:
+                    lot = InventoryLot.objects.filter(
+                        stock=stock,
+                        batch_number=item.product_batch_number or "DEFAULT"
+                    ).first()
+                    if lot:
+                        lot.quantity = max(Decimal('0.00'), lot.quantity - item.quantity)
+                        lot.save(update_fields=['quantity'])
+
+        # 2. Reverse vendor financial balance
+        account = VendorAccount.get_or_create_for_supplier(order.supplier)
+        account.current_balance = max(Decimal('0.00'), account.current_balance - order.grand_total)
+        account.save(update_fields=['current_balance', 'updated_at'])
+
+        # 3. Delete installments & vendor transactions
+        VendorInstallment.objects.filter(transaction__purchase_order=order).delete()
+        order.vendor_transactions.all().delete()
+
+        # 4. Delete inventory memo
+        if order.memo:
+            memo = order.memo
+            order.memo = None
+            order.save(update_fields=['memo'])
+            memo.items.all().delete()
+            memo.delete()
+
+        # 5. Audit log
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_DELETED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"حذف أمر مشتريات رقم {order.order_number} للمورد {order.supplier.name} بقيمة {order.grand_total:,.2f} ج.م وعكس الحركات المخزنية والمالية",
+            previous_values={'order_number': order.order_number, 'grand_total': str(order.grand_total)}
+        )
+
+        order.delete()
+        return True
+
+    @classmethod
+    @transaction.atomic
+    def update_payment_status(cls, order: PurchaseOrder, new_status: str, user, notes=''):
+        """
+        Manually updates commercial payment status with validation and audit trail (Requirement B3).
+        """
+        valid_statuses = dict(PurchaseOrder.PAYMENT_STATUS_CHOICES)
+        if new_status not in valid_statuses:
+            raise ValidationError(f"حالة السداد غير صالحة: '{new_status}'.")
+
+        old_status = order.payment_status
+        order.payment_status = new_status
+        order.save(update_fields=['payment_status', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='purchase_order',
+            purchase_order=order,
+            action='payment_status_updated',
+            actor=user,
+            status_before=old_status,
+            status_after=new_status,
+            reason=notes or f"تغيير حالة السداد التجارية إلى {order.payment_status_display_ar}"
+        )
+
+        AuditLogService.log(
+            action_type='PURCHASE_ORDER_UPDATED',
+            module='purchases',
+            actor=user,
+            record_id=order.id,
+            record_name=f"{order.order_number} ({order.supplier.name})",
+            description=f"تحديث حالة السداد التجارية لأمر الشراء {order.order_number} إلى '{order.payment_status_display_ar}'",
+            previous_values={'payment_status': old_status},
+            new_values={'payment_status': new_status, 'notes': notes}
         )
         return order
 
@@ -679,17 +1000,34 @@ class PurchaseReturnOrderService:
         else:
             parent_order = None
 
+        if not warehouse or not warehouse.is_active:
+            raise ValidationError("مخزن الصرف للإرجاع المحدد غير صالح أو معطل.")
+
+        # Backend stock availability verification with select_for_update (Requirement B4)
+        for itm in items_data:
+            p = itm['product']
+            q = parse_positive_integer_quantity(itm.get('quantity'), item_label=p.name)
+            itm['quantity'] = q
+            stock = InventoryStock.objects.select_for_update().filter(warehouse=warehouse, product=p).first()
+            avail = stock.qty_available if stock else Decimal('0.00')
+            if avail < q:
+                raise ValidationError(
+                    f"الرصيد المتاح من الصنف '{p.name}' في مخزن '{warehouse.name}' غير كافٍ للإرجاع ({avail:,.0f} متاح / {q:,.0f} مطلوب)."
+                )
+
+        now_dt = timezone.now()
         return_order = PurchaseReturnOrder.objects.create(
             supplier=supplier,
             warehouse=warehouse,
             purchase_order=parent_order,
-            order_date=order_date or timezone.now().date(),
+            order_date=order_date or now_dt.date(),
             delivery_agent=delivery_agent,
             delivery_time=delivery_time,
             notes=notes,
             created_by=user,
             updated_by=user,
-            status='pending'
+            status='settled',
+            dispatched_at=now_dt
         )
 
         for idx, itm in enumerate(items_data, start=1):
@@ -715,8 +1053,8 @@ class PurchaseReturnOrderService:
                     returnable_qty = orig_item.quantity - returned_so_far
                     if qty > returnable_qty:
                         raise ValidationError(
-                            f"الكمية المرتجعة للصنف '{orig_item.product.name}' ({qty:,.2f}) تتجاوز الكمية المتاحة للإرجاع ({returnable_qty:,.2f}). "
-                            f"(الكمية الأصلية: {orig_item.quantity:,.2f}، المرتجع سابقاً: {returned_so_far:,.2f})"
+                            f"الكمية المرتجعة للصنف '{orig_item.product.name}' ({qty:,.0f}) تتجاوز الكمية المتاحة للإرجاع ({returnable_qty:,.0f}). "
+                            f"(الكمية الأصلية: {orig_item.quantity:,.0f}، المرتجع سابقاً: {returned_so_far:,.0f})"
                         )
 
             PurchaseReturnOrderItem.objects.create(
@@ -733,16 +1071,88 @@ class PurchaseReturnOrderService:
 
         return_order.recalculate_totals()
 
+        # Immediate warehouse dispatch: Outward InventoryMemo & decrement stock (Requirement B2, B4)
+        memo_number = f"MEMO-OUT-RO-{return_order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='outward',
+            warehouse=return_order.warehouse,
+            statement=f"إذن صرف إرجاع مشتريات #{return_order.order_number} للمورد {return_order.supplier.name}",
+            status='applied',
+            applied_at=now_dt,
+            created_by=user
+        )
+
+        for item in return_order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=item.product,
+                quantity=item.quantity,
+                unit_cost=item.unit_price,
+                batch_number=item.product_batch_number,
+                expiry_date=item.product_expiry_date
+            )
+
+            stock = InventoryStock.objects.select_for_update().get(warehouse=return_order.warehouse, product=item.product)
+            stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+            stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+            if item.product_batch_number:
+                lot = InventoryLot.objects.filter(stock=stock, batch_number=item.product_batch_number).first()
+                if lot:
+                    lot.quantity = max(Decimal('0.00'), lot.quantity - item.quantity)
+                    lot.save(update_fields=['quantity'])
+
+        return_order.memo = memo
+        return_order.save(update_fields=['memo'])
+
+        # Immediate financial execution: debit note on VendorAccount & VendorTransaction (Requirement B2)
+        account = VendorAccount.get_or_create_for_supplier(return_order.supplier)
+        new_balance = account.current_balance - return_order.grand_total
+
+        tx = VendorTransaction.objects.create(
+            account=account,
+            purchase_order=parent_order,
+            transaction_type='debit',
+            reason='purchase_return',
+            transaction_date=return_order.order_date or now_dt.date(),
+            credit=Decimal('0.00'),
+            debit=return_order.grand_total,
+            running_balance=new_balance,
+            description=f"إشعار خصم مرتجع مشتريات #{return_order.order_number} ({return_order.supplier.name})",
+            created_by=user
+        )
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx.transaction_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        if parent_order:
+            remaining_to_deduct = return_order.grand_total
+            for inst in VendorInstallment.objects.filter(transaction__purchase_order=parent_order, is_settled=False).order_by('due_date'):
+                if remaining_to_deduct <= Decimal('0.00'):
+                    break
+                inst_rem = inst.open_amount
+                if remaining_to_deduct >= inst_rem:
+                    inst.closed_amount = inst.total_amount
+                    inst.open_amount = Decimal('0.00')
+                    inst.is_settled = True
+                    remaining_to_deduct -= inst_rem
+                else:
+                    inst.closed_amount += remaining_to_deduct
+                    inst.open_amount = max(Decimal('0.00'), inst.total_amount - inst.closed_amount)
+                    remaining_to_deduct = Decimal('0.00')
+                inst.save(update_fields=['closed_amount', 'open_amount', 'is_settled'])
+
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
             record_type='purchase_return',
             purchase_return=return_order,
-            action='created',
+            action='submitted',
             actor=user,
             status_before='',
-            status_after='pending',
-            reason="إنشاء أمر إرجاع مشتريات جديد" + (f" لأمر الشراء #{parent_order.order_number}" if parent_order else ""),
-            changes=[{'field': 'الحالة', 'old': '-', 'new': 'قيد الانتظار'}],
+            status_after='settled',
+            reason="إنشاء وتنفيذ مرتجع المشتريات مباشرة في المخزن والحسابات"
         )
 
         AuditLogService.log(
@@ -1045,6 +1455,67 @@ class PurchaseReturnOrderService:
             new_values={'status': 'cancelled'}
         )
         return return_order
+
+    @classmethod
+    @transaction.atomic
+    def delete_return_order(cls, return_order: PurchaseReturnOrder, user):
+        """
+        Deletes a purchase return order safely with financial and inventory reversal (Requirement B7):
+        1. Restores deducted stock to warehouse.
+        2. Restores lots.
+        3. Reverts vendor ledger debt balance.
+        4. Deletes outward memo and return order.
+        5. Logs deletion to SecurityAuditLog.
+        """
+        # 1. Restore stock to warehouse
+        if return_order.warehouse:
+            for item in return_order.items.select_related('product'):
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                    warehouse=return_order.warehouse,
+                    product=item.product,
+                    defaults={'product_cost': item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+                )
+                stock.qty_on_hand += item.quantity
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
+                if item.product_batch_number:
+                    lot = InventoryLot.objects.filter(stock=stock, batch_number=item.product_batch_number).first()
+                    if lot:
+                        lot.quantity += item.quantity
+                        lot.save(update_fields=['quantity'])
+
+        # 2. Reverse vendor financial balance
+        account = VendorAccount.get_or_create_for_supplier(return_order.supplier)
+        account.current_balance += return_order.grand_total
+        account.save(update_fields=['current_balance', 'updated_at'])
+
+        # 3. Delete debit transaction if exists
+        VendorTransaction.objects.filter(
+            account=account,
+            reason__in=['purchase_return', 'purchase_returns'],
+            description__contains=return_order.order_number
+        ).delete()
+
+        # 4. Delete outward inventory memo
+        if return_order.memo:
+            memo = return_order.memo
+            return_order.memo = None
+            return_order.save(update_fields=['memo'])
+            memo.items.all().delete()
+            memo.delete()
+
+        # 5. Audit log
+        AuditLogService.log(
+            action_type='PURCHASE_RETURN_DELETED',
+            module='purchases',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"{return_order.order_number} ({return_order.supplier.name})",
+            description=f"حذف أمر إرجاع مشتريات رقم {return_order.order_number} للمورد {return_order.supplier.name} بقيمة {return_order.grand_total:,.2f} ج.م وعكس الحركات المخزنية والمالية",
+            previous_values={'order_number': return_order.order_number, 'grand_total': str(return_order.grand_total)}
+        )
+
+        return_order.delete()
+        return True
 
 
 def build_purchase_return_timeline(return_order):

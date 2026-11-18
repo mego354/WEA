@@ -18,9 +18,20 @@
             <!-- Search Form -->
             <form method="GET" action="{% url 'categories_list' %}" class="relative flex-1 sm:w-64">
                 <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالاسم أو الكود..."
+                       data-smart-search-module="categories"
                        class="w-full py-2 pr-9 pl-4 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent">
                 <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
             </form>
+
+            {% include 'components/table_column_picker.html' with table_id='categories_table' %}
+
+            {% if request.user|has_permission:'catalog:categories/export' %}
+            <a href="{% url 'categories_export' %}{% if search_query %}?search={{ search_query|urlencode }}{% endif %}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">تصدير Excel</span>
+            </a>
+            {% endif %}
 
             <button onclick="openModal('create-cat-modal')"
                     class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[38px]">
@@ -36,14 +47,14 @@
     <!-- Categories Table -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
         <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+            <table id="categories_table" data-col-table="categories_table" class="w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4">الاسم</th>
-                        <th class="py-3.5 px-4">الكود</th>
-                        <th class="py-3.5 px-4">التوصيف</th>
-                        <th class="py-3.5 px-4">انشئ فى</th>
-                        <th class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th class="py-3.5 px-4" data-col="name" data-col-required="true">الاسم</th>
+                        <th class="py-3.5 px-4" data-col="code" data-col-required="true">الكود</th>
+                        <th class="py-3.5 px-4" data-col="description">التوصيف</th>
+                        <th class="py-3.5 px-4" data-col="created_at">انشئ فى</th>
+                        <th class="py-3.5 px-4 text-center" data-col="actions" data-col-required="true">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">

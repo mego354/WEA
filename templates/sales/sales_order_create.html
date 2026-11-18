@@ -19,7 +19,7 @@
         <p class="text-xs text-slate-500 mt-1">تسجيل طلبية عميل جديدة وحجز البضاعة ومتابعة الخصومات والتسليم</p>
     </div>
 
-    <form method="POST" id="salesOrderForm" class="space-y-6">
+    <form method="POST" enctype="multipart/form-data" id="salesOrderForm" class="space-y-6">
         {% csrf_token %}
 
         <!-- Master Details Card -->
@@ -42,7 +42,7 @@
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر العميل --</option>
                         {% for c in customers %}
-                        <option value="{{ c.id }}" data-subtext="#{{ c.serial_num }}{% if c.area %} | {{ c.area.name }}{% endif %}{% if c.brick and c.brick != c.area %} - {{ c.brick.name }}{% endif %}" data-search="{{ c.serial_num }} {{ c.code }} {{ c.mobile }} {{ c.area.name|default:'' }} {{ c.brick.name|default:'' }}" {% if selected_customer_id == c.id %}selected{% endif %}>{{ c.name }}{% if c.code %} • {{ c.code }}{% endif %}</option>
+                        <option value="{{ c.id }}" data-subtext="#{{ c.serial_num }}{% if c.area %} | {{ c.area.name }}{% endif %}{% if c.brick and c.brick != c.area %} - {{ c.brick.name }}{% endif %}" data-search="{{ c.serial_num }} {{ c.code }} {{ c.mobile }} {{ c.area.name|default:'' }} {{ c.brick.name|default:'' }}" {% if selected_customer_id == c.id or form_data.customer|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}{% if c.code %} • {{ c.code }}{% endif %}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -69,7 +69,7 @@
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر المخزن --</option>
                         {% for wh in warehouses %}
-                        <option value="{{ wh.id }}" data-subtext="{{ wh.code }}{% if wh.area %} | {{ wh.area.name }}{% endif %}" data-search="{{ wh.code }} {{ wh.area.name|default:'' }}">{{ wh.name }}</option>
+                        <option value="{{ wh.id }}" data-subtext="{{ wh.code }}{% if wh.area %} | {{ wh.area.name }}{% endif %}" data-search="{{ wh.code }} {{ wh.area.name|default:'' }}" {% if form_data.warehouse|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }}</option>
                         {% endfor %}
                     </select>
                     {% endif %}
@@ -78,21 +78,21 @@
                 <!-- Order Date -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">تاريخ الطلب <span class="text-rose-500">*</span></label>
-                    <input type="date" name="order_date" value="{% now 'Y-m-d' %}" required
+                    <input type="date" name="order_date" value="{% if form_data.order_date %}{{ form_data.order_date }}{% else %}{% now 'Y-m-d' %}{% endif %}" required
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
 
                 <!-- Expected Delivery Date -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">تاريخ التسليم المتوقع</label>
-                    <input type="date" name="delivery_date"
+                    <input type="date" name="delivery_date" value="{{ form_data.delivery_date|default:'' }}"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
 
                 <!-- Due Date -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">تاريخ استحقاق السداد (Due Date)</label>
-                    <input type="date" name="due_date"
+                    <input type="date" name="due_date" value="{{ form_data.due_date|default:'' }}"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
             </div>
@@ -143,18 +143,18 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">خصم إضافي على الأمر %</label>
-                    <input type="number" step="0.01" min="0" max="100" name="custom_discount_percentage" id="customDiscountInput" value="0.00" oninput="calculateGrandTotal()"
+                    <input type="number" step="0.01" min="0" max="100" name="custom_discount_percentage" id="customDiscountInput" value="{{ form_data.custom_discount_percentage|default:'0.00' }}" oninput="calculateGrandTotal()"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">مصاريف الشحن / التوصيل (ج.م)</label>
-                    <input type="number" step="0.01" min="0" name="shipping_fees" id="shippingFeesInput" value="0.00" oninput="calculateGrandTotal()"
+                    <input type="number" step="0.01" min="0" name="shipping_fees" id="shippingFeesInput" value="{{ form_data.shipping_fees|default:'0.00' }}" oninput="calculateGrandTotal()"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
                 <div class="col-span-full">
                     <label class="block font-bold text-slate-700 mb-1.5">ملاحظات وتعليمات الشحن</label>
                     <textarea name="notes" rows="2" placeholder="أي ملاحظات إضافية بخصوص الطلب أو عنوان التوصيل..."
-                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors"></textarea>
+                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">{{ form_data.notes|default:'' }}</textarea>
                 </div>
             </div>
         </div>
@@ -191,6 +191,8 @@
             </div>
         </div>
 
+        {% include 'components/attachments_uploader.html' with title='مرفقات أمر البيع (صور / PDF)' %}
+
         <!-- Bottom Submit Actions Bar (Consistent with Purchases) -->
         <div class="flex items-center justify-end gap-3 pt-4">
             <a href="{% url 'sales_orders_list' %}" class="px-5 py-2.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
@@ -217,12 +219,77 @@
     ];
 
     let rowCount = 0;
+    let warehouseStock = {};
 
-    function createRow(index) {
+    function fetchWarehouseStock() {
+        const whInput = document.querySelector('input[name="warehouse"]') || document.querySelector('select[name="warehouse"]');
+        const whId = whInput ? whInput.value : null;
+        if (!whId) {
+            warehouseStock = {};
+            updateAllStockDisplays();
+            return;
+        }
+        fetch(`/inventory/api/warehouse-stock/?warehouse_id=${whId}`)
+            .then(res => res.json())
+            .then(data => {
+                warehouseStock = {};
+                if (data.products) {
+                    data.products.forEach(p => {
+                        warehouseStock[p.id] = p;
+                    });
+                }
+                updateAllStockDisplays();
+            })
+            .catch(err => console.error("Error loading warehouse stock", err));
+    }
+
+    function updateAllStockDisplays() {
+        const rows = document.querySelectorAll('#itemsTableBody .item-row');
+        rows.forEach(r => {
+            const m = r.id.match(/row-(\d+)/);
+            if (m) updateRowStockDisplay(m[1]);
+        });
+    }
+
+    function updateRowStockDisplay(index) {
+        const row = document.getElementById(`row-${index}`);
+        if (!row) return;
+        const select = row.querySelector('select[name="product_id[]"]');
+        const prodId = select ? select.value : null;
+        const stockEl = document.getElementById(`avail-stock-${index}`);
+        const warnEl = document.getElementById(`stock-warning-${index}`);
+        const qtyInput = row.querySelector('input[name="quantity[]"]');
+
+        if (!prodId || !warehouseStock[prodId]) {
+            if (stockEl) stockEl.innerText = '-';
+            if (warnEl) warnEl.classList.add('hidden');
+            if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+            return;
+        }
+
+        const avail = parseFloat(warehouseStock[prodId].qty_available) || 0;
+        if (stockEl) stockEl.innerText = avail.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+
+        const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+        if (qty > avail) {
+            if (warnEl) warnEl.classList.remove('hidden');
+            if (qtyInput) qtyInput.classList.add('border-rose-500', 'text-rose-600');
+        } else {
+            if (warnEl) warnEl.classList.add('hidden');
+            if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+        }
+    }
+
+    function createRow(index, itemData = null) {
         let options = '<option value="">-- اختر الصنف --</option>';
         availableProducts.forEach(p => {
-            options += `<option value="${p.id}" data-price="${p.price}">[${p.sku}] ${p.name}</option>`;
+            const selected = itemData && String(itemData.productId || itemData.product_id) === String(p.id) ? 'selected' : '';
+            options += `<option value="${p.id}" data-price="${p.price}" ${selected}>[${p.sku}] ${p.name}</option>`;
         });
+
+        const qty = itemData ? (itemData.quantity || 1) : 1;
+        const price = itemData ? (itemData.unitPrice || itemData.unit_price || '0.00') : '0.00';
+        const disc = itemData ? (itemData.discountPercentage || itemData.discount_percentage || '0') : '0';
 
         return `
             <tr id="row-${index}" class="item-row block md:table-row bg-slate-50/60 md:bg-transparent p-4 md:p-0 rounded-xl md:rounded-none border border-slate-200 md:border-none shadow-xs md:shadow-none mb-3 md:mb-0 space-y-2 md:space-y-0">
@@ -237,13 +304,20 @@
                     </div>
                 </td>
 
-                <!-- Product Select -->
+                <!-- Product Select & Available Stock -->
                 <td class="block md:table-cell py-1.5 md:py-2 px-2">
                     <label class="block md:hidden text-[11px] font-bold text-slate-600 mb-1">المنتج / الصنف <span class="text-rose-500">*</span></label>
                     <select name="product_id[]" required onchange="onProductSelect(${index}, this)"
                             class="w-full px-2.5 py-2 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#27bebe] transition-colors">
                         ${options}
                     </select>
+                    <div class="mt-1 flex items-center justify-between text-[11px]">
+                        <span class="text-slate-400">المتاح بالمخزن:</span>
+                        <span id="avail-stock-${index}" class="font-mono font-bold text-slate-700">-</span>
+                    </div>
+                    <div id="stock-warning-${index}" class="hidden text-[10px] text-rose-600 font-bold mt-0.5">
+                        الكمية المطلوبة تتجاوز الرصيد المتاح!
+                    </div>
                 </td>
 
                 <!-- Inputs Grid on Mobile -->
@@ -252,19 +326,19 @@
                         <!-- Qty -->
                         <div>
                             <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-1">الكمية</label>
-                            <input type="number" step="1" min="1" name="quantity[]" value="1" required oninput="calculateRow(${index})"
+                            <input type="number" step="1" min="1" name="quantity[]" value="${qty}" required oninput="calculateRow(${index})"
                                    class="w-full text-center px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold font-mono focus:outline-none focus:border-[#27bebe]">
                         </div>
                         <!-- Price on Mobile -->
                         <div class="md:hidden">
                             <label class="block text-[10px] font-bold text-slate-600 mb-1">سعر الوحدة</label>
-                            <input type="number" step="0.01" min="0" name="unit_price_mobile_${index}" value="0.00" oninput="syncMobilePrice(${index}, this)"
+                            <input type="number" step="0.01" min="0" name="unit_price_mobile_${index}" value="${price}" oninput="syncMobilePrice(${index}, this)"
                                    class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
                         </div>
                         <!-- Discount on Mobile -->
                         <div class="md:hidden">
                             <label class="block text-[10px] font-bold text-slate-600 mb-1">الخصم %</label>
-                            <input type="number" step="0.01" min="0" max="100" name="discount_percentage_mobile_${index}" value="0" oninput="syncMobileDiscount(${index}, this)"
+                            <input type="number" step="0.01" min="0" max="100" name="discount_percentage_mobile_${index}" value="${disc}" oninput="syncMobileDiscount(${index}, this)"
                                    class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                         </div>
                     </div>
@@ -272,13 +346,13 @@
 
                 <!-- Unit Price (Desktop) -->
                 <td class="hidden md:table-cell py-2 px-2">
-                    <input type="number" step="0.01" min="0" name="unit_price[]" value="0.00" required oninput="calculateRow(${index})"
+                    <input type="number" step="0.01" min="0" name="unit_price[]" value="${price}" required oninput="calculateRow(${index})"
                            class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
                 </td>
 
                 <!-- Discount Percentage (Desktop) -->
                 <td class="hidden md:table-cell py-2 px-2">
-                    <input type="number" step="0.01" min="0" max="100" name="discount_percentage[]" value="0" oninput="calculateRow(${index})"
+                    <input type="number" step="0.01" min="0" max="100" name="discount_percentage[]" value="${disc}" oninput="calculateRow(${index})"
                            class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                 </td>
 
@@ -300,9 +374,10 @@
         `;
     }
 
-    function addRow() {
+    function addRow(itemData = null) {
         const tbody = document.getElementById('itemsTableBody');
-        tbody.insertAdjacentHTML('beforeend', createRow(rowCount));
+        tbody.insertAdjacentHTML('beforeend', createRow(rowCount, itemData));
+        calculateRow(rowCount);
         rowCount++;
     }
 
@@ -328,6 +403,7 @@
             if (priceMobile) priceMobile.value = price;
             calculateRow(index);
         }
+        updateRowStockDisplay(index);
     }
 
     function syncMobilePrice(index, input) {
@@ -371,7 +447,6 @@
             subtotalEl.innerText = subtotal.toFixed(2) + ' ج.م';
         }
 
-        // Also sync mobile inputs if changed from desktop
         const mobilePrice = row.querySelector(`input[name="unit_price_mobile_${index}"]`);
         if (mobilePrice && priceInput && mobilePrice.value !== priceInput.value) {
             mobilePrice.value = priceInput.value;
@@ -381,6 +456,7 @@
             mobileDisc.value = discInput.value;
         }
 
+        updateRowStockDisplay(index);
         calculateGrandTotal();
     }
 
@@ -432,7 +508,27 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        addRow();
+        const whSelect = document.querySelector('select[name="warehouse"]');
+        if (whSelect) {
+            whSelect.addEventListener('change', fetchWarehouseStock);
+        }
+        fetchWarehouseStock();
+
+        {% if submitted_items %}
+            const submittedItems = [
+                {% for item in submitted_items %}
+                {
+                    productId: "{{ item.product_id }}",
+                    quantity: {{ item.quantity|default:"1" }},
+                    unitPrice: {{ item.unit_price|default:"0.00" }},
+                    discountPercentage: {{ item.discount_percentage|default:"0.00" }}
+                },
+                {% endfor %}
+            ];
+            submittedItems.forEach(itm => addRow(itm));
+        {% else %}
+            addRow();
+        {% endif %}
     });
 </script>
 {% endblock %}

@@ -30,6 +30,7 @@ urlpatterns = [
     path('users/<int:pk>/edit/', accounts_views.user_edit, name='user_edit_root_alias'),
     path('users/<int:pk>/reset-password/', accounts_views.user_reset_password, name='user_reset_password_root_alias'),
     path('users/<int:pk>/toggle-status/', accounts_views.user_toggle_status, name='user_toggle_status_root_alias'),
+    path('users/<int:pk>/delete/', accounts_views.user_delete, name='user_delete_root_alias'),
     path('users/<int:pk>/toggle-bypass-location/', accounts_views.user_toggle_bypass_location, name='user_toggle_bypass_location_root_alias'),
     path('roles/', accounts_views.roles_list, name='roles_list_root_alias'),
     path('approvals/', approvals_views.approvals_hub, name='approvals_hub_root'),
@@ -73,6 +74,8 @@ urlpatterns = [
     path('vendor-payment-requests/<int:pk>/action/<str:action>/', treasury_views.vendor_payment_request_action, name='vendor_payment_request_action_alias'),
     path('accounting/vendors/', treasury_views.accounting_vendors_list, name='accounting_vendors_alias'),
     path('accounting/vendor-transactions/', treasury_views.vendor_transactions_list, name='vendor_transactions_alias'),
+    path('accounting/customers/', sales_views.accounting_customers_list, name='accounting_customers_root_alias'),
+    path('accounting/customer-transactions/', sales_views.customer_transactions_list, name='customer_transactions_root_alias'),
 
     # Customer and Visit Search API Parity
     path('api/customers/search/', contacts_views.customers_search_api, name='customers_search_global_api'),

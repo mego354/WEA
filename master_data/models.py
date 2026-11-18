@@ -479,3 +479,186 @@ class DataSyncConfig(models.Model):
         return self.title
 
 
+def erp_attachment_upload_to(instance, filename):
+    from django.utils import timezone
+    import os
+    import uuid
+    _, ext = os.path.splitext(str(filename or ''))
+    now = timezone.now()
+    return f"attachments/{now:%Y/%m}/{uuid.uuid4().hex[:12]}{ext.lower()}"
+
+
+class ERPAttachment(models.Model):
+    """Unified media attachment (Image / PDF) linked via ContentType to any ERP transaction."""
+    from django.contrib.contenttypes.fields import GenericForeignKey
+    from django.contrib.contenttypes.models import ContentType
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, verbose_name="نوع السجل")
+    object_id = models.PositiveBigIntegerField(verbose_name="معرف السجل")
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+    file = models.FileField(upload_to=erp_attachment_upload_to, max_length=500, verbose_name="الملف")
+    storage_key = models.CharField(max_length=500, blank=True, db_index=True, verbose_name="مفتاح التخزين")
+    file_hash = models.CharField(max_length=64, blank=True, db_index=True, verbose_name="بصمة الملف (SHA-256)")
+    original_filename = models.CharField(max_length=255, verbose_name="اسم الملف الأصلي")
+    mime_type = models.CharField(max_length=100, blank=True, verbose_name="نوع MIME")
+    file_size_bytes = models.PositiveBigIntegerField(default=0, verbose_name="الحجم بالبايت")
+    title = models.CharField(max_length=200, blank=True, verbose_name="العنوان")
+    is_public = models.BooleanField(default=False, verbose_name="ملف عام")
+
+    uploaded_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_attachments',
+        verbose_name="رفع بواسطة",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الرفع")
+
+    class Meta:
+        verbose_name = "مرفق معاملة"
+        verbose_name_plural = "مرفقات المعاملات"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.original_filename} ({self.content_type.model} #{self.object_id})"
+
+    @property
+    def is_image(self):
+        return (self.mime_type or '').startswith('image/')
+
+    @property
+    def is_pdf(self):
+        return self.mime_type == 'application/pdf' or self.original_filename.lower().endswith('.pdf')
+
+    @property
+    def size_display(self):
+        b = self.file_size_bytes or 0
+        if b < 1024:
+            return f"{b} B"
+        if b < 1024 * 1024:
+            return f"{b / 1024:.1f} KB"
+        return f"{b / (1024 * 1024):.2f} MB"
+
+
+class R2StorageConfig(models.Model):
+    """Singleton Cloudflare R2 pricing assumptions and local usage metrics."""
+    from decimal import Decimal
+
+    free_storage_gb = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('10.00'), verbose_name="الحد المجاني للتخزين (GB)")
+    free_class_a_ops = models.PositiveBigIntegerField(default=1000000, verbose_name="الحد المجاني لعمليات Class A شهرياً")
+    free_class_b_ops = models.PositiveBigIntegerField(default=10000000, verbose_name="الحد المجاني لعمليات Class B شهرياً")
+
+    price_per_gb_month_usd = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0150'), verbose_name="سعر التخزين ($ / GB-شهر)")
+    price_per_million_class_a_usd = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('4.5000'), verbose_name="سعر مليون عملية Class A ($)")
+    price_per_million_class_b_usd = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.3600'), verbose_name="سعر مليون عملية Class B ($)")
+    egress_price_per_gb_usd = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'), verbose_name="سعر نقل البيانات Egress ($ / GB)")
+    usd_to_egp_rate = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('50.00'), verbose_name="سعر صرف الدولار (ج.م)")
+
+    # Tracked metrics (updated on ERP media operations; not live Cloudflare billing)
+    tracked_storage_bytes = models.PositiveBigIntegerField(default=0, verbose_name="إجمالي المساحة المسجلة (بايت)")
+    tracked_objects_count = models.PositiveIntegerField(default=0, verbose_name="عدد الكائنات المسجلة")
+    current_month_class_a_ops = models.PositiveBigIntegerField(default=0, verbose_name="عمليات Class A الشهر الحالي")
+    current_month_class_b_ops = models.PositiveBigIntegerField(default=0, verbose_name="عمليات Class B الشهر الحالي")
+    metrics_month = models.CharField(max_length=7, blank=True, verbose_name="شهر الإحصاء")
+
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="آخر تحديث")
+    updated_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="حدث بواسطة",
+    )
+
+    class Meta:
+        verbose_name = "إعدادات وتكلفة Cloudflare R2"
+        verbose_name_plural = "إعدادات وتكلفة Cloudflare R2"
+
+    def __str__(self):
+        return "إعدادات وحاسبة تكلفة Cloudflare R2"
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def calculate_cost_estimate(self, *, storage_gb=None, class_a_ops=None, class_b_ops=None, egress_gb=None):
+        """
+        Calculates estimated monthly R2 cost based on current pricing assumptions and free-tier allowances.
+        Clearly represents an estimate, not live Cloudflare billing.
+        """
+        from decimal import Decimal
+        s_gb = Decimal(str(storage_gb)) if storage_gb is not None else (Decimal(self.tracked_storage_bytes) / Decimal(1024 ** 3))
+        a_ops = int(class_a_ops) if class_a_ops is not None else int(self.current_month_class_a_ops)
+        b_ops = int(class_b_ops) if class_b_ops is not None else int(self.current_month_class_b_ops)
+        e_gb = Decimal(str(egress_gb)) if egress_gb is not None else Decimal('0.00')
+
+        billable_storage_gb = max(Decimal('0.00'), s_gb - self.free_storage_gb)
+        billable_a_ops = max(0, a_ops - int(self.free_class_a_ops))
+        billable_b_ops = max(0, b_ops - int(self.free_class_b_ops))
+
+        storage_cost_usd = (billable_storage_gb * self.price_per_gb_month_usd).quantize(Decimal('0.0001'))
+        class_a_cost_usd = ((Decimal(billable_a_ops) / Decimal('1000000')) * self.price_per_million_class_a_usd).quantize(Decimal('0.0001'))
+        class_b_cost_usd = ((Decimal(billable_b_ops) / Decimal('1000000')) * self.price_per_million_class_b_usd).quantize(Decimal('0.0001'))
+        egress_cost_usd = (e_gb * self.egress_price_per_gb_usd).quantize(Decimal('0.0001'))
+
+        total_usd = (storage_cost_usd + class_a_cost_usd + class_b_cost_usd + egress_cost_usd).quantize(Decimal('0.01'))
+        total_egp = (total_usd * self.usd_to_egp_rate).quantize(Decimal('0.01'))
+
+        storage_pct = float((s_gb / self.free_storage_gb) * 100) if self.free_storage_gb > 0 else 0.0
+        class_a_pct = (a_ops / int(self.free_class_a_ops) * 100.0) if self.free_class_a_ops > 0 else 0.0
+        class_b_pct = (b_ops / int(self.free_class_b_ops) * 100.0) if self.free_class_b_ops > 0 else 0.0
+
+        warnings = []
+        if storage_pct >= 100:
+            warnings.append('تم تجاوز الحد المجاني لمساحة التخزين (10 GB) — تطبق رسوم إضافية.')
+        elif storage_pct >= 80:
+            warnings.append('استهلاك مساحة التخزين اقترب من الحد المجاني (أكثر من 80%).')
+        if class_a_pct >= 80:
+            warnings.append('عمليات الكتابة (Class A) اقتربت من أو تجاوزت الحد المجاني.')
+        if class_b_pct >= 80:
+            warnings.append('عمليات القراءة (Class B) اقتربت من أو تجاوزت الحد المجاني.')
+
+        return {
+            'storage_gb': float(round(s_gb, 4)),
+            'billable_storage_gb': float(round(billable_storage_gb, 4)),
+            'storage_pct': round(storage_pct, 1),
+            'class_a_ops': a_ops,
+            'billable_class_a_ops': billable_a_ops,
+            'class_a_pct': round(class_a_pct, 2),
+            'class_b_ops': b_ops,
+            'billable_class_b_ops': billable_b_ops,
+            'class_b_pct': round(class_b_pct, 2),
+            'egress_gb': float(round(e_gb, 2)),
+            'storage_cost_usd': float(storage_cost_usd),
+            'class_a_cost_usd': float(class_a_cost_usd),
+            'class_b_cost_usd': float(class_b_cost_usd),
+            'egress_cost_usd': float(egress_cost_usd),
+            'total_usd': float(total_usd),
+            'total_egp': float(total_egp),
+            'warnings': warnings,
+        }
+
+
+class PendingStorageDeletion(models.Model):
+    """Retry queue for failed physical object deletions in R2 / local storage."""
+    storage_key = models.CharField(max_length=500, unique=True, verbose_name="مفتاح التخزين")
+    attempts = models.PositiveIntegerField(default=0, verbose_name="عدد المحاولات")
+    last_error = models.TextField(blank=True, verbose_name="آخر خطأ")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    last_attempt_at = models.DateTimeField(null=True, blank=True, verbose_name="آخر محاولة")
+
+    class Meta:
+        verbose_name = "حذف تخزين معلق"
+        verbose_name_plural = "طابور حذف التخزين المعلق"
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.storage_key} ({self.attempts} attempts)"
+
+

@@ -19,10 +19,8 @@ class AgreementType(models.Model):
 
 class Agreement(models.Model):
     STATUS_CHOICES = [
-        ('new', 'بانتظار الاعتماد'),
-        ('approved', 'معتمد'),
-        ('disapproved', 'مرفوض'),
-        ('done', 'منجز'),
+        ('new', 'جديدة'),
+        ('done', 'منجزة'),
     ]
 
     serial_num = models.IntegerField(unique=True, db_index=True, verbose_name="الرقم التعريفي")
@@ -60,10 +58,10 @@ class Agreement(models.Model):
     @property
     def status_display_ar(self):
         mapping = {
-            'new': 'بانتظار الاعتماد',
-            'approved': 'معتمد',
-            'disapproved': 'مرفوض',
-            'done': 'منجز',
+            'new': 'جديدة',
+            'done': 'منجزة',
+            'approved': 'منجزة',
+            'disapproved': 'جديدة',
         }
         return mapping.get(self.status, self.status)
 
@@ -71,9 +69,9 @@ class Agreement(models.Model):
     def status_badge_class(self):
         mapping = {
             'new': 'bg-amber-100 text-amber-800 border-amber-300',
+            'done': 'bg-emerald-100 text-emerald-800 border-emerald-300',
             'approved': 'bg-emerald-100 text-emerald-800 border-emerald-300',
-            'disapproved': 'bg-rose-100 text-rose-800 border-rose-300',
-            'done': 'bg-slate-100 text-slate-800 border-slate-300',
+            'disapproved': 'bg-amber-100 text-amber-800 border-amber-300',
         }
         return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
 
@@ -347,7 +345,7 @@ class VisitTemplateQuestion(models.Model):
     is_conditional = models.BooleanField(default=False, verbose_name="مشروط")
     conditional_parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='conditional_dependents', verbose_name="السؤال الشرطي الأب")
     conditional_trigger_value = models.CharField(max_length=255, blank=True, default='', verbose_name="قيمة الإجابة المشروطة")
-    stage = models.CharField(max_length=50, choices=STAGES, default='all', verbose_name="مرحلة السؤال")
+    stage = models.CharField(max_length=50, choices=STAGES, default='end_only', verbose_name="مرحلة السؤال")
     order = models.PositiveIntegerField(default=1, verbose_name="الترتيب")
     is_active = models.BooleanField(default=True, verbose_name="نشط")
 
@@ -367,7 +365,7 @@ class PlannedVisitDay(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='planned_visit_days', verbose_name="المسئول")
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='planned_visit_days', verbose_name="المسئول")
     date = models.DateField(db_index=True, verbose_name="تاريخ اليوم")
     status = models.CharField(max_length=30, default='new', choices=STATUS_CHOICES, verbose_name="حالة اليوم")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="أنشئ بواسطة")
@@ -382,6 +380,97 @@ class PlannedVisitDay(models.Model):
 
     def __str__(self):
         return f"{self.assignee} - {self.date}"
+
+
+class VisitPlan(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('disapproved', 'Disapproved'),
+    ]
+
+    plan_id = models.CharField(max_length=50, unique=True, db_index=True, verbose_name="رقم الخطة")
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='visit_plans', verbose_name="المسؤول")
+    date = models.DateField(db_index=True, verbose_name="تاريخ الخطة")
+    comment = models.TextField(blank=True, default='', verbose_name="ملاحظات الخطة")
+    
+    approval_status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="حالة الاعتماد")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_visit_plans', verbose_name="معتمد بواسطة")
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الاعتماد")
+    approval_notes = models.TextField(blank=True, default='', verbose_name="ملاحظات الاعتماد / الرفض")
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_visit_plans', verbose_name="أنشئ بواسطة")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "خطة زيارات"
+        verbose_name_plural = "خطط الزيارات"
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f"{self.plan_id} ({self.assignee} - {self.date})"
+
+    def save(self, *args, **kwargs):
+        if not self.plan_id:
+            import uuid
+            new_id = self.generate_plan_id(self.date)
+            while VisitPlan.objects.filter(plan_id=new_id).exists():
+                seq_part = new_id.split('-')[-1]
+                try:
+                    next_seq = int(seq_part) + 1
+                    prefix = '-'.join(new_id.split('-')[:-1])
+                    new_id = f"{prefix}-{next_seq:04d}"
+                except Exception:
+                    new_id = f"PLAN-{uuid.uuid4().hex[:8].upper()}"
+            self.plan_id = new_id
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_plan_id(cls, date=None):
+        from django.utils import timezone
+        d = date or timezone.localdate()
+        date_str = d.strftime('%Y%m%d')
+        prefix = f"PLAN-{date_str}-"
+        latest = cls.objects.filter(plan_id__startswith=prefix).order_by('-plan_id').first()
+        if latest:
+            try:
+                seq = int(latest.plan_id.split('-')[-1]) + 1
+            except Exception:
+                seq = cls.objects.filter(date=d).count() + 1
+        else:
+            seq = 1
+        return f"{prefix}{seq:04d}"
+
+    @property
+    def is_approved(self):
+        return self.approval_status == 'approved'
+
+    @property
+    def is_pending(self):
+        return self.approval_status == 'pending'
+
+    @property
+    def is_disapproved(self):
+        return self.approval_status == 'disapproved'
+
+    @property
+    def approval_display_ar(self):
+        mapping = {
+            'pending': 'قيد الاعتماد',
+            'approved': 'معتمدة',
+            'disapproved': 'مرفوضة',
+        }
+        return mapping.get(self.approval_status, self.approval_status)
+
+    @property
+    def approval_badge_class(self):
+        mapping = {
+            'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+            'approved': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'disapproved': 'bg-rose-100 text-rose-800 border-rose-300',
+        }
+        return mapping.get(self.approval_status, 'bg-slate-100 text-slate-700')
 
 
 class Visit(models.Model):
@@ -401,7 +490,8 @@ class Visit(models.Model):
     serial_num = models.IntegerField(unique=True, db_index=True, verbose_name="رقم الزيارة")
     contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='visits', verbose_name="جهة الاتصال")
     template = models.ForeignKey(VisitTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits', verbose_name="قالب الزيارة")
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='visits_conducted', verbose_name="المسؤول")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='visits_conducted', verbose_name="المسؤول")
+    plan = models.ForeignKey(VisitPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits', verbose_name="خطة الزيارات")
     is_planned = models.BooleanField(default=False, db_index=True, verbose_name="مخططة")
     
     date = models.DateField(default=timezone.now, db_index=True, verbose_name="تاريخ الزيارة")
@@ -418,10 +508,8 @@ class Visit(models.Model):
     doubled = models.BooleanField(default=False, verbose_name="زيارة مزدوجة")
     mode = models.CharField(max_length=50, default='checkin_checkout', verbose_name="الوضع")
     
-    feedback = models.TextField(blank=True, default='', verbose_name="الملاحظات والنتائج")
     questionnaire_answers = models.JSONField(default=dict, blank=True, verbose_name="إجابات الاستبيان")
     detailed_products = models.ManyToManyField('catalog.Product', blank=True, related_name='detailed_in_visits', verbose_name="المنتجات المشروحة")
-    visit_outcome = models.CharField(max_length=50, blank=True, default='', verbose_name="نتيجة الزيارة")
     
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط العرض المسجل")
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط الطول المسجل")
@@ -437,9 +525,14 @@ class Visit(models.Model):
     customer_latitude_snapshot = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط عرض العميل")
     customer_longitude_snapshot = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="خط طول العميل")
     
-    # Location Photo & Superuser Bypass Evidence Fields
-    location_photo = models.ImageField(upload_to='visits/evidence/%Y/%m/', null=True, blank=True, verbose_name="صورة إثبات الموقع")
-    photo_captured_at = models.DateTimeField(null=True, blank=True, verbose_name="وقت التقاط الصورة")
+    # Distinguishable GPS Bypass Fields (Start vs End)
+    gps_forced_start = models.BooleanField(default=False, verbose_name="تجاوز GPS عند البدء")
+    gps_forced_end = models.BooleanField(default=False, verbose_name="تجاوز GPS عند الإنهاء")
+    gps_forced_start_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_gps_forced_start', verbose_name="تجاوز GPS البدء بواسطة")
+    gps_forced_start_at = models.DateTimeField(null=True, blank=True, verbose_name="وقت تجاوز GPS البدء")
+    gps_forced_end_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_gps_forced_end', verbose_name="تجاوز GPS الإنهاء بواسطة")
+    gps_forced_end_at = models.DateTimeField(null=True, blank=True, verbose_name="وقت تجاوز GPS الإنهاء")
+
     bypassed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_bypassed', verbose_name="تم التجاوز بواسطة")
     bypassed_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ ووقت التجاوز")
     bypass_reason = models.CharField(max_length=255, blank=True, default='', verbose_name="سبب التجاوز")
@@ -487,8 +580,110 @@ class Visit(models.Model):
         return "bg-purple-50 text-purple-700 border-purple-200"
 
     @property
-    def has_photo_evidence(self):
-        return bool(self.location_photo)
+    def duration_formatted(self):
+        if self.started_at and self.ended_at:
+            delta = self.ended_at - self.started_at
+            sec = int(delta.total_seconds())
+            if sec >= 0:
+                min_val = max(1, round(sec / 60))
+                return f"{min_val} دقيقة"
+        if self.duration and self.duration > 0:
+            min_val = max(1, round(self.duration / 60))
+            return f"{min_val} دقيقة"
+        if self.status == 'started':
+            return "قيد التنفيذ"
+        return "–"
+
+    @property
+    def outcome_display(self):
+        """Reads outcome from questionnaire_answers (Question 1)."""
+        ans = self.questionnaire_answers or {}
+        if self.template:
+            q1 = self.template.questions.filter(order=1).first()
+            if q1 and str(q1.id) in ans:
+                val = ans[str(q1.id)]
+                if val == 'successful' or val == 'زيارة ناجحة' or 'ناجحة' in str(val):
+                    return 'زيارة ناجحة'
+                elif val == 'unsuccessful' or val == 'غير ناجحة' or 'غير' in str(val):
+                    return 'زيارة غير ناجحة'
+                return str(val)
+            for q in self.template.questions.all():
+                if 'نتيجة' in q.text_ar or 'outcome' in q.text_en.lower():
+                    if str(q.id) in ans:
+                        val = ans[str(q.id)]
+                        if val == 'successful':
+                            return 'زيارة ناجحة'
+                        elif val == 'unsuccessful':
+                            return 'زيارة غير ناجحة'
+                        return str(val)
+        if hasattr(self, 'is_successful') and self.is_successful:
+            return 'زيارة ناجحة'
+        return 'زيارة غير ناجحة' if self.status == 'finished' else '–'
+
+    def get_qa_display_list(self):
+        """
+        Returns a list of dicts with {'question_text': str, 'answer': str, 'order': int}
+        mapping option keys ('successful', 'yes', etc.) to their Arabic labels using the
+        prefetched template.questions cache (zero N+1 queries when prefetched).
+        """
+        if not self.questionnaire_answers:
+            return []
+        res = []
+        q_map = {}
+        opt_map = {}
+        q_order_map = {}
+        if self.template_id:
+            # Iterate prefetched cache in Python without triggering extra .order_by() SQL
+            questions = sorted(self.template.questions.all(), key=lambda x: (x.order, x.id))
+            for q in questions:
+                qid_str = str(q.id)
+                q_map[qid_str] = q.text_ar or q.text_en or f"سؤال #{q.order}"
+                q_order_map[qid_str] = q.order
+                if isinstance(q.options, list):
+                    lookup = {}
+                    for opt in q.options:
+                        if isinstance(opt, dict):
+                            val_k = str(opt.get('value', '')).strip()
+                            lbl = opt.get('text_ar') or opt.get('text_en') or val_k
+                            if val_k:
+                                lookup[val_k.lower()] = lbl
+                    opt_map[qid_str] = lookup
+
+        global_label_map = {
+            'successful': 'زيارة ناجحة',
+            'unsuccessful': 'زيارة غير ناجحة',
+            'yes': 'نعم',
+            'no': 'لا',
+            'true': 'نعم',
+            'false': 'لا',
+        }
+
+        def _translate_val(qid_str, raw_v):
+            s = str(raw_v).strip()
+            s_low = s.lower()
+            q_lookup = opt_map.get(qid_str, {})
+            if s_low in q_lookup:
+                return q_lookup[s_low]
+            if s_low in global_label_map:
+                return global_label_map[s_low]
+            return s
+
+        for q_id, val in self.questionnaire_answers.items():
+            qid_str = str(q_id)
+            q_text = q_map.get(qid_str, f"سؤال #{q_id}")
+            if isinstance(val, list):
+                val_str = '، '.join(_translate_val(qid_str, item) for item in val if item not in (None, ''))
+            elif val is None or val == '':
+                val_str = '—'
+            else:
+                val_str = _translate_val(qid_str, val)
+            res.append({
+                'question_text': q_text,
+                'answer': val_str,
+                'order': q_order_map.get(qid_str, 999),
+            })
+        res.sort(key=lambda item: item['order'])
+        return res
 
     @property
     def status_display_ar(self):
@@ -598,6 +793,7 @@ class Visit(models.Model):
 
 class PlannedVisitItem(models.Model):
     plan_day = models.ForeignKey(PlannedVisitDay, on_delete=models.CASCADE, related_name='items', verbose_name="خطة اليوم")
+    plan = models.ForeignKey(VisitPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='planned_items', verbose_name="خطة الزيارات")
     order = models.PositiveIntegerField(default=1, verbose_name="الترتيب")
     contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='planned_visit_items', verbose_name="العميل")
     template = models.ForeignKey(VisitTemplate, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="القالب")

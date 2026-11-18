@@ -191,7 +191,7 @@ def performance_daily_export(request):
     headers = [
         "اسم المندوب", "المنطقة", "أول تسجيل", "آخر تسجيل", "ساعات العمل",
         "المخططة", "المنفذة", "خارج الخطة", "الملغاة", "المزدوجة",
-        "مرات الشرح", "نسبة دقة الموقع %", "نسبة التحقق %", "الصور الملتقطة",
+        "مرات الشرح", "نسبة دقة الموقع %", "نسبة التحقق %",
         "عدد الطلبيات", "قيمة المبيعات (ج.م)", "قيمة التحصيلات (ج.م)", "المصروفات (ج.م)", "حالة اليوم"
     ]
     rows = []
@@ -207,11 +207,11 @@ def performance_daily_export(request):
             r['name'], r['area'], r['first_checkin'], r['last_checkout'], r['working_hours'],
             r['planned_visits'], r['completed_visits'], r['unplanned_visits'], r['cancelled_visits'],
             r['double_visits'], r['detailing_count'], f"{r['in_range_pct']}%", f"{r['verified_pct']}%",
-            r['photos_taken'], r['orders_count'], r['orders_val'], r['cols_val'], r['expenses_val'], r['status']
+            r['orders_count'], r['orders_val'], r['cols_val'], r['expenses_val'], r['status']
         ])
 
     summary_row = [
-        "الإجمالي", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+        "الإجمالي", "", "", "", "", "", "", "", "", "", "", "", "", "",
         tot_sales, tot_cols, tot_exp, ""
     ]
 

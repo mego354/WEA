@@ -246,7 +246,7 @@
                         {% for po in recent_purchases %}
                         <tr class="hover:bg-slate-50 transition-colors">
                             <td class="py-2.5 pr-2 font-mono font-bold text-brand-700">
-                                <a href="{% url 'purchase_order_detail' po.id %}" class="hover:underline">PO-{{ po.serial_number }}</a>
+                                <a href="{% url 'purchase_order_detail' po.id %}" class="hover:underline">{{ po.order_number }}</a>
                             </td>
                             <td class="py-2.5 font-medium text-slate-800">{{ po.supplier.name|truncatechars:18 }}</td>
                             <td class="py-2.5 font-mono text-slate-900 font-semibold">{{ po.grand_total|floatformat:2 }} ج.م</td>
@@ -303,7 +303,7 @@
                         {% for so in recent_sales %}
                         <tr class="hover:bg-slate-50 transition-colors">
                             <td class="py-2.5 pr-2 font-mono font-bold text-brand-700">
-                                <a href="{% url 'sales_order_detail' so.id %}" class="hover:underline">SO-{{ so.serial_number }}</a>
+                                <a href="{% url 'sales_order_detail' so.id %}" class="hover:underline">{{ so.order_number }}</a>
                             </td>
                             <td class="py-2.5 font-medium text-slate-800">{{ so.customer.name|truncatechars:18 }}</td>
                             <td class="py-2.5 font-mono text-slate-900 font-semibold">{{ so.grand_total|floatformat:2 }} ج.م</td>

@@ -25,10 +25,10 @@ class SalesReturnOrderItemInline(admin.TabularInline):
 class SalesOrderAdmin(admin.ModelAdmin):
     list_display = (
         'order_number', 'customer', 'source_warehouse', 'order_date',
-        'status_badge', 'grand_total_display', 'created_by',
+        'status_badge', 'payment_status_badge', 'grand_total_display', 'created_by',
         'approved_by', 'approved_at'
     )
-    list_filter = ('status', 'source_warehouse', 'order_date')
+    list_filter = ('status', 'payment_status', 'source_warehouse', 'order_date')
     search_fields = ('order_number', 'serial_num', 'customer__name', 'customer__code', 'notes')
     date_hierarchy = 'order_date'
     inlines = [SalesOrderItemInline]
@@ -37,7 +37,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('معلومات أمر البيع', {
-            'fields': ('serial_num', 'order_number', 'customer', 'delivery_address', 'source_warehouse', 'order_date', 'delivery_date', 'status')
+            'fields': ('serial_num', 'order_number', 'customer', 'delivery_address', 'source_warehouse', 'order_date', 'delivery_date', 'status', 'payment_status')
         }),
         ('الربط المخزني والمالي', {
             'fields': ('memo', 'subtotal', 'items_discount_total', 'custom_discount_percentage', 'custom_discount_amount', 'shipping_fees', 'grand_total')
@@ -61,6 +61,17 @@ class SalesOrderAdmin(admin.ModelAdmin):
         cls = mapping.get(obj.status, 'admin-pill-neutral')
         return format_html('<span class="admin-pill {}">{}</span>', cls, obj.status_display_ar)
     status_badge.short_description = "الحالة"
+
+    def payment_status_badge(self, obj):
+        ps_mapping = {
+            'paid': 'admin-pill-success',
+            'partial': 'admin-pill-info',
+            'credit': 'admin-pill-warning',
+            'returned': 'admin-pill-danger',
+        }
+        cls = ps_mapping.get(obj.payment_status, 'admin-pill-neutral')
+        return format_html('<span class="admin-pill {}">{}</span>', cls, obj.payment_status_display_ar)
+    payment_status_badge.short_description = "حالة السداد"
 
     def grand_total_display(self, obj):
         return f"{obj.grand_total:,.2f} ج.م"

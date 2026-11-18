@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load erp_tags %}
 
-{% block title %}المخازن - WEA Pharma ERP{% endblock %}
+{% block title %}المخازن والمستودعات - WEA Pharma ERP{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -17,19 +17,22 @@
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">إدارة المخازن</h1>
-            <p class="text-sm text-slate-500 mt-0.5">مستودعات الشركة ومخازن الفروع وتوزيع المخزون</p>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">warehouse</span>
+                <span>إدارة المخازن ومراكز التوزيع</span>
+            </h1>
+            <p class="text-sm text-slate-500 mt-0.5">مستودعات الشركة ومخازن الفروع وتوزيع المخزون وعهد مناديب المبيعات</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-            <a href="{% url 'product_transfers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all">
+            <a href="{% url 'product_transfers_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-600">swap_horiz</span>
                 <span>طلبات التحويل بين المخازن</span>
             </a>
             {% if can_manage_warehouses %}
-            <button onclick="toggleModal('new-warehouse-modal')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
+            <a href="{% url 'warehouse_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إضافة مخزن جديد</span>
-            </button>
+            </a>
             {% endif %}
         </div>
     </div>
@@ -39,7 +42,7 @@
         <!-- Card 1: Total Warehouses -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المخازن</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المخازن المصرح بها</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">warehouse</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
@@ -63,7 +66,7 @@
         <!-- Card 3: Rep Warehouses -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">مخازن المناديب</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">مخازن عهد المناديب</span>
                 <span class="p-1.5 sm:p-2 bg-blue-50 text-blue-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">local_shipping</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
@@ -80,23 +83,45 @@
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.active_warehouses|stat_number }}">{{ stats.active_warehouses|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 block leading-tight mt-0.5">مفعلة وتعمل</span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 block leading-tight mt-0.5">جاهزة للتشغيل</span>
             </div>
         </div>
     </div>
 
-    <!-- 3. Search Toolbar -->
+    <!-- 3. Search & Filter Controls Toolbar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
         <form method="GET" class="flex flex-col sm:flex-row gap-3">
             <div class="flex-1 relative">
                 <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم المخزن أو الكود..."
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+                       data-smart-search-module="warehouses"
+                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
             </div>
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
+            {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
+            {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+            {% if selected_area %}<input type="hidden" name="area" value="{{ selected_area }}">{% endif %}
+            {% if selected_assigned_user %}<input type="hidden" name="assigned_user" value="{{ selected_assigned_user }}">{% endif %}
+
+            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">search</span>
                 <span>بحث</span>
             </button>
+            <button type="button" onclick="openFilterDrawer()" class="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base text-brand-600">tune</span>
+                <span>فلترة متقدمة</span>
+            </button>
+            {% if request.user|has_permission:'inventory:warehouses/export' %}
+            <a href="{% url 'warehouses_export' %}?search={{ search_query|urlencode }}&type={{ selected_type|urlencode }}&status={{ selected_status|urlencode }}&area={{ selected_area|urlencode }}&assigned_user={{ selected_assigned_user|urlencode }}"
+               class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">تصدير Excel</span>
+            </a>
+            {% endif %}
+            {% if search_query or active_filters %}
+            <a href="{% url 'warehouses_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
+                إلغاء الفلاتر
+            </a>
+            {% endif %}
         </form>
     </div>
 
@@ -106,74 +131,97 @@
     <!-- Warehouses Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {% for wh in warehouses %}
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div class="flex items-start justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl {% if wh.is_rep_warehouse %}bg-amber-50 text-amber-600{% elif wh.is_main %}bg-blue-50 text-blue-600{% else %}bg-brand-50 text-brand-600{% endif %} flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl">{% if wh.is_rep_warehouse %}person_pin{% else %}warehouse{% endif %}</span>
-                    </div>
-                    <div>
-                        <h2 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors">{{ wh.name }}</h2>
-                        <div class="flex items-center gap-1.5 mt-0.5">
-                            <span class="text-xs font-mono font-bold text-slate-400">#{{ wh.code }}</span>
-                            {% if wh.is_main %}
-                            <span class="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">رئيسي</span>
-                            {% elif wh.is_rep_warehouse %}
-                            <span class="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">عهدة مندوب</span>
-                            {% endif %}
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group flex flex-col justify-between">
+            <div>
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl {% if wh.is_rep_warehouse %}bg-amber-50 text-amber-600{% elif wh.is_main %}bg-blue-50 text-blue-600{% else %}bg-brand-50 text-brand-600{% endif %} flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-2xl">{% if wh.is_rep_warehouse %}person_pin{% else %}warehouse{% endif %}</span>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-slate-900 text-base group-hover:text-brand-600 transition-colors">{{ wh.name }}</h2>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <span class="text-xs font-mono font-bold text-slate-400">#{{ wh.code }}</span>
+                                {% if wh.is_main %}
+                                <span class="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">رئيسي مركزي</span>
+                                {% elif wh.is_rep_warehouse %}
+                                <span class="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">عهدة مندوب</span>
+                                {% else %}
+                                <span class="text-[10px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded">فرعي</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
-                </div>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold {% if wh.is_active %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-slate-100 text-slate-500{% endif %}">
-                    {% if wh.is_active %}نشط{% else %}معطل{% endif %}
-                </span>
-            </div>
-
-            <div class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
-                {% if wh.assigned_user %}
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-400">المندوب المسئول:</span>
-                    <span class="font-bold text-slate-900">{{ wh.assigned_user.get_full_name|default:wh.assigned_user.username }}</span>
-                </div>
-                {% endif %}
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-400">المنطقة الرئيسية:</span>
-                    <span class="font-bold text-brand-700">
-                        {% with m_area=wh.main_area %}
-                        {{ m_area.name|default:"عام / غير محدد" }}
-                        {% endwith %}
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold {% if wh.is_active %}bg-emerald-50 text-emerald-700 border border-emerald-200/60{% else %}bg-slate-100 text-slate-500 border border-slate-200{% endif %}">
+                        {% if wh.is_active %}نشط{% else %}معطل{% endif %}
                     </span>
                 </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-slate-400">العنوان:</span>
-                    <span class="font-medium text-slate-700 truncate max-w-[180px]">{{ wh.address|default:"غير محدد" }}</span>
+
+                <div class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400">المسؤول / المندوب:</span>
+                        <span class="font-bold text-slate-900">
+                            {% if wh.assigned_user %}
+                            {{ wh.assigned_user.get_full_name|default:wh.assigned_user.username }}
+                            {% else %}
+                            <span class="text-slate-400 font-normal">عام / بدون مندوب</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400">المنطقة الجغرافية:</span>
+                        <span class="font-bold text-brand-700">
+                            {% with m_area=wh.main_area %}
+                            {{ m_area.name|default:"عام / غير محدد" }}
+                            {% endwith %}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400">العنوان:</span>
+                        <span class="font-medium text-slate-700 truncate max-w-[180px]">{{ wh.address|default:"غير محدد" }}</span>
+                    </div>
+                    {% if wh.has_saved_location %}
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="text-slate-400">الإحداثيات:</span>
+                        <span class="font-mono font-bold text-teal-700 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs text-teal-600">location_on</span>
+                            <span>{{ wh.latitude|floatformat:4 }}, {{ wh.longitude|floatformat:4 }}</span>
+                        </span>
+                    </div>
+                    {% endif %}
                 </div>
-                {% if wh.has_saved_location %}
-                <div class="flex items-center justify-between text-[11px]">
-                    <span class="text-slate-400">الإحداثيات:</span>
-                    <span class="font-mono font-bold text-teal-700 flex items-center gap-1">
-                        <span class="material-symbols-outlined text-xs text-teal-600">location_on</span>
-                        <span>{{ wh.latitude|floatformat:4 }}, {{ wh.longitude|floatformat:4 }}</span>
-                    </span>
-                </div>
-                {% endif %}
             </div>
 
-            <div class="mt-4 pt-3 flex items-center justify-between border-t border-slate-100">
-                <a href="{% url 'inventory_stock_list' %}?warehouse={{ wh.id }}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
-                    <span>عرض الأرصدة</span>
-                    <span class="material-symbols-outlined text-sm">arrow_left</span>
-                </a>
-                <a href="{% url 'product_transfers_list' %}?search={{ wh.code }}" class="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1">
-                    <span>التحويلات</span>
-                    <span class="material-symbols-outlined text-sm">history</span>
-                </a>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <a href="{% url 'inventory_stock_list' %}?warehouse={{ wh.id }}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                        <span>الأرصدة</span>
+                        <span class="material-symbols-outlined text-sm">arrow_left</span>
+                    </a>
+                    <span class="text-slate-300">|</span>
+                    <a href="{% url 'product_transfers_list' %}?search={{ wh.code }}" class="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1">
+                        <span>التحويلات</span>
+                    </a>
+                </div>
+
+                {% if can_manage_warehouses %}
+                <div class="flex items-center gap-1">
+                    <a href="{% url 'warehouse_edit' wh.pk %}" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="تعديل المخزن">
+                        <span class="material-symbols-outlined text-base">edit</span>
+                    </a>
+                    <button type="button"
+                            onclick="showConfirmDeleteModal({ action: '{% url 'warehouse_delete' wh.pk %}', title: 'حذف المخزن', itemName: '{{ wh.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف المخزن <span class=\'font-bold text-slate-800\'>{{ wh.name|escapejs }}</span> نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف المخزن إذا كانت به أرصدة حالية أو أذونات مخزنية أو فواتير مرتبطة.' })"
+                            class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="حذف المخزن">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% empty %}
         <div class="col-span-full bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">warehouse</span>
-            <p class="font-medium text-slate-600">لا توجد مخازن مسجلة حتى الآن</p>
+            <p class="font-medium text-slate-600">لا توجد مخازن مطابقة لمعايير البحث أو ضمن نطاقك المصرح به.</p>
         </div>
         {% endfor %}
     </div>
@@ -183,65 +231,84 @@
         {% include 'components/pagination.html' %}
     </div>
 
-    <!-- Add Warehouse Modal -->
-    <div id="new-warehouse-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 transform transition-all">
-            <div class="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-20">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
-                        <span class="material-symbols-outlined text-lg">warehouse</span>
-                    </div>
-                    <h3 class="font-bold text-slate-900">إضافة مخزن جديد</h3>
-                </div>
-                <button type="button" onclick="toggleModal('new-warehouse-modal')" class="text-slate-400 hover:text-slate-600">
-                    <span class="material-symbols-outlined">close</span>
+</div>
+
+<!-- Advanced Filter Drawer -->
+<div id="filter-drawer" class="fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeFilterDrawer()"></div>
+    <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+        <div class="w-screen max-w-sm bg-white shadow-xl flex flex-col">
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-brand-600">tune</span>
+                    <span>فلترة متقدمة للمخازن</span>
+                </h2>
+                <button type="button" onclick="closeFilterDrawer()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <span class="material-symbols-outlined text-xl">close</span>
                 </button>
             </div>
+            <form method="GET" class="p-6 space-y-4 flex-1 overflow-y-auto">
+                {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
-            <form method="POST" action="{% url 'warehouses_list' %}" class="p-6 space-y-4">
-                {% csrf_token %}
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">اسم المخزن <span class="text-rose-500">*</span></label>
-                    <input type="text" name="name" required placeholder="مثال: مخزن الدلتا الرئيسي"
-                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تصنيف / نوع المخزن</label>
+                    <select name="type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="">جميع التصنيفات</option>
+                        <option value="main" {% if selected_type == 'main' %}selected{% endif %}>مستودع رئيسي مركزي</option>
+                        <option value="rep" {% if selected_type == 'rep' %}selected{% endif %}>مخزن عهدة مندوب</option>
+                        <option value="standard" {% if selected_type == 'standard' %}selected{% endif %}>مخزن فرعي عادي</option>
+                    </select>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">كود المخزن <span class="text-rose-500">*</span></label>
-                    <input type="text" name="code" required placeholder="مثال: WH-02"
-                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة المخزن</label>
+                    <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="">جميع الحالات</option>
+                        <option value="active" {% if selected_status == 'active' %}selected{% endif %}>نشط ويعمل</option>
+                        <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>معطل</option>
+                    </select>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">العنوان وموقع المخزن</label>
-                    <textarea name="address" id="warehouse_address_input" rows="2" placeholder="العنوان التفصيلي للمخزن..."
-                              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المنطقة الجغرافية / المحافظة</label>
+                    <select name="area" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="">جميع المناطق</option>
+                        {% for a in areas %}
+                        <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
-                <!-- Shared Location Picker Component -->
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تحديد موقع المخزن على الخريطة (GPS)</label>
-                    {% include 'components/location_picker.html' with picker_id='warehouse_picker' lat_name='latitude' lng_name='longitude' initial_lat=30.0444 initial_lng=31.2357 has_saved_location=False address_input_id='warehouse_address_input' marker_label='موقع المخزن' map_height='h-52' %}
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول / المندوب المعين</label>
+                    <select name="assigned_user" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <option value="">جميع المسؤولين</option>
+                        {% for u in assignees %}
+                        <option value="{{ u.id }}" {% if selected_assigned_user == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.role.display_name|default:u.username }})</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
-                <div class="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
-                    <button type="button" onclick="toggleModal('new-warehouse-modal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
-                        إلغاء
-                    </button>
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <a href="{% url 'warehouses_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+                        إعادة تعيين
+                    </a>
                     <button type="submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
-                        حفظ المخزن
+                        تطبيق الفلترة
                     </button>
                 </div>
             </form>
         </div>
     </div>
-
 </div>
 
 <script>
-    function toggleModal(id) {
-        const modal = document.getElementById(id);
-        modal.classList.toggle('hidden');
+    function openFilterDrawer() {
+        document.getElementById('filter-drawer').classList.remove('hidden');
+    }
+
+    function closeFilterDrawer() {
+        document.getElementById('filter-drawer').classList.add('hidden');
     }
 </script>
 {% endblock %}

@@ -146,7 +146,16 @@
             <form method="GET" class="relative w-48 sm:w-64">
                 <input type="hidden" name="view" value="{{ view_mode }}">
                 <input type="hidden" name="relation" value="{{ current_relation }}">
-                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث"
+                {% if current_show_inactive and current_show_inactive != 'no' %}<input type="hidden" name="inactive" value="{{ current_show_inactive }}">{% endif %}
+                {% if current_user_id %}<input type="hidden" name="user_id" value="{{ current_user_id }}">{% endif %}
+                {% if current_status and current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                {% if current_contact_type and current_contact_type != 'all' %}<input type="hidden" name="contact_type" value="{{ current_contact_type }}">{% endif %}
+                {% if current_category and current_category != 'all' %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
+                {% if current_specialty and current_specialty != 'all' %}<input type="hidden" name="specialty" value="{{ current_specialty }}">{% endif %}
+                {% for a in selected_main_areas_chips %}<input type="hidden" name="area_id" value="{{ a.id }}">{% endfor %}
+                {% for b in selected_bricks_chips %}<input type="hidden" name="brick_id" value="{{ b.id }}">{% endfor %}
+                {% for at in selected_account_types %}<input type="hidden" name="account_type" value="{{ at }}">{% endfor %}
+                <input type="text" name="search" value="{{ search_query }}" data-smart-search-module="contacts" placeholder="بحث"
                        class="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-slate-800">
                 <button type="submit" class="absolute left-2.5 top-2 text-slate-400 hover:text-brand-600">
                     <span class="material-symbols-outlined text-base">search</span>
@@ -165,8 +174,10 @@
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
 
-            <!-- Column Selector -->
+            <!-- Column Selector (Table View Only) -->
+            {% if view_mode == 'table' %}
             {% include 'components/table_column_picker.html' with table_id='contacts_table' %}
+            {% endif %}
         </div>
     </div>
 
@@ -596,14 +607,6 @@
         <input type="hidden" name="view" value="{{ view_mode }}">
         <input type="hidden" name="search" value="{{ search_query }}">
 
-        <!-- Preset: مجموعة الفلاتر المختارة -->
-        <div>
-            <label class="mat-like-label">مجموعة الفلاتر المختارة</label>
-            <select class="mat-like-control">
-                <option>مجموعة فلاتر جديدة</option>
-            </select>
-        </div>
-
         <!-- إظهار الغير فعال -->
         <div>
             <label class="mat-like-label">إظهار الغير فعال</label>
@@ -619,7 +622,7 @@
             <select name="user_id" class="mat-like-control">
                 <option value="">اختر مسؤول...</option>
                 {% for u in users_list %}
-                <option value="{{ u.id }}">{{ u.name }} ({{ u.role_name }})</option>
+                <option value="{{ u.id }}" {% if current_user_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }} ({{ u.role_name }})</option>
                 {% endfor %}
             </select>
         </div>
@@ -682,16 +685,8 @@
             </select>
         </div>
 
-        <!-- نوع الاكونت -->
-        <div>
-            <label class="mat-like-label">نوع الاكونت</label>
-            <select name="account_type" class="mat-like-control">
-                <option value="all" {% if current_account_type == 'all' %}selected{% endif %}>الكل</option>
-                {% for acc in account_types %}
-                <option value="{{ acc }}" {% if current_account_type == acc %}selected{% endif %}>{{ acc }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <!-- نوع الاكونت (اختيار متعدد) -->
+        {% include 'components/account_type_multiselect.html' with component_id='contacts' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types label='نوع الاكونت (اختيار متعدد)' %}
 
         <!-- Buttons -->
         <div class="pt-4 flex items-center gap-3">

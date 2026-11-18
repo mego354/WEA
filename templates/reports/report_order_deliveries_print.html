@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>كشف تسليمات الطلبيات — WEA Pharma ERP</title>
+    <title>كشف تسليمات الطلبيات — {{ company.company_name|default:'WEA Pharma' }}</title>
     <style>
         body { font-family: 'Cairo', Tahoma, sans-serif; margin: 20px; font-size: 11px; color: #1e293b; }
         .header { text-align: center; border-bottom: 2px solid #27bebe; padding-bottom: 12px; margin-bottom: 15px; }
@@ -21,7 +21,13 @@
 </head>
 <body onload="window.print();">
     <div class="header">
-        <h1>WEA PHARMA ERP — كشف تسليمات الطلبيات واللوجستيات</h1>
+        {% if company.logo %}
+        <img src="{{ company.logo.url }}" alt="{{ company.company_name|default:'WEA Pharma' }}" style="max-height:42px;margin-bottom:6px;">
+        {% endif %}
+        <h1>{{ company.company_name|default:'WEA Pharma' }} — كشف تسليمات الطلبيات واللوجستيات</h1>
+        {% if company.phone or company.address %}
+        <p>{% if company.address %}{{ company.address }}{% endif %}{% if company.address and company.phone %} | {% endif %}{% if company.phone %}{{ company.phone }}{% endif %}</p>
+        {% endif %}
         <p>الفترة من {{ start_date }} إلى {{ end_date }} | إجمالي الطلبات: {{ summary.total_orders }} (تم التسليم: {{ summary.delivered_count }})</p>
     </div>
 

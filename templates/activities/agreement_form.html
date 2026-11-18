@@ -21,75 +21,14 @@
         <form method="POST" id="agreement-form" onsubmit="return handleAgreementSubmit(event)" class="p-6 space-y-4">
             {% csrf_token %}
 
-            <!-- Customer Picker with Dynamic Search -->
-            <div class="space-y-2 pb-2">
-                <div class="flex items-center justify-between">
-                    <label class="block text-xs font-bold text-slate-700">العميل *</label>
-                    <span class="text-[11px] text-slate-400">مقيد بالنطاق الجغرافي المصرح لك به</span>
-                </div>
-
-                <!-- Hidden Django Select field (synced automatically) -->
-                <div class="hidden">
-                    {{ form.customer }}
-                </div>
+            <!-- Customer Picker with Smart Select -->
+            <div class="space-y-1.5 pb-2">
+                <label class="block text-xs font-bold text-slate-700">
+                    العميل <span class="text-rose-500">*</span>
+                </label>
+                {{ form.customer }}
                 {% if form.customer.errors %}<p class="text-xs text-rose-500 mt-1 font-semibold">{{ form.customer.errors.0 }}</p>{% endif %}
-
-                <!-- Selected Customer Card -->
-                <div id="selected-customer-card" class="{% if not selected_contact and not form.customer.value %}hidden{% endif %} bg-slate-50/80 border border-teal-200 rounded-xl p-3.5 transition-all">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-full bg-[#27bebe] text-white font-bold text-xs flex items-center justify-center flex-shrink-0" id="customer-avatar-initials">
-                                {{ selected_contact.initials|default:"CL" }}
-                            </div>
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <h3 class="text-xs font-black text-slate-900" id="customer-display-name">
-                                        {% if selected_contact %{{ selected_contact.name }}{% endif %}
-                                    </h3>
-                                    <span id="customer-category-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-[#1a8b8b]">
-                                        {% if selected_contact %}{{ selected_contact.customer_category|default:selected_contact.account_type|default:"عميل" }}{% else %}عميل{% endif %}
-                                    </span>
-                                </div>
-                                <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                                    <span id="customer-specialty-text">تخصص: {% if selected_contact %}{{ selected_contact.specialty|default:"عام" }}{% else %}عام{% endif %}</span>
-                                    <span>•</span>
-                                    <span id="customer-area-text">المنطقة: {% if selected_contact and selected_contact.area %}{{ selected_contact.area.name }}{% else %}غير محددة{% endif %}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="clearCustomerSelection()" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                            تغيير العميل
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Customer Search Typeahead Box -->
-                <div id="customer-search-container" class="{% if selected_contact or form.customer.value %}hidden{% endif %} relative">
-                    <div class="relative">
-                        <span class="material-symbols-outlined absolute right-3.5 top-2.5 text-slate-400 text-lg">search</span>
-                        <input type="text" id="customer-search-input" onkeyup="handleCustomerSearch(event)" onfocus="openSearchResults()" onclick="openSearchResults()"
-                               placeholder="ابحث باسم العميل أو الكود أو المنطقة أو التخصص..." autocomplete="off"
-                               class="w-full rounded-xl border border-slate-200 pr-10 pl-20 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-xs cursor-pointer">
-                        <div class="absolute left-2 top-1.5 flex items-center gap-1">
-                            <span id="search-spinner" class="material-symbols-outlined text-slate-400 text-lg hidden animate-spin">refresh</span>
-                            <button type="button" onclick="toggleSearchResults(event)" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-0.5">
-                                <span class="material-symbols-outlined text-base">expand_more</span>
-                                <span>العملاء</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="customer-search-dropdown" class="hidden absolute right-0 left-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto z-30 divide-y divide-slate-100">
-                        <div class="p-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                            <span>العملاء المتاحون ضمن نطاقك الجغرافي</span>
-                            <span id="customer-results-count" class="text-teal-700">0 عميل</span>
-                        </div>
-                        <div id="customer-search-results" class="p-1 space-y-1">
-                            <!-- Populated dynamically via fetch -->
-                        </div>
-                    </div>
-                </div>
+                <p class="text-[11px] text-slate-400">مقيد بالنطاق الجغرافي المصرح لك به</p>
             </div>
 
             <div>

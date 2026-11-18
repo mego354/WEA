@@ -256,18 +256,8 @@ class PurchasesModelsAndViewsTestCase(TestCase):
             user=self.user,
             notes='مرتجع تجريبي'
         )
-        self.assertEqual(ret_order.status, 'pending')
+        self.assertEqual(ret_order.status, 'settled')
         self.assertEqual(ret_order.grand_total, Decimal('376.00'))
-
-        # 3. Approve return order
-        PurchaseReturnOrderService.approve_return_order(ret_order, self.user)
-        ret_order.refresh_from_db()
-        self.assertEqual(ret_order.status, 'approved')
-
-        # 4. Deliver / Dispatch unstocking
-        PurchaseReturnOrderService.deliver_return_order(ret_order, self.user)
-        ret_order.refresh_from_db()
-        self.assertEqual(ret_order.status, 'delivered')
         self.assertIsNotNone(ret_order.memo)
         self.assertEqual(ret_order.memo.memo_type, 'outward')
 
@@ -275,11 +265,6 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         lot.refresh_from_db()
         self.assertEqual(stock.qty_on_hand, Decimal('80.00'))
         self.assertEqual(lot.quantity, Decimal('80.00'))
-
-        # 5. Financial Settlement (Debit Note)
-        PurchaseReturnOrderService.settle_return_order(ret_order, self.user)
-        ret_order.refresh_from_db()
-        self.assertEqual(ret_order.status, 'settled')
 
         vendor_acc.refresh_from_db()
         self.assertEqual(vendor_acc.current_balance, Decimal('9624.00'))
@@ -298,17 +283,21 @@ class PurchasesModelsAndViewsTestCase(TestCase):
             'quantity': Decimal('50.00'),
             'unit_price': Decimal('18.80')
         }]
-        ret_order = PurchaseReturnOrderService.create_return_order(
-            supplier=self.supplier,
-            warehouse=self.warehouse,
-            order_date='2026-10-10',
-            items_data=items_data,
-            user=self.user
-        )
         with self.assertRaises(ValidationError):
-            PurchaseReturnOrderService.deliver_return_order(ret_order, self.user)
+            PurchaseReturnOrderService.create_return_order(
+                supplier=self.supplier,
+                warehouse=self.warehouse,
+                order_date='2026-10-10',
+                items_data=items_data,
+                user=self.user
+            )
 
     def test_purchase_return_order_cancel(self):
+        InventoryStock.objects.create(
+            warehouse=self.warehouse,
+            product=self.product,
+            qty_on_hand=Decimal('10.00')
+        )
         items_data = [{
             'product': self.product,
             'quantity': Decimal('5.00'),
@@ -321,11 +310,18 @@ class PurchasesModelsAndViewsTestCase(TestCase):
             items_data=items_data,
             user=self.user
         )
+        ret_order.status = 'pending'
+        ret_order.save()
         PurchaseReturnOrderService.cancel_return_order(ret_order, self.user)
         ret_order.refresh_from_db()
         self.assertEqual(ret_order.status, 'cancelled')
 
     def test_purchase_return_order_views_crud_and_export(self):
+        InventoryStock.objects.create(
+            warehouse=self.warehouse,
+            product=self.product,
+            qty_on_hand=Decimal('50.00')
+        )
         # 1. GET create
         create_resp = self.client.get(reverse('purchase_return_order_create'))
         self.assertEqual(create_resp.status_code, 200)
@@ -356,6 +352,8 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         self.assertContains(detail_resp, ret.order_number)
 
         # 4. Action transition POST (approve)
+        ret.status = 'pending'
+        ret.save()
         act_resp = self.client.post(reverse('purchase_return_order_action', args=[ret.id, 'approve']), follow=True)
         self.assertEqual(act_resp.status_code, 200)
         ret.refresh_from_db()
@@ -469,7 +467,14 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
         self.assertIsNotNone(create_audit)
         self.assertEqual(create_audit.actor, self.accountant)
 
-        # Approve Order
+        # Test approval and subsequent workflow on pending order
+        if order.memo:
+            order.memo.items.all().delete()
+            order.memo.delete()
+            order.memo = None
+            order.save()
+        order.status = 'pending'
+        order.save()
         PurchaseOrderService.approve_order(order, self.superadmin)
         order.refresh_from_db()
         self.assertEqual(order.status, 'approved')
@@ -505,9 +510,6 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
             user=self.accountant,
             due_date=datetime.date(2026, 11, 20)
         )
-        PurchaseOrderService.approve_order(po, self.superadmin)
-        PurchaseOrderService.stock_order(po, self.superadmin)
-        PurchaseOrderService.invoice_order(po, self.accountant)
         po.refresh_from_db()
         self.assertEqual(po.outstanding_balance, Decimal('2000.00'))
 
@@ -623,7 +625,7 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             warehouse=self.wh, product=self.product, qty_on_hand=Decimal('100.00'), product_cost=Decimal('30.00')
         )
 
-        # Create original purchase order, approve, stock, and invoice 20 units
+        # Create original purchase order (immediately settled, stocked, and invoiced)
         self.orig_po = PurchaseOrderService.create_order(
             supplier=self.supplier,
             target_warehouse=self.wh,
@@ -631,9 +633,6 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             items_data=[{'product': self.product, 'quantity': 20, 'unit_price': Decimal('30.00')}],
             user=self.accountant
         )
-        PurchaseOrderService.approve_order(self.orig_po, self.superadmin)
-        PurchaseOrderService.stock_order(self.orig_po, self.superadmin)
-        PurchaseOrderService.invoice_order(self.orig_po, self.superadmin)
         self.orig_po.refresh_from_db()
         self.orig_po_item = self.orig_po.items.first()
         self.vendor_acc.refresh_from_db()
@@ -655,7 +654,7 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             user=self.accountant,
             notes='مرتجع عيوب صناعة'
         )
-        self.assertEqual(ret1.status, 'pending')
+        self.assertEqual(ret1.status, 'settled')
         self.assertEqual(ret1.grand_total, Decimal('240.00'))
 
         # 2. Return remaining 12 units
@@ -703,6 +702,8 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             }],
             user=self.accountant
         )
+        ret.status = 'pending'
+        ret.save()
 
         # Self-approval by accountant fails
         with self.assertRaises(ValidationError) as ctx:
@@ -727,12 +728,18 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             }],
             user=self.accountant
         )
+        ret.status = 'pending'
+        ret.save()
         rejected = PurchaseReturnOrderService.reject_return_order(ret, self.manager, rejection_reason='تجاوز فترة الضمان المسموح بها')
         self.assertEqual(rejected.status, 'rejected')
         self.assertEqual(rejected.rejection_reason, 'تجاوز فترة الضمان المسموح بها')
 
     def test_purchase_return_delivery_and_settlement_workflow(self):
         """Dispatching return un-stocks warehouse; settling decrements vendor payable balance."""
+        self.stock.refresh_from_db()
+        initial_stock = self.stock.qty_on_hand
+        initial_bal = self.vendor_acc.current_balance
+
         ret = PurchaseReturnOrderService.create_return_order(
             supplier=self.supplier,
             warehouse=self.wh,
@@ -745,26 +752,12 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             }],
             user=self.accountant
         )
-        PurchaseReturnOrderService.approve_return_order(ret, self.manager)
-
-        # Stock before dispatch
-        self.stock.refresh_from_db()
-        initial_stock = self.stock.qty_on_hand
-
-        # Dispatch (deliver)
-        delivered = PurchaseReturnOrderService.deliver_return_order(ret, self.manager)
-        self.assertEqual(delivered.status, 'delivered')
+        self.assertEqual(ret.status, 'settled')
 
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.qty_on_hand, initial_stock - Decimal('4.00'))
 
-        # Settle
-        initial_bal = self.vendor_acc.current_balance # 600.00
-        settled = PurchaseReturnOrderService.settle_return_order(ret, self.accountant)
-        self.assertEqual(settled.status, 'settled')
-
         self.vendor_acc.refresh_from_db()
-        # 600.00 - 120.00 (4 * 30.00) = 480.00
         self.assertEqual(self.vendor_acc.current_balance, initial_bal - Decimal('120.00'))
 
     def test_purchase_return_views_post_only_actions(self):
@@ -781,12 +774,15 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             }],
             user=self.accountant
         )
+        ret.status = 'pending'
+        ret.save()
         self.client.force_login(self.manager)
 
         # GET request on approve endpoint redirects to detail view without action
         get_resp = self.client.get(reverse('purchase_return_order_action', args=[ret.pk, 'approve']))
         self.assertEqual(get_resp.status_code, 302)
         ret.refresh_from_db()
+        self.assertEqual(ret.status, 'pending')
         self.assertEqual(ret.status, 'pending')
 
         # POST request on approve endpoint executes action
@@ -871,6 +867,205 @@ class PurchasesSupplierScopingAndSmartSearchTests(TestCase):
         self.assertEqual(bad_po.status_code, 302)
         self.assertEqual(PurchaseOrder.objects.count(), before)
 
+    def test_purchases_orders_search_api_and_total_count(self):
+        """Verifies purchases_orders_search_api scoping, for_return, unsettled, and total_count."""
+        po_cairo_1 = PurchaseOrder.objects.create(
+            order_number='PO-CAI-001',
+            supplier=self.corp_supplier,
+            target_warehouse=self.wh_cairo,
+            status='received',
+            order_date='2026-11-16',
+            created_by=self.mgr_cairo,
+            grand_total=Decimal('5000.00'),
+        )
+        po_cairo_2 = PurchaseOrder.objects.create(
+            order_number='PO-CAI-002',
+            supplier=self.corp_supplier,
+            target_warehouse=self.wh_cairo,
+            status='settled',
+            order_date='2026-11-16',
+            created_by=self.mgr_cairo,
+            grand_total=Decimal('3000.00'),
+        )
+        po_alex = PurchaseOrder.objects.create(
+            order_number='PO-ALX-001',
+            supplier=self.alex_supplier,
+            target_warehouse=self.wh_alex,
+            status='settled',
+            order_date='2026-11-16',
+            created_by=self.superadmin,
+            grand_total=Decimal('7000.00'),
+        )
+
+        self.client.force_login(self.mgr_cairo)
+        res = self.client.get(reverse('purchases_orders_search_api'))
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn('total_count', data)
+        self.assertEqual(data['total_count'], 2)
+        ids = [item['id'] for item in data['results']]
+        self.assertIn(po_cairo_1.id, ids)
+        self.assertIn(po_cairo_2.id, ids)
+        self.assertNotIn(po_alex.id, ids)
+
+        # Filter unsettled=1
+        res_unsettled = self.client.get(reverse('purchases_orders_search_api') + '?unsettled=1')
+        self.assertEqual(res_unsettled.status_code, 200)
+        unsettled_ids = [item['id'] for item in res_unsettled.json()['results']]
+        self.assertIn(po_cairo_1.id, unsettled_ids)
+        self.assertNotIn(po_cairo_2.id, unsettled_ids)
+
+
+class PurchasesPhase2ImprovementsTests(TestCase):
+    """
+    Verifies Phase 2 architectural improvements in Purchases:
+    1. /purchases/api/orders/<id>/return-details/ API returning returnable quantities and scoping
+    2. Form error recovery preserving user inputs and dynamic line items in purchase_return_order_create
+    """
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+        self.cairo = Area.objects.create(code='PUR-P2-CAI', name='القاهرة', area_type='governorate')
+        self.giza = Area.objects.create(code='PUR-P2-GIZ', name='الجيزة', area_type='governorate')
+
+        self.role_super = Role.objects.get(name='superadmin')
+        self.role_manager = Role.objects.get(name='manager')
+
+        self.superadmin = User.objects.create_superuser(username='pur_p2_super', email='pur_p2_super@test.com', password='pass')
+        self.mgr_cairo = User.objects.create_user(username='pur_p2_mgr_cai', role=self.role_manager, is_staff=True)
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+        self.mgr_giza = User.objects.create_user(username='pur_p2_mgr_giz', role=self.role_manager, is_staff=True)
+        self.mgr_giza.assigned_areas.add(self.giza)
+
+        self.wh_cairo = Warehouse.objects.create(name='مخزن مشتريات القاهرة', code='PUR-WH-CAI', area=self.cairo, is_main=True)
+        self.wh_giza = Warehouse.objects.create(name='مخزن مشتريات الجيزة', code='PUR-WH-GIZ', area=self.giza, is_main=True)
+
+        self.supplier = Contact.objects.create(
+            serial_num=88001,
+            name='شركة فارما للتوزيع',
+            is_supplier=True,
+            status='supplier',
+            area=self.cairo,
+            created_by=self.superadmin
+        )
+
+        self.cat = ProductCategory.objects.create(name='أدوية مشتريات', code='PUR-GEN')
+        self.prod = Product.objects.create(
+            name='سيتال 500 ملجم',
+            sku_code='CETAL-500',
+            retail_price=Decimal('20.00'),
+            default_purchase_cost=Decimal('14.00'),
+            category=self.cat,
+            sellable=True
+        )
+
+        self.po = PurchaseOrder.objects.create(
+            order_number='PO-P2-TEST-001',
+            supplier=self.supplier,
+            target_warehouse=self.wh_cairo,
+            status='settled',
+            order_date='2026-11-17',
+            created_by=self.mgr_cairo,
+            grand_total=Decimal('1400.00')
+        )
+        self.po_item = PurchaseOrderItem.objects.create(
+            order=self.po,
+            product=self.prod,
+            quantity=Decimal('100.00'),
+            unit_price=Decimal('14.00')
+        )
+
+    def test_purchases_order_return_details_api(self):
+        """API returns PO returnable items and limits, respecting data scope."""
+        self.client.force_login(self.mgr_cairo)
+        resp = self.client.get(reverse('purchases_order_return_details_api', args=[self.po.id]))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['order_number'], self.po.order_number)
+        self.assertEqual(data['supplier_id'], self.supplier.id)
+        self.assertEqual(data['warehouse_id'], self.wh_cairo.id)
+        self.assertEqual(len(data['items']), 1)
+        item = data['items'][0]
+        self.assertEqual(item['product_name'], self.prod.name)
+        self.assertEqual(item['product_code'], self.prod.sku_code)
+        self.assertEqual(item['original_quantity'], '100.00')
+        self.assertEqual(item['remaining_returnable'], '100.00')
+
+        # Giza manager cannot access Cairo PO -> 403
+        self.client.force_login(self.mgr_giza)
+        bad_resp = self.client.get(reverse('purchases_order_return_details_api', args=[self.po.id]))
+        self.assertEqual(bad_resp.status_code, 403)
+
+    def test_purchase_return_order_form_error_recovery(self):
+        """Validation errors in purchase_return_order_create preserve entered dynamic items and form data."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(reverse('purchase_return_order_create'), {
+            'purchase_order': self.po.id,
+            'supplier': self.supplier.id,
+            'warehouse': self.wh_cairo.id,
+            'return_date': '2026-11-17',
+            'product_id[]': [self.prod.id],
+            'quantity[]': ['250.00'],  # Exceeds remaining returnable quantity (100)
+            'unit_price[]': ['14.00'],
+            'notes': 'ملاحظات مرتجع مشتريات هامة'
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('form_data', resp.context)
+        self.assertEqual(resp.context['form_data']['notes'], 'ملاحظات مرتجع مشتريات هامة')
+        self.assertIn('submitted_items', resp.context)
+        self.assertEqual(len(resp.context['submitted_items']), 1)
+        self.assertEqual(resp.context['submitted_items'][0]['quantity'], '250.00')
 
 
 
+
+
+
+
+class Phase2PurchasesIntegerAndStatsTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from accounts.models import Role
+        from catalog.models import Product, ProductCategory
+        from contacts.models import Contact
+        from inventory.models import Warehouse
+        from master_data.models import Area, CompanyProfile
+
+        User = get_user_model()
+        CompanyProfile.objects.get_or_create(pk=1, defaults={'company_name': 'WEA Test Pharma'})
+        self.cairo = Area.objects.create(name='القاهرة مشتريات P2', code='CAI-P2')
+        self.super_role, _ = Role.objects.get_or_create(name='superadmin', defaults={'display_name': 'Super Admin', 'is_super': True})
+        self.superadmin = User.objects.create_superuser(username='pur_p2_super', email='pur_p2_super@wea.com', password='TestPassword123!', role=self.super_role)
+        self.supplier = Contact.objects.create(name='مورد مشتريات P2', is_supplier=True, area=self.cairo)
+        self.wh = Warehouse.objects.create(name='مخزن مشتريات P2', code='WH-P-P2', area=self.cairo)
+        self.cat = ProductCategory.objects.create(name='تصنيف مشتريات P2', code='CAT-PP2')
+        self.prod = Product.objects.create(name='صنف مشتريات P2', sku_code='SKU-PP2', category=self.cat, default_purchase_cost=Decimal('40.00'))
+
+    def test_purchase_service_rejects_fractional_quantity(self):
+        from django.core.exceptions import ValidationError
+        from purchases.services import PurchaseOrderService
+
+        with self.assertRaises(ValidationError):
+            PurchaseOrderService.create_order(
+                supplier=self.supplier,
+                target_warehouse=self.wh,
+                order_date='2026-11-17',
+                items_data=[{'product': self.prod, 'quantity': Decimal('1.25'), 'unit_cost': Decimal('40.00')}],
+                user=self.superadmin,
+            )
+
+    def test_purchase_return_orders_list_stats_and_exports(self):
+        from django.urls import reverse
+        self.client.force_login(self.superadmin)
+
+        resp = self.client.get(reverse('purchase_return_orders_list'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('draft_count', resp.context['stats'])
+        self.assertIn('settled_count', resp.context['stats'])
+
+        for url_name in ['purchase_orders_export', 'purchase_return_orders_export']:
+            exp = self.client.get(reverse(url_name), {'date_from': '2026-01-01', 'total_min': '10'})
+            self.assertEqual(exp.status_code, 200)
+            self.assertIn('spreadsheetml.sheet', exp['Content-Type'])

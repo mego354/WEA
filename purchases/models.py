@@ -18,6 +18,14 @@ class PurchaseOrder(models.Model):
         ('cancelled', 'Cancelled / ملغي'),
     ]
 
+    PAYMENT_STATUS_CHOICES = [
+        ('credit', 'آجل (Credit)'),
+        ('cash', 'نقدي (Cash)'),
+        ('partial', 'سداد جزئي (Partial)'),
+        ('paid', 'مسدد بالكامل (Paid)'),
+        ('overdue', 'متأخر (Overdue)'),
+    ]
+
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
     order_number = models.CharField(max_length=50, unique=True, verbose_name="رقم الأمر")
     
@@ -32,7 +40,8 @@ class PurchaseOrder(models.Model):
     delivery_agent = models.CharField(max_length=150, blank=True, verbose_name="مسئول التوصيل")
     delivery_time = models.CharField(max_length=100, blank=True, verbose_name="وقت التوصيل")
 
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="حالة الطلب")
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='settled', db_index=True, verbose_name="حالة الطلب")
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='credit', db_index=True, verbose_name="حالة السداد التجارية")
     is_hold = models.BooleanField(default=False, verbose_name="معلق مؤقتاً (Hold)")
     is_canceled = models.BooleanField(default=False, verbose_name="ملغي")
     is_split = models.BooleanField(default=False, verbose_name="مقسم")
@@ -152,8 +161,47 @@ class PurchaseOrder(models.Model):
         return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
 
     @property
+    def payment_status_display_ar(self):
+        mapping = {
+            'credit': 'آجل',
+            'cash': 'نقدي',
+            'partial': 'جزئي',
+            'paid': 'مدفوع بالكامل',
+            'overdue': 'متأخر',
+        }
+        return mapping.get(self.payment_status, self.get_payment_status_display())
+
+    @property
+    def payment_status_badge_class(self):
+        mapping = {
+            'paid': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            'cash': 'bg-teal-50 text-teal-700 border-teal-200',
+            'partial': 'bg-amber-50 text-amber-700 border-amber-200',
+            'overdue': 'bg-rose-50 text-rose-700 border-rose-200',
+            'credit': 'bg-slate-100 text-slate-700 border-slate-300',
+        }
+        return mapping.get(self.payment_status, 'bg-slate-100 text-slate-700 border-slate-300')
+
+    @classmethod
+    def with_payment_totals(cls, queryset=None):
+        """Annotate PurchaseOrders with `_annotated_total_paid` in SQL to prevent N+1 queries."""
+        from django.db.models import DecimalField, Q, Sum, Value
+        from django.db.models.functions import Coalesce
+        qs = queryset if queryset is not None else cls.objects.all()
+        return qs.annotate(
+            _annotated_total_paid=Coalesce(
+                Sum('vendor_payments__amount', filter=Q(vendor_payments__status='cleared')),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        )
+
+    @property
     def total_paid(self):
         """Total settled/cleared vendor payments explicitly linked to this purchase order."""
+        annotated = getattr(self, '_annotated_total_paid', None)
+        if annotated is not None:
+            return annotated
         res = self.vendor_payments.filter(status='cleared').aggregate(total=models.Sum('amount'))['total']
         return res or Decimal('0.00')
 
@@ -345,6 +393,28 @@ class PurchaseReturnOrder(models.Model):
             'cancelled': 'bg-slate-100 text-slate-700 border border-slate-300',
         }
         return mapping.get(self.status, 'bg-slate-50 text-slate-600 border border-slate-200')
+
+    @property
+    def payment_status_display_ar(self):
+        mapping = {
+            'credit': 'آجل',
+            'cash': 'نقدي',
+            'partial': 'جزئي',
+            'paid': 'مدفوع بالكامل',
+            'overdue': 'متأخر',
+        }
+        return mapping.get(self.payment_status, self.get_payment_status_display())
+
+    @property
+    def payment_status_badge_class(self):
+        mapping = {
+            'paid': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            'cash': 'bg-teal-50 text-teal-700 border-teal-200',
+            'partial': 'bg-amber-50 text-amber-700 border-amber-200',
+            'overdue': 'bg-rose-50 text-rose-700 border-rose-200',
+            'credit': 'bg-slate-100 text-slate-700 border-slate-300',
+        }
+        return mapping.get(self.payment_status, 'bg-slate-100 text-slate-700 border-slate-300')
 
 
 class PurchaseReturnOrderItem(models.Model):

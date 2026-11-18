@@ -7,7 +7,7 @@ from django.utils import timezone
 class SalesTarget(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='sales_targets',
         verbose_name="المندوب / المسؤول"
     )
@@ -80,7 +80,7 @@ class CustomerCall(models.Model):
     )
     performed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='conducted_calls',
         verbose_name="المندوب / المسؤول"
     )
@@ -122,13 +122,13 @@ class CoachingEvaluation(models.Model):
     )
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='given_coaching_evaluations',
         verbose_name="المدير / المشرف المقيم"
     )
     rep = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='received_coaching_evaluations',
         verbose_name="المندوب المتدرب"
     )

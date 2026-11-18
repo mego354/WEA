@@ -3,7 +3,8 @@ from django.utils.html import format_html
 from .models import (
     Area, CompanyProfile, LocationSettings, SalesSettings,
     PurchaseSettings, ExpenseType, TicketType, ApprovalRequestType,
-    AgreementType, DataSyncConfig
+    AgreementType, DataSyncConfig, ERPAttachment, R2StorageConfig,
+    PendingStorageDeletion,
 )
 
 
@@ -139,3 +140,28 @@ class DataSyncConfigAdmin(admin.ModelAdmin):
     list_display = ('title', 'sync_type', 'status', 'last_synced_at')
     list_filter = ('sync_type', 'status')
     search_fields = ('title', 'service_account_email')
+
+
+@admin.register(ERPAttachment)
+class ERPAttachmentAdmin(admin.ModelAdmin):
+    list_display = ('original_filename', 'content_type', 'object_id', 'mime_type', 'size_display', 'uploaded_by', 'created_at')
+    list_filter = ('content_type', 'mime_type', 'is_public', 'created_at')
+    search_fields = ('original_filename', 'title', 'storage_key', 'file_hash')
+    readonly_fields = ('storage_key', 'file_hash', 'mime_type', 'file_size_bytes', 'uploaded_by', 'created_at')
+    date_hierarchy = 'created_at'
+
+
+@admin.register(R2StorageConfig)
+class R2StorageConfigAdmin(admin.ModelAdmin):
+    list_display = ('metrics_month', 'tracked_objects_count', 'tracked_storage_bytes', 'current_month_class_a_ops', 'current_month_class_b_ops', 'updated_at')
+    readonly_fields = ('tracked_storage_bytes', 'tracked_objects_count', 'current_month_class_a_ops', 'current_month_class_b_ops', 'metrics_month', 'updated_at', 'updated_by')
+
+    def has_add_permission(self, request):
+        return not R2StorageConfig.objects.exists()
+
+
+@admin.register(PendingStorageDeletion)
+class PendingStorageDeletionAdmin(admin.ModelAdmin):
+    list_display = ('storage_key', 'attempts', 'created_at', 'last_attempt_at')
+    search_fields = ('storage_key', 'last_error')
+    readonly_fields = ('storage_key', 'attempts', 'last_error', 'created_at', 'last_attempt_at')

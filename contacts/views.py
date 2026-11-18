@@ -92,7 +92,14 @@ def contacts_list(request):
     contact_type = request.GET.get('contact_type', 'all').strip()
     category = request.GET.get('category', 'all').strip()
     specialty = request.GET.get('specialty', 'all').strip()
-    account_type = request.GET.get('account_type', 'all').strip()
+    raw_account_types = request.GET.getlist('account_type') or request.GET.getlist('account_type[]')
+    account_types_selected = []
+    for at in raw_account_types:
+        for p in str(at).split(','):
+            p = p.strip()
+            if p and p != 'all' and p not in account_types_selected:
+                account_types_selected.append(p)
+    account_type = account_types_selected[0] if account_types_selected else request.GET.get('account_type', 'all').strip()
     view_mode = request.GET.get('view', 'table').strip().lower()
     if view_mode not in ['table', 'cards', 'kanban']:
         view_mode = 'table'
@@ -183,7 +190,26 @@ def contacts_list(request):
         qs = qs.filter(specialty=specialty)
         active_filters_count += 1
 
-    if account_type and account_type != 'all':
+    user_id = (request.GET.get('user_id') or '').strip()
+    from accounts.permissions import get_visible_assignees_queryset
+    scoped_users = get_visible_assignees_queryset(request.user, 'contacts')
+    if user_id:
+        if user_id.isdigit():
+            u_obj = scoped_users.filter(id=int(user_id)).first()
+            if u_obj:
+                qs = qs.filter(Q(created_by_id=u_obj.id) | Q(assigned_team__id=u_obj.id)).distinct()
+                active_filters_count += 1
+            else:
+                qs = qs.none()
+                active_filters_count += 1
+        else:
+            qs = qs.none()
+            active_filters_count += 1
+
+    if account_types_selected:
+        qs = qs.filter(account_type__in=account_types_selected)
+        active_filters_count += len(account_types_selected)
+    elif account_type and account_type != 'all':
         qs = qs.filter(account_type=account_type)
         active_filters_count += 1
 
@@ -217,8 +243,14 @@ def contacts_list(request):
         active_filters.append({'label': 'التصنيف', 'value': category, 'param': 'category'})
     if specialty and specialty != 'all':
         active_filters.append({'label': 'التخصص', 'value': specialty, 'param': 'specialty'})
-    if account_type and account_type != 'all':
+    if account_types_selected:
+        for at in account_types_selected:
+            active_filters.append({'label': 'نوع الحساب', 'value': at, 'param': 'account_type'})
+    elif account_type and account_type != 'all':
         active_filters.append({'label': 'نوع الحساب', 'value': account_type, 'param': 'account_type'})
+    if user_id:
+        u_sel = scoped_users.filter(id=int(user_id)).first() if user_id.isdigit() else None
+        active_filters.append({'label': 'المسؤول', 'value': (u_sel.name or u_sel.username) if u_sel else f'#{user_id}', 'param': 'user_id'})
 
     # Preserve existing filters across view switching (table / cards / kanban)
     get_params = request.GET.copy()
@@ -366,6 +398,7 @@ def contacts_list(request):
         'current_category': category,
         'current_specialty': specialty,
         'current_account_type': account_type,
+        'selected_account_types': account_types_selected,
         'current_show_inactive': show_inactive,
         'view_mode': view_mode,
         'filter_querystring': filter_querystring,
@@ -376,7 +409,8 @@ def contacts_list(request):
         'customer_categories': CUSTOMER_CATEGORIES,
         'specialties': SPECIALTIES,
         'account_types': ACCOUNT_TYPES,
-        'users_list': User.objects.filter(is_active=True).order_by('name')[:30],
+        'users_list': scoped_users.order_by('name'),
+        'current_user_id': user_id,
     }
     return render(request, 'contacts/contacts_list.html', context)
 
@@ -407,19 +441,32 @@ def contact_detail(request, pk):
     total_timeline_count = activities.count()
     communication_methods = contact.communication_methods.all()
 
-    # Transactions & accounting relationships
+    # Transactions & accounting relationships (strictly permission & scope enforced)
     sales_orders = []
     collections = []
     purchase_orders = []
-    customer_account = getattr(contact, 'customer_account', None)
-    vendor_account = getattr(contact, 'vendor_account', None)
+    customer_account = None
+    vendor_account = None
 
-    if contact.is_customer:
-        sales_orders = contact.sales_orders.select_related('created_by').order_by('-created_at')[:20]
-        collections = contact.collections.select_related('created_by').order_by('-created_at')[:20]
+    raw_ca = getattr(contact, 'customer_account', None)
+    if raw_ca and has_perm_or_admin(request.user, 'sales:customers/accounting') and can_user_access_object(request.user, raw_ca, 'view'):
+        customer_account = raw_ca
 
-    if contact.is_supplier:
-        purchase_orders = contact.purchase_orders.select_related('created_by').order_by('-created_at')[:20]
+    raw_va = getattr(contact, 'vendor_account', None)
+    if raw_va and has_perm_or_admin(request.user, 'treasury:vendors/accounting') and can_user_access_object(request.user, raw_va, 'view'):
+        vendor_account = raw_va
+
+    if contact.is_customer and has_perm_or_admin(request.user, 'sales:orders/list'):
+        so_qs = get_scoped_queryset(contact.sales_orders.select_related('created_by'), request.user, 'salesorder')
+        sales_orders = so_qs.order_by('-created_at')[:20]
+
+    if contact.is_customer and has_perm_or_admin(request.user, 'sales:collections/list'):
+        col_qs = get_scoped_queryset(contact.collections.select_related('created_by'), request.user, 'collection')
+        collections = col_qs.order_by('-created_at')[:20]
+
+    if contact.is_supplier and has_perm_or_admin(request.user, 'purchases:orders/list'):
+        po_qs = get_scoped_queryset(contact.purchase_orders.select_related('created_by'), request.user, 'purchaseorder')
+        purchase_orders = po_qs.order_by('-created_at')[:20]
 
     governorates = Area.objects.filter(area_type='governorate', is_company_area=False).order_by('name')
     if not governorates.exists():
@@ -838,11 +885,21 @@ def contact_edit(request, pk):
                 contact.parent_org = None
 
         explicit_area_id = request.POST.get('area_id') or request.POST.get('area')
-        explicit_brick_id = request.POST.get('brick_id') or request.POST.get('brick')
+        explicit_brick_id = request.POST.get('brick_id') or request.POST.get('brick') or request.POST.get('sub_area')
+        from accounts.scope_service import ScopeResolutionService
         if explicit_area_id and str(explicit_area_id).isdigit():
-            contact.area = Area.objects.filter(id=int(explicit_area_id)).first()
+            cand_area = Area.objects.filter(id=int(explicit_area_id)).first()
+            scoped_gov_ids = set(ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts').values_list('id', flat=True))
+            if cand_area and (cand_area.id in scoped_gov_ids or (contact.area_id and cand_area.id == contact.area_id)):
+                contact.area = cand_area
         if explicit_brick_id and str(explicit_brick_id).isdigit():
-            contact.brick = Area.objects.filter(id=int(explicit_brick_id)).first()
+            cand_brick = Area.objects.filter(id=int(explicit_brick_id)).first()
+            scoped_brick_ids = set(ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'contacts').values_list('id', flat=True))
+            if cand_brick and (cand_brick.id in scoped_brick_ids or (contact.brick_id and cand_brick.id == contact.brick_id)):
+                contact.brick = cand_brick
+            elif cand_brick:
+                messages.error(request, "المنطقة الفرعية المحددة تقع خارج نطاق منطقتك الجغرافية المصرح بها.")
+                return render_edit_form(request, contact, errors={'brick': 'منطقة فرعية خارج النطاق الجغرافي'})
 
         if contact.brick and not contact.area and contact.brick.parent:
             contact.area = contact.brick.parent
@@ -1031,17 +1088,6 @@ def render_edit_form(request, contact, errors=None):
     _ensure_area_and_brick(contact.area, contact.brick)
     for addr in addresses_qs:
         _ensure_area_and_brick(addr.area, addr.brick)
-
-    # Ensure child bricks for any existing main area on the contact are available so dropdowns populate
-    saved_gov_ids = {
-        a.parent_id if a and a.parent_id else a.id
-        for a in [contact.area] + [addr.area for addr in addresses_qs]
-        if a
-    }
-    if saved_gov_ids:
-        for extra_brick in Area.objects.filter(parent_id__in=saved_gov_ids).select_related('parent').order_by('name'):
-            if extra_brick.id not in brick_by_id:
-                brick_by_id[extra_brick.id] = extra_brick
 
     governorates = sorted(gov_by_id.values(), key=lambda a: a.name)
     bricks = sorted(brick_by_id.values(), key=lambda a: a.name)
@@ -1747,7 +1793,14 @@ def contacts_export(request):
     contact_type = request.GET.get('contact_type', 'all').strip()
     category = request.GET.get('category', 'all').strip()
     specialty = request.GET.get('specialty', 'all').strip()
-    account_type = request.GET.get('account_type', 'all').strip()
+    raw_account_types = request.GET.getlist('account_type') or request.GET.getlist('account_type[]')
+    account_types_selected = []
+    for at in raw_account_types:
+        for p in str(at).split(','):
+            p = p.strip()
+            if p and p != 'all' and p not in account_types_selected:
+                account_types_selected.append(p)
+    account_type = account_types_selected[0] if account_types_selected else request.GET.get('account_type', 'all').strip()
 
     from accounts.scope_service import ScopeResolutionService
     auth_gov_ids = set(ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'contacts').values_list('id', flat=True))
@@ -1765,6 +1818,12 @@ def contacts_export(request):
 
     if status != 'all' and status:
         qs = qs.filter(status=status)
+    show_inactive = request.GET.get('inactive', 'no').strip()
+    if show_inactive != 'yes' and status != 'inactive':
+        qs = qs.exclude(status='inactive')
+    user_id = request.GET.get('user_id', '').strip()
+    if user_id and user_id.isdigit():
+        qs = qs.filter(Q(created_by_id=int(user_id)) | Q(assigned_team__id=int(user_id))).distinct()
     if relation == 'vendor':
         qs = qs.filter(is_supplier=True)
     elif relation == 'customer':
@@ -1777,7 +1836,9 @@ def contacts_export(request):
         qs = qs.filter(customer_category=category)
     if specialty and specialty != 'all':
         qs = qs.filter(specialty=specialty)
-    if account_type and account_type != 'all':
+    if account_types_selected:
+        qs = qs.filter(account_type__in=account_types_selected)
+    elif account_type and account_type != 'all':
         qs = qs.filter(account_type=account_type)
     if area_ids:
         qs = qs.filter(
@@ -2177,10 +2238,8 @@ def customers_search_api(request):
         q = request.GET.get('q', '').strip()
         limit = int(request.GET.get('limit', 100))
 
-    # Base queryset: active customers and visitable contacts
-    qs = Contact.objects.filter(
-        Q(is_customer=True) | Q(status='customer') | Q(account_type__gt='')
-    ).exclude(status='inactive')\
+    # Base queryset: active contacts matching contacts list scope
+    qs = Contact.objects.exclude(status='inactive')\
         .select_related('area', 'brick', 'area__parent', 'created_by')\
         .prefetch_related('addresses__area', 'addresses__brick')
 
@@ -2208,8 +2267,12 @@ def customers_search_api(request):
         main_addr = c.main_address
         lat = c.latitude
         lng = c.longitude
+        area_part = c.brick.name if c.brick else (c.area.name if c.area else '')
+        sub_items = [f"#{c.serial_num}", area_part, c.account_type or c.customer_category or 'عميل']
         results.append({
             'id': c.id,
+            'text': f"{c.name}{f' • {c.code}' if c.code else ''}",
+            'subtext': " | ".join(p for p in sub_items if p),
             'serial_num': c.serial_num,
             'name': c.name,
             'code': c.code or f"#{c.serial_num}",
@@ -2233,7 +2296,8 @@ def customers_search_api(request):
     return JsonResponse({
         'results': results,
         'count': len(results),
-        'total': total_count
+        'total': total_count,
+        'total_count': total_count,
     })
 
 

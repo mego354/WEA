@@ -18,7 +18,6 @@ from reports.services import (
     get_performance_overview_data,
     get_ar_aging_report_data,
     get_customer_360_report_data,
-    get_target_achievement_report_data,
 )
 
 
@@ -259,3 +258,111 @@ class ReportsPermissionsAndDataScopeTests(TestCase):
         # Delivery Stock (Inventory)
         res_stock = self.client.get(reverse('report_delivery_stock'))
         self.assertEqual(res_stock.status_code, 200)
+
+
+class Phase2ReportsScopingAndColumnPickerTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from accounts.models import Role, Permission
+        from master_data.models import Area, CompanyProfile
+        from contacts.models import Contact
+        from catalog.models import Product, ProductCategory
+        from inventory.models import Warehouse, InventoryStock
+        from sales.services import SalesOrderService
+
+        User = get_user_model()
+        CompanyProfile.objects.get_or_create(pk=1, defaults={'company_name': 'WEA Test Pharma'})
+        self.cairo = Area.objects.create(name='القاهرة تقارير P2', code='CAI-R2')
+        self.giza = Area.objects.create(name='الجيزة تقارير P2', code='GIZ-R2')
+
+        self.super_role, _ = Role.objects.get_or_create(name='superadmin', defaults={'display_name': 'Super Admin', 'is_super': True})
+        self.mgr_role, _ = Role.objects.get_or_create(name='manager', defaults={'display_name': 'Manager'})
+        perms = Permission.objects.filter(codename__in=[
+            'module:reports', 'reports:sales/view', 'reports:inventory/view', 'reports:activities/view',
+        ])
+        self.mgr_role.permissions.add(*perms)
+
+        self.superadmin = User.objects.create_superuser(username='rep_p2_super', email='rep_p2_super@wea.com', password='TestPassword123!', role=self.super_role)
+        self.mgr_giza = User.objects.create_user(username='rep_p2_mgr_g', email='rep_p2_mgr_g@wea.com', password='TestPassword123!', role=self.mgr_role)
+        self.mgr_giza.assigned_areas.add(self.giza)
+
+        self.cairo_cust = Contact.objects.create(name='عميل القاهرة تقارير', is_customer=True, area=self.cairo)
+        self.wh_cairo = Warehouse.objects.create(name='مخزن القاهرة تقارير', code='WH-R-C2', area=self.cairo)
+        cat = ProductCategory.objects.create(name='تصنيف تقارير', code='CAT-R2')
+        self.prod = Product.objects.create(name='صنف تقارير P2', sku_code='SKU-R2', category=cat, retail_price=Decimal('100.00'))
+        InventoryStock.objects.create(warehouse=self.wh_cairo, product=self.prod, qty_on_hand=Decimal('30.00'))
+
+        SalesOrderService.create_order(
+            customer=self.cairo_cust,
+            source_warehouse=self.wh_cairo,
+            order_date=timezone.now().date().strftime('%Y-%m-%d'),
+            items_data=[{'product': self.prod, 'quantity': Decimal('5'), 'unit_price': Decimal('100.00')}],
+            user=self.superadmin,
+            validate_stock=False,
+        )
+
+    def test_reports_services_isolate_cairo_from_giza_manager(self):
+        from reports.services import get_item_sales_by_customer_report_data, get_delivery_stock_availability_report_data
+        from django.urls import reverse
+
+        today = timezone.now().date()
+        # Giza manager sees 0 Cairo item-sales rows
+        sales_data = get_item_sales_by_customer_report_data(self.mgr_giza, today, today)
+        self.assertFalse(any(r['customer_name'] == 'عميل القاهرة تقارير' for r in sales_data['rows']))
+
+        # Giza manager sees 0 Cairo stock in delivery stock report
+        stock_data = get_delivery_stock_availability_report_data(self.mgr_giza)
+        cairo_row = [r for r in stock_data['rows'] if r['code'] == 'SKU-R2']
+        self.assertTrue(len(cairo_row) == 0 or cairo_row[0]['on_hand'] == 0)
+
+        # Report pages render col-picker-dropdown
+        self.client.force_login(self.superadmin)
+        resp = self.client.get(reverse('report_net_sales'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'col-picker-dropdown')
+
+
+    def test_removed_reports_return_404_and_fixed_report_math(self):
+        from reports.services import (
+            get_ar_aging_report_data,
+            get_performance_daily_data,
+            get_net_sales_profitability_report_data,
+        )
+        from activities.models import PlannedVisitDay, PlannedVisitItem
+
+        self.client.force_login(self.superadmin)
+        for path in ['/reports/calls/', '/reports/samples/', '/reports/promotions/', '/reports/order-deliveries/', '/reports/target-achievement/']:
+            res = self.client.get(path)
+            self.assertEqual(res.status_code, 404)
+
+        # PlannedVisitItem in Giza must not leak into Cairo manager's performance_daily tasks
+        today = timezone.now().date()
+        from accounts.models import Role
+        mgr_role = Role.objects.get(name=Role.ROLE_MANAGER)
+        mgr_cairo = User.objects.create_user(username='rep_mgr_cai_t', password='Password123!', name='Mgr Cai', role=mgr_role)
+        mgr_cairo.assigned_areas.add(self.cairo)
+        giza_cust = Contact.objects.create(name='عميل الجيزة تخطيط', area=self.giza, is_customer=True, status='active')
+        pday = PlannedVisitDay.objects.create(assignee=self.mgr_giza, date=today, created_by=self.superadmin)
+        PlannedVisitItem.objects.create(plan_day=pday, contact=giza_cust, order=1)
+        daily_cai = get_performance_daily_data(mgr_cairo, today)
+        self.assertFalse(any(t.contact_id == giza_cust.id for t in daily_cai['subtabs']['tasks']))
+
+        # AR Aging FIFO capping: even if debit > current_balance, buckets cannot exceed current_balance
+        cairo_cust = Contact.objects.create(name='عميل القاهرة FIFO', area=self.cairo, is_customer=True, status='active')
+        acc_c, _ = CustomerAccount.objects.get_or_create(customer=cairo_cust, defaults={'current_balance': Decimal('100.00')})
+        acc_c.current_balance = Decimal('100.00')
+        acc_c.overdue_balance = Decimal('100.00')
+        acc_c.save()
+        CustomerTransaction.objects.create(
+            serial=88001, account=acc_c, transaction_type='debit', reason='sales',
+            transaction_date=today - datetime.timedelta(days=45),
+            due_date=today - datetime.timedelta(days=15),
+            debit=Decimal('400.00'), credit=Decimal('0.00'), description='FIFO cap test'
+        )
+        aging = get_ar_aging_report_data(self.superadmin)
+        row_c = [r for r in aging['rows'] if r['customer_name'] == cairo_cust.name][0]
+        self.assertLessEqual(row_c['bucket_1_30'] + row_c['bucket_31_60'], 100.0)
+
+        # Net sales profitability includes default_purchase_cost fallback
+        net_sales = get_net_sales_profitability_report_data(self.superadmin, today, today)
+        self.assertIn('rows', net_sales)

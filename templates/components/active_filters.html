@@ -9,8 +9,12 @@
 
     {% for filter in active_filters %}
     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 text-slate-700 rounded-lg shadow-2xs font-medium">
+        {% if filter.value %}
         <span class="text-slate-400 font-normal">{{ filter.label }}:</span>
         <span class="font-bold text-slate-900">{{ filter.value }}</span>
+        {% else %}
+        <span class="font-bold text-slate-900">{{ filter.label }}</span>
+        {% endif %}
         {% if filter.param %}
         <a href="{% url_remove_param filter.param page=1 %}"
            class="w-4 h-4 rounded flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"

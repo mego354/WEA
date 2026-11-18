@@ -158,8 +158,8 @@
                     <span class="text-[11px] text-slate-400">مقيد بالنطاق الجغرافي المصرح لك به</span>
                 </div>
 
-                <!-- Hidden Django Select field (synced automatically) -->
-                <div class="hidden">
+                <!-- Customer Smart Select -->
+                <div id="customer-select-wrapper" class="{% if selected_contact or form.contact.value %}hidden{% endif %}">
                     {{ form.contact }}
                 </div>
                 {% if form.contact.errors %}
@@ -213,31 +213,6 @@
                                 <span class="material-symbols-outlined text-lg">open_in_new</span>
                             </a>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Customer Search Typeahead Box -->
-                <div id="customer-search-container" class="{% if selected_contact or form.contact.value %}hidden{% endif %} relative">
-                    <div class="relative">
-                        <span class="material-symbols-outlined absolute right-3.5 top-2.5 text-slate-400 text-lg">search</span>
-                        <input type="text" id="customer-search-input" onkeyup="handleCustomerSearch(event)" onfocus="openSearchResults()" onclick="openSearchResults()"
-                               placeholder="ابحث باسم العميل أو مكان الزيارة، الكود، التخصص، أو العنوان..." autocomplete="off"
-                               class="w-full rounded-xl border border-slate-200 pr-10 pl-24 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] shadow-xs cursor-pointer">
-                        <div class="absolute left-2 top-1.5 flex items-center gap-1">
-                            <span id="search-spinner" class="material-symbols-outlined text-slate-400 text-lg hidden animate-spin">refresh</span>
-                            <button type="button" onclick="toggleSearchResults(event)" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 border border-slate-200 text-slate-700 hover:text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-0.5">
-                                <span class="material-symbols-outlined text-base">expand_more</span>
-                                <span>العملاء</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="customer-search-dropdown" class="hidden absolute right-0 left-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-72 overflow-y-auto z-30 divide-y divide-slate-100">
-                        <div class="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                            <span>العملاء المتاحون ضمن نطاقك الجغرافي</span>
-                            <span id="customer-results-count" class="text-teal-600 font-mono"></span>
-                        </div>
-                        <div id="customer-search-results" class="p-1.5 space-y-1"></div>
                     </div>
                 </div>
             </div>
@@ -299,119 +274,6 @@
                 </label>
             </div>
 
-            <!-- FIELD 6: COMPACT GPS & DISTANCE VALIDATION SECTION -->
-            <div id="distance-validation-section" class="p-3 sm:p-4 rounded-xl border border-slate-200 bg-white shadow-xs space-y-3">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[#27bebe] text-lg">near_me</span>
-                        <h4 class="text-xs font-bold text-slate-800">بيانات الموقع والمسافة (GPS)</h4>
-                        <span id="distance-requirement-pill" class="hidden"></span>
-                    </div>
-                    <button type="button" onclick="acquireDeviceLocation()" class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-xs font-medium transition-colors">
-                        <span class="material-symbols-outlined text-sm text-[#27bebe]">my_location</span>
-                        <span>تحديث</span>
-                    </button>
-                </div>
-
-                <!-- 4-Item Grid with Icons and Compact Text Only -->
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    <!-- 1. Current Location -->
-                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
-                        <span id="gps-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
-                        <div class="min-w-0 flex-1">
-                            <span class="text-[10px] text-slate-400 block">موقعك الحالي</span>
-                            <span id="user-gps-display" class="font-bold text-slate-800 font-mono text-xs truncate block dir-ltr text-right">جاري الالتقاط...</span>
-                        </div>
-                        <span id="gps-status-label" class="hidden"></span>
-                    </div>
-
-                    <!-- 2. Client Location -->
-                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
-                        <span class="material-symbols-outlined text-base text-slate-400 shrink-0">pin_drop</span>
-                        <div class="min-w-0 flex-1">
-                            <span class="text-[10px] text-slate-400 block">موقع العميل</span>
-                            <span id="client-gps-display" class="font-bold text-slate-800 font-mono text-xs truncate block dir-ltr text-right">
-                                {% if selected_contact and selected_contact.has_saved_location %}
-                                {{ selected_contact.latitude|floatformat:4 }}, {{ selected_contact.longitude|floatformat:4 }}
-                                {% elif selected_contact %}غير مسجل{% else %}اختر العميل{% endif %}
-                            </span>
-                        </div>
-                        <span id="client-gps-subtext" class="hidden"></span>
-                    </div>
-
-                    <!-- 3. Calculated Actual Distance -->
-                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
-                        <span class="material-symbols-outlined text-base text-[#27bebe] shrink-0">straighten</span>
-                        <div class="min-w-0 flex-1">
-                            <span class="text-[10px] text-slate-400 block">المسافة الفعلية</span>
-                            <div class="flex items-center gap-1.5">
-                                <span id="actual-distance-display" class="text-xs font-black text-slate-900">—</span>
-                                <span id="distance-feedback-badge" class="px-1.5 py-0.2 rounded font-bold text-[9px] bg-slate-200/60 text-slate-600 truncate">بانتظار الحساب</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 4. Allowed Distance -->
-                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 min-w-0">
-                        <span class="material-symbols-outlined text-base text-teal-600 shrink-0">radar</span>
-                        <div class="min-w-0 flex-1">
-                            <span class="text-[10px] text-slate-400 block">الحد المسموح</span>
-                            <div class="flex items-center gap-1">
-                                <span id="allowed-distance-display" class="text-xs font-black text-[#1a8b8b]">{{ gps_tolerance|default:300 }} م</span>
-                                <span id="allowed-distance-source" class="hidden">{% if selected_template and selected_template.has_special_location_settings and allow_template_distance_override %}مخصص للقالب{% else %}الافتراضي{% endif %}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- GPS Permission Recovery Alert (Hidden until permission denied or error) -->
-                <div id="gps-permission-alert" class="hidden p-3 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 space-y-2">
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex items-start gap-2">
-                            <span class="material-symbols-outlined text-rose-600 text-lg shrink-0 mt-0.5">location_disabled</span>
-                            <div class="space-y-0.5">
-                                <strong id="gps-alert-title" class="font-bold block text-rose-900 text-xs">تعذر تحديد الموقع الجغرافي</strong>
-                                <p id="gps-alert-desc" class="text-[11px] text-rose-700 leading-relaxed">
-                                    يرجى السماح للمتصفح بالوصول إلى موقعك الجغرافي بالنقر على أيقونة القفل 🔒 بجوار عنوان الصفحة، ثم الضغط على "إعادة المحاولة".
-                                </p>
-                            </div>
-                        </div>
-                        <button type="button" onclick="acquireDeviceLocation(true)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shrink-0 transition-colors shadow-xs">
-                            <span class="material-symbols-outlined text-sm">refresh</span>
-                            <span>إعادة المحاولة</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Conditional Bypass / Exception Request Box (Simple & Compact) -->
-                <div id="distance-bypass-container" class="hidden p-3 rounded-xl border {% if can_bypass_gps %}border-indigo-200 bg-indigo-50/50{% elif can_request_gps_exception %}border-amber-200 bg-amber-50/50{% else %}border-rose-200 bg-rose-50/50{% endif %} space-y-2">
-                    {% if can_bypass_gps %}
-                    <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-indigo-950">
-                        <input type="checkbox" name="force_bypass_location" id="id_force_bypass_location" value="1" class="rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500">
-                        <span>تجاوز قيد المسافة (صلاحية مدير / مشرف)</span>
-                    </label>
-                    <div>
-                        <input type="text" name="bypass_reason" id="id_bypass_reason" value="{{ request.POST.bypass_reason|default:'' }}"
-                               placeholder="سبب التجاوز {% if bypass_reason_mandatory %}(إلزامي *){% else %}(اختياري){% endif %}..."
-                               class="w-full rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none">
-                    </div>
-                    {% elif can_request_gps_exception %}
-                    <label class="flex items-center gap-2 text-xs cursor-pointer font-bold text-amber-950">
-                        <input type="checkbox" name="request_distance_exception" id="id_request_distance_exception" value="1" class="rounded border-amber-400 text-amber-600 focus:ring-amber-500">
-                        <span>طلب استثناء لتجاوز المسافة وتحويل الزيارة لاعتماد المدير</span>
-                    </label>
-                    <div>
-                        <input type="text" name="bypass_reason" id="id_bypass_reason" value="{{ request.POST.bypass_reason|default:'' }}"
-                               placeholder="سبب التواجد خارج النطاق المسموح (إلزامي *)..."
-                               class="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none">
-                    </div>
-                    {% else %}
-                    <div class="text-rose-700 font-bold text-xs p-2 bg-rose-50 rounded-lg">
-                        <span>أنت خارج النطاق الجغرافي المسموح به ولا تملك صلاحية تجاوز المسافة أو طلب استثناء.</span>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
             {% endif %}
 
             {% if visit %}
@@ -486,7 +348,7 @@
     }
 
     let currentVisitType = "{% if is_planned_visit or planned_item or visit.is_planned %}planned{% else %}unplanned{% endif %}";
-    let currentAllowedDistance = Number("{{ gps_tolerance|default:300 }}");
+    let currentAllowedDistance = Number("{{ gps_tolerance|default:300|stringformat:'s' }}") || 300;
     let currentCustomer = null;
     let currentDeviceCoords = null;
     let searchDebounceTimeout = null;
@@ -608,17 +470,19 @@
     }
 
     function computeHaversineDistance(lat1, lon1, lat2, lon2) {
-        if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+        const a1 = Number(lat1), o1 = Number(lon1), a2 = Number(lat2), o2 = Number(lon2);
+        if (!Number.isFinite(a1) || !Number.isFinite(o1) || !Number.isFinite(a2) || !Number.isFinite(o2)) return null;
         const R = 6371000;
-        const phi1 = lat1 * Math.PI / 180;
-        const phi2 = lat2 * Math.PI / 180;
-        const deltaPhi = (lat2 - lat1) * Math.PI / 180;
-        const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+        const phi1 = a1 * Math.PI / 180;
+        const phi2 = a2 * Math.PI / 180;
+        const deltaPhi = (a2 - a1) * Math.PI / 180;
+        const deltaLambda = (o2 - o1) * Math.PI / 180;
 
         const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
                   Math.cos(phi1) * Math.cos(phi2) *
                   Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const clampedA = Math.min(1, Math.max(0, a));
+        const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(1 - clampedA));
         return Math.round(R * c * 100) / 100;
     }
 
@@ -829,6 +693,7 @@
             currentDeviceCoords.lat, currentDeviceCoords.lng,
             currentCustomer.lat, currentCustomer.lng
         );
+        if (!Number.isFinite(dist)) return;
 
         if (actualDistEl) actualDistEl.textContent = `${Math.round(dist)} متر`;
 
@@ -978,6 +843,24 @@
         `).join('');
     }
 
+    async function onCustomerSelected(contactId) {
+        if (!contactId) {
+            clearCustomerSelection();
+            return;
+        }
+        try {
+            const res = await fetch(`/contacts/api/search/?id=${encodeURIComponent(contactId)}`);
+            if (res.ok) {
+                const data = await res.json();
+                const list = data.results || data || [];
+                if (list.length) {
+                    selectCustomer(list[0]);
+                }
+            }
+        } catch(e) {}
+    }
+    window.onCustomerSelected = onCustomerSelected;
+
     function selectCustomer(c) {
         currentCustomer = {
             id: c.id,
@@ -1008,6 +891,7 @@
         }
 
         const card = document.getElementById('selected-customer-card');
+        const selectWrapper = document.getElementById('customer-select-wrapper');
         const searchContainer = document.getElementById('customer-search-container');
         const dropdown = document.getElementById('customer-search-dropdown');
         const nameEl = document.getElementById('customer-display-name');
@@ -1045,6 +929,7 @@
 
         if (dropdown) dropdown.classList.add('hidden');
         if (searchContainer) searchContainer.classList.add('hidden');
+        if (selectWrapper) selectWrapper.classList.add('hidden');
         if (card) card.classList.remove('hidden');
 
         filterTemplatesByCustomer(currentCustomer);
@@ -1055,15 +940,20 @@
     function clearCustomerSelection() {
         currentCustomer = null;
         const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
-        if (djangoSelect) djangoSelect.value = '';
+        if (djangoSelect) {
+            djangoSelect.value = '';
+            djangoSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
 
         const card = document.getElementById('selected-customer-card');
+        const selectWrapper = document.getElementById('customer-select-wrapper');
         const searchContainer = document.getElementById('customer-search-container');
         const searchInput = document.getElementById('customer-search-input');
         const warningBox = document.getElementById('duplicate-visit-warning-box');
 
         if (card) card.classList.add('hidden');
         if (warningBox) warningBox.classList.add('hidden');
+        if (selectWrapper) selectWrapper.classList.remove('hidden');
         if (searchContainer) searchContainer.classList.remove('hidden');
         if (searchInput) {
             searchInput.value = '';
@@ -1123,58 +1013,6 @@
             confirmChk.focus();
             if (e) e.preventDefault();
             return false;
-        }
-
-        // Validate GPS and Distance constraints for unplanned visits (strictly when GBS verification is active)
-        if (!isEditMode && currentVisitType === 'unplanned' && verifyVisitsEnabled && verifyUnplannedDistance) {
-            const bypassChk = document.getElementById('id_force_bypass_location') || document.getElementById('id_request_distance_exception');
-            const isBypassed = bypassChk && bypassChk.checked;
-            const bypassReasonInput = document.getElementById('id_bypass_reason');
-            const bypassContainer = document.getElementById('distance-bypass-container');
-
-            if (currentCustomer && currentCustomer.lat && currentCustomer.lng) {
-                if (!currentDeviceCoords) {
-                    if (!isBypassed) {
-                        alert('التحقق من إحداثيات الـ GPS إلزامي للزيارات الميدانية المباشرة. يرجى تفعيل الموقع أو طلب استثناء لتجاوز المسافة.');
-                        if (bypassContainer) bypassContainer.classList.remove('hidden');
-                        if (e) e.preventDefault();
-                        return false;
-                    }
-                } else {
-                    const dist = computeHaversineDistance(
-                        currentDeviceCoords.lat, currentDeviceCoords.lng,
-                        currentCustomer.lat, currentCustomer.lng
-                    );
-                    if (dist > currentAllowedDistance) {
-                        if (!isBypassed) {
-                            const diff = Math.round(dist - currentAllowedDistance);
-                            alert(`أنت خارج النطاق الجغرافي المسموح به بـ ${diff} متر. يرجى تفعيل خيار تجاوز/طلب استثناء المسافة لإتمام الحفظ.`);
-                            if (bypassContainer) bypassContainer.classList.remove('hidden');
-                            if (bypassChk) bypassChk.focus();
-                            if (e) e.preventDefault();
-                            return false;
-                        }
-                    }
-                }
-            } else {
-                // Initial location capture: if no device coords and not bypassed
-                if (!currentDeviceCoords && !isBypassed) {
-                    alert('العميل ليس لديه موقع مسجل مسبقاً. يرجى تفعيل الـ GPS لحفظ موقع العميل لأول مرة، أو تفعيل خيار تجاوز المسافة.');
-                    if (bypassContainer) bypassContainer.classList.remove('hidden');
-                    if (e) e.preventDefault();
-                    return false;
-                }
-            }
-
-            // If bypass or exception is checked, verify reason when mandatory
-            if (isBypassed && bypassReasonMandatory) {
-                if (!bypassReasonInput || !bypassReasonInput.value.trim()) {
-                    alert('يرجى ذكر سبب التجاوز أو طلب الاستثناء.');
-                    if (bypassReasonInput) bypassReasonInput.focus();
-                    if (e) e.preventDefault();
-                    return false;
-                }
-            }
         }
 
         const btn = document.getElementById('submit-visit-btn');

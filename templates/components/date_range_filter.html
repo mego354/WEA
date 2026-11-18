@@ -1,0 +1,75 @@
+<!-- Unified Date Range Filter Control (Presets + Custom Range) -->
+<div class="flex flex-wrap items-center gap-2 text-xs">
+    <select name="{{ preset_name|default:'preset' }}"
+            onchange="window.applyDatePreset && window.applyDatePreset(this)"
+            class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#27bebe]">
+        {% if allow_all_time|default:True %}
+        <option value="all_time" {% if active_preset == 'all_time' or not active_preset and not date_from and not date_to %}selected{% endif %}>كل الوقت</option>
+        {% endif %}
+        <option value="today" {% if active_preset == 'today' %}selected{% endif %}>اليوم</option>
+        <option value="yesterday" {% if active_preset == 'yesterday' %}selected{% endif %}>أمس</option>
+        <option value="last_7_days" {% if active_preset == 'last_7_days' %}selected{% endif %}>آخر 7 أيام</option>
+        <option value="last_30_days" {% if active_preset == 'last_30_days' %}selected{% endif %}>آخر 30 يوم</option>
+        <option value="this_month" {% if active_preset == 'this_month' %}selected{% endif %}>هذا الشهر</option>
+        <option value="last_month" {% if active_preset == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
+        <option value="this_year" {% if active_preset == 'this_year' %}selected{% endif %}>هذه السنة</option>
+        <option value="custom" {% if active_preset == 'custom' or date_from or date_to %}selected{% endif %}>فترة مخصصة</option>
+    </select>
+
+    <div class="flex items-center gap-1.5">
+        <input type="date"
+               name="{{ from_name|default:'date_from' }}"
+               value="{{ date_from|default:'' }}"
+               aria-label="من تاريخ"
+               class="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-[#27bebe]">
+        <span class="text-slate-400 font-bold">-</span>
+        <input type="date"
+               name="{{ to_name|default:'date_to' }}"
+               value="{{ date_to|default:'' }}"
+               aria-label="إلى تاريخ"
+               class="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-[#27bebe]">
+    </div>
+</div>
+<script>
+if (!window.applyDatePreset) {
+    window.applyDatePreset = function(selectEl) {
+        const form = selectEl.closest('form');
+        if (!form) return;
+        const fromInput = form.querySelector('input[type="date"][name="date_from"], input[type="date"][name="start_date"]');
+        const toInput = form.querySelector('input[type="date"][name="date_to"], input[type="date"][name="end_date"]');
+        const val = selectEl.value;
+        if (val === 'custom') return;
+        const pad = n => String(n).padStart(2, '0');
+        const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const now = new Date();
+        let s = '', e = '';
+        if (val === 'today') {
+            s = e = fmt(now);
+        } else if (val === 'yesterday') {
+            const y = new Date(now); y.setDate(y.getDate() - 1);
+            s = e = fmt(y);
+        } else if (val === 'last_7_days') {
+            const d = new Date(now); d.setDate(d.getDate() - 6);
+            s = fmt(d); e = fmt(now);
+        } else if (val === 'last_30_days') {
+            const d = new Date(now); d.setDate(d.getDate() - 29);
+            s = fmt(d); e = fmt(now);
+        } else if (val === 'this_month') {
+            s = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+            e = fmt(now);
+        } else if (val === 'last_month') {
+            const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const last = new Date(now.getFullYear(), now.getMonth(), 0);
+            s = fmt(first); e = fmt(last);
+        } else if (val === 'this_year') {
+            s = `${now.getFullYear()}-01-01`;
+            e = fmt(now);
+        }
+        if (fromInput) fromInput.value = s;
+        if (toInput) toInput.value = e;
+        if (selectEl.dataset.autoSubmit !== 'false') {
+            form.submit();
+        }
+    };
+}
+</script>

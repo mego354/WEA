@@ -33,58 +33,80 @@
             </div>
         </div>
 
-        <!-- Workflow Action Buttons -->
+        <!-- Action Buttons -->
         <div class="flex items-center gap-2 flex-wrap">
-            {% if return_order.status == 'pending' and can_approve %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'approve' %}">
+            {% if return_order.status == 'pending' and request.user|has_permission:'purchases:returns/approve' and return_order.created_by_id != request.user.id %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'approve' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
                     <span class="material-symbols-outlined text-base">check_circle</span>
                     <span>اعتماد المرتجع</span>
                 </button>
             </form>
-            <button type="button" onclick="openRejectModal()"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">cancel</span>
-                <span>رفض</span>
-            </button>
-            {% elif return_order.status == 'approved' and can_deliver %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'deliver' %}">
+            {% elif return_order.status == 'approved' and request.user|has_permission:'purchases:returns/approve' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'deliver' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" onclick="return confirm('تأكيد صرف البضاعة من المخزن وإنشاء إذن صرف؟');"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">output</span>
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-base">local_shipping</span>
                     <span>صرف من المخزن</span>
                 </button>
             </form>
-            {% elif return_order.status == 'delivered' and can_settle %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'settle' %}">
+            {% elif return_order.status == 'delivered' and request.user|has_permission:'purchases:returns/approve' %}
+            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'settle' %}" class="inline">
                 {% csrf_token %}
-                <button type="submit" onclick="return confirm('تأكيد ترحيل إشعار الخصم للحسابات وتخفيض مديونية المورد؟');"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
                     <span class="material-symbols-outlined text-base">receipt_long</span>
                     <span>ترحيل للحسابات</span>
                 </button>
             </form>
             {% endif %}
 
-            {% if can_cancel %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'cancel' %}" class="inline">
-                {% csrf_token %}
-                <button type="submit" onclick="return confirm('هل أنت متأكد من رغبتك في إلغاء أمر الإرجاع نهائياً؟');"
-                        class="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">close</span>
-                    <span>إلغاء</span>
+            <!-- Secondary Actions Dropdown -->
+            <div class="relative inline-block text-right" data-detail-action-menu>
+                <button type="button" onclick="toggleDetailActionMenu(this)" aria-haspopup="true" aria-expanded="false"
+                        class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors" title="إجراءات إضافية">
+                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                 </button>
-            </form>
-            {% endif %}
+                <div class="detail-action-dropdown hidden fixed sm:absolute left-0 mt-1.5 w-52 rounded-xl bg-white border border-slate-200 shadow-xl py-1.5 z-[90] text-xs font-semibold text-slate-700">
+                    {% if request.user|has_permission:'purchases:returns/pdf' %}
+                    <button type="button" onclick="openOrderPdfModal('{% url 'purchase_return_order_pdf' return_order.id %}', '{{ return_order.order_number|escapejs }}', 'purchasereturnorder')"
+                            class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                        <span>تصدير PDF مخصص</span>
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'purchase_return_order_print' return_order.id %}" target="_blank"
+                       class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-slate-500">print</span>
+                        <span>نسخة للطباعة</span>
+                    </a>
+                    {% if return_order.status == 'pending' and request.user|has_permission:'purchases:returns/approve' and return_order.created_by_id != request.user.id %}
+                    <button type="button" onclick="openRejectModal()"
+                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">cancel</span>
+                        <span>رفض المرتجع</span>
+                    </button>
+                    {% endif %}
+                    {% if return_order.status not in 'settled,cancelled' %}
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء مرتجع المشتريات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من إلغاء هذا المرتجع؟', submitText: 'تأكيد الإلغاء', icon: 'block' })"
+                            class="w-full text-right px-3.5 py-2 text-amber-700 hover:bg-amber-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">block</span>
+                        <span>إلغاء المرتجع</span>
+                    </button>
+                    {% endif %}
+                    {% if can_delete %}
+                    <div class="h-px bg-slate-100 my-1"></div>
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_return_order_delete' return_order.id %}', title: 'حذف مرتجع المشتريات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر إرجاع المشتريات رقم {{ return_order.order_number|escapejs }}؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
+                            class="w-full text-right px-3.5 py-2 text-rose-700 hover:bg-rose-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                        <span>حذف المرتجع</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
 
-            <a href="{% url 'purchase_return_order_print' return_order.id %}" target="_blank"
-               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="طباعة">
-                <span class="material-symbols-outlined text-lg">print</span>
-            </a>
             <a href="{% url 'purchase_return_orders_list' %}"
-               class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="العودة">
+               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة">
                 <span class="material-symbols-outlined text-lg">arrow_back</span>
             </a>
         </div>
@@ -358,6 +380,8 @@
         </div>
 
     </div>
+
+    {% include 'components/attachments_gallery.html' with target_obj=return_order model_key='purchasereturnorder' %}
 
 </div>
 

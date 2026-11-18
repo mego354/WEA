@@ -823,3 +823,203 @@ def build_payment_request_timeline(req):
     return events
 
 
+class VaultService:
+    """
+    Enterprise service layer for Vault and Safe CRUD operations:
+    - Atomic creation and initial opening balance setup
+    - Custodian / User assignment and branch association
+    - Strict financial transaction and balance integrity checks before deletion
+    - Full SecurityAuditLog audit trails
+    """
+
+    @classmethod
+    @transaction.atomic
+    def create_vault(cls, data: dict, user, request=None):
+        from master_data.models import Area
+        from accounts.models import User
+
+        name = data.get('name', '').strip()
+        vault_type = data.get('vault_type', 'cash')
+        is_rep_vault = data.get('is_rep_vault') in [True, 'on', 'true', 'True', '1', 1]
+        is_active = data.get('is_active') in [True, 'on', 'true', 'True', '1', 1] if 'is_active' in data else True
+        initial_balance_raw = (data.get('initial_balance') or data.get('current_balance') or '0.00')
+
+        if not name:
+            raise ValidationError("اسم الخزنة / الحساب حقل إلزامي.")
+
+        if Vault.objects.filter(name__iexact=name).exists():
+            raise ValidationError(f"توجد خزنة مسجلة مسبقاً بنفس الاسم ({name}).")
+
+        assigned_user = None
+        assigned_user_id = data.get('assigned_user')
+        if assigned_user_id:
+            assigned_user = User.objects.filter(id=assigned_user_id, is_active=True).first()
+
+        area = None
+        area_id = data.get('area')
+        if area_id:
+            area = Area.objects.filter(id=area_id).first()
+
+        try:
+            init_bal = Decimal(str(initial_balance_raw or '0.00'))
+            if init_bal < Decimal('0.00'):
+                raise ValidationError("الرصيد الافتتاحي لا يمكن أن يكون سالباً.")
+        except Exception:
+            raise ValidationError("قيمة الرصيد الافتتاحي غير صحيحة.")
+
+        vault = Vault.objects.create(
+            name=name,
+            vault_type=vault_type,
+            assigned_user=assigned_user,
+            area=area,
+            is_rep_vault=is_rep_vault,
+            is_active=is_active,
+            current_balance=init_bal
+        )
+
+        if init_bal > Decimal('0.00'):
+            opening_tx = VaultTransaction.objects.create(
+                vault=vault,
+                transaction_type='inflow',
+                amount=init_bal,
+                running_balance=init_bal,
+                reference_type='opening_balance',
+                description=f"رصيد افتتاحي عند إنشاء الخزنة ({vault.name})",
+                created_by=user
+            )
+            AuditLogService.log(
+                action_type='VAULT_OPENING_BALANCE',
+                module='treasury',
+                actor=user,
+                record_id=opening_tx.id,
+                record_name=f"رصيد افتتاحي {vault.name}",
+                description=f"تسجيل قيد رصيد افتتاحي بمبلغ {init_bal:,.2f} ج.م لخزنة {vault.name}",
+                new_values={'vault': vault.name, 'amount': str(init_bal), 'tx_id': opening_tx.id},
+                request=request
+            )
+
+        AuditLogService.log(
+            action_type='VAULT_CREATED',
+            module='treasury',
+            actor=user,
+            record_id=vault.id,
+            record_name=vault.name,
+            description=f"إنشاء خزنة جديدة: {vault.name} برقم مسلسل #{vault.serial_num} ورصيد افتتاحي {init_bal:,.2f} ج.م",
+            new_values={
+                'name': vault.name,
+                'serial_num': vault.serial_num,
+                'vault_type': vault.vault_type,
+                'is_rep_vault': vault.is_rep_vault,
+                'is_active': vault.is_active,
+                'initial_balance': str(init_bal),
+                'area': vault.area.name if vault.area else None,
+                'assigned_user': vault.assigned_user.username if vault.assigned_user else None,
+            },
+            request=request
+        )
+        return vault
+
+    @classmethod
+    @transaction.atomic
+    def update_vault(cls, vault: Vault, data: dict, user, request=None):
+        from master_data.models import Area
+        from accounts.models import User
+
+        name = data.get('name', '').strip()
+        vault_type = data.get('vault_type', vault.vault_type)
+        is_rep_vault = data.get('is_rep_vault') in [True, 'on', 'true', 'True', '1', 1]
+        is_active = data.get('is_active') in [True, 'on', 'true', 'True', '1', 1] if 'is_active' in data else True
+
+        if not name:
+            raise ValidationError("اسم الخزنة / الحساب حقل إلزامي.")
+
+        if Vault.objects.filter(name__iexact=name).exclude(id=vault.id).exists():
+            raise ValidationError(f"توجد خزنة أخرى مسجلة بنفس الاسم ({name}).")
+
+        assigned_user = None
+        assigned_user_id = data.get('assigned_user')
+        if assigned_user_id:
+            assigned_user = User.objects.filter(id=assigned_user_id, is_active=True).first()
+
+        area = None
+        area_id = data.get('area')
+        if area_id:
+            area = Area.objects.filter(id=area_id).first()
+
+        prev_values = {
+            'name': vault.name,
+            'vault_type': vault.vault_type,
+            'is_rep_vault': vault.is_rep_vault,
+            'is_active': vault.is_active,
+            'area': vault.area.name if vault.area else None,
+            'assigned_user': vault.assigned_user.username if vault.assigned_user else None,
+        }
+
+        vault.name = name
+        vault.vault_type = vault_type
+        vault.assigned_user = assigned_user
+        vault.area = area
+        vault.is_rep_vault = is_rep_vault
+        vault.is_active = is_active
+        vault.save()
+
+        new_values = {
+            'name': vault.name,
+            'vault_type': vault.vault_type,
+            'is_rep_vault': vault.is_rep_vault,
+            'is_active': vault.is_active,
+            'area': vault.area.name if vault.area else None,
+            'assigned_user': vault.assigned_user.username if vault.assigned_user else None,
+        }
+
+        AuditLogService.log(
+            action_type='VAULT_UPDATED',
+            module='treasury',
+            actor=user,
+            record_id=vault.id,
+            record_name=vault.name,
+            description=f"تحديث بيانات الخزنة: {vault.name} (#{vault.serial_num})",
+            previous_values=prev_values,
+            new_values=new_values,
+            request=request
+        )
+        return vault
+
+    @classmethod
+    @transaction.atomic
+    def delete_vault(cls, vault: Vault, user, request=None):
+        # 1. Financial transactions check
+        if VaultTransaction.objects.filter(vault=vault).exists():
+            raise ValidationError("لا يمكن حذف الخزنة لوجود حركات مالية مسجلة عليها. يمكنك تعطيل الخزنة بدلاً من حذفها.")
+
+        # 2. Balance check
+        if vault.current_balance != Decimal('0.00'):
+            raise ValidationError(f"لا يمكن حذف الخزنة لوجود رصيد حالي بها ({vault.current_balance:,.2f} ج.م). يجب تصفية الرصيد أولاً.")
+
+        # 3. Vendor payments check
+        if VendorPayment.objects.filter(vault=vault).exists():
+            raise ValidationError("لا يمكن حذف الخزنة لوجود سندات صرف موردين مسجلة عليها.")
+
+        # 4. Sales collections check
+        from sales.models import Collection
+        if Collection.objects.filter(vault=vault).exists():
+            raise ValidationError("لا يمكن حذف الخزنة لوجود سندات تحصيل مبيعات مسجلة عليها.")
+
+        v_id = vault.id
+        v_name = vault.name
+        v_serial = vault.serial_num
+
+        vault.delete()
+
+        AuditLogService.log(
+            action_type='VAULT_DELETED',
+            module='treasury',
+            actor=user,
+            record_id=v_id,
+            record_name=v_name,
+            description=f"حذف الخزنة: {v_name} (#{v_serial})",
+            request=request
+        )
+        return True
+
+

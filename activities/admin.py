@@ -4,7 +4,7 @@ from django.utils import timezone
 from .models import (
     AgreementType, Agreement, VisitTemplate,
     VisitTemplateQuestion, PlannedVisitDay, PlannedVisitItem,
-    Visit, VisitSampleItem, VisitExpense,
+    VisitPlan, Visit, VisitSampleItem, VisitExpense,
     ApprovalAuditLog, AgendaTodo
 )
 
@@ -179,8 +179,7 @@ class VisitAdmin(admin.ModelAdmin):
     filter_horizontal = ('detailed_products',)
     readonly_fields = (
         'created_at', 'updated_at', 'started_at', 'ended_at',
-        'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot',
-        'photo_preview'
+        'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot'
     )
     inlines = [VisitSampleItemInline, VisitExpenseInline]
     actions = ['approve_selected_visits', 'disapprove_selected_visits']
@@ -197,8 +196,7 @@ class VisitAdmin(admin.ModelAdmin):
         ('النتائج والاستبيان', {
             'fields': (
                 ('is_successful', 'doubled', 'mode'),
-                'visit_outcome',
-                'feedback',
+                ('plan',),
                 'detailed_products',
                 'questionnaire_answers',
             )
@@ -209,7 +207,9 @@ class VisitAdmin(admin.ModelAdmin):
                 ('device_accuracy', 'distance', 'allowed_distance', 'distance_discrepancy'),
                 ('location_verified', 'location_status', 'verification_status'),
                 ('customer_latitude_snapshot', 'customer_longitude_snapshot'),
-                ('location_photo', 'photo_preview', 'photo_captured_at'),
+                ('gps_forced_start', 'gps_forced_end'),
+                ('gps_forced_start_by', 'gps_forced_start_at'),
+                ('gps_forced_end_by', 'gps_forced_end_at'),
             )
         }),
         ('التجاوز والاعتماد الإداري', {
@@ -228,15 +228,6 @@ class VisitAdmin(admin.ModelAdmin):
             )
         }),
     )
-
-    def photo_preview(self, obj):
-        if obj.location_photo:
-            return format_html(
-                '<a href="{}" target="_blank"><img src="{}" style="max-height:120px; border-radius:6px; border:1px solid #cbd5e1;"/></a>',
-                obj.location_photo.url, obj.location_photo.url
-            )
-        return "لا توجد صورة مسجلة"
-    photo_preview.short_description = "معاينة صورة الموقع"
 
     def status_badge(self, obj):
         colors = {
@@ -288,6 +279,27 @@ class VisitAdmin(admin.ModelAdmin):
         )
         self.message_user(request, f"تم رفض {updated} زيارة.")
     disapprove_selected_visits.short_description = "رفض الزيارات المحددة"
+
+
+@admin.register(VisitPlan)
+class VisitPlanAdmin(admin.ModelAdmin):
+    list_display = ('plan_id', 'assignee', 'date', 'approval_status_badge', 'created_by', 'created_at')
+    list_filter = ('approval_status', 'date')
+    search_fields = ('plan_id', 'assignee__username', 'assignee__first_name', 'comment')
+    readonly_fields = ('created_at', 'updated_at')
+
+    def approval_status_badge(self, obj):
+        colors = {
+            'pending': ('#d97706', '#fef3c7', 'قيد الاعتماد'),
+            'approved': ('#059669', '#d1fae5', 'معتمدة'),
+            'disapproved': ('#dc2626', '#fee2e2', 'مرفوضة'),
+        }
+        text_color, bg_color, label = colors.get(obj.approval_status, ('#475569', '#f1f5f9', obj.approval_status))
+        return format_html(
+            '<span style="background-color:{}; color:{}; padding:3px 8px; border-radius:10px; font-weight:600; font-size:11px;">{}</span>',
+            bg_color, text_color, label
+        )
+    approval_status_badge.short_description = "حالة الاعتماد"
 
 
 @admin.register(ApprovalAuditLog)

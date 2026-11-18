@@ -24,6 +24,14 @@
             <p class="text-xs text-slate-500 mt-1">تتبع دقيق وتاريخي لكافة العمليات الحساسة في النظام (المستخدمين، جهات الاتصال، الزيارات، المخازن، المبيعات، والخزينة).</p>
         </div>
         <div class="flex items-center gap-2">
+            {% include 'components/table_column_picker.html' with table_id='audit_logs_table' %}
+            {% if request.user|has_permission:'settings:auditLogs/export' %}
+            <a href="{% url 'audit_logs_export' %}?q={{ query|urlencode }}&module={{ module_filter|urlencode }}&action={{ action_filter|urlencode }}&user={{ user_filter|urlencode }}&date_from={{ date_from|urlencode }}&date_to={{ date_to|urlencode }}"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">تصدير Excel</span>
+            </a>
+            {% endif %}
             <span class="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5 min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-teal-600">security</span>
                 <span>إجمالي السجلات: {{ paginator.count }}</span>
@@ -40,6 +48,7 @@
             <!-- Search -->
             <div class="relative lg:col-span-2">
                 <input type="text" name="q" value="{{ query }}" placeholder="بحث (المسؤول، السجل، IP، الوصف)..."
+                       data-smart-search-module="audit_logs"
                        class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[42px]">
                 <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
             </div>
@@ -102,18 +111,18 @@
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
         <!-- Desktop Table (hidden on mobile < 768px) -->
         <div class="hidden md:block overflow-x-auto">
-            <table class="w-full text-right border-collapse">
+            <table id="audit_logs_table" data-col-table="audit_logs_table" class="w-full text-right border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] font-bold">
-                        <th class="p-3.5">التاريخ والوقت</th>
-                        <th class="p-3.5">الموديول</th>
-                        <th class="p-3.5">نوع العملية</th>
-                        <th class="p-3.5">المنفذ</th>
-                        <th class="p-3.5">السجل المستهدف</th>
-                        <th class="p-3.5">الحالة</th>
-                        <th class="p-3.5">عنوان IP</th>
-                        <th class="p-3.5">الوصف</th>
-                        <th class="p-3.5 text-center">التفاصيل</th>
+                        <th class="p-3.5" data-col="created_at" data-col-required="true">التاريخ والوقت</th>
+                        <th class="p-3.5" data-col="module">الموديول</th>
+                        <th class="p-3.5" data-col="action_type" data-col-required="true">نوع العملية</th>
+                        <th class="p-3.5" data-col="actor">المنفذ</th>
+                        <th class="p-3.5" data-col="target">السجل المستهدف</th>
+                        <th class="p-3.5" data-col="status">الحالة</th>
+                        <th class="p-3.5" data-col="ip_address">عنوان IP</th>
+                        <th class="p-3.5" data-col="description">الوصف</th>
+                        <th class="p-3.5 text-center" data-col="details" data-col-required="true">التفاصيل</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-xs">

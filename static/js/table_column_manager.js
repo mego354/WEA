@@ -50,6 +50,7 @@ window.TableColumnManager = (function () {
             th.setAttribute('data-col-index', index);
 
             const isRequired = th.getAttribute('data-required') === 'true' ||
+                               th.getAttribute('data-col-required') === 'true' ||
                                colId === 'actions' ||
                                colId === 'checkbox' ||
                                th.classList.contains('col-required');
@@ -167,17 +168,17 @@ window.TableColumnManager = (function () {
             colMap[c.id] = meta.visibleCols.has(c.id);
         });
 
-        // 1. Update thead headers
+        // 1. Update thead headers (preserve Tailwind responsive hidden classes; only toggle inline display)
         const thList = table.querySelectorAll('thead tr:last-child th');
         thList.forEach((th, idx) => {
             const colId = th.getAttribute('data-col') || ('col_' + idx);
             const isVis = colMap[colId] !== false;
             if (isVis) {
-                th.classList.remove('hidden');
                 th.style.display = '';
+                th.removeAttribute('data-col-hidden');
             } else {
-                th.classList.add('hidden');
                 th.style.display = 'none';
+                th.setAttribute('data-col-hidden', 'true');
             }
         });
 
@@ -193,11 +194,11 @@ window.TableColumnManager = (function () {
                 const colId = td.getAttribute('data-col') || (meta.columns[idx] ? meta.columns[idx].id : ('col_' + idx));
                 const isVis = colMap[colId] !== false;
                 if (isVis) {
-                    td.classList.remove('hidden');
                     td.style.display = '';
+                    td.removeAttribute('data-col-hidden');
                 } else {
-                    td.classList.add('hidden');
                     td.style.display = 'none';
+                    td.setAttribute('data-col-hidden', 'true');
                 }
             });
         });
@@ -276,6 +277,19 @@ window.TableColumnManager = (function () {
 
         if (isHidden) {
             dropdown.classList.remove('hidden');
+            // Viewport-safe positioning on desktop/tablet (>= 640px)
+            if (window.innerWidth >= 640) {
+                dropdown.style.left = '';
+                dropdown.style.right = '';
+                const rect = dropdown.getBoundingClientRect();
+                if (rect.left < 8) {
+                    dropdown.style.left = 'auto';
+                    dropdown.style.right = '0';
+                } else if (rect.right > window.innerWidth - 8) {
+                    dropdown.style.right = 'auto';
+                    dropdown.style.left = '0';
+                }
+            }
         }
     }
 

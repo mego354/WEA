@@ -243,17 +243,18 @@ class SettingsViewsTests(TestCase):
         self.assertFalse(ApprovalRequestType.objects.filter(pk=custom_req.pk).exists())
 
     def test_agreements_crud(self):
+        from activities.models import AgreementType as ActivitiesAgreementType
         self.client.login(username='admin@example.com', password='AdminPassword123!')
         response = self.client.post(reverse('agreement_type_create'), {'name': 'اتفاقية بونص سنوي'})
         self.assertEqual(response.status_code, 302)
-        agr = AgreementType.objects.get(name='اتفاقية بونص سنوي')
+        agr = ActivitiesAgreementType.objects.get(name='اتفاقية بونص سنوي')
 
         self.client.post(reverse('agreement_type_edit', args=[agr.pk]), {'name': 'اتفاقية بونص نصف سنوي'})
         agr.refresh_from_db()
         self.assertEqual(agr.name, 'اتفاقية بونص نصف سنوي')
 
         self.client.post(reverse('agreement_type_delete', args=[agr.pk]))
-        self.assertFalse(AgreementType.objects.filter(pk=agr.pk).exists())
+        self.assertFalse(ActivitiesAgreementType.objects.filter(pk=agr.pk).exists())
 
     def test_sales_and_purchase_settings_update(self):
         self.client.login(username='admin@example.com', password='AdminPassword123!')
@@ -394,7 +395,6 @@ class SettingsServiceAndCacheTests(TestCase):
             user=self.accountant_user,
             due_date=datetime.date(2026, 10, 25)
         )
-        PurchaseOrderService.approve_order(po, self.superadmin_user)
 
         self.client.force_login(self.superadmin_user)
         resp = self.client.get(reverse('home'), {'period': 'all'})
@@ -1197,3 +1197,216 @@ class ArabicSearchNormalizationTests(TestCase):
 
 
 
+
+
+class R2StorageAndAttachmentsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_permissions')
+        cls.superadmin_role = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        cls.rep_role = Role.objects.get(name=Role.ROLE_REP)
+        cls.cairo = Area.objects.create(name='القاهرة R2', code='R2-CAI')
+        cls.giza = Area.objects.create(name='الجيزة R2', code='R2-GIZ')
+        cls.admin = User.objects.create_superuser(username='r2_admin', password='Password123!', name='Admin R2')
+        cls.rep_cai = User.objects.create_user(
+            username='r2_rep_cai', password='Password123!', name='Rep Cairo', role=cls.rep_role
+        )
+        cls.rep_cai.assigned_areas.add(cls.cairo)
+        cls.rep_giz = User.objects.create_user(
+            username='r2_rep_giz', password='Password123!', name='Rep Giza', role=cls.rep_role
+        )
+        cls.rep_giz.assigned_areas.add(cls.giza)
+        cls.customer_cai = Contact.objects.create(
+            name='صيدلية R2 القاهرة', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='active'
+        )
+        cls.customer_cai2 = Contact.objects.create(
+            name='صيدلية R2 القاهرة 2', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='active'
+        )
+
+    def test_r2_cost_calculator_and_settings_protection(self):
+        from master_data.models import R2StorageConfig
+
+        cfg = R2StorageConfig.get_settings()
+        est_free = cfg.calculate_cost_estimate(
+            storage_gb=Decimal('5'), class_a_ops=100000, class_b_ops=500000
+        )
+        self.assertEqual(est_free['total_usd'], 0.0)
+
+        est_paid = cfg.calculate_cost_estimate(
+            storage_gb=Decimal('110'), class_a_ops=2000000, class_b_ops=20000000
+        )
+        self.assertGreater(est_paid['total_usd'], 0.0)
+
+        # Non-superadmin blocked from /settings/storage/
+        self.client.force_login(self.rep_cai)
+        res_rep = self.client.get(reverse('r2_storage_settings'))
+        self.assertIn(res_rep.status_code, (302, 403))
+
+        # Superadmin can view and update pricing
+        self.client.force_login(self.admin)
+        res_adm = self.client.get(reverse('r2_storage_settings'))
+        self.assertEqual(res_adm.status_code, 200)
+        res_post = self.client.post(reverse('r2_storage_settings'), {
+            'action': 'update_pricing',
+            'price_per_gb_month_usd': '0.0200',
+            'free_storage_gb': '10.00',
+            'price_per_million_class_a_usd': '4.5000',
+            'free_class_a_ops': '1000000',
+            'price_per_million_class_b_usd': '0.3600',
+            'free_class_b_ops': '10000000',
+            'egress_price_per_gb_usd': '0.0000',
+            'usd_to_egp_rate': '50.00',
+        })
+        self.assertEqual(res_post.status_code, 302)
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.price_per_gb_month_usd, Decimal('0.0200'))
+
+    def test_attachment_validation_dedup_refcount_and_idor(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.core.exceptions import ValidationError
+        from master_data.media_service import store_attachment, delete_attachment
+        from master_data.models import ERPAttachment
+        from django.core.files.storage import default_storage
+
+        # Invalid extension rejected
+        bad_file = SimpleUploadedFile('malware.exe', b'MZ\x90\x00', content_type='application/octet-stream')
+        with self.assertRaises(ValidationError):
+            store_attachment(self.customer_cai, bad_file, user=self.rep_cai)
+
+        # Valid PDF uploaded twice on two records -> deduplicates same storage path
+        pdf_bytes = b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n'
+        f1 = SimpleUploadedFile('invoice1.pdf', pdf_bytes, content_type='application/pdf')
+        f2 = SimpleUploadedFile('invoice2.pdf', pdf_bytes, content_type='application/pdf')
+        att1, _ = store_attachment(self.customer_cai, f1, user=self.rep_cai)
+        att2, dedup2 = store_attachment(self.customer_cai2, f2, user=self.rep_cai)
+        self.assertTrue(dedup2)
+        self.assertEqual(att1.file_hash, att2.file_hash)
+        self.assertEqual(att1.file.name, att2.file.name)
+        shared_name = att1.file.name
+
+        # Giza rep cannot view/download/delete Cairo attachment (IDOR protection)
+        self.client.force_login(self.rep_giz)
+        self.assertIn(self.client.get(reverse('erp_attachment_view', args=[att1.pk])).status_code, (302, 403))
+        self.assertIn(self.client.get(reverse('erp_attachment_download', args=[att1.pk])).status_code, (302, 403))
+
+        # Deleting first ref preserves shared blob
+        with self.captureOnCommitCallbacks(execute=True):
+            delete_attachment(att1, user=self.rep_cai)
+        self.assertTrue(ERPAttachment.objects.filter(pk=att2.pk).exists())
+        self.assertTrue(default_storage.exists(shared_name))
+
+        # Deleting last ref deletes blob
+        with self.captureOnCommitCallbacks(execute=True):
+            delete_attachment(att2, user=self.rep_cai)
+        self.assertFalse(default_storage.exists(shared_name))
+
+
+class PDFInvoicesAndStatementsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_permissions')
+        cls.rep_role = Role.objects.get(name=Role.ROLE_REP)
+        cls.cairo = Area.objects.create(name='القاهرة PDF', code='PDF-CAI')
+        cls.giza = Area.objects.create(name='الجيزة PDF', code='PDF-GIZ')
+        cls.admin = User.objects.create_superuser(username='pdf_admin', password='Password123!', name='Admin PDF')
+        cls.rep_giz = User.objects.create_user(
+            username='pdf_rep_giz', password='Password123!', name='Rep Giza PDF', role=cls.rep_role
+        )
+        cls.rep_giz.assigned_areas.add(cls.giza)
+
+        from catalog.models import Product, ProductCategory
+        from inventory.models import Warehouse
+        from sales.models import CustomerAccount, CustomerTransaction, SalesOrder, SalesOrderItem
+        from purchases.models import PurchaseOrder, PurchaseOrderItem
+
+        cls.cat = ProductCategory.objects.create(name='فئة PDF')
+        cls.customer = Contact.objects.create(
+            name='عميل PDF القاهرة', area=cls.cairo, is_customer=True, created_by=cls.admin, status='active'
+        )
+        cls.supplier = Contact.objects.create(
+            name='مورد PDF القاهرة', area=cls.cairo, is_supplier=True, created_by=cls.admin, status='active'
+        )
+        cls.wh = Warehouse.objects.create(name='مخزن PDF', code='WH-PDF', area=cls.cairo, is_active=True)
+        cls.prod = Product.objects.create(
+            name='دواء PDF', sku_code='PDF-001', category=cls.cat, retail_price=Decimal('100.00'), default_purchase_cost=Decimal('60.00')
+        )
+        cls.so = SalesOrder.objects.create(
+            serial_num=9501, order_number='SO-PDF-9501', customer=cls.customer, source_warehouse=cls.wh,
+            order_date=datetime.date(2026, 5, 10), status='invoiced', created_by=cls.admin
+        )
+        SalesOrderItem.objects.create(
+            order=cls.so, product=cls.prod, quantity=Decimal('2'), unit_price=Decimal('100.00')
+        )
+        cls.so.recalculate_totals()
+
+        cls.po = PurchaseOrder.objects.create(
+            serial_num=9502, order_number='PO-PDF-9502', supplier=cls.supplier, target_warehouse=cls.wh,
+            order_date=datetime.date(2026, 5, 10), status='settled', created_by=cls.admin
+        )
+        PurchaseOrderItem.objects.create(
+            order=cls.po, product=cls.prod, quantity=Decimal('5'), unit_price=Decimal('60.00')
+        )
+        cls.po.recalculate_totals()
+
+        # Ledger transactions for customer statement
+        acc, _ = CustomerAccount.objects.get_or_create(customer=cls.customer, defaults={'current_balance': Decimal('150.00')})
+        CustomerTransaction.objects.create(
+            serial=91001, account=acc, transaction_type='debit', reason='sales',
+            transaction_date=datetime.date(2026, 4, 20), debit=Decimal('500.00'), credit=Decimal('0.00'),
+            description='رصيد سابق'
+        )
+        CustomerTransaction.objects.create(
+            serial=91002, account=acc, transaction_type='debit', reason='sales',
+            transaction_date=datetime.date(2026, 5, 10), debit=Decimal('200.00'), credit=Decimal('0.00'),
+            description='SO-PDF-9501'
+        )
+        CustomerTransaction.objects.create(
+            serial=91003, account=acc, transaction_type='credit', reason='collection',
+            transaction_date=datetime.date(2026, 5, 12), debit=Decimal('0.00'), credit=Decimal('550.00'),
+            description='تحصيل نقدي'
+        )
+
+    def test_order_and_statement_pdfs_and_scope(self):
+        from accounts.models import SecurityAuditLog
+
+        self.client.force_login(self.admin)
+        res_so = self.client.get(reverse('sales_order_pdf', args=[self.so.pk]))
+        self.assertEqual(res_so.status_code, 200)
+        self.assertEqual(res_so['Content-Type'], 'application/pdf')
+        self.assertTrue(res_so.content.startswith(b'%PDF-'))
+
+        res_po = self.client.get(reverse('purchase_order_pdf', args=[self.po.pk]), {'include_signatures': '1'})
+        self.assertEqual(res_po.status_code, 200)
+        self.assertTrue(res_po.content.startswith(b'%PDF-'))
+
+        res_stmt = self.client.get(reverse('customer_statement_pdf', args=[self.customer.pk]), {
+            'start_date': '2026-05-01',
+            'end_date': '2026-05-31',
+            'category': 'orders',
+            'include_line_details': '1',
+        })
+        self.assertEqual(res_stmt.status_code, 200)
+        self.assertTrue(res_stmt.content.startswith(b'%PDF-'))
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='PDF_GENERATED').exists())
+
+        # Giza rep blocked from Cairo order PDF & statement PDF
+        self.client.force_login(self.rep_giz)
+        self.assertIn(self.client.get(reverse('sales_order_pdf', args=[self.so.pk])).status_code, (302, 403))
+        self.assertIn(self.client.get(reverse('customer_statement_pdf', args=[self.customer.pk])).status_code, (302, 403))
+
+    def test_date_range_resolver_and_home_default_current_month(self):
+        from master_data.date_filter_utils import resolve_date_range
+        from django.test import RequestFactory
+
+        rf = RequestFactory()
+        s, e, preset, _, _ = resolve_date_range(rf.get('/home/'), default_preset='this_month')
+        today = timezone.localdate()
+        self.assertEqual(preset, 'this_month')
+        self.assertEqual(s, today.replace(day=1))
+        self.assertEqual(e, today)
+
+        # Home view no longer defaults to hardcoded Oct 2026
+        self.client.force_login(self.admin)
+        res_home = self.client.get(reverse('home'))
+        self.assertEqual(res_home.status_code, 200)
+        self.assertEqual(res_home.context['start_date_str'], today.replace(day=1).strftime('%Y-%m-%d'))

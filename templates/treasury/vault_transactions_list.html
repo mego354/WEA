@@ -128,6 +128,8 @@
                 </select>
             </div>
 
+            {% include 'components/date_range_filter.html' with date_from=request.GET.date_from date_to=request.GET.date_to active_preset=request.GET.preset|default:'all_time' %}
+
             <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
                 <span class="material-symbols-outlined text-base">filter_alt</span>
                 <span>تصفية</span>
@@ -153,7 +155,16 @@
                     {{ total_count }} حركة
                 </span>
             </h2>
-            {% include 'components/table_column_picker.html' with table_id='vault_transactions_table' %}
+            <div class="flex items-center gap-2">
+                {% if request.user|has_permission:'treasury:transactions/export' %}
+                <a href="{% url 'vault_transactions_export' %}?search={{ search_query|urlencode }}&vault_id={{ selected_vault_id|default:''|urlencode }}&type={{ selected_tx_type|default:''|urlencode }}&date_from={{ selected_date_from|default:''|urlencode }}&date_to={{ selected_date_to|default:''|urlencode }}"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
+                    <span class="material-symbols-outlined text-base">download</span>
+                    <span class="hidden sm:inline">تصدير Excel</span>
+                </a>
+                {% endif %}
+                {% include 'components/table_column_picker.html' with table_id='vault_transactions_table' %}
+            </div>
         </div>
 
         <div class="overflow-x-auto scrollbar-thin">

@@ -267,3 +267,213 @@ class AuditLogService:
             logger.error(f"Failed to record audit log: {e}", exc_info=True)
             return None
 
+
+def _get_or_create_archive_user():
+    """Returns the inactive system archive account used to preserve historical attribution."""
+    from django.contrib.auth import get_user_model
+    UserModel = get_user_model()
+    archive = UserModel.objects.filter(username='historical_archive@wea.com').first()
+    if not archive:
+        archive = UserModel.objects.filter(email='historical_archive@wea.com').first()
+    if not archive:
+        archive = UserModel.objects.create(
+            username='historical_archive@wea.com',
+            email='historical_archive@wea.com',
+            name='أرشيف المستخدمين المحذوفين',
+            is_active=False,
+        )
+        archive.set_unusable_password()
+        archive.save(update_fields=['password'])
+    elif archive.is_active:
+        archive.is_active = False
+        archive.save(update_fields=['is_active'])
+    return archive
+
+
+def revoke_user_sessions(user_id):
+    """Deletes all active Django sessions belonging to the given user_id."""
+    from django.contrib.sessions.models import Session
+    from django.utils import timezone
+    for session in Session.objects.filter(expire_date__gte=timezone.now()):
+        try:
+            data = session.get_decoded()
+            if str(data.get('_auth_user_id')) == str(user_id):
+                session.delete()
+        except Exception:
+            continue
+
+
+@transaction.atomic
+def delete_user_safely(target_user, actor, request=None):
+    """
+    Safely deletes a user account while strictly protecting financial, inventory,
+    and field-activity history:
+    1. Prevents self-deletion and unauthorized SuperAdmin/superuser deletion.
+    2. Blocks deletion if custody warehouse has stock/reserved qty or custody vault has non-zero balance.
+    3. Revokes all active sessions for the target user.
+    4. If the user has zero historical records, hard-deletes the user and empty auto-provisioned resources.
+    5. If the user has historical records (Visits, Orders, Collections, Transfers, Targets, Calls, Coaching),
+       transfers ownership to the inactive archive account (`historical_archive@wea.com`) before deleting
+       the user account, preserving complete financial/audit integrity and recording original identity in SecurityAuditLog.
+    """
+    from django.core.exceptions import ValidationError
+    from django.contrib.auth import get_user_model
+    from inventory.models import Warehouse, InventoryStock, InventoryMemo, ProductTransferRequest
+    from treasury.models import Vault, VaultTransaction, VendorPayment, VendorPaymentRequest
+    from sales.models import SalesOrder, SalesReturnOrder, Collection
+    from purchases.models import PurchaseOrder, PurchaseReturnOrder
+    from activities.models import Visit, VisitPlan, PlannedVisitDay, Agreement
+    from reports.models import SalesTarget, CustomerCall, CoachingEvaluation
+
+    UserModel = get_user_model()
+    target_user = UserModel.objects.select_for_update().get(pk=target_user.pk)
+
+    if target_user.pk == actor.pk:
+        raise ValidationError("لا يمكنك حذف حسابك الشخصي.")
+
+    if target_user.username == 'historical_archive@wea.com':
+        raise ValidationError("لا يمكن حذف حساب الأرشيف النظامي.")
+
+    actor_is_super = bool(actor.is_superuser or getattr(actor, 'is_super_admin', False))
+    target_is_super = bool(target_user.is_superuser or getattr(target_user, 'is_super_admin', False))
+    if target_is_super and not actor_is_super:
+        raise ValidationError("لا تملك صلاحية حذف حساب مدير نظام أعلى (SuperAdmin).")
+
+    if target_is_super:
+        other_active_supers = UserModel.objects.filter(
+            is_active=True
+        ).filter(
+            Q(is_superuser=True) | Q(role__is_super=True) | Q(role__name__iexact='superadmin')
+        ).exclude(pk=target_user.pk).count()
+        if other_active_supers == 0:
+            raise ValidationError("لا يمكن حذف آخر مدير نظام أعلى نشط في النظام.")
+
+    # Check custody warehouses & vaults
+    custody_whs = Warehouse.objects.filter(assigned_user=target_user)
+    if InventoryStock.objects.filter(warehouse__in=custody_whs).filter(Q(qty_on_hand__gt=0) | Q(qty_reserved__gt=0)).exists():
+        raise ValidationError("لا يمكن حذف المستخدم لوجود أرصدة مخزنية أو كميات محجوزة في مخزن عهدته. يرجى تصفية أو تحويل المخزون أولاً.")
+
+    if ProductTransferRequest.objects.filter(
+        Q(source_warehouse__in=custody_whs) | Q(destination_warehouse__in=custody_whs),
+        status__in=['pending', 'approved']
+    ).exists():
+        raise ValidationError("لا يمكن حذف المستخدم لوجود طلبات تحويل مخزني معلقة مرتبطة بمخزن عهدته.")
+
+    custody_vaults = Vault.objects.filter(assigned_user=target_user)
+    if custody_vaults.exclude(current_balance=Decimal('0.00')).exists():
+        raise ValidationError("لا يمكن حذف المستخدم لوجود رصيد مالي غير صفري في خزنة عهدته. يرجى تصفية الرصيد أولاً.")
+
+    # Revoke active sessions
+    revoke_user_sessions(target_user.pk)
+
+    # Count historical records
+    visits_cnt = Visit.objects.filter(owner=target_user).count()
+    plans_cnt = VisitPlan.objects.filter(assignee=target_user).count()
+    days_cnt = PlannedVisitDay.objects.filter(assignee=target_user).count()
+    transfers_cnt = ProductTransferRequest.objects.filter(requesting_user=target_user).count()
+    sales_cnt = SalesOrder.objects.filter(created_by=target_user).count()
+    purchases_cnt = PurchaseOrder.objects.filter(created_by=target_user).count()
+    cols_cnt = Collection.objects.filter(created_by=target_user).count()
+    calls_cnt = CustomerCall.objects.filter(performed_by=target_user).count()
+    coaching_cnt = CoachingEvaluation.objects.filter(Q(rep=target_user) | Q(manager=target_user)).count()
+    targets_cnt = SalesTarget.objects.filter(user=target_user).count()
+
+    has_history = any([
+        visits_cnt, plans_cnt, days_cnt, transfers_cnt, sales_cnt,
+        purchases_cnt, cols_cnt, calls_cnt, coaching_cnt, targets_cnt,
+        SalesReturnOrder.objects.filter(created_by=target_user).exists(),
+        PurchaseReturnOrder.objects.filter(created_by=target_user).exists(),
+        InventoryMemo.objects.filter(created_by=target_user).exists(),
+        VaultTransaction.objects.filter(created_by=target_user).exists(),
+        VendorPayment.objects.filter(created_by=target_user).exists(),
+        VendorPaymentRequest.objects.filter(created_by=target_user).exists(),
+        Agreement.objects.filter(created_by=target_user).exists(),
+    ])
+
+    orig_info = {
+        'id': target_user.pk,
+        'username': target_user.username,
+        'name': target_user.name,
+        'email': target_user.email,
+        'role': target_user.role.name if target_user.role else None,
+        'has_history': has_history,
+        'reassigned_counts': {
+            'visits': visits_cnt,
+            'plans': plans_cnt,
+            'transfers': transfers_cnt,
+            'sales_orders': sales_cnt,
+            'purchase_orders': purchases_cnt,
+            'collections': cols_cnt,
+        }
+    }
+
+    if has_history:
+        archive_user = _get_or_create_archive_user()
+        Visit.objects.filter(owner=target_user).update(owner=archive_user)
+        VisitPlan.objects.filter(assignee=target_user).update(assignee=archive_user)
+        for day in PlannedVisitDay.objects.filter(assignee=target_user):
+            existing_day = PlannedVisitDay.objects.filter(assignee=archive_user, date=day.date).first()
+            if existing_day:
+                day.items.update(plan_day=existing_day)
+                day.delete()
+            else:
+                day.assignee = archive_user
+                day.save(update_fields=['assignee'])
+        ProductTransferRequest.objects.filter(requesting_user=target_user).update(requesting_user=archive_user)
+        CustomerCall.objects.filter(performed_by=target_user).update(performed_by=archive_user)
+        CoachingEvaluation.objects.filter(manager=target_user).update(manager=archive_user)
+        CoachingEvaluation.objects.filter(rep=target_user).update(rep=archive_user)
+        for tgt in SalesTarget.objects.filter(user=target_user):
+            if SalesTarget.objects.filter(user=archive_user, year=tgt.year, month=tgt.month).exists():
+                tgt.delete()
+            else:
+                tgt.user = archive_user
+                tgt.save(update_fields=['user'])
+        # Unassign custody warehouses/vaults cleanly
+        custody_whs.update(assigned_user=None, is_active=False)
+        custody_vaults.update(assigned_user=None, is_active=False)
+    else:
+        # Cleanly remove empty auto-provisioned rep warehouses/vaults
+        for wh in custody_whs:
+            has_wh_links = (
+                InventoryMemo.objects.filter(warehouse=wh).exists() or
+                ProductTransferRequest.objects.filter(Q(source_warehouse=wh) | Q(destination_warehouse=wh)).exists() or
+                SalesOrder.objects.filter(source_warehouse=wh).exists() or
+                PurchaseOrder.objects.filter(target_warehouse=wh).exists()
+            )
+            if has_wh_links:
+                wh.assigned_user = None
+                wh.is_active = False
+                wh.save(update_fields=['assigned_user', 'is_active'])
+            else:
+                wh.delete()
+        for v in custody_vaults:
+            has_v_links = (
+                VaultTransaction.objects.filter(vault=v).exists() or
+                Collection.objects.filter(vault=v).exists() or
+                VendorPayment.objects.filter(vault=v).exists()
+            )
+            if has_v_links:
+                v.assigned_user = None
+                v.is_active = False
+                v.save(update_fields=['assigned_user', 'is_active'])
+            else:
+                v.delete()
+
+    target_label = f"{target_user.name or target_user.username} ({target_user.username})"
+    target_id = target_user.pk
+    target_user.delete()
+
+    AuditLogService.log(
+        action_type='USER_DELETED',
+        module='accounts',
+        actor=actor,
+        record_id=target_id,
+        record_name=target_label,
+        description=f"حذف حساب المستخدم '{target_label}' مع الحفاظ على سلامة السجلات التاريخية والمالية.",
+        previous_values=orig_info,
+        request=request,
+    )
+    return orig_info
+
+

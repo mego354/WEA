@@ -119,7 +119,16 @@
                     {{ total_count }} مورد
                 </span>
             </h2>
-            {% include 'components/table_column_picker.html' with table_id='accounting_vendors_table' %}
+            <div class="flex items-center gap-2">
+                {% if request.user|has_permission:'treasury:vendors/accounting_export' %}
+                <a href="{% url 'accounting_vendors_export' %}{% if search_query %}?search={{ search_query|urlencode }}{% endif %}"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
+                    <span class="material-symbols-outlined text-base">download</span>
+                    <span class="hidden sm:inline">تصدير Excel</span>
+                </a>
+                {% endif %}
+                {% include 'components/table_column_picker.html' with table_id='accounting_vendors_table' %}
+            </div>
         </div>
 
         <div class="overflow-x-auto scrollbar-thin">
@@ -150,15 +159,28 @@
                         </td>
                         <td data-col="last_transaction" class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ acc.last_transaction_date|date:"Y-m-d"|default:"-" }}</td>
                         <td data-col="actions" class="py-3.5 px-4 text-center">
-                            <div class="inline-flex items-center gap-2">
-                                <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ acc.supplier.id }}" class="px-3 py-1.5 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 min-h-[36px]">
-                                    <span class="material-symbols-outlined text-sm">receipt_long</span>
-                                    <span>كشف حساب</span>
-                                </a>
-                                <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 min-h-[36px]">
-                                    <span class="material-symbols-outlined text-sm">payments</span>
-                                    <span>سداد</span>
-                                </a>
+                            <div data-row-menu-host class="inline-flex items-center justify-center">
+                                <button type="button" data-row-menu-trigger onclick="openRowActionMenu(this, event)" aria-haspopup="true" aria-expanded="false"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
+                                    <span class="material-symbols-outlined text-lg">more_vert</span>
+                                </button>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ acc.supplier.id }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-slate-500">receipt_long</span>
+                                        <span>حركات الحساب</span>
+                                    </a>
+                                    {% if request.user|has_permission:'purchases:statements/pdf' %}
+                                    <button type="button" onclick="openStatementPdfModal('{% url 'vendor_statement_pdf' acc.supplier.id %}', '{{ acc.supplier.name|escapejs }}')"
+                                            class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                                        <span>كشف حساب PDF</span>
+                                    </button>
+                                    {% endif %}
+                                    <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="w-full text-right px-3.5 py-2 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-emerald-600">payments</span>
+                                        <span>سداد</span>
+                                    </a>
+                                </template>
                             </div>
                         </td>
                     </tr>

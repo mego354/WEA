@@ -579,10 +579,6 @@
                         <span class="material-symbols-outlined text-base">account_balance</span>
                         <span>ميزان المراجعة للعملاء</span>
                     </a>
-                    <a href="{% url 'report_target_achievement' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/target-achievement' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">flag</span>
-                        <span>تحقيق أهداف المبيعات</span>
-                    </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:sales/view' %}
                     <a href="{% url 'report_net_sales' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/net-sales' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
@@ -593,20 +589,12 @@
                         <span class="material-symbols-outlined text-base">person_search</span>
                         <span>ملخص العملاء 360</span>
                     </a>
-                    <a href="{% url 'report_promotions' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/promotions' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">local_offer</span>
-                        <span>أداء العروض والخصومات</span>
-                    </a>
                     <a href="{% url 'report_item_sales_by_customer' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/item-sales-by-customer' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">table_chart</span>
                         <span>مبيعات الأصناف حسب العملاء</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:inventory/view' %}
-                    <a href="{% url 'report_order_deliveries' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/order-deliveries' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">local_shipping</span>
-                        <span>تسليمات الطلبيات واللوجستيات</span>
-                    </a>
                     <a href="{% url 'report_delivery_stock' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/delivery-stock' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">inventory_2</span>
                         <span>توفر المخزون والتسليمات</span>
@@ -620,14 +608,6 @@
                     <a href="{% url 'report_agreements_roi' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/agreements-roi' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
                         <span class="material-symbols-outlined text-base">handshake</span>
                         <span>تحقيق الاتفاقيات وعائد الاستثمار</span>
-                    </a>
-                    <a href="{% url 'report_calls' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/calls' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">phone_in_talk</span>
-                        <span>تقرير التواصل الهاتفي (Calls)</span>
-                    </a>
-                    <a href="{% url 'report_samples' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/samples' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">science</span>
-                        <span>عينات المنتجات الطبية</span>
                     </a>
                     {% endif %}
                 </div>
@@ -669,6 +649,12 @@
                     <a href="{% url 'branding_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'branding' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base">domain</span>
                         <span>بيانات الشركة والفاتورة</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:storage/manage' %}
+                    <a href="{% url 'r2_storage_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if '/settings/storage' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base">cloud_upload</span>
+                        <span>التخزين السحابي وحاسبة R2</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:location/manage' %}
@@ -883,6 +869,9 @@
 
     <!-- UNIFIED GLOBAL DELETE CONFIRMATION MODAL -->
     {% include 'components/confirm_delete_modal.html' %}
+    {% include 'components/attachments_modal.html' %}
+    {% include 'components/pdf_export_modal.html' %}
+    {% include 'components/row_action_menu.html' %}
 
     <!-- Script for sidebar toggle, bottom sheet, submenus, and mobile refresh -->
     <script>
@@ -1295,6 +1284,8 @@
     </script>
     <!-- Reusable Smart Select Combobox -->
     <script src="{% static 'js/smart_select.js' %}"></script>
+    <!-- Reusable List Smart Search Suggestions -->
+    <script src="{% static 'js/list_smart_search.js' %}"></script>
     <!-- Reusable Table Column Manager -->
     <script src="{% static 'js/table_column_manager.js' %}"></script>
     {% block extra_js %}{% endblock %}

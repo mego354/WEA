@@ -200,13 +200,25 @@
                     <button type="button" onclick="toggleHeaderActionsMenu()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
                         <span class="material-symbols-outlined text-xl">more_vert</span>
                     </button>
-                    <div id="headerActionsMenu" class="hidden absolute left-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-40 text-right">
+                    <div id="headerActionsMenu" class="hidden absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-40 text-right">
                         {% if contact.is_customer %}
                         <!-- Register Visit -->
                         <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">
                             <span class="material-symbols-outlined text-base text-emerald-600">add_location_alt</span>
                             <span>تسجيل زيارة</span>
                         </a>
+                        {% if request.user|has_permission:'sales:statements/pdf' %}
+                        <button type="button" onclick="openStatementPdfModal('{% url 'customer_statement_pdf' contact.id %}', '{{ contact.name|escapejs }}')" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#27bebe] hover:bg-teal-50 text-right">
+                            <span class="material-symbols-outlined text-base">receipt_long</span>
+                            <span>كشف حساب عميل PDF</span>
+                        </button>
+                        {% endif %}
+                        {% endif %}
+                        {% if contact.is_vendor and request.user|has_permission:'purchases:statements/pdf' %}
+                        <button type="button" onclick="openStatementPdfModal('{% url 'vendor_statement_pdf' contact.id %}', '{{ contact.name|escapejs }}')" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 text-right">
+                            <span class="material-symbols-outlined text-base">receipt_long</span>
+                            <span>كشف حساب مورد PDF</span>
+                        </button>
                         {% endif %}
                         <!-- Timeline -->
                         <a href="?tab=overview#timeline" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
@@ -440,12 +452,14 @@
                         <span class="erp-detail-label">الرصيد القائم</span>
                         <span class="erp-detail-val font-bold text-rose-600">{{ vendor_account.current_balance|intcomma }} ج.م</span>
                     </div>
+                    {% if request.user|has_permission:'treasury:vendors/transactions' %}
                     <div class="pt-2 text-center">
                         <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ contact.id }}" class="inline-flex items-center gap-1.5 text-xs text-brand-600 font-bold hover:underline">
                             <span class="material-symbols-outlined text-sm">receipt_long</span>
                             <span>عرض كشف حساب المورد</span>
                         </a>
                     </div>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -888,7 +902,9 @@
                 <span class="material-symbols-outlined text-brand-600">storefront</span>
                 <span>اوامر الشراء</span>
             </div>
+            {% if request.user|has_permission:'treasury:vendors/transactions' %}
             <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ contact.id }}" class="erp-btn-teal text-xs">كشف حساب المورد</a>
+            {% endif %}
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-right text-xs">

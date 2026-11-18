@@ -8,13 +8,14 @@ from contacts.models import Contact, ContactAddress
 from catalog.models import Product
 from inventory.models import Warehouse, InventoryStock, InventoryMemo, InventoryMemoItem
 from treasury.models import Vault, VaultTransaction
+from master_data.validation_utils import parse_positive_integer_quantity
 
 
 class SalesOrderService:
 
     @classmethod
     @transaction.atomic
-    def create_order(cls, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'), notes='', validate_stock=False):
+    def create_order(cls, customer, source_warehouse, order_date, items_data, user, delivery_address=None, delivery_date=None, due_date=None, custom_discount_percentage=Decimal('0.00'), shipping_fees=Decimal('0.00'), notes='', validate_stock=True):
         """
         Creates a new SalesOrder with line items, stock validation, and discount/grand_total computation.
         """
@@ -52,37 +53,27 @@ class SalesOrderService:
         # Pre-validate line items values and stock availability
         for item in items_data:
             product = item['product']
-            qty = Decimal(str(item.get('quantity', 0)))
+            qty = parse_positive_integer_quantity(item.get('quantity'), item_label=product.name)
             price = Decimal(str(item.get('unit_price', 0)))
             disc = Decimal(str(item.get('discount_percentage', 0)))
 
-            if qty <= Decimal('0.00'):
-                raise ValidationError(f"الكمية غير صالحة للصنف '{product.name}'. يجب أن تكون أكبر من الصفر.")
             if price < Decimal('0.00'):
                 raise ValidationError(f"سعر البيع للصنف '{product.name}' لا يمكن أن يكون سالباً.")
             if disc < Decimal('0.00') or disc > Decimal('100.00'):
                 raise ValidationError(f"نسبة الخصم للصنف '{product.name}' يجب أن تكون بين 0% و 100%.")
 
+            # Mandatory atomic stock validation (Requirement B4)
             if validate_stock:
-                # Check stock in source warehouse (accounting for reservations)
-                stock = InventoryStock.objects.filter(warehouse=source_warehouse, product=product).first()
-                qty_avail = stock.qty_available if stock else Decimal('0.00')
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                    warehouse=source_warehouse,
+                    product=product,
+                    defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': product.default_purchase_cost}
+                )
+                qty_avail = stock.qty_available
                 if qty_avail < qty:
                     raise ValidationError(
-                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.2f}) غير كافٍ للكمية المطلوبة ({qty:,.2f})."
+                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.0f}) غير كافٍ للكمية المطلوبة ({qty:,.0f})."
                     )
-
-        from master_data.models import SalesSettings
-        from accounts.permissions import has_perm_or_admin
-        sales_settings = SalesSettings.get_settings()
-
-        initial_status = 'pending'
-        approved_by = None
-        approved_at = None
-        if not sales_settings.require_manager_approval or has_perm_or_admin(user, 'sales:orders/approve'):
-            initial_status = 'manager_approval'
-            approved_by = user
-            approved_at = timezone.now()
 
         order = SalesOrder(
             customer=customer,
@@ -93,9 +84,9 @@ class SalesOrderService:
             due_date=due_date,
             custom_discount_percentage=custom_disc_pct,
             shipping_fees=shipping,
-            status=initial_status,
-            approved_by=approved_by,
-            approved_at=approved_at,
+            status='invoiced',
+            approved_by=user,
+            approved_at=timezone.now(),
             notes=notes,
             created_by=user
         )
@@ -117,15 +108,62 @@ class SalesOrderService:
 
         order.recalculate_totals()
 
+        # Immediate warehouse execution: Outward InventoryMemo + stock decrement (Requirement B2)
+        memo_number = f"MEMO-OUT-{order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='outward',
+            warehouse=order.source_warehouse,
+            statement=f"صرف أمر بيع رقم {order.order_number} للعميل {order.customer.name}",
+            status='applied',
+            applied_at=timezone.now(),
+            notes=f"Generated from Sales Order #{order.order_number}",
+            created_by=user
+        )
+        for item in order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=item.product,
+                quantity=item.quantity,
+                unit_cost=item.product.default_purchase_cost
+            )
+            stock = InventoryStock.objects.select_for_update().get(
+                warehouse=order.source_warehouse,
+                product=item.product
+            )
+            stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+            stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+        order.memo = memo
+        order.save(update_fields=['memo'])
+
+        # Immediate financial execution: Post invoice debit to CustomerAccount (Requirement B2)
+        account = CustomerAccount.get_or_create_for_customer(order.customer)
+        new_balance = account.current_balance + order.grand_total
+        CustomerTransaction.objects.create(
+            account=account,
+            transaction_type='debit',
+            reason='sales',
+            transaction_date=timezone.now().date(),
+            debit=order.grand_total,
+            credit=Decimal('0.00'),
+            running_balance=new_balance,
+            description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
+            created_by=user
+        )
+        account.current_balance = new_balance
+        account.last_transaction_date = timezone.now().date()
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
             record_type='sales_order',
             sales_order=order,
-            action='submitted' if order.status == 'pending' else 'auto_approved',
+            action='submitted',
             actor=user,
             status_before='',
             status_after=order.status,
-            reason=notes or ('إنشاء وتقديم أمر البيع للاعتماد' if order.status == 'pending' else 'إنشاء أمر البيع واعتماده تلقائياً')
+            reason=notes or 'إنشاء وتنفيذ أمر البيع مباشرة'
         )
 
         from accounts.services import AuditLogService
@@ -135,7 +173,7 @@ class SalesOrderService:
             actor=user,
             record_id=order.id,
             record_name=f"Sales Order #{order.order_number}",
-            description=f"إنشاء أمر بيع رقم {order.order_number} للعميل {customer.name} بقيمة {order.grand_total}",
+            description=f"إنشاء وتنفيذ أمر بيع رقم {order.order_number} للعميل {customer.name} بقيمة {order.grand_total}",
             new_values={
                 'order_number': order.order_number,
                 'customer': customer.name,
@@ -193,12 +231,10 @@ class SalesOrderService:
         # Validate line items and stock availability
         for item in items_data:
             product = item['product']
-            qty = Decimal(str(item.get('quantity', 0)))
+            qty = parse_positive_integer_quantity(item.get('quantity'), item_label=product.name)
             price = Decimal(str(item.get('unit_price', 0)))
             disc = Decimal(str(item.get('discount_percentage', 0)))
 
-            if qty <= Decimal('0.00'):
-                raise ValidationError(f"الكمية غير صالحة للصنف '{product.name}'. يجب أن تكون أكبر من الصفر.")
             if price < Decimal('0.00'):
                 raise ValidationError(f"سعر البيع للصنف '{product.name}' لا يمكن أن يكون سالباً.")
             if disc < Decimal('0.00') or disc > Decimal('100.00'):
@@ -210,7 +246,7 @@ class SalesOrderService:
                 qty_avail = stock.qty_available if stock else Decimal('0.00')
                 if qty_avail < qty:
                     raise ValidationError(
-                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.2f}) غير كافٍ للكمية المطلوبة ({qty:,.2f})."
+                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.0f}) غير كافٍ للكمية المطلوبة ({qty:,.0f})."
                     )
 
         previous_values = {
@@ -283,9 +319,11 @@ class SalesOrderService:
     @transaction.atomic
     def approve_order(cls, order, user, notes=''):
         """
-        Approves the sales order by management in the same main area.
+        Approves the sales order by management with anti-self-approval and manager scoping.
+        Automatically executes warehouse dispatch (InventoryMemo + stock deduction)
+        and customer ledger invoicing (CustomerTransaction Debit), moving status directly to 'invoiced'.
         """
-        if order.status not in ['pending', 'rejected']:
+        if order.status not in ['pending', 'rejected', 'manager_approval']:
             raise ValidationError(f"لا يمكن اعتماد الطلب في حالته الحالية: {order.get_status_display()}.")
 
         from accounts.permissions import is_manager_eligible_for_user
@@ -297,11 +335,87 @@ class SalesOrderService:
                 raise ValidationError("غير مصرح لك باعتماد أمر البيع لمندوب خارج نطاق منطقتك الرئيسية.")
 
         status_before = order.status
-        order.status = 'manager_approval'
+
+        # 1. Authoritative atomic stock validation
+        for item in order.items.select_related('product'):
+            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                warehouse=order.source_warehouse,
+                product=item.product,
+                defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
+            )
+            effective_avail = stock.qty_available if order.status != 'preparing' else (stock.qty_available + item.quantity)
+            if effective_avail < item.quantity:
+                raise ValidationError(
+                    f"لا يمكن اعتماد أمر البيع لعدم توفر رصيد كافٍ من الصنف '{item.product.name}' في {order.source_warehouse.name}. "
+                    f"الرصيد المتاح: {effective_avail:,.2f}، الكمية المطلوبة: {item.quantity:,.2f}."
+                )
+
+        # 2. Automatically generate outward InventoryMemo and decrement stock
+        memo_number = f"MEMO-OUT-{order.serial_num}"
+        memo = order.memo
+        if not memo:
+            memo, _ = InventoryMemo.objects.get_or_create(
+                memo_number=memo_number,
+                defaults={
+                    'memo_type': 'outward',
+                    'warehouse': order.source_warehouse,
+                    'statement': f"صرف أمر بيع رقم {order.order_number} للعميل {order.customer.name}",
+                    'status': 'applied',
+                    'applied_at': timezone.now(),
+                    'notes': f"Generated from Sales Order #{order.order_number}",
+                    'created_by': user
+                }
+            )
+            for item in order.items.select_related('product'):
+                InventoryMemoItem.objects.get_or_create(
+                    memo=memo,
+                    product=item.product,
+                    defaults={
+                        'quantity': item.quantity,
+                        'unit_cost': item.product.default_purchase_cost
+                    }
+                )
+                stock = InventoryStock.objects.select_for_update().get(
+                    warehouse=order.source_warehouse,
+                    product=item.product
+                )
+                stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+                if order.status == 'preparing':
+                    stock.qty_reserved = max(Decimal('0.00'), stock.qty_reserved - item.quantity)
+                stock.save(update_fields=['qty_on_hand', 'qty_reserved', 'updated_at'])
+
+            order.memo = memo
+
+        # 3. Automatically post financial invoice (debit) to Customer Account
+        account = CustomerAccount.get_or_create_for_customer(order.customer)
+        existing_tx = CustomerTransaction.objects.filter(
+            account=account,
+            reason='sales',
+            description__contains=order.order_number
+        ).first()
+
+        if not existing_tx:
+            new_balance = account.current_balance + order.grand_total
+            CustomerTransaction.objects.create(
+                account=account,
+                transaction_type='debit',
+                reason='sales',
+                transaction_date=timezone.now().date(),
+                debit=order.grand_total,
+                credit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
+                created_by=user
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = timezone.now().date()
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        order.status = 'invoiced'
         order.approved_by = user
         order.approved_at = timezone.now()
         order.rejection_reason = ''
-        order.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_at'])
+        order.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'memo', 'updated_at'])
 
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
@@ -310,8 +424,8 @@ class SalesOrderService:
             action='approved',
             actor=user,
             status_before=status_before,
-            status_after='manager_approval',
-            reason=notes or 'تم اعتماد أمر البيع من الإدارة'
+            status_after='invoiced',
+            reason=notes or 'اعتماد وصرف وفوترة تلقائية لأمر البيع'
         )
 
         from accounts.services import AuditLogService
@@ -321,9 +435,50 @@ class SalesOrderService:
             actor=user,
             record_id=order.id,
             record_name=f"Sales Order #{order.order_number}",
-            description=f"اعتماد أمر بيع رقم {order.order_number} بواسطة {user.name or user.username}",
+            description=f"اعتماد وصرف وفوترة أمر بيع رقم {order.order_number} بواسطة {user.name or user.username}",
             previous_values={'status': status_before},
-            new_values={'status': 'manager_approval', 'approved_by': str(user)}
+            new_values={'status': 'invoiced', 'approved_by': str(user), 'memo': memo.memo_number}
+        )
+        return order
+
+    @classmethod
+    @transaction.atomic
+    def update_payment_status(cls, order, new_status, user, notes=''):
+        """
+        Updates the operational payment classification of a sales order with audit trail.
+        """
+        valid_statuses = [c[0] for c in SalesOrder.PAYMENT_STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            raise ValidationError(f"حالة سداد غير صالحة: {new_status}")
+
+        old_status = order.payment_status
+        if old_status == new_status:
+            return order
+
+        order.payment_status = new_status
+        order.save(update_fields=['payment_status', 'updated_at'])
+
+        from activities.models import ApprovalAuditLog
+        ApprovalAuditLog.objects.create(
+            record_type='sales_order',
+            sales_order=order,
+            action='payment_status_updated',
+            actor=user,
+            status_before=old_status,
+            status_after=new_status,
+            reason=notes or f"تغيير حالة السداد التجارية إلى {order.payment_status_display_ar}"
+        )
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='SALES_ORDER_PAYMENT_STATUS_UPDATED',
+            module='sales',
+            actor=user,
+            record_id=order.id,
+            record_name=f"Sales Order #{order.order_number}",
+            description=f"تعديل حالة السداد لأمر بيع #{order.order_number} من {old_status} إلى {new_status}",
+            previous_values={'payment_status': old_status},
+            new_values={'payment_status': new_status, 'notes': notes}
         )
         return order
 
@@ -431,6 +586,8 @@ class SalesOrderService:
         """
         Moves order to 'preparing' and reserves stock in warehouse.
         """
+        if order.status in ['preparing', 'delivered', 'invoiced']:
+            return order
         if order.status != 'manager_approval':
             raise ValidationError(f"يجب اعتماد أمر البيع أولاً قبل تجهيزه بالمخزن.")
 
@@ -457,7 +614,9 @@ class SalesOrderService:
         """
         Marks order as delivered, generates outward InventoryMemo, and decrements stock.
         """
-        if order.status != 'preparing':
+        if order.status in ['delivered', 'invoiced']:
+            return order
+        if order.status not in ['preparing', 'manager_approval']:
             raise ValidationError(f"يجب أن يكون الطلب في مرحلة التجهيز (Preparing) قبل تسليمه.")
 
         # Create Outward Inventory Memo
@@ -511,7 +670,9 @@ class SalesOrderService:
         """
         Invoices the delivered sales order and posts debit to customer's ledger.
         """
-        if order.status != 'delivered':
+        if order.status == 'invoiced':
+            return order
+        if order.status not in ['delivered', 'manager_approval', 'preparing']:
             raise ValidationError(f"يجب تسليم الطلب (Delivered) قبل ترحيل الفاتورة للحسابات.")
 
         account = CustomerAccount.get_or_create_for_customer(order.customer)
@@ -582,6 +743,72 @@ class SalesOrderService:
             new_values={'status': 'cancelled'}
         )
         return order
+
+    @classmethod
+    @transaction.atomic
+    def delete_order(cls, order, user):
+        """
+        Deletes a sales order safely with financial and inventory reversal (Requirement B7):
+        1. Checks no payments/collections are recorded against this order.
+        2. Restores deducted stock to source warehouse.
+        3. Creates credit reversal or deletes invoice transaction on customer account.
+        4. Deletes outward inventory memo and order line items.
+        5. Logs deletion to SecurityAuditLog.
+        """
+        if order.collections.exists() or (hasattr(order, 'collections_applied') and order.collections_applied.exists()):
+            raise ValidationError("لا يمكن حذف أمر بيع مرتبط بمتحصلات مالية مسجلة. يرجى إلغاء أو حذف سندات التحصيل أولاً.")
+
+        # 1. Restore stock
+        if order.source_warehouse:
+            for item in order.items.select_related('product'):
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                    warehouse=order.source_warehouse,
+                    product=item.product,
+                    defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
+                )
+                stock.qty_on_hand += item.quantity
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+        # 2. Revert Customer Account balance
+        account = CustomerAccount.get_or_create_for_customer(order.customer)
+        account.current_balance = max(Decimal('0.00'), account.current_balance - order.grand_total)
+        account.save(update_fields=['current_balance', 'updated_at'])
+
+        # Delete customer transactions linked to this order
+        CustomerTransaction.objects.filter(
+            account=account,
+            reason='sales',
+            description__contains=order.order_number
+        ).delete()
+
+        # 3. Delete outward InventoryMemo if exists
+        memo = order.memo
+        if memo:
+            order.memo = None
+            order.save(update_fields=['memo'])
+            memo.items.all().delete()
+            memo.delete()
+
+        serial = order.serial_num
+        order_num = order.order_number
+        customer_name = order.customer.name
+        grand_total = str(order.grand_total)
+
+        # 4. Audit Log
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action='delete',
+            action_type='SALES_ORDER_DELETED',
+            module='sales',
+            actor=user,
+            record_id=order.id,
+            record_name=f"Sales Order #{order_num}",
+            description=f"حذف أمر بيع رقم {order_num} للعميل {customer_name} وإعادة المخزون وعكس القيد المالي ({grand_total} ج.م)",
+            status='SUCCESS'
+        )
+
+        order.items.all().delete()
+        order.delete()
 
 
 class CollectionService:
@@ -739,9 +966,7 @@ class SalesReturnOrderService:
             if not orig_item:
                 raise ValidationError("الصنف المحدد غير موجود في بنود أمر البيع الأصلي.")
 
-            qty = Decimal(str(itm['quantity']))
-            if qty <= Decimal('0.00'):
-                raise ValidationError(f"الكمية المرتجعة للصنف '{orig_item.product.name}' يجب أن تكون أكبر من الصفر.")
+            qty = parse_positive_integer_quantity(itm.get('quantity'), item_label=orig_item.product.name)
 
             # Calculate previously returned quantity
             from django.db.models import Sum
@@ -753,8 +978,8 @@ class SalesReturnOrderService:
             returnable_qty = orig_item.quantity - returned_so_far
             if qty > returnable_qty:
                 raise ValidationError(
-                    f"الكمية المرتجعة من الصنف '{orig_item.product.name}' ({qty:,.2f}) تتجاوز الكمية المتبقية القابلة للإرجاع ({returnable_qty:,.2f}). "
-                    f"(الكمية الأصلية: {orig_item.quantity:,.2f}، المرتجع سابقاً: {returned_so_far:,.2f})"
+                    f"الكمية المرتجعة من الصنف '{orig_item.product.name}' ({qty:,.0f}) تتجاوز الكمية المتبقية القابلة للإرجاع ({returnable_qty:,.0f}). "
+                    f"(الكمية الأصلية: {orig_item.quantity:,.0f}، المرتجع سابقاً: {returned_so_far:,.0f})"
                 )
 
             unit_price = Decimal(str(itm.get('unit_price', orig_item.unit_price)))
@@ -781,15 +1006,67 @@ class SalesReturnOrderService:
 
         return_order.recalculate_totals()
 
+        # Immediate warehouse execution: Inward InventoryMemo + stock increment (Requirement B2)
+        memo_number = f"MEMO-IN-RET-{return_order.serial_num}"
+        memo = InventoryMemo.objects.create(
+            memo_number=memo_number,
+            memo_type='inward',
+            warehouse=return_order.target_warehouse,
+            statement=f"استلام مرتجع مبيعات رقم {return_order.order_number} لأمر البيع {parent_order.order_number}",
+            status='applied',
+            applied_at=timezone.now(),
+            notes=f"Generated from Sales Return #{return_order.order_number}",
+            created_by=user
+        )
+        for itm in return_order.items.select_related('product'):
+            InventoryMemoItem.objects.create(
+                memo=memo,
+                product=itm.product,
+                quantity=itm.quantity,
+                unit_cost=itm.product.default_purchase_cost
+            )
+            if itm.condition == 'resalable':
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                    warehouse=return_order.target_warehouse,
+                    product=itm.product,
+                    defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': itm.product.default_purchase_cost}
+                )
+                stock.qty_on_hand += itm.quantity
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+        return_order.memo = memo
+        return_order.status = 'settled'
+        return_order.stocked_at = timezone.now()
+        return_order.settled_at = timezone.now()
+        return_order.save(update_fields=['memo', 'status', 'stocked_at', 'settled_at'])
+
+        # Immediate financial execution: Post credit note to CustomerAccount (Requirement B2)
+        account = CustomerAccount.get_or_create_for_customer(return_order.customer)
+        new_balance = max(Decimal('0.00'), account.current_balance - return_order.grand_total)
+        CustomerTransaction.objects.create(
+            account=account,
+            transaction_type='credit',
+            reason='sales_return',
+            transaction_date=timezone.now().date(),
+            debit=Decimal('0.00'),
+            credit=return_order.grand_total,
+            running_balance=new_balance,
+            description=f"إشعار دائن مرتجع مبيعات #{return_order.order_number}",
+            created_by=user
+        )
+        account.current_balance = new_balance
+        account.last_transaction_date = timezone.now().date()
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
         ApprovalAuditLog.objects.create(
             record_type='sales_return',
             sales_return=return_order,
             action='created',
             actor=user,
             status_before='',
-            status_after='pending',
-            reason=f"إنشاء إشعار مرتجع مبيعات لأمر البيع #{parent_order.order_number}",
-            changes=[{'field': 'الحالة', 'old': '-', 'new': 'قيد الانتظار والمراجعة'}],
+            status_after='settled',
+            reason=f"إنشاء وتنفيذ إشعار مرتجع مبيعات لأمر البيع #{parent_order.order_number}",
+            changes=[{'field': 'الحالة', 'old': '-', 'new': 'مرحل بالحسابات'}],
         )
 
         from accounts.services import AuditLogService
@@ -799,7 +1076,7 @@ class SalesReturnOrderService:
             actor=user,
             record_id=return_order.id,
             record_name=f"{return_order.order_number} ({return_order.customer.name})",
-            description=f"إنشاء مرتجع مبيعات {return_order.order_number} لأمر البيع {parent_order.order_number} بمبلغ {return_order.grand_total:,.2f} ج.م",
+            description=f"إنشاء وتنفيذ مرتجع مبيعات {return_order.order_number} لأمر البيع {parent_order.order_number} بمبلغ {return_order.grand_total:,.2f} ج.م",
             new_values={
                 'order_number': return_order.order_number,
                 'sales_order': parent_order.order_number,
@@ -809,6 +1086,66 @@ class SalesReturnOrderService:
             }
         )
         return return_order
+
+    @classmethod
+    @transaction.atomic
+    def delete_return_order(cls, return_order, user):
+        """
+        Deletes a sales return order safely with financial and inventory reversal:
+        1. Checks warehouse available stock is sufficient before deducting.
+        2. Deducts returned stock from warehouse.
+        3. Reverts Customer Account balance (restores debt).
+        4. Deletes inward memo and return order.
+        5. Logs deletion to SecurityAuditLog.
+        """
+        if return_order.target_warehouse:
+            for item in return_order.items.select_related('product'):
+                if item.condition == 'resalable':
+                    stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                        warehouse=return_order.target_warehouse,
+                        product=item.product,
+                        defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
+                    )
+                    if stock.qty_on_hand < item.quantity:
+                        raise ValidationError(f"لا يمكن حذف مرتجع المبيعات لأن رصيد الصنف '{item.product.name}' في المخزن أقل من الكمية المرتجعة.")
+                    stock.qty_on_hand -= item.quantity
+                    stock.save(update_fields=['qty_on_hand', 'updated_at'])
+
+        account = CustomerAccount.get_or_create_for_customer(return_order.customer)
+        account.current_balance += return_order.grand_total
+        account.save(update_fields=['current_balance', 'updated_at'])
+
+        CustomerTransaction.objects.filter(
+            account=account,
+            reason='sales_return',
+            description__contains=return_order.order_number
+        ).delete()
+
+        memo = return_order.memo
+        if memo:
+            return_order.memo = None
+            return_order.save(update_fields=['memo'])
+            memo.items.all().delete()
+            memo.delete()
+
+        order_num = return_order.order_number
+        customer_name = return_order.customer.name
+        grand_total = str(return_order.grand_total)
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action='delete',
+            action_type='SALES_RETURN_DELETED',
+            module='sales',
+            actor=user,
+            record_id=return_order.id,
+            record_name=f"Sales Return #{order_num}",
+            description=f"حذف مرتجع مبيعات رقم {order_num} للعميل {customer_name} وعكس المخزون والقيد المالي ({grand_total} ج.م)",
+            status='SUCCESS'
+        )
+
+        return_order.items.all().delete()
+        return_order.delete()
 
     @classmethod
     @transaction.atomic
@@ -855,6 +1192,7 @@ class SalesReturnOrderService:
             previous_values={'status': status_before},
             new_values={'status': 'approved'}
         )
+
         return locked_order
 
     @classmethod
@@ -914,6 +1252,8 @@ class SalesReturnOrderService:
         from inventory.models import InventoryLot
 
         locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status in ['delivered', 'settled']:
+            return locked_order
         if locked_order.status != 'approved':
             raise ValidationError(f"لا يمكن استلام بضاعة المرتجع بالمخزن إلا بعد الاعتماد الإداري (الحالة الحالية: {locked_order.status_display_ar}).")
 
@@ -1002,6 +1342,8 @@ class SalesReturnOrderService:
         from accounts.services import AuditLogService
 
         locked_order = return_order.__class__.objects.select_for_update().get(pk=return_order.pk)
+        if locked_order.status == 'settled':
+            return locked_order
         if locked_order.status != 'delivered':
             raise ValidationError("يجب استلام بضاعة المرتجع بالمخزن أولاً (Delivered) قبل الترحيل للحسابات.")
 

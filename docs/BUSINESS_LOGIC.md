@@ -24,34 +24,44 @@ stateDiagram-v2
     Completed --> [*]
 ```
 
-### 1.1 Automatic Planned vs. Unplanned Determination & Approval Lifecycle
+### 1.1 Automatic Planned vs. Unplanned Determination & Plan-Based Approval Lifecycle
 - **Zero Ambiguity**: Manual selection of planned vs. unplanned visit type has been eliminated.
-- **Planned Visits**: Generated directly via bulk daily planning (`/planned-visits/bulk-add/`) or individual planned add. Planned visits are **automatically approved upon creation** (`approval_status='approved'`, `approved_by=None`, `approved_at=now()`) and do not require manager approval to start.
-- **Unplanned Visits**: Initiated via `/visits/create/`. The backend sets `is_planned=False`. Unplanned visits require manager approval upon creation (`approval_status='pending'`).
-- **Re-approval Trigger on Edits**: Any permitted edit to a visit's date, template, time (pre-start/pre-end) or questionnaire answers (post-end) immediately invalidates existing approval: sets `approval_status='pending'`, `waiting_for_reapproval=True`, clears prior approver info, and writes structured changes with `approval_required=True` to the Complete Visit Timeline.
+- **Bulk Planned Visits & Visit Plans (`activities.VisitPlan`)**:
+  - Generated via bulk daily planning (`/planned-visits/bulk-add/`).
+  - Each submission creates a distinct `VisitPlan` with a unique ID (`plan_id`, e.g. `PLAN-YYYYMMDD-0001`) and links all planned visits to it.
+  - Form notes/comments are stored strictly as the plan comment (`plan.comment`), displayed directly above each plan in `planned-visits/` and `agenda/`.
+  - **Approval Workflow**: If the plan creator lacks `activities:visits/approve`, the plan and its visits are created with `approval_status='pending'`. Authorized managers within the data scope can approve/reject the entire plan via `/planned-visits/plan/<pk>/action/<action>/` or approve individual visits.
+- **Unplanned Visits**: Initiated via `/visits/create/`. The backend sets `is_planned=False`. Unplanned visits are **auto-approved upon creation** (`approval_status='approved'`) and can be started immediately without manager approval.
+- **Date Restriction**: Visits can only be started when the visit date matches the actual current local date (`visit.date == timezone.localdate()`). Visit time fields have been completely removed.
+- **Re-approval Trigger on Edits**: Any permitted edit to a visit's date or template (pre-start/pre-end) or questionnaire answers (post-end) immediately invalidates existing approval: sets `approval_status='pending'`, `waiting_for_reapproval=True`, clears prior approver info, and writes structured changes with `approval_required=True` to the Complete Visit Timeline.
 
-### 1.2 GPS Distance Validation & Geofencing
+### 1.2 GPS Distance Validation, Geofencing, & Forced Bypass Tracking
 - **Configurable Allowed Distance**:
   - Global default: `LocationSettings.tolerance` (default 300 meters).
   - Template override: If `LocationSettings.allow_template_distance_override` is enabled and `VisitTemplate.has_special_location_settings=True`, the template's `special_tolerance` takes precedence.
 - **Coordinate Handling & Decimal Separator Resilience**:
-  - The distance calculation engine (`calculate_haversine_distance`) and verification services sanitize input coordinates by converting comma decimal separators (common in Arabic locales, e.g. `'30,0444'`) to standard dots prior to float and Decimal conversion, preventing localization crashes.
+  - The distance calculation engine (`calculate_haversine_distance`) and verification services sanitize input coordinates by converting comma decimal separators to standard dots prior to float and Decimal conversion, preventing localization crashes.
 - **Stage-Specific Validation (`verify_visit_location`)**:
-  - **Creation (`stage='create'`)**: Mandatory for **unplanned** visits when `LocationSettings.verify_unplanned_visit_distance=True`. **Not enforced** at creation time for **planned** visits (planned visits start with `location_verified=False` until field execution).
-  - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user.
+  - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user with `activities:visits/bypass_gps`.
   - **Completion (`stage='end'`)**: Mandatory when ending a visit (`end_visit`) if `LocationSettings.verify_end_visit_distance=True`.
-- **Bypass & Exception Security**:
-  - **Direct Bypass**: Controlled server-side via `LocationSettings.can_user_bypass_without_approval(user, stage)`. Unauthorized users submitting `force_bypass_location=1` are rejected on both form and service layers.
-  - **Exception Requests**: Controlled by the explicit permission `activities:visits/gps_request_exception` and `LocationSettings.can_user_request_distance_exception(user)`. When outside tolerance, only users with this permission can request an exception with mandatory `bypass_reason`, marking the visit with `requires_approval_due_to_distance=True` and `approval_status='pending'`.
+- **Forced GPS Start & End Separation**:
+  - Forced GPS bypass at start is recorded distinctly in `gps_forced_start`, `gps_forced_start_by`, and `gps_forced_start_at`.
+  - Forced GPS bypass at end is recorded distinctly in `gps_forced_end`, `gps_forced_end_by`, and `gps_forced_end_at`.
+  - Both actions generate separate `ApprovalAuditLog` records and display dedicated badges in visit list and detail views.
+- **Evidence Photos Removed**:
+  - Photo evidence capture, storage, and permission (`activities:visits/evidence`) have been completely removed across the entire application.
 
-### 1.3 Separation of Visit Metadata vs. Questionnaire Answers & Lifecycle Restrictions
+### 1.3 Visit Outcome & Questionnaire Architecture
+- **Visit Outcome via Questionnaire**:
+  - Visit-level `visit_outcome` and `feedback` model fields have been removed completely.
+  - The visit outcome is collected as Question #1 (`نتيجة الزيارة`) in every `VisitTemplate`.
+  - Answers are stored in `visit.questionnaire_answers` and rendered dynamically via `visit.outcome_display` and `visit.get_qa_display_list()`.
 - **Pre-Start / Pre-End Visit Editing (`visit_edit` / `POST /visits/<pk>/edit/`)**:
-  - Before the visit has started and ended, editing is restricted strictly to the visit date, template, and scheduled time. Questionnaire answers and execution fields cannot be edited.
-  - All permitted edits trigger re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), and write structured diffs to `ApprovalAuditLog` and `SecurityAuditLog`.
+  - Editing is restricted strictly to date and template.
+  - All permitted edits trigger re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`).
 - **Post-End Questionnaire Answer Editing (`visit_update_answers` / `POST /activities/visits/<pk>/update-answers/`)**:
-  - Allowed **only after the visit has finished** (`status == 'finished'` and `ended_at` is set) by the visit owner/creator (or superuser) with `activities:visits/edit_answers`.
-  - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs in `ApprovalAuditLog` (`action='answers_updated'`), and is displayed in the Complete Visit Timeline.
-  - The UI button «تعديل إجابات استبيان» is hidden until the visit has ended.
+  - Allowed **only after the visit has finished** (`status == 'finished'`) by the visit owner/creator with `activities:visits/edit_answers`.
+  - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs in `ApprovalAuditLog`, and appears in the Complete Visit Timeline.
 - **Agenda Start-Visit Execution**:
   - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying bypass/exception options, and answering check-in questions), rather than merely redirecting.
 - **Removal of Cancellation Actions & Strict Deletion Rules**:
@@ -94,30 +104,49 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending : Rep Creates Order
-    Pending --> ManagerApproval : Submitted (SalesSettings.require_manager_approval)
-    ManagerApproval --> Preparing : Manager Approves
-    ManagerApproval --> Rejected : Manager Rejects
-    Preparing --> Delivered : Warehouse Delivers (Stock Decremented)
-    Delivered --> Invoiced : Invoicing & Customer Ledger Debited
-    Invoiced --> [*]
+    [*] --> Invoiced : Direct Creation (Atomic Stock Deduction + Customer Debit + Status 'invoiced')
+    Invoiced --> Invoiced : Manual Payment Status Update (Credit / Partial / Paid / Returned)
+    Invoiced --> [*] : Deleted (Atomic Stock & Balance Reversal, only if no collections exist)
 ```
 
-### 2.1 Available Stock Validation
-- On order creation and delivery, the system strictly validates that available warehouse stock (`qty_on_hand - qty_reserved`) is greater than or equal to the ordered quantity.
-- Sales by representatives are strictly constrained to their designated representative warehouse (`rep.get_default_warehouse()`).
+### 2.1 Direct Execution Architecture & Safe Reversal Engine
+- **Direct Automation on Creation (`create_order`)**: To eliminate multi-step status machine overhead and support rapid ERP commercial operations:
+  1. Validates available warehouse stock for all line items atomically with row-level locks (`select_for_update()`). If stock is insufficient, creation is rejected immediately with a descriptive validation error.
+  2. Posts an inward/outward balanced `InventoryMemo` (`memo_type='out'`, `status='posted'`), directly reducing `qty_on_hand` and updating batch lots.
+  3. Records the financial debit entry in the customer ledger (`CustomerAccount`) via `CustomerTransaction` (`reason='sales_invoice'`), increasing customer receivables.
+  4. Directly sets the order status to `invoiced` (`status='invoiced'`) and payment status to `credit` (`payment_status='credit'`).
+- **Safe Delta Reconciliation on Edit (`update_order`)**:
+  - Modifications to quantities or items compute stock and financial deltas atomically.
+  - Decreasing quantity restores stock to warehouse; increasing quantity validates availability and deducts stock.
+  - Customer account balance is adjusted by the exact difference in order grand total.
+  - **Protection Invariant**: Orders with associated payments/collections (`order.collections.exists()`) cannot be edited.
+- **Safe Reversal on Deletion (`delete_order`)**:
+  - Requires permission `sales:orders/delete` and manage scope.
+  - **Collection Block**: Deletion is strictly blocked if any payment collections are linked to the order (`order.collections.exists()`).
+  - Restores deducted stock to the warehouse, reverts customer account balance, deletes related `CustomerTransaction` and `InventoryMemo`, and logs `SALES_ORDER_DELETED` in `SecurityAuditLog`.
+- **Backward Compatibility**: Downstream service methods (`prepare_order`, `deliver_order`, `invoice_order`) remain idempotent and safe if called by legacy scripts.
 
-### 2.2 Pricing, Discounts, and Taxes
+### 2.2 Operational Payment Status (`payment_status`)
+- Independent from order fulfillment, `SalesOrder` maintains an operational `payment_status` tracking settlement progress:
+  - `credit` (آجل) — default on creation.
+  - `partial` (جزئي) — partial collection received.
+  - `paid` (مدفوع بالكامل) — fully collected.
+  - `returned` (مرتجع) — refunded or returned.
+- **Authority**: Managed via dedicated modal action on `sales_order_detail.html` restricted to users with permission `sales:orders/manage_payment_status`.
+- **Audit Logging**: Every transition generates entries in both `ApprovalAuditLog` and `SecurityAuditLog`.
+- **Advanced List Filtering**: Replaced obsolete fulfillment status tabs with active payment status filters, total amount range (`total_min` / `total_max`), and remaining balance range (`remaining_min` / `remaining_max`) with active filter chips.
+
+### 2.3 Live Available Stock Display & Strict Atomic Validation
+- On order creation and editing, available warehouse stock is displayed in real-time next to product selections via `/inventory/api/warehouse-stock/`.
+- Clear red visual alerts warn the user if requested quantities exceed available stock.
+- On order drafting/submission, orders are saved with pending status. Authoritative stock validation and atomic deduction execute strictly during order approval under `select_for_update()`.
+- Sales by representatives are strictly constrained to warehouses accessible within their configured data scope.
+
+### 2.4 Pricing, Discounts, and Taxes
 - **Line-Item Discounts**: Verified to be between 0% and 100%.
 - **Order-Level Discounts**: Verified not to exceed subtotal.
 - **Shipping Fees**: Strictly non-negative.
 - **Taxation Modes**: Inclusive or Exclusive based on `CompanyProfile.tax_mode`.
-
-### 2.3 Atomic Delivery & Financial Ledger
-- Order delivery executes inside `@transaction.atomic` using `select_for_update()` row locks on `InventoryStock`.
-- Delivery generates a balanced outward inventory memo.
-- Invoicing records the balance on `CustomerAccount` via `CustomerTransaction`.
-- Customer payments (`Collection`) credit the customer ledger and debit the representative's cash vault (`rep.get_default_treasury()`).
 
 ---
 
@@ -125,26 +154,30 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending : Purchase Order Created
-    Pending --> Approved : Manager / SuperAdmin Approves
-    Pending --> Rejected : Rejected
-    Approved --> Picked : Warehouse Receives Stock (Memos + Stock Added)
-    Picked --> Settled : Vendor Ledger Recorded & Invoiced
-    Settled --> [*]
+    [*] --> Settled : Direct Creation (Credit Limit Check + Stock Increment + Vendor Credit + Status 'settled')
+    Settled --> Settled : Manual Payment Status Update (Credit / Partial / Paid / Returned)
+    Settled --> [*] : Deleted (Atomic Stock, Lot, Installment & Vendor Balance Reversal)
 ```
 
-### 3.1 Supplier Validation and Costing
-- Suppliers must be active vendor contacts.
-- Unit prices must be non-negative; quantities must be strictly positive.
-- When an order is marked as `picked` / received:
-  - Inventory stock is increased inside `@transaction.atomic`.
-  - The product's weighted average unit cost is recalculated:
+### 3.1 Direct Execution Architecture & Supplier Credit Limit Validation
+- **Supplier Credit Limit Check**: During PO creation (`PurchaseOrderService.create_order`), if the supplier has a configured `credit_limit > 0`, the system verifies that `current_balance + order_total <= credit_limit`. If violated, order creation is rejected with a descriptive error.
+- **Immediate Stock Inward & Recalculation**:
+  - Automatically posts an inward `InventoryMemo` (`memo_type='in'`, `status='posted'`).
+  - Increments warehouse stock (`InventoryStock.qty_on_hand`) and updates batch lots.
+  - Recalculates product weighted average unit cost:
     $$\text{New Cost} = \frac{(\text{Current Qty} \times \text{Current Cost}) + (\text{Received Qty} \times \text{Purchase Price})}{\text{Current Qty} + \text{Received Qty}}$$
-  - A permanent Stock In memo is recorded.
-
-### 3.2 Vendor Settlement & Treasury Payments
-- Settling a purchase order creates a liability entry on the vendor ledger (`VendorAccount`).
-- Payments to vendors (`VendorPayment`) are disbursed from authorized cash vaults, validating sufficient vault balance and generating `SecurityAuditLog` entries.
+- **Immediate Financial Recording**:
+  - Creates a credit transaction on `VendorAccount` (`VendorTransaction` with `reason='purchase_invoice'`), increasing accounts payable.
+  - Automatically creates a open `VendorInstallment` for the net total.
+  - Sets order status directly to `settled` (`status='settled'`).
+- **Operational Payment Status (`payment_status`)**:
+  - Independent operational field (`credit`, `partial`, `paid`, `returned`).
+  - Managed via modal on `purchase_order_detail.html` restricted to users with permission `purchases:orders/manage_payment_status`.
+- **Safe Reversal on Deletion (`delete_order`)**:
+  - Requires permission `purchases:orders/delete` and manage scope.
+  - **Reversal Blocks**: Strictly blocks deletion if payments exist (`order.payments.exists()`), if any installments have been settled (`settled_amount > 0`), or if any purchase return orders reference this order (`order.returns.exists()`).
+  - **Stock Availability Verification**: Verifies warehouse has sufficient stock to deduct before reversing.
+  - Atomically reverses stock, decrements lots, reverses vendor account balance, deletes installments, transactions, memos, and the order itself, logging `PURCHASE_ORDER_DELETED` in `SecurityAuditLog`.
 
 ---
 
@@ -161,10 +194,19 @@ stateDiagram-v2
 
 ### Transfer Invariants
 1. **Different Warehouses**: Source and destination warehouses must be distinct.
-2. **Same Main Area Boundary**: Unless requested by SuperAdmin, both warehouses must belong to the same canonical root Main Area (`Area.parent is None`). Cross-governorate unauthorized transfers are blocked.
-3. **Available Stock Reservation**: Source warehouse available stock (`qty_on_hand - qty_reserved`) must strictly cover the transferred quantity.
-4. **Accountant / SuperAdmin Authority**: Area managers cannot approve transfers; execution is reserved for SuperAdmin and Accountant roles.
+2. **Flexible & Scoped Transfer Requests**: Central warehouse transfers (`is_main=True`) and inter-manager warehouse transfers are permitted. In the UI, source warehouse is selected before destination warehouse.
+3. **Available Stock Reservation & Live Display**: Source warehouse available stock (`qty_on_hand - qty_reserved`) is displayed dynamically and must strictly cover the transferred quantity.
+4. **Accountant / SuperAdmin Authority**: Transfer execution is reserved for users with transfer approval permission (`inventory:transfers/approve`) or SuperAdmin.
 5. **Atomic Execution**: Creates matched Stock Out (source) and Stock In (destination) inventory memos inside `@transaction.atomic`.
+
+### 4.1 Warehouse Lifecycle, CRUD, Scoping & Safe Deletion Integrity (`inventory.Warehouse`)
+1. **Permissions & Scoping**: Managed via `inventory:warehouses/manage` and `inventory:warehouses/delete`. SuperAdmin accesses all warehouses; Managers manage warehouses in their assigned Main Area and its child subareas; Representatives access only their assigned custody warehouse.
+2. **Safe Deletion Validation (`WarehouseService.delete_warehouse`)**: Deletion is strictly prevented if:
+   - Any stock on hand exists (`qty_on_hand > 0`).
+   - Any inventory memos (`InventoryMemo`) are linked to the warehouse.
+   - Any pending or completed transfer requests (`ProductTransferRequest`) reference the warehouse.
+   - Any sales orders (`SalesOrder`) or purchase orders (`PurchaseOrder`) reference the warehouse.
+3. **Advanced Filters & Scoped Statistics**: The list view (`warehouses_list`) includes an off-canvas drawer filtering by type (`main`, `rep`, `standard`), status (`active`, `inactive`), governorate/area, assigned custodian, and search terms, with dynamically calculated stats cards.
 
 ---
 
@@ -175,45 +217,70 @@ stateDiagram-v2
 - **Concurrency Safety**: Vault balances are locked using `select_for_update()` during deposits, withdrawals, and collections.
 - **Negative Balance Prevention**: Withdrawals and outgoing transfers cannot exceed current vault balance.
 
+### 5.1 Vault Lifecycle, CRUD, Scoping & Financial Integrity (`treasury.Vault`)
+1. **Permissions & Scoping**: Controlled via `treasury:vaults/manage` and `treasury:vaults/delete`. Scoped by `ScopeResolutionService` across `OWN`, `AREA`, and `ALL`.
+2. **Opening Balance Setup**: Non-zero initial balance is posted atomically inside `@transaction.atomic` as a `VaultTransaction` with `reference_type='opening_balance'` and audited via `SecurityAuditLog`.
+3. **Safe Deletion Validation (`VaultService.delete_vault`)**: Deletion is strictly blocked if:
+   - Current balance is non-zero (`current_balance != 0.00`).
+   - Any financial movements exist (`VaultTransaction`).
+   - Any vendor payments (`VendorPayment`) or customer collections (`Collection`) are linked to the vault.
+4. **Advanced Filters**: The list view (`vaults_list`) includes an off-canvas filter drawer covering vault type (`cash`, `bank`), custody type (`rep`, `central`), active status, area, assigned custodian, and numerical balance range (`balance_min`, `balance_max`).
+
+### 5.2 Bi-directional User Account Linked Assets Assignment (`accounts`)
+1. **Direct Profile Assignment**: From the user profile edit interface (`/settings/users/<pk>/edit/`), managers and administrators can view and assign the user's default custody warehouse and vault.
+2. **Data Scope Enforcement**: Selectable warehouses and vaults are strictly scoped to the editing user's `manage_scope`.
+3. **Audit Trail**: Modifications are audited in `SecurityAuditLog` with explicit before/after values under `USER_UPDATED`.
+
 ---
 
 ## 7. Agreements Lifecycle (`activities.Agreement`)
 
-- **Approval Pipeline**: `new` (قيد الانتظار) → `approved` (معتمد) / `rejected` (مرفوض) → `done` (مكتمل).
+- **2-Status Lifecycle**: `new` (جديدة) and `done` (منجزة).
 - **Client Scoping**: Agreement client dropdown is dynamically scoped using `get_visit_eligible_contacts_queryset(request.user)` (SuperAdmin = all, Manager = Main Area + child bricks, Rep = assigned Bricks).
-- **Unapproved-Only Edit and Deletion**:
-  - Agreements can be edited or deleted **only** while in unapproved state (`status in ['new', 'rejected']`).
-  - Once approved (`status in ['approved', 'done']`), edit and delete requests are rejected server-side on form submission and URL endpoint access.
-- **Anti-Self-Approval**: Creators cannot approve their own agreements (`can_user_access_object(user, agreement, 'approve')`).
-- **Complete Timeline**: Tracks creation, update, approval, rejection, and completion with localized Arabic descriptions.
+- **Status Transitions & Anti-Self-Approval**:
+  - Marking an agreement as completed (`done`) or reopening it (`new`) requires `activities:agreements/approve` and manage scope.
+  - Anti-self-approval rule strictly prohibits creators from changing the status of their own agreements (`can_user_access_object(user, agreement, 'approve')` / `can_user_access_object(user, agreement, 'done')`).
+- **Scoped Edit and Deletion**:
+  - Agreements can be edited (`/activities/agreements/<pk>/edit/`) or deleted (`/activities/agreements/<pk>/delete/`) by authorized users respecting data scope (`can_user_access_object(user, agreement, 'edit')` / `'delete'`).
+  - All operations write structured audit logs (`AGREEMENT_UPDATED`, `AGREEMENT_DELETED`).
+- **Clean Isolated Timeline**: `build_agreement_timeline` strictly isolates agreement events (`action_type__startswith='AGREEMENT_'`), eliminating any foreign visit or plan events.
+- **Advanced List Filtering**: Slide-out filter drawer matching visits UX with dynamic active filter chips, customer selector, status, governorate, brick, amount range (`amount_min` / `amount_max`), and date range.
 
 ---
 
 ## 8. Sales Returns & Purchase Returns
 
 ### 8.1 Sales Return Orders (`sales.SalesReturnOrder`)
-- **Original Order Linkage**: Returns must reference an eligible delivered or invoiced sales order.
-- **Returnable Quantity Invariant**:
-  $$\text{Returnable Qty} = \text{Original Ordered Qty} - \text{Total Previously Returned Qty}$$
-  Over-returns exceeding returnable quantity are rejected on server-side validation.
-- **Stock Restocking Logic**:
+- **Direct Automation on Creation**: Returns reference an eligible invoiced sales order.
+- **Immediate Stock Restocking**:
   - Resalable items (`condition='resalable'`) generate an inward memo and increment `InventoryStock.qty_on_hand` and batch lots.
   - Damaged items (`condition='damaged'`) are logged in the inward memo for documentation but are excluded from sellable inventory.
-- **Financial Settlement**:
-  - Settle action generates a credit transaction on `CustomerAccount`, reducing customer debt.
-- **POST-Only Actions**: Approve, reject, cancel, deliver, and settle actions require POST requests with anti-self-approval.
+- **Immediate Financial Settlement**:
+  - Generates a credit transaction on `CustomerAccount` (`reason='sales_return'`), reducing customer receivables.
+  - Status is set directly to `settled` (`status='settled'`).
+- **Safe Reversal on Deletion (`delete_return_order`)**:
+  - Requires permission `sales:returns/delete` and manage scope.
+  - Atomically deducts restocked inventory (for resalable items), restores customer receivables balance, deletes the credit transaction and memo, and logs `SALES_RETURN_DELETED`.
 
 ### 8.2 Purchase Return Orders (`purchases.PurchaseReturnOrder`)
-- **Original PO Linkage**: Strictly linked to an approved/picked/settled purchase order.
-- **Quantity Invariant**: Cannot return more than originally received quantity minus previous returns.
-- **Warehouse Dispatch**: Generates an outward memo and decrements `InventoryStock.qty_on_hand` and lot quantities.
-- **Financial Settlement**: Generates a debit note on `VendorAccount`, decrements accounts payable, and reconciles open installments.
+- **Direct Automation on Creation**: Linked to an existing settled purchase order.
+- **Returnable Quantity Invariant**: Cannot return more than originally received quantity minus previous returns.
+- **Immediate Warehouse Dispatch**:
+  - Verifies sufficient stock availability in the warehouse under `select_for_update()`.
+  - Generates an outward memo and decrements `InventoryStock.qty_on_hand` and lot quantities.
+- **Immediate Financial Settlement**:
+  - Generates a debit note on `VendorAccount` (`reason='purchase_return'`), reducing accounts payable.
+  - Status is set directly to `settled` (`status='settled'`).
+- **Safe Reversal on Deletion (`delete_return_order`)**:
+  - Requires permission `purchases:returns/delete` and manage scope.
+  - Atomically restores deducted stock to the warehouse, restores lot balances, restores accounts payable balance, deletes debit transaction and memo, and logs `PURCHASE_RETURN_DELETED`.
 
 ---
 
-## 9. Vendor Payment Requests (`treasury.VendorPaymentRequest`)
+## 9. Vendor Payment Requests (`treasury.VendorPaymentRequest`) & Unified Payment Creation
 
-- **Requisition Workflow**: `pending` → `approved` / `rejected` → `executed` / `cancelled`.
+- **Unified Payment Flow**: Direct creation of isolated vendor payment requests (`/purchases/orders/payment-requests/create/`) automatically redirects with query parameters (`?supplier=...&purchase_order=...`) to the authoritative Treasury payment view (`/treasury/payments/create/`), ensuring all disbursement transactions originate from valid cash vaults with proper audit tracking.
+- **Requisition Workflow**: Existing payment requests follow `pending` → `approved` / `rejected` → `executed` / `cancelled`.
 - **Validation**:
   - Amount cannot exceed the purchase order's outstanding balance (`purchase_order.outstanding_balance`).
 - **Anti-Self-Approval**: Creators cannot approve or reject their own payment requests.
@@ -234,4 +301,22 @@ All search operations across contacts, catalog, purchases, sales, treasury, and 
 - **Diacritics & Tatweel**: Tashkeel (harakat) and Kashida (`ـ`) stripped.
 - **SQL Portability**: Sequential SQL `Replace` functions evaluated natively in SQLite and PostgreSQL.
 - **Signature Tolerance**: Accepts both `(queryset, fields, query)` and `(queryset, query, fields)` dynamically.
+
+---
+
+## 11. Form Error Recovery & Data Preservation
+
+To protect data entry against accidental loss during server-side validation failures:
+- **Zero Redirect on Error**: Form submissions that fail validation re-render the template directly with HTTP 400 Bad Request instead of redirecting.
+- **Input & Dynamic Row Re-population**: All scalar inputs, selected relationships, and dynamic item rows (products, quantities, unit prices, discounts, conditions, notes) are packaged as `submitted_items` / `submitted_data` and injected directly into template contexts and JavaScript initialization scripts.
+- **Consistent Across Modules**: Enforced across Sales Orders (`sales_order_create`, `sales_order_edit`), Sales Returns (`sales_return_order_create`), Purchase Returns (`purchase_return_order_create`), and Inventory Memos/Transfers (`memo_create`, `product_transfer_create`).
+
+---
+
+## 12. Integer-Only Quantities, Visit Questionnaire & Safe User Deletion
+
+- **Integer-Only Quantities (`master_data.validation_utils.parse_positive_integer_quantity`)**: All Sales, Purchases, Inventory Memos, and Product Transfer quantities must be positive whole integers (`>= 1`, or `>= 0` where zero-qty return rows are skipped). Both HTML inputs (`step="1" min="1"`) and backend services enforce integer-only values.
+- **Visit Template Questions (`end_only`)**: New and edited `VisitTemplateQuestion` records enforce `stage='end_only'` so questionnaire answers are collected during visit completion; historical `start_only` answers remain accepted if already recorded on in-progress visits. `Visit.get_qa_display_list()` maps stored option keys (`yes`/`no`, `successful`/`unsuccessful`, and choice `value`s) to Arabic labels.
+- **Safe User Deletion (`accounts.services.delete_user_safely`)**: Protected by `users:users/delete`. Blocks self-deletion, SuperAdmin deletion, and deletion of users holding active warehouse stock or non-zero vault balances. Revokes active sessions, reassigns `PROTECT`-ed historical records (`Visit`, `VisitPlan`, `PlannedVisitDay`, `SalesTarget`, `CustomerCall`, `CoachingEvaluation`) to the inactive `historical_archive@wea.com` archive account, and records `USER_DELETED` in `SecurityAuditLog`.
+
 

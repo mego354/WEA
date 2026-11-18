@@ -1,0 +1,123 @@
+<!-- Global Attachments Preview & List-Row Attachments Modal -->
+<div id="erp-image-lightbox" class="fixed inset-0 z-[70] bg-slate-900/80 backdrop-blur-xs hidden flex items-center justify-center p-4" onclick="closeAttachmentImagePreview()">
+    <div class="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+        <div class="p-3.5 border-b border-slate-100 flex items-center justify-between">
+            <span id="erp-lightbox-title" class="text-xs font-bold text-slate-800 truncate">معاينة الصورة</span>
+            <button type="button" onclick="closeAttachmentImagePreview()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <div class="p-4 bg-slate-100 flex items-center justify-center max-h-[78vh] overflow-auto">
+            <img id="erp-lightbox-img" src="" alt="معاينة المرفق" class="max-w-full max-h-[70vh] rounded-lg shadow-sm object-contain">
+        </div>
+    </div>
+</div>
+
+<div id="erp-attachments-modal" class="fixed inset-0 z-[65] bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-4" onclick="closeAttachmentsModal()">
+    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 id="erp-att-modal-title" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">attach_file</span>
+                <span>المرفقات</span>
+            </h3>
+            <button type="button" onclick="closeAttachmentsModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <div class="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div id="erp-att-modal-upload-wrap" class="hidden">
+                <form id="erp-att-modal-upload-form" method="POST" enctype="multipart/form-data" class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-dashed border-slate-300">
+                    {% csrf_token %}
+                    <input type="file" name="attachments" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" class="text-xs text-slate-700 flex-1" required>
+                    <button type="submit" class="px-3.5 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg transition-colors">رفع</button>
+                </form>
+            </div>
+            <div id="erp-att-modal-list" class="space-y-2 text-xs text-slate-500">جاري التحميل...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAttachmentImagePreview(url, title) {
+    const m = document.getElementById('erp-image-lightbox');
+    const img = document.getElementById('erp-lightbox-img');
+    const t = document.getElementById('erp-lightbox-title');
+    if (m && img) {
+        img.src = url;
+        if (t) t.textContent = title || 'معاينة الصورة';
+        m.classList.remove('hidden');
+    }
+}
+function closeAttachmentImagePreview() {
+    const m = document.getElementById('erp-image-lightbox');
+    const img = document.getElementById('erp-lightbox-img');
+    if (m) m.classList.add('hidden');
+    if (img) img.src = '';
+}
+function closeAttachmentsModal() {
+    const m = document.getElementById('erp-attachments-modal');
+    if (m) m.classList.add('hidden');
+}
+async function openAttachmentsModal(modelKey, objectId, titleText) {
+    const modal = document.getElementById('erp-attachments-modal');
+    const titleEl = document.getElementById('erp-att-modal-title');
+    const listEl = document.getElementById('erp-att-modal-list');
+    const uploadWrap = document.getElementById('erp-att-modal-upload-wrap');
+    const uploadForm = document.getElementById('erp-att-modal-upload-form');
+    if (!modal || !listEl) return;
+
+    if (titleEl) titleEl.querySelector('span:last-child').textContent = titleText || 'المرفقات والمستندات';
+    listEl.innerHTML = '<div class="py-6 text-center text-slate-400">جاري تحميل المرفقات...</div>';
+    modal.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`/attachments/${modelKey}/${objectId}/list/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await res.json();
+        if (!res.ok) {
+            listEl.innerHTML = `<div class="py-4 text-center text-rose-600 font-bold">${data.error || 'تعذر تحميل المرفقات'}</div>`;
+            return;
+        }
+        if (uploadWrap && uploadForm) {
+            if (data.can_upload) {
+                uploadWrap.classList.remove('hidden');
+                uploadForm.action = data.upload_url;
+                uploadForm.onsubmit = async function(ev) {
+                    ev.preventDefault();
+                    const fd = new FormData(uploadForm);
+                    const upRes = await fetch(data.upload_url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const upJson = await upRes.json();
+                    if (upJson.success) {
+                        uploadForm.reset();
+                        openAttachmentsModal(modelKey, objectId, titleText);
+                    } else {
+                        alert(upJson.error || 'فشل رفع المرفق');
+                    }
+                };
+            } else {
+                uploadWrap.classList.add('hidden');
+            }
+        }
+        if (!data.attachments || data.attachments.length === 0) {
+            listEl.innerHTML = '<div class="py-6 text-center text-slate-400">لا توجد مرفقات لهذا السجل.</div>';
+            return;
+        }
+        listEl.innerHTML = data.attachments.map(a => `
+            <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div class="min-w-0">
+                    <div class="font-bold text-slate-900 truncate">${a.filename}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">${a.size} • ${a.created_at} • ${a.uploaded_by}</div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                    ${a.is_image
+                        ? `<button type="button" onclick="openAttachmentImagePreview('${a.view_url}', '${a.filename.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white" title="معاينة"><span class="material-symbols-outlined text-base">visibility</span></button>`
+                        : `<a href="${a.view_url}" target="_blank" class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white" title="فتح"><span class="material-symbols-outlined text-base">open_in_new</span></a>`}
+                    <a href="${a.download_url}" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-white" title="تحميل"><span class="material-symbols-outlined text-base">download</span></a>
+                    ${data.can_delete ? `<button type="button" onclick="showConfirmDeleteModal({ action: '${a.delete_url}', title: 'حذف المرفق', itemName: '${a.filename.replace(/'/g, "\\'")}' })" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50" title="حذف"><span class="material-symbols-outlined text-base">delete</span></button>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        listEl.innerHTML = '<div class="py-4 text-center text-rose-600 font-bold">حدث خطأ في الاتصال بالخادم.</div>';
+    }
+}
+</script>

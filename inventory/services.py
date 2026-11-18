@@ -2,7 +2,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.db.models import Max
+from django.db.models import Max, Q
 
 from .models import (
     Warehouse, InventoryStock, InventoryLot, InventoryMemo, InventoryMemoItem,
@@ -14,6 +14,7 @@ from accounts.permissions import (
     can_user_perform_stock_in, can_user_perform_stock_out, can_user_perform_transfer
 )
 from accounts.services import AuditLogService
+from master_data.validation_utils import parse_positive_integer_quantity
 
 
 class InventoryMemoService:
@@ -69,9 +70,10 @@ class InventoryMemoService:
             if isinstance(product, (int, str)):
                 product = Product.objects.get(id=int(product))
 
-            qty = Decimal(str(item_entry.get('quantity', 0)))
-            if qty <= 0:
-                raise ValidationError(f"الكمية للصنف '{product.name}' يجب أن تكون أكبر من الصفر.")
+            qty = parse_positive_integer_quantity(
+                item_entry.get('quantity'),
+                item_label=product.name
+            )
 
             batch = (item_entry.get('batch_number') or '').strip()
             expiry = item_entry.get('expiry_date') or None
@@ -122,8 +124,8 @@ class InventoryMemoService:
                 # Available stock validation (strictly excludes reserved stock)
                 if stock.qty_available < qty:
                     raise ValidationError(
-                        f"الرصيد المتاح من الصنف '{product.name}' في المخزن ({stock.qty_available:,.2f}) "
-                        f"غير كافٍ لصرف الكمية المطلوبة ({qty:,.2f})."
+                        f"الرصيد المتاح من الصنف '{product.name}' في المخزن ({stock.qty_available:,.0f}) "
+                        f"غير كافٍ لصرف الكمية المطلوبة ({qty:,.0f})."
                     )
 
                 stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - qty)
@@ -191,14 +193,20 @@ class ProductTransferService:
 
         is_super = requesting_user.is_superuser or getattr(requesting_user, 'is_super_admin', False)
 
-        if not (dest_main and src_main and dest_main.id == src_main.id):
-            if not is_super:
-                dest_name = dest_main.name if dest_main else 'غير محدد'
-                src_name = src_main.name if src_main else 'غير محدد'
-                raise ValidationError(
-                    f"غير مصرح بالتحويل المخزني عبر مناطق رئيسية مختلفة ({src_name} -> {dest_name}). "
-                    f"التحويل متاح حصرياً بين المخازن التابعة لنفس المنطقة الرئيسية."
-                )
+        same_main = bool(dest_main and src_main and dest_main.id == src_main.id)
+        is_central = bool(source_warehouse.is_main or destination_warehouse.is_main)
+        from accounts.permissions import can_user_access_object
+        manager_access = bool(
+            can_user_access_object(requesting_user, source_warehouse, 'view') and
+            can_user_access_object(requesting_user, destination_warehouse, 'view')
+        )
+
+        if not (same_main or is_central or manager_access or is_super):
+            dest_name = dest_main.name if dest_main else 'غير محدد'
+            src_name = src_main.name if src_main else 'غير محدد'
+            raise ValidationError(
+                f"غير مصرح بالتحويل المخزني عبر مناطق رئيسية مختلفة ({src_name} -> {dest_name}) دون صلاحية إشرافية أو مخزن رئيسي."
+            )
 
         if not is_super:
             rep = destination_warehouse.assigned_user
@@ -226,9 +234,10 @@ class ProductTransferService:
             if isinstance(product, (int, str)):
                 product = Product.objects.get(id=int(product))
 
-            qty = Decimal(str(item_entry.get('quantity', 0)))
-            if qty <= 0:
-                raise ValidationError(f"الكمية المطلوبة للصنف '{product.name}' يجب أن تكون أكبر من الصفر.")
+            qty = parse_positive_integer_quantity(
+                item_entry.get('quantity'),
+                item_label=product.name
+            )
 
             stock = InventoryStock.objects.filter(
                 warehouse=source_warehouse,
@@ -282,12 +291,15 @@ class ProductTransferService:
 
         for item in transfer_request.items.select_related('product'):
             if approved_quantities and item.id in approved_quantities:
-                qty_appr = Decimal(str(approved_quantities[item.id]))
+                qty_appr = parse_positive_integer_quantity(
+                    approved_quantities[item.id],
+                    item_label=item.product.name
+                )
             else:
-                qty_appr = item.requested_quantity
-
-            if qty_appr <= 0:
-                raise ValidationError(f"الكمية المعتمدة للصنف '{item.product.name}' يجب أن تكون أكبر من الصفر.")
+                qty_appr = parse_positive_integer_quantity(
+                    item.requested_quantity,
+                    item_label=item.product.name
+                )
 
             if qty_appr > item.requested_quantity:
                 raise ValidationError(f"الكمية المعتمدة للصنف '{item.product.name}' ({qty_appr}) لا يمكن أن تتجاوز الكمية المطلوبة ({item.requested_quantity}).")
@@ -541,3 +553,220 @@ class ProductTransferService:
         )
 
         return transfer_request
+
+
+class WarehouseService:
+    """
+    Service layer for Warehouse CRUD operations with atomic data integrity,
+    spatial coordinate handling, foreign key protection, and security audit logging.
+    """
+
+    @classmethod
+    @transaction.atomic
+    def create_warehouse(cls, data: dict, user, request=None):
+        from master_data.models import Area
+        from accounts.models import User
+
+        name = data.get('name', '').strip()
+        code = data.get('code', '').strip()
+        address = data.get('address', '').strip()
+        is_main = data.get('is_main') in [True, 'on', 'true', 'True', '1', 1]
+        is_rep_warehouse = data.get('is_rep_warehouse') in [True, 'on', 'true', 'True', '1', 1]
+        is_active = data.get('is_active') in [True, 'on', 'true', 'True', '1', 1] if 'is_active' in data else True
+
+        if not name or not code:
+            raise ValidationError("اسم المخزن وكود المخزن حقول إلزامية.")
+
+        if Warehouse.objects.filter(Q(name__iexact=name) | Q(code__iexact=code)).exists():
+            raise ValidationError(f"يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود ({name} / {code}).")
+
+        area = None
+        area_id = data.get('area')
+        if area_id:
+            area = Area.objects.filter(id=area_id).first()
+
+        assigned_user = None
+        assigned_user_id = data.get('assigned_user')
+        if assigned_user_id:
+            assigned_user = User.objects.filter(id=assigned_user_id, is_active=True).first()
+
+        manager = None
+        manager_id = data.get('manager')
+        if manager_id:
+            manager = User.objects.filter(id=manager_id, is_active=True).first()
+
+        lat = None
+        lng = None
+        lat_raw = str(data.get('latitude', '') or '').strip().replace(',', '.')
+        lng_raw = str(data.get('longitude', '') or '').strip().replace(',', '.')
+        if lat_raw and lng_raw:
+            try:
+                lat = Decimal(lat_raw)
+                lng = Decimal(lng_raw)
+            except Exception:
+                pass
+
+        wh = Warehouse.objects.create(
+            name=name,
+            code=code,
+            address=address,
+            is_main=is_main,
+            is_rep_warehouse=is_rep_warehouse,
+            is_active=is_active,
+            area=area,
+            assigned_user=assigned_user,
+            manager=manager,
+            latitude=lat,
+            longitude=lng
+        )
+
+        AuditLogService.log(
+            action_type='WAREHOUSE_CREATED',
+            module='inventory',
+            actor=user,
+            record_id=wh.id,
+            record_name=wh.name,
+            description=f"إنشاء مخزن جديد: {wh.name} ({wh.code})",
+            new_values={
+                'name': wh.name,
+                'code': wh.code,
+                'is_main': wh.is_main,
+                'is_rep_warehouse': wh.is_rep_warehouse,
+                'is_active': wh.is_active,
+                'area': wh.area.name if wh.area else None,
+                'assigned_user': wh.assigned_user.username if wh.assigned_user else None,
+            },
+            request=request
+        )
+        return wh
+
+    @classmethod
+    @transaction.atomic
+    def update_warehouse(cls, warehouse: Warehouse, data: dict, user, request=None):
+        from master_data.models import Area
+        from accounts.models import User
+
+        name = data.get('name', '').strip()
+        code = data.get('code', '').strip()
+        address = data.get('address', '').strip()
+        is_main = data.get('is_main') in [True, 'on', 'true', 'True', '1', 1]
+        is_rep_warehouse = data.get('is_rep_warehouse') in [True, 'on', 'true', 'True', '1', 1]
+        is_active = data.get('is_active') in [True, 'on', 'true', 'True', '1', 1] if 'is_active' in data else True
+
+        if not name or not code:
+            raise ValidationError("اسم المخزن وكود المخزن حقول إلزامية.")
+
+        if Warehouse.objects.filter(Q(name__iexact=name) | Q(code__iexact=code)).exclude(id=warehouse.id).exists():
+            raise ValidationError(f"يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود ({name} / {code}).")
+
+        area = None
+        area_id = data.get('area')
+        if area_id:
+            area = Area.objects.filter(id=area_id).first()
+
+        assigned_user = None
+        assigned_user_id = data.get('assigned_user')
+        if assigned_user_id:
+            assigned_user = User.objects.filter(id=assigned_user_id, is_active=True).first()
+
+        manager = None
+        manager_id = data.get('manager')
+        if manager_id:
+            manager = User.objects.filter(id=manager_id, is_active=True).first()
+
+        lat = None
+        lng = None
+        lat_raw = str(data.get('latitude', '') or '').strip().replace(',', '.')
+        lng_raw = str(data.get('longitude', '') or '').strip().replace(',', '.')
+        if lat_raw and lng_raw:
+            try:
+                lat = Decimal(lat_raw)
+                lng = Decimal(lng_raw)
+            except Exception:
+                pass
+
+        prev_values = {
+            'name': warehouse.name,
+            'code': warehouse.code,
+            'is_main': warehouse.is_main,
+            'is_rep_warehouse': warehouse.is_rep_warehouse,
+            'is_active': warehouse.is_active,
+            'area': warehouse.area.name if warehouse.area else None,
+            'assigned_user': warehouse.assigned_user.username if warehouse.assigned_user else None,
+        }
+
+        warehouse.name = name
+        warehouse.code = code
+        warehouse.address = address
+        warehouse.is_main = is_main
+        warehouse.is_rep_warehouse = is_rep_warehouse
+        warehouse.is_active = is_active
+        warehouse.area = area
+        warehouse.assigned_user = assigned_user
+        warehouse.manager = manager
+        warehouse.latitude = lat
+        warehouse.longitude = lng
+        warehouse.save()
+
+        new_values = {
+            'name': warehouse.name,
+            'code': warehouse.code,
+            'is_main': warehouse.is_main,
+            'is_rep_warehouse': warehouse.is_rep_warehouse,
+            'is_active': warehouse.is_active,
+            'area': warehouse.area.name if warehouse.area else None,
+            'assigned_user': warehouse.assigned_user.username if warehouse.assigned_user else None,
+        }
+
+        AuditLogService.log(
+            action_type='WAREHOUSE_UPDATED',
+            module='inventory',
+            actor=user,
+            record_id=warehouse.id,
+            record_name=warehouse.name,
+            description=f"تحديث بيانات المخزن: {warehouse.name} ({warehouse.code})",
+            previous_values=prev_values,
+            new_values=new_values,
+            request=request
+        )
+        return warehouse
+
+    @classmethod
+    @transaction.atomic
+    def delete_warehouse(cls, warehouse: Warehouse, user, request=None):
+        # 1. Check stock with quantity > 0
+        if InventoryStock.objects.filter(warehouse=warehouse, qty_on_hand__gt=0).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود أرصدة مخزنية حالية به. يرجى تصفية أو نقل المخزون أولاً.")
+
+        # 2. Check inventory memos
+        if InventoryMemo.objects.filter(warehouse=warehouse).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود أذونات مخزنية مسجلة عليه.")
+
+        # 3. Check transfer requests
+        if ProductTransferRequest.objects.filter(Q(source_warehouse=warehouse) | Q(destination_warehouse=warehouse)).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود طلبات تحويل مرتبطة به.")
+
+        # 4. Check sales orders or purchase orders
+        from sales.models import SalesOrder
+        from purchases.models import PurchaseOrder
+        if SalesOrder.objects.filter(source_warehouse=warehouse).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود أوامر بيع مسجلة عليه.")
+        if PurchaseOrder.objects.filter(target_warehouse=warehouse).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود أوامر شراء مسجلة عليه.")
+
+        wh_id = warehouse.id
+        wh_name = warehouse.name
+        wh_code = warehouse.code
+
+        warehouse.delete()
+
+        AuditLogService.log(
+            action_type='WAREHOUSE_DELETED',
+            module='inventory',
+            actor=user,
+            record_id=wh_id,
+            record_name=wh_name,
+            description=f"حذف المخزن: {wh_name} ({wh_code})",
+            request=request
+        )
+        return True

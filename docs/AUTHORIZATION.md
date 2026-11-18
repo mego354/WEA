@@ -145,28 +145,39 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | User & Role RBAC Management | Yes | Subordinate Reps Only | No | Self Profile Only |
 | Audit Log UI | Yes (`settings:auditLogs/view`) | If granted | If granted | No |
 | Contact Directory | All Areas | Assigned Main Area | All Areas | Assigned Brick(s) |
-| Visit Creation | Yes | Yes | If granted | Own (Assigned Brick) |
+| Visit Creation (Unplanned) | Yes | Yes (Auto-approved) | If granted (Auto-approved) | Own (Assigned Brick, Auto-approved) |
+| Visit Planning & Bulk Plans | Yes | Subordinates (Auto-approved) | If granted | Own (Assigned Brick, Pending manager approval) |
+| Visit & Plan Approval | Yes | Subordinates in Main Area (Not Self) | No | No |
 | Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
 | Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
-| GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | No (Request exception via `activities:visits/gps_request_exception`) |
-| GBS Exception Request | Yes | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) | No | If role enabled in LocationSettings & perm granted (`activities:visits/gps_request_exception`) |
-| Visit Approval | Yes | Subordinates (Not Self) | No | No |
-| Agreement Creation & Edit | Yes | Yes | If granted | Own (Assigned Brick) - Edit/Delete Unapproved Only |
-| Agreement Approval | Yes | Subordinates (Not Self) | No | No |
-| Sales Order Creation | Yes | Yes | If granted | Own Warehouse |
-| Sales Order Approval | Yes | Subordinates (Not Self) | View Only | No |
-| Sales Return Creation | Yes | Yes | If granted | Own Orders (Original order linkage) |
-| Sales Return Approval | Yes | Subordinates (Not Self) | View Only | No |
-| Sales Return Restock & Settle | Yes | Deliver (If inventory perm) | Settle (Accounts) | No |
-| Purchase Order Approval | Yes | Subordinates (Not Self) | View Only | No |
-| Purchase Return Creation | Yes | Yes | Yes | No |
-| Purchase Return Approval | Yes | Subordinates (Not Self) | View Only | No |
-| Vendor Payment Request Creation | Yes | Yes | Yes | No |
+| GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | If granted (`activities:visits/bypass_gps`) / exception via `activities:visits/gps_request_exception` |
+| Agreement Creation & Edit | Yes | Subordinates (`activities:agreements/create`, `_edit`) | If granted | Own (Assigned Brick) |
+| Agreement Deletion | Yes (`activities:agreements/delete`) | Subordinates | If granted | Own |
+| Agreement Completion (`done`) | Yes (`activities:agreements/approve`) | Subordinates (Not Self) | No | No |
+| Sales Order Creation | Yes | Yes (Immediate stock deduction + customer debit) | If granted | Own Warehouse |
+| Sales Order Edit | Yes (`sales:orders/edit`) | Subordinates (Blocked if collections exist) | No | Own (Blocked if collections exist) |
+| Sales Order Deletion | Yes (`sales:orders/delete`) | If granted (Blocked if collections exist) | If granted | No |
+| Sales Order Payment Status | Yes (`sales:orders/manage_payment_status`) | If granted (`sales:orders/manage_payment_status`) | If granted (`sales:orders/manage_payment_status`) | No |
+| Sales Return Creation | Yes (`sales:returns/create`) | Yes (Immediate restocking + customer credit) | If granted | Own Orders |
+| Sales Return Deletion | Yes (`sales:returns/delete`) | If granted | If granted | No |
+| Customer Accounts (`/sales/customers/accounts/`) & Export | Yes | Assigned Main Area (`sales:customers/accounting`, `_export`) | All (`sales:customers/accounting`, `_export`) | If granted (Own/Brick scoped via `sales` scope) |
+| Customer Transactions (`/sales/customer-transactions/`) & Export | Yes | Assigned Main Area (`sales:customers/transactions`, `_export`) | All (`sales:customers/transactions`, `_export`) | If granted (Own/Brick scoped via `sales` scope) |
+| Purchase Order Creation | Yes (`purchases:orders/create`) | Yes (Immediate stock inward + vendor credit) | If granted | No |
+| Purchase Order Deletion | Yes (`purchases:orders/delete`) | If granted (Blocked if payments/returns exist) | If granted | No |
+| Purchase Order Payment Status | Yes (`purchases:orders/manage_payment_status`) | If granted (`purchases:orders/manage_payment_status`) | If granted (`purchases:orders/manage_payment_status`) | No |
+| Purchase Return Creation | Yes (`purchases:returns/create`) | Yes (Immediate stock deduction + vendor debit) | If granted | No |
+| Purchase Return Deletion | Yes (`purchases:returns/delete`) | If granted | If granted | No |
+| Vendor Payment Request Creation | Redirects to Treasury Payment (`treasury:payments/create`) | Redirects | Redirects | No |
 | Vendor Payment Request Approval | Yes | Subordinates (Not Self) | View Only | No |
 | Vendor Payment Request Execution | Yes | No | Yes | No |
-| Inventory Stock In / Out | Yes | If role in settings | Yes | If role in settings |
-| Transfer Request | Yes | If role in settings | Yes | If role in settings |
-| Transfer Approval & Execution | Yes | No | Yes | No |
+| Warehouse Creation & Editing | Yes (`inventory:warehouses/manage`) | If granted (Assigned Main Area / Subareas) | No | No |
+| Warehouse Deletion | Yes (`inventory:warehouses/delete`) | If granted (Blocked if stock > 0, memos, or orders exist) | No | No |
+| Vault Creation & Editing | Yes (`treasury:vaults/manage`) | If granted (Assigned Main Area / Subareas) | If granted (`treasury:vaults/manage`) | No |
+| Vault Deletion | Yes (`treasury:vaults/delete`) | If granted (Blocked if balance != 0, transactions, or payments exist) | No | No |
+| User Profile Linked Assets Assignment | Yes (`accounts:users/edit`) | Subordinate Reps (Scoped warehouses & vaults) | No | No |
+| Inventory Stock In / Out (Memos) | Yes | If granted (`inventory:memos/manage`) | Yes (`inventory:memos/manage`) | Own Custody Warehouse (`inventory:memos/manage`) |
+| Transfer Request | Yes | Yes (`inventory:transfers/create`) | Yes (`inventory:transfers/create`) | Own Custody Warehouse (`inventory:transfers/create`) |
+| Transfer Approval & Execution | Yes | No | Yes (`inventory:transfers/approve`) | No |
 | Vault Deposits & Withdrawals | Yes | Subordinates + Perm | Yes | Own Vault |
 | Performance Overview & Analysis | Yes | Assigned Main Area (`performance:overview/view`, `performance:analysis/view`) | If granted | Own Performance (`performance:overview/view`) |
 | Performance Daily & Detailed | Yes | Assigned Main Area (`performance:daily/view`, `performance:detailed/view`) | If granted | Own Daily Activity (`performance:daily/view`) |
@@ -175,3 +186,7 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Activities & Samples Reports | Yes | Assigned Main Area | If granted | Own Activities (`reports:activities/view`) |
 
 
+| Cloudflare R2 Storage Settings (`/settings/storage/`) | Yes (`settings:storage/manage`, SuperAdmin-gated) | No | No | No |
+| Transaction Attachments Upload / View / Delete | Yes | Scoped (`can_user_access_object`) | Scoped | Own / Scoped |
+| Order / Return PDF Export | Yes | Scoped (`sales:orders/pdf`, `sales:returns/pdf`, `purchases:orders/pdf`, `purchases:returns/pdf`) | Scoped | Own / Scoped |
+| Customer & Vendor Account Statement PDF | Yes | Scoped (`sales:statements/pdf`, `purchases:statements/pdf`) | Scoped | Own / Scoped |

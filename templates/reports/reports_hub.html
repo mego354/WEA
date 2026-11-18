@@ -54,21 +54,6 @@
                     <span class="material-symbols-outlined text-sm">arrow_back</span>
                 </div>
             </a>
-
-            <!-- Target Achievement -->
-            <a href="{% url 'report_target_achievement' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl">flag</span>
-                    </div>
-                    <h3 class="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors">تحقيق أهداف المبيعات والتحصيلات</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">مقارنة المستهدفات البيعية والتارجت الشهري للمناديب بالمحقق الفعلي للمبيعات والتحصيلات.</p>
-                </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
-                    <span>فتح التقرير</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </div>
-            </a>
         </div>
     </div>
     {% endif %}
@@ -111,21 +96,6 @@
                 </div>
             </a>
 
-            <!-- Bundles & Promotions -->
-            <a href="{% url 'report_promotions' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl">local_offer</span>
-                    </div>
-                    <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">أداء العروض والخصومات</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">تحليل إقبال العملاء على العروض الترويجية والخصومات الممنوحة ومردودها المالي.</p>
-                </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
-                    <span>فتح التقرير</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </div>
-            </a>
-
             <!-- Item Sales by Customer -->
             <a href="{% url 'report_item_sales_by_customer' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
@@ -151,22 +121,7 @@
             <span class="material-symbols-outlined text-teal-600 text-lg">warehouse</span>
             <span>اللوجستيات والمخازن والتوريد (Supply Chain & Inventory)</span>
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <!-- Order Deliveries -->
-            <a href="{% url 'report_order_deliveries' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl">local_shipping</span>
-                    </div>
-                    <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">تسليمات الطلبيات واللوجستيات</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">تتبع حركة توصيل الطلبيات وسائقي الشحن وإحداثيات GPS وحالات التسليم.</p>
-                </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
-                    <span>فتح التقرير</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </div>
-            </a>
-
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <!-- Stock Availability -->
             <a href="{% url 'report_delivery_stock' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
@@ -216,36 +171,6 @@
                     </div>
                     <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">تحقيق الاتفاقيات وعائد الاستثمار</h3>
                     <p class="text-xs text-slate-500 mt-1 leading-relaxed">متابعة مبيعات الصيدليات والمراكز الطبية المرتبطة باتفاقيات تجارية ونسبة العائد ROI %.</p>
-                </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
-                    <span>فتح التقرير</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </div>
-            </a>
-
-            <!-- Calls & Telesales -->
-            <a href="{% url 'report_calls' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl">phone_in_talk</span>
-                    </div>
-                    <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">تقرير المكالمات والتواصل</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">سجل التواصل الهاتفي والزيارات عن بعد مع العملاء ومعدلات الرد والأوامر الناتجة.</p>
-                </div>
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
-                    <span>فتح التقرير</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </div>
-            </a>
-
-            <!-- Medical Samples -->
-            <a href="{% url 'report_samples' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
-                <div>
-                    <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl">science</span>
-                    </div>
-                    <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">عينات المنتجات الطبية</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">تتبع كميات وتكلفة العينات الدوائية المجانية الموزعة على الأطباء أثناء الزيارات.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
                     <span>فتح التقرير</span>

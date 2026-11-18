@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.contrib import messages
@@ -9,7 +10,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 
 from .models import Vault, VendorAccount, VendorTransaction, VendorPayment, VaultTransaction, VendorPaymentRequest
-from .services import TreasuryService, VendorPaymentRequestService, build_payment_request_timeline
+from .services import TreasuryService, VendorPaymentRequestService, build_payment_request_timeline, VaultService
 from master_data.search_utils import filter_by_arabic_search, get_bounded_select_options
 from contacts.models import Contact
 from purchases.models import PurchaseOrder
@@ -21,6 +22,7 @@ from accounts.permissions import (
     can_user_access_object,
     render_forbidden_response,
     has_perm_or_admin,
+    get_visible_assignees_queryset,
 )
 from accounts.scope_service import ScopeResolutionService
 
@@ -33,6 +35,8 @@ def vendor_payments_list(request):
     supplier_id = request.GET.get('supplier')
     vault_id = request.GET.get('vault')
     payment_method = request.GET.get('payment_method')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
 
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by', 'purchase_order').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vendorpayment')
@@ -53,6 +57,14 @@ def vendor_payments_list(request):
         qs = qs.filter(payment_method=payment_method)
         method_labels = dict(VendorPayment.PAYMENT_METHODS)
         active_filters.append({'label': f'طريقة الدفع: {method_labels.get(payment_method, payment_method)}', 'param': 'payment_method'})
+
+    if date_from:
+        qs = qs.filter(payment_date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+
+    if date_to:
+        qs = qs.filter(payment_date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial_num', 'supplier__name', 'reference_number', 'notes'])
@@ -97,6 +109,8 @@ def vendor_payments_list(request):
         'selected_supplier_id': supplier_id,
         'selected_vault_id': vault_id,
         'selected_payment_method': payment_method,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
         'active_filters': active_filters,
         'total_count': paginator.count,
         'stats': stats,
@@ -107,10 +121,26 @@ def vendor_payments_list(request):
 @require_permission('treasury:payments/export')
 def vendor_payments_export(request):
     supplier_id = request.GET.get('supplier')
+    vault_id = request.GET.get('vault_id')
+    payment_method = request.GET.get('payment_method')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    search = request.GET.get('search', '').strip()
+
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by', 'purchase_order').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vendorpayment')
     if supplier_id:
         qs = qs.filter(supplier_id=supplier_id)
+    if vault_id:
+        qs = qs.filter(vault_id=vault_id)
+    if payment_method:
+        qs = qs.filter(payment_method=payment_method)
+    if date_from:
+        qs = qs.filter(payment_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(payment_date__lte=date_to)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['serial_num', 'supplier__name', 'reference_number', 'notes'])
 
     columns = [
         {'header': 'رقم سند الصرف', 'key': lambda p: f"#{p.serial_num}", 'width': 16, 'align': 'center'},
@@ -125,7 +155,14 @@ def vendor_payments_export(request):
         {'header': 'ملاحظات', 'key': lambda p: p.notes or '', 'width': 30, 'align': 'right'},
     ]
 
-    return export_to_excel_response(qs, columns, filename="vendor_payments_export", sheet_title="مدفوعات الموردين")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="vendor_payments_export",
+        sheet_title="مدفوعات الموردين",
+        report_title="سجل مدفوعات وسندات صرف الموردين",
+        user=request.user,
+    )
 
 
 @require_permission('treasury:payments/create')
@@ -173,6 +210,9 @@ def vendor_payment_create(request):
                 reference_number=reference_number,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(payment, request)
             po_info = f" لأمر الشراء {purchase_order.order_number}" if purchase_order else ""
             messages.success(request, f"تم تسجيل سند الصرف #{payment.serial_num} بنجاح بمبلغ {payment.amount:,.2f} ج.م للمورد {supplier.name}{po_info}.")
             return redirect('vendor_payments_list')
@@ -195,8 +235,10 @@ def vendor_payment_create(request):
     )
     vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury')
 
-    # Open purchase orders for dropdown linking
-    orders_qs = PurchaseOrder.objects.exclude(status='cancelled').select_related('supplier').order_by('-order_date')
+    # Open purchase orders for dropdown linking (SQL-annotated paid totals to avoid N+1)
+    orders_qs = PurchaseOrder.with_payment_totals(
+        PurchaseOrder.objects.exclude(status='cancelled').select_related('supplier').order_by('-order_date', '-id')
+    )
     orders_qs = get_scoped_queryset(orders_qs, request.user, 'purchaseorder')
 
     context = {
@@ -251,12 +293,43 @@ def accounting_vendors_list(request):
     return render(request, 'treasury/accounting_vendors_list.html', context)
 
 
+@require_permission('treasury:vendors/accounting_export')
+def accounting_vendors_export(request):
+    """Export filtered and scoped vendor accounts to Excel."""
+    search = request.GET.get('search', '').strip()
+    qs = VendorAccount.objects.select_related('supplier', 'supplier__area').order_by('-current_balance')
+    scoped_suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact')
+    qs = qs.filter(supplier__in=scoped_suppliers)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['supplier__name', 'supplier__code'])
+
+    columns = [
+        {'header': 'كود المورد', 'key': lambda a: a.supplier.code or '', 'width': 16, 'align': 'center'},
+        {'header': 'اسم المورد', 'key': lambda a: a.supplier.name, 'width': 32, 'align': 'right'},
+        {'header': 'المنطقة', 'key': lambda a: a.supplier.area.name if a.supplier.area else '', 'width': 20, 'align': 'right'},
+        {'header': 'الرصيد المستحق (ج.م)', 'key': lambda a: float(a.current_balance or 0), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
+        {'header': 'المتأخرات (ج.م)', 'key': lambda a: float(a.overdue_balance or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'الحد الائتماني (ج.م)', 'key': lambda a: float(a.credit_limit or 0), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="accounting_vendors_export",
+        sheet_title="حسابات الموردين",
+        report_title="كشف أرصدة وحسابات الموردين",
+        user=request.user,
+    )
+
+
 @require_permission('treasury:vendors/transactions')
 def vendor_transactions_list(request):
     """
     Vendor Ledger Transactions (عمليات الموردين).
     """
-    vendor_id = request.GET.get('vendor_id')
+    vendor_id = request.GET.get('vendor_id') or request.GET.get('supplier')
+    tx_type = request.GET.get('type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
     search = request.GET.get('search', '').strip()
 
     qs = VendorTransaction.objects.select_related('account', 'account__supplier', 'created_by', 'purchase_order').order_by('-serial')
@@ -269,6 +342,19 @@ def vendor_transactions_list(request):
         qs = qs.filter(account__supplier_id=vendor_id)
         v_obj = scoped_suppliers.filter(id=vendor_id).first()
         active_filters.append({'label': f'المورد: {v_obj.name if v_obj else vendor_id}', 'param': 'vendor_id'})
+
+    if tx_type in ['credit', 'debit']:
+        qs = qs.filter(transaction_type=tx_type)
+        tx_label = 'دائن (فاتورة مشتريات)' if tx_type == 'credit' else 'مدين (سداد / مردودات)'
+        active_filters.append({'label': f'النوع: {tx_label}', 'param': 'type'})
+
+    if date_from:
+        qs = qs.filter(transaction_date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+
+    if date_to:
+        qs = qs.filter(transaction_date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__supplier__name'])
@@ -302,6 +388,9 @@ def vendor_transactions_list(request):
         'paginator': paginator,
         'suppliers': suppliers,
         'selected_vendor_id': vendor_id,
+        'selected_type': tx_type,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
@@ -310,19 +399,117 @@ def vendor_transactions_list(request):
     return render(request, 'treasury/vendor_transactions_list.html', context)
 
 
+@require_permission('treasury:vendors/transactions_export')
+def vendor_transactions_export(request):
+    """Export filtered and scoped vendor ledger transactions to Excel."""
+    vendor_id = request.GET.get('vendor_id') or request.GET.get('supplier')
+    tx_type = request.GET.get('type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    search = request.GET.get('search', '').strip()
+
+    qs = VendorTransaction.objects.select_related('account', 'account__supplier', 'created_by', 'purchase_order').order_by('-serial')
+    scoped_suppliers = get_scoped_queryset(Contact.objects.filter(is_supplier=True), request.user, 'contact')
+    qs = qs.filter(account__supplier__in=scoped_suppliers)
+    if vendor_id:
+        qs = qs.filter(account__supplier_id=vendor_id)
+    if tx_type in ['credit', 'debit']:
+        qs = qs.filter(transaction_type=tx_type)
+    if date_from:
+        qs = qs.filter(transaction_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(transaction_date__lte=date_to)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__supplier__name'])
+
+    columns = [
+        {'header': 'رقم القيد', 'key': lambda t: f"#{t.serial}", 'width': 14, 'align': 'center'},
+        {'header': 'المورد / الحساب', 'key': lambda t: t.account.supplier.name, 'width': 28, 'align': 'right'},
+        {'header': 'تاريخ المعاملة', 'key': lambda t: t.transaction_date.strftime('%Y-%m-%d') if t.transaction_date else '', 'width': 16, 'align': 'center'},
+        {'header': 'البيان والتوصيف', 'key': lambda t: t.description or '', 'width': 34, 'align': 'right'},
+        {'header': 'تاريخ الاستحقاق', 'key': lambda t: t.due_date.strftime('%Y-%m-%d') if t.due_date else '', 'width': 16, 'align': 'center'},
+        {'header': 'دائن / فاتورة (+)', 'key': lambda t: float(t.credit or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'مدين / سداد (-)', 'key': lambda t: float(t.debit or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'الرصيد المستحق', 'key': lambda t: float(t.running_balance or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'المسئول', 'key': lambda t: (t.created_by.name or t.created_by.username) if t.created_by else '', 'width': 22, 'align': 'right'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="vendor_transactions_export",
+        sheet_title="قيود الموردين",
+        report_title="سجل القيود اليومية وحركات الموردين",
+        user=request.user,
+    )
+
+
 @require_permission(['treasury:vaults/view', 'treasury:treasury/view'])
 def vaults_list(request):
     """
-    Vaults & Cash Safes Listing with Dedicated Scoped Statistics Cards.
+    Vaults & Cash Safes Listing with Dedicated Scoped Statistics Cards and Advanced Filter Drawer.
     """
     search = request.GET.get('search', '').strip()
-    qs = Vault.objects.select_related('assigned_user').order_by('serial_num')
+    vault_type = request.GET.get('vault_type', '').strip()
+    custody_type = request.GET.get('custody_type', '').strip()
+    status = request.GET.get('status', '').strip()
+    area_id = request.GET.get('area', '').strip()
+    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    balance_min = request.GET.get('balance_min', '').strip()
+    balance_max = request.GET.get('balance_max', '').strip()
+
+    qs = Vault.objects.select_related('assigned_user', 'area').order_by('serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vault')
 
     active_filters = []
     if search:
         qs = filter_by_arabic_search(qs, search, ['name', 'serial_num'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
+
+    if vault_type in ['cash', 'bank']:
+        qs = qs.filter(vault_type=vault_type)
+        v_label = 'خزينة نقدية' if vault_type == 'cash' else 'حساب بنكي'
+        active_filters.append({'label': 'نوع الخزنة', 'value': v_label, 'param': 'vault_type'})
+
+    if custody_type == 'rep':
+        qs = qs.filter(is_rep_vault=True)
+        active_filters.append({'label': 'التبعية', 'value': 'عهدة مندوب', 'param': 'custody_type'})
+    elif custody_type == 'central':
+        qs = qs.filter(is_rep_vault=False)
+        active_filters.append({'label': 'التبعية', 'value': 'خزينة عامة / فرع', 'param': 'custody_type'})
+
+    if status == 'active':
+        qs = qs.filter(is_active=True)
+        active_filters.append({'label': 'الحالة', 'value': 'مفعلة', 'param': 'status'})
+    elif status == 'inactive':
+        qs = qs.filter(is_active=False)
+        active_filters.append({'label': 'الحالة', 'value': 'معطلة', 'param': 'status'})
+
+    from master_data.models import Area
+    if area_id:
+        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
+        area_obj = Area.objects.filter(id=area_id).first()
+        active_filters.append({'label': 'المنطقة', 'value': area_obj.name if area_obj else area_id, 'param': 'area'})
+
+    if assigned_user_id:
+        qs = qs.filter(assigned_user_id=assigned_user_id)
+        u_obj = User.objects.filter(id=assigned_user_id).first()
+        active_filters.append({'label': 'المسؤول', 'value': u_obj.get_full_name() or u_obj.username if u_obj else assigned_user_id, 'param': 'assigned_user'})
+
+    if balance_min:
+        try:
+            b_min = Decimal(balance_min)
+            qs = qs.filter(current_balance__gte=b_min)
+            active_filters.append({'label': 'الحد الأدنى للرصيد', 'value': f'{b_min:,.2f} ج.م', 'param': 'balance_min'})
+        except Exception:
+            pass
+
+    if balance_max:
+        try:
+            b_max = Decimal(balance_max)
+            qs = qs.filter(current_balance__lte=b_max)
+            active_filters.append({'label': 'الحد الأقصى للرصيد', 'value': f'{b_max:,.2f} ج.م', 'param': 'balance_max'})
+        except Exception:
+            pass
 
     # Dedicated Real Scoped Statistics Cards matching active filters
     vlt_agg = qs.aggregate(
@@ -346,19 +533,92 @@ def vaults_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'treasury')
+
     context = {
         'vaults': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'search_query': search,
+        'selected_vault_type': vault_type,
+        'selected_custody_type': custody_type,
+        'selected_status': status,
+        'selected_area': area_id,
+        'selected_assigned_user': assigned_user_id,
+        'selected_balance_min': balance_min,
+        'selected_balance_max': balance_max,
         'active_filters': active_filters,
         'total_count': paginator.count,
         'stats': stats,
+        'areas': areas,
+        'assignees': assignees,
         'can_transfer': can_transfer,
         'can_manage': can_manage,
         'can_create_tx': can_create_tx,
     }
     return render(request, 'treasury/vaults_list.html', context)
+
+
+@require_permission('treasury:vaults/export')
+def vaults_export(request):
+    """Export filtered and scoped vaults to Excel."""
+    search = request.GET.get('search', '').strip()
+    vault_type = request.GET.get('vault_type', '').strip()
+    custody_type = request.GET.get('custody_type', '').strip()
+    status = request.GET.get('status', '').strip()
+    area_id = request.GET.get('area', '').strip()
+    assigned_user_id = request.GET.get('assigned_user', '').strip()
+    balance_min = request.GET.get('balance_min', '').strip()
+    balance_max = request.GET.get('balance_max', '').strip()
+
+    qs = Vault.objects.select_related('assigned_user', 'area').order_by('serial_num')
+    qs = get_scoped_queryset(qs, request.user, 'vault')
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['name', 'serial_num'])
+    if vault_type in ['cash', 'bank']:
+        qs = qs.filter(vault_type=vault_type)
+    if custody_type == 'rep':
+        qs = qs.filter(is_rep_vault=True)
+    elif custody_type == 'central':
+        qs = qs.filter(is_rep_vault=False)
+    if status == 'active':
+        qs = qs.filter(is_active=True)
+    elif status == 'inactive':
+        qs = qs.filter(is_active=False)
+    if area_id:
+        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
+    if assigned_user_id:
+        qs = qs.filter(assigned_user_id=assigned_user_id)
+    if balance_min:
+        try:
+            qs = qs.filter(current_balance__gte=Decimal(balance_min))
+        except Exception:
+            pass
+    if balance_max:
+        try:
+            qs = qs.filter(current_balance__lte=Decimal(balance_max))
+        except Exception:
+            pass
+
+    columns = [
+        {'header': 'الرقم المسلسل', 'key': 'serial_num', 'width': 16, 'align': 'center'},
+        {'header': 'اسم الخزنة / الحساب', 'key': 'name', 'width': 28, 'align': 'right'},
+        {'header': 'النوع', 'key': lambda v: 'خزينة نقدية' if v.vault_type == 'cash' else 'حساب بنكي', 'width': 16, 'align': 'center'},
+        {'header': 'التبعية', 'key': lambda v: 'عهدة مندوب' if v.is_rep_vault else 'خزينة عامة / فرع', 'width': 18, 'align': 'center'},
+        {'header': 'المنطقة', 'key': lambda v: v.area.name if v.area else '', 'width': 20, 'align': 'right'},
+        {'header': 'المسؤول', 'key': lambda v: (v.assigned_user.name or v.assigned_user.username) if v.assigned_user else '', 'width': 22, 'align': 'right'},
+        {'header': 'الرصيد الحالي (ج.م)', 'key': lambda v: float(v.current_balance or 0), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda v: 'مفعلة' if v.is_active else 'معطلة', 'width': 12, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="vaults_export",
+        sheet_title="الخزن النقدية",
+        report_title="دليل الخزن النقدية وحسابات العهد",
+        user=request.user,
+    )
 
 
 @require_permission(['treasury:vaults/view', 'treasury:vaults/manage'])
@@ -387,6 +647,8 @@ def vault_detail(request, pk):
 
     can_transfer = has_perm_or_admin(request.user, 'treasury:vaults/transfer')
     can_create_tx = has_perm_or_admin(request.user, 'treasury:transactions/create')
+    can_manage = has_perm_or_admin(request.user, 'treasury:vaults/manage') and can_user_access_object(request.user, vault, 'edit')
+    can_delete = (has_perm_or_admin(request.user, 'treasury:vaults/manage') or has_perm_or_admin(request.user, 'treasury:vaults/delete')) and can_user_access_object(request.user, vault, 'delete')
 
     recent_transactions = tx_qs[:20]
 
@@ -396,6 +658,8 @@ def vault_detail(request, pk):
         'recent_transactions': recent_transactions,
         'can_transfer': can_transfer,
         'can_create_tx': can_create_tx,
+        'can_manage': can_manage,
+        'can_delete': can_delete,
     }
     return render(request, 'treasury/vault_detail.html', context)
 
@@ -407,6 +671,8 @@ def vault_transactions_list(request):
     """
     vault_id = request.GET.get('vault_id')
     tx_type = request.GET.get('type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
     search = request.GET.get('search', '').strip()
 
     qs = VaultTransaction.objects.select_related('vault', 'created_by', 'reversal_transaction').order_by('-created_at')
@@ -423,6 +689,14 @@ def vault_transactions_list(request):
         qs = qs.filter(transaction_type=tx_type)
         type_label = 'إيداع (Inflow)' if tx_type == 'inflow' else 'صرف (Outflow)'
         active_filters.append({'label': f'نوع الحركة: {type_label}', 'param': 'type'})
+
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['description', 'vault__name'])
@@ -460,6 +734,8 @@ def vault_transactions_list(request):
         'vaults': vaults,
         'selected_vault_id': vault_id,
         'selected_tx_type': tx_type,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
@@ -469,6 +745,46 @@ def vault_transactions_list(request):
         'can_transfer': can_transfer,
     }
     return render(request, 'treasury/vault_transactions_list.html', context)
+
+
+@require_permission('treasury:transactions/export')
+def vault_transactions_export(request):
+    """Export filtered and scoped vault transactions to Excel."""
+    vault_id = request.GET.get('vault_id')
+    tx_type = request.GET.get('type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    search = request.GET.get('search', '').strip()
+
+    qs = VaultTransaction.objects.select_related('vault', 'created_by', 'reversal_transaction').order_by('-created_at')
+    qs = get_scoped_queryset(qs, request.user, 'vaulttransaction')
+    if vault_id:
+        qs = qs.filter(vault_id=vault_id)
+    if tx_type in ['inflow', 'outflow']:
+        qs = qs.filter(transaction_type=tx_type)
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['description', 'vault__name'])
+
+    columns = [
+        {'header': 'التاريخ والوقت', 'key': lambda t: t.created_at.strftime('%Y-%m-%d %H:%M') if t.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'الخزنة', 'key': lambda t: t.vault.name if t.vault else '', 'width': 24, 'align': 'right'},
+        {'header': 'نوع الحركة', 'key': lambda t: 'إيداع (Inflow)' if t.transaction_type == 'inflow' else 'صرف (Outflow)', 'width': 18, 'align': 'center'},
+        {'header': 'المبلغ (ج.م)', 'key': lambda t: float(t.amount or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'البيان', 'key': lambda t: t.description or '', 'width': 36, 'align': 'right'},
+        {'header': 'المسئول', 'key': lambda t: (t.created_by.name or t.created_by.username) if t.created_by else '', 'width': 22, 'align': 'right'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="vault_transactions_export",
+        sheet_title="حركات الخزن",
+        report_title="سجل حركات وسندات الخزن النقدية",
+        user=request.user,
+    )
 
 
 @require_permission('treasury:vaults/transfer')
@@ -502,6 +818,9 @@ def vault_transfer(request):
                 user=request.user,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(out_tx, request)
             messages.success(request, f"تم التحويل بنجاح بقيمة {Decimal(amount):,.2f} ج.م من {source_vault.name} إلى {dest_vault.name}.")
             return redirect('vaults_list')
         except (ValidationError, Exception) as e:
@@ -549,84 +868,96 @@ def vault_transaction_reverse(request, pk):
 @require_permission('treasury:vaults/manage')
 def vault_create(request):
     """
-    Create a new Vault (Cash Safe or Bank Account).
+    Create a new Vault (Cash Safe or Bank Account) using VaultService.
     """
+    from accounts.scope_service import ScopeResolutionService
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        vault_type = request.POST.get('vault_type', 'cash')
-        assigned_user_id = request.POST.get('assigned_user') or None
-        is_rep_vault = request.POST.get('is_rep_vault') == 'on'
-        is_active = request.POST.get('is_active', 'on') == 'on'
-        initial_balance = (request.POST.get('initial_balance') or request.POST.get('current_balance') or '0.00').strip()
-
-        if not name:
-            messages.error(request, "يرجى إدخال اسم الخزنة.")
-            return redirect('vault_create')
-
-        if Vault.objects.filter(name__iexact=name).exists():
-            messages.error(request, f"توجد خزنة مسجلة مسبقاً بنفس الاسم ({name}).")
-            return redirect('vault_create')
-
-        assigned_user = None
-        if assigned_user_id:
-            assigned_user = get_object_or_404(User, id=assigned_user_id)
-
+        data = {
+            'name': request.POST.get('name', '').strip(),
+            'vault_type': request.POST.get('vault_type', 'cash'),
+            'assigned_user': request.POST.get('assigned_user') or None,
+            'area': request.POST.get('area') or None,
+            'is_rep_vault': request.POST.get('is_rep_vault') == 'on',
+            'is_active': request.POST.get('is_active', 'on') == 'on',
+            'initial_balance': request.POST.get('initial_balance') or request.POST.get('current_balance') or '0.00',
+        }
         try:
-            init_bal = Decimal(initial_balance)
-            vault = Vault.objects.create(
-                name=name,
-                vault_type=vault_type,
-                assigned_user=assigned_user,
-                is_rep_vault=is_rep_vault,
-                is_active=is_active,
-                current_balance=init_bal
-            )
-
-            if init_bal > Decimal('0.00'):
-                opening_tx = VaultTransaction.objects.create(
-                    vault=vault,
-                    transaction_type='inflow',
-                    amount=init_bal,
-                    running_balance=init_bal,
-                    reference_type='opening_balance',
-                    description=f"رصيد افتتاحي عند إنشاء الخزنة ({vault.name})",
-                    created_by=request.user
-                )
-                from accounts.services import AuditLogService
-                AuditLogService.log(
-                    action_type='VAULT_OPENING_BALANCE',
-                    module='treasury',
-                    actor=request.user,
-                    record_id=opening_tx.id,
-                    record_name=f"رصيد افتتاحي {vault.name}",
-                    description=f"تسجيل قيد رصيد افتتاحي بمبلغ {init_bal:,.2f} ج.م لخزنة {vault.name}",
-                    new_values={'vault': vault.name, 'amount': str(init_bal), 'tx_id': opening_tx.id}
-                )
-
-            from accounts.services import AuditLogService
-            AuditLogService.log(
-                action_type='VAULT_CREATED',
-                module='treasury',
-                actor=request.user,
-                record_id=vault.id,
-                record_name=vault.name,
-                description=f"إنشاء خزنة جديدة: {vault.name} برصيد افتتاحي {init_bal:,.2f} ج.م",
-                new_values={
-                    'name': vault.name,
-                    'vault_type': vault.vault_type,
-                    'initial_balance': str(init_bal),
-                    'assigned_user': assigned_user.username if assigned_user else None
-                }
-            )
-
+            vault = VaultService.create_vault(data, request.user, request=request)
             messages.success(request, f"تم إنشاء الخزنة ({vault.name}) بنجاح برقم مسلسل #{vault.serial_num}.")
             return redirect('vaults_list')
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
         except Exception as e:
             messages.error(request, f"خطأ أثناء إنشاء الخزنة: {e}")
-            return redirect('vault_create')
 
-    users = User.objects.filter(is_active=True).order_by('username')
-    return render(request, 'treasury/vault_form.html', {'is_create': True, 'users': users})
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'treasury')
+    return render(request, 'treasury/vault_form.html', {
+        'is_create': True,
+        'areas': areas,
+        'users': assignees,
+    })
+
+
+@require_permission('treasury:vaults/manage')
+def vault_edit(request, pk):
+    """
+    Edit Vault details, custodian, branch, and status using VaultService.
+    """
+    from accounts.scope_service import ScopeResolutionService
+    vault = get_object_or_404(Vault, pk=pk)
+    if not can_user_access_object(request.user, vault, 'edit'):
+        return render_forbidden_response(request, "لا تملك صلاحية تعديل بيانات هذه الخزنة.")
+
+    if request.method == 'POST':
+        data = {
+            'name': request.POST.get('name', '').strip(),
+            'vault_type': request.POST.get('vault_type', vault.vault_type),
+            'assigned_user': request.POST.get('assigned_user') or None,
+            'area': request.POST.get('area') or None,
+            'is_rep_vault': request.POST.get('is_rep_vault') == 'on',
+            'is_active': request.POST.get('is_active') == 'on',
+        }
+        try:
+            vault = VaultService.update_vault(vault, data, request.user, request=request)
+            messages.success(request, f"تم تحديث بيانات الخزنة ({vault.name}) بنجاح.")
+            return redirect('vault_detail', pk=vault.pk)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        except Exception as e:
+            messages.error(request, f"خطأ أثناء تحديث الخزنة: {e}")
+
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'treasury')
+    return render(request, 'treasury/vault_form.html', {
+        'is_create': False,
+        'vault': vault,
+        'areas': areas,
+        'users': assignees,
+    })
+
+
+@require_permission(['treasury:vaults/manage', 'treasury:vaults/delete'])
+def vault_delete(request, pk):
+    """
+    Safely delete an empty vault with zero balance and no transaction history.
+    """
+    if request.method != 'POST':
+        return render_forbidden_response(request, "طريقة الطلب غير مسموح بها.")
+
+    vault = get_object_or_404(Vault, pk=pk)
+    if not can_user_access_object(request.user, vault, 'delete'):
+        return render_forbidden_response(request, "لا تملك صلاحية حذف هذه الخزنة.")
+
+    try:
+        VaultService.delete_vault(vault, request.user, request=request)
+        messages.success(request, "تم حذف الخزنة بنجاح.")
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+    except Exception as e:
+        messages.error(request, f"تعذر حذف الخزنة: {e}")
+
+    return redirect('vaults_list')
 
 
 @require_permission(['treasury:payment_requests/list', 'treasury:payments/requests'])
@@ -707,75 +1038,16 @@ def vendor_payment_requests_list(request):
 
 @require_permission(['treasury:payment_requests/create', 'treasury:payments/create'])
 def vendor_payment_request_create(request):
-    if request.method == 'POST':
-        supplier_id = request.POST.get('supplier')
-        po_id = request.POST.get('purchase_order') or None
-        vault_id = request.POST.get('preferred_vault') or None
-        amount_raw = request.POST.get('amount', '0.00').strip()
-        request_date = request.POST.get('request_date') or timezone.now().date()
-        notes = request.POST.get('notes', '').strip()
-
-        if not supplier_id or not amount_raw:
-            messages.error(request, "يرجى تحديد المورد ومبلغ السداد المطلوب.")
-            return redirect('vendor_payment_request_create')
-
-        supplier = get_object_or_404(Contact, id=supplier_id)
-        if not ScopeResolutionService.can_user_access_supplier(request.user, supplier):
-            return render_forbidden_response(request, "غير مصرح لك بتقديم طلب صرف لمورد خارج نطاقك الجغرافي.")
-        if not supplier.is_supplier or supplier.status == 'inactive':
-            messages.error(request, "جهة الاتصال المحددة غير مصنفة كمورد نشط.")
-            return redirect('vendor_payment_request_create')
-
-        po = None
-        if po_id:
-            po = get_object_or_404(PurchaseOrder, id=po_id)
-            if not can_user_access_object(request.user, po, 'view'):
-                return render_forbidden_response(request, "غير مصرح لك بطلب سداد لأمر شراء خارج نطاقك.")
-
-        preferred_vault = None
-        if vault_id:
-            preferred_vault = get_object_or_404(Vault, id=vault_id)
-            if not can_user_access_object(request.user, preferred_vault, 'view'):
-                return render_forbidden_response(request, "غير مصرح لك باختيار خزنة خارج نطاق صلاحياتك.")
-
-        try:
-            amount = Decimal(amount_raw)
-            req_obj = VendorPaymentRequestService.create_request(
-                supplier=supplier,
-                amount=amount,
-                preferred_vault=preferred_vault,
-                purchase_order=po,
-                request_date=request_date,
-                notes=notes,
-                user=request.user
-            )
-            messages.success(request, f"تم إنشاء طلب الصرف {req_obj.request_number} بنجاح وهو بانتظار الاعتماد المالي.")
-            return redirect('vendor_payment_request_detail', pk=req_obj.pk)
-        except ValidationError as e:
-            messages.error(request, str(e.message if hasattr(e, 'message') else e))
-            return redirect('vendor_payment_request_create')
-
-    # GET
-    po_id = request.GET.get('po')
-    selected_po = None
-    if po_id:
-        candidate_po = PurchaseOrder.objects.filter(id=po_id).first()
-        if candidate_po and can_user_access_object(request.user, candidate_po, 'view'):
-            selected_po = candidate_po
-
-    suppliers = get_bounded_select_options(
-        ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'treasury'),
-        selected_id=selected_po.supplier_id if selected_po else (request.GET.get('supplier') or request.GET.get('supplier_id')),
-        limit=100,
-    )
-    vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury')
-
-    context = {
-        'suppliers': suppliers,
-        'vaults': vaults,
-        'selected_po': selected_po,
-    }
-    return render(request, 'treasury/vendor_payment_request_create.html', context)
+    """
+    Requirement B6: Remove payment-requests/create/ completely; all payment creation
+    routes use treasury/payments/create/. Redirect directly to vendor_payment_create,
+    preserving query parameters (e.g. ?po=... or ?supplier=...).
+    """
+    query_str = request.META.get('QUERY_STRING', '')
+    url = reverse('vendor_payment_create')
+    if query_str:
+        url = f"{url}?{query_str}"
+    return redirect(url)
 
 
 @require_permission(['treasury:payment_requests/list', 'treasury:payments/requests'])
@@ -899,9 +1171,12 @@ def vendor_payment_request_action(request, pk, action):
 
 @require_permission(['treasury:payment_requests/export', 'treasury:payments/requests'])
 def vendor_payment_requests_export(request):
+    from master_data.date_filter_utils import resolve_date_range
+
     status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
+    date_from, date_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
 
     qs = VendorPaymentRequest.objects.select_related('supplier', 'purchase_order', 'preferred_vault', 'created_by').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vendorpaymentrequest')
@@ -910,6 +1185,10 @@ def vendor_payment_requests_export(request):
         qs = qs.filter(status=status_filter)
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
+    if date_from:
+        qs = qs.filter(request_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(request_date__lte=date_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['request_number', 'supplier__name', 'purchase_order__order_number'])
 
@@ -974,6 +1253,9 @@ def vault_deposit(request):
                 reference_number=reference_number,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(tx, request)
             messages.success(request, f"تم بنجاح إيداع {amount:,.2f} ج.م في خزنة ({vault.name}). رقم الحركة: #{tx.id}.")
             return redirect('vaults_list')
         except (ValidationError, Exception) as e:
@@ -1047,6 +1329,9 @@ def vault_withdraw(request):
                 reference_number=reference_number,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(tx, request)
             messages.success(request, f"تم بنجاح صرف {amount:,.2f} ج.م من خزنة ({vault.name}). رقم الحركة: #{tx.id}.")
             return redirect('vaults_list')
         except (ValidationError, Exception) as e:

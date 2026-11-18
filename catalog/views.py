@@ -223,14 +223,11 @@ def product_edit(request, pk):
 
         clear_thumbnail = request.POST.get('clear_thumbnail') == '1'
         if clear_thumbnail:
-            if product.thumbnail:
-                try:
-                    product.thumbnail.delete(save=False)
-                except Exception:
-                    pass
-            product.thumbnail = None
+            from master_data.media_service import clear_model_file
+            clear_model_file(product, 'thumbnail')
         elif request.FILES.get('thumbnail'):
-            product.thumbnail = request.FILES['thumbnail']
+            from master_data.media_service import replace_model_file
+            replace_model_file(product, 'thumbnail', request.FILES['thumbnail'])
 
         product.save()
 
@@ -331,6 +328,8 @@ def products_export(request):
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category')
     sellable_filter = request.GET.get('sellable')
+    min_price = request.GET.get('min_price', '').strip()
+    max_price = request.GET.get('max_price', '').strip()
 
     qs = Product.objects.select_related('category').all().order_by('name')
 
@@ -340,12 +339,18 @@ def products_export(request):
         qs = qs.filter(sellable=True)
     elif sellable_filter in ['false', '0']:
         qs = qs.filter(sellable=False)
+    if min_price:
+        try:
+            qs = qs.filter(retail_price__gte=Decimal(min_price))
+        except Exception:
+            pass
+    if max_price:
+        try:
+            qs = qs.filter(retail_price__lte=Decimal(max_price))
+        except Exception:
+            pass
     if search:
-        qs = qs.filter(
-            Q(name__icontains=search) |
-            Q(sku_code__icontains=search) |
-            Q(barcode__icontains=search)
-        )
+        qs = filter_by_arabic_search(qs, search, ['name', 'sku_code', 'barcode', 'description'])
 
     columns = [
         {'header': 'الكود (SKU)', 'key': 'sku_code', 'width': 18, 'align': 'center'},
@@ -360,7 +365,14 @@ def products_export(request):
         {'header': 'تاريخ الإنشاء', 'key': lambda p: p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '', 'width': 20, 'align': 'center'},
     ]
 
-    return export_to_excel_response(qs, columns, filename="products_export", sheet_title="المنتجات")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="products_export",
+        sheet_title="المنتجات",
+        report_title="دليل المنتجات والأصناف",
+        user=request.user,
+    )
 
 
 @require_permission('catalog:products/import')
@@ -611,6 +623,30 @@ def categories_list(request):
         'search_query': search,
         'active_filters': active_filters,
     })
+
+
+@require_permission('catalog:categories/export')
+def categories_export(request):
+    search = request.GET.get('search', '').strip()
+    categories = ProductCategory.objects.annotate(products_count=Count('products')).all().order_by('name')
+    if search:
+        categories = filter_by_arabic_search(categories, search, ['name', 'code', 'description'])
+
+    columns = [
+        {'header': 'الاسم', 'key': 'name', 'width': 30, 'align': 'right'},
+        {'header': 'الكود', 'key': 'code', 'width': 16, 'align': 'center'},
+        {'header': 'التوصيف', 'key': lambda c: c.description or '', 'width': 36, 'align': 'right'},
+        {'header': 'عدد المنتجات', 'key': lambda c: int(c.products_count or 0), 'format': '#,##0', 'width': 15, 'align': 'center'},
+        {'header': 'تاريخ الإنشاء', 'key': lambda c: c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '', 'width': 20, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        categories,
+        columns,
+        filename="categories_export",
+        sheet_title="التصنيفات",
+        report_title="تصنيفات المنتجات",
+        user=request.user,
+    )
 
 
 @require_permission('catalog:categories/edit')

@@ -185,44 +185,55 @@ def validate_assigned_areas_for_user(request_user, area_ids):
     return True, "", cleaned_ids
 
 
+def _get_filtered_users_queryset(request):
+    from master_data.search_utils import filter_by_arabic_search
+    query = request.GET.get('q', '').strip()
+    role_filter = request.GET.get('role', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+    area_filter = request.GET.get('area', '').strip()
+
+    users_qs = (
+        User.objects.select_related('role')
+        .prefetch_related('assigned_areas', 'assigned_warehouses', 'assigned_vaults')
+        .order_by('-created_at')
+    )
+    users_qs = get_scoped_queryset(users_qs, request.user, 'user')
+
+    if query:
+        users_qs = filter_by_arabic_search(
+            users_qs,
+            ['name', 'username', 'email', 'code', 'mobile'],
+            query,
+            raw_fields=['username', 'code', 'mobile'],
+        )
+    if role_filter:
+        users_qs = users_qs.filter(role__id=role_filter)
+    if status_filter == 'active':
+        users_qs = users_qs.filter(is_active=True)
+    elif status_filter == 'inactive':
+        users_qs = users_qs.filter(is_active=False)
+    if area_filter:
+        users_qs = users_qs.filter(
+            Q(assigned_areas__id=area_filter) | Q(assigned_areas__parent_id=area_filter)
+        ).distinct()
+
+    return users_qs, query, role_filter, status_filter, area_filter
+
+
 @login_required
 @require_permission('users:users/list')
 def users_list(request):
     """
     User accounts list matching reference ERP:
-    Columns: الاسم, البريد الإلكتروني, مفعل, الدور, إجراءات
     Enforces strict RBAC: Accountant and Representative restricted; Manager scoped to region.
     """
-    # 1. Accountant restriction
     if is_accountant(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
         return render_forbidden_response(request, 'users:users/list', 'عذراً، لا يمتلك المحاسب صلاحية إدارة المستخدمين.')
 
-    # 2. Representative restriction
     if is_representative(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
         return render_forbidden_response(request, 'users:users/list', 'عذراً، لا تمتلك صلاحية استعراض قائمة المستخدمين.')
 
-    query = request.GET.get('q', '').strip()
-    role_filter = request.GET.get('role', '').strip()
-    status_filter = request.GET.get('status', '').strip()
-
-    users_qs = User.objects.select_related('role').prefetch_related('assigned_areas').order_by('-created_at')
-    users_qs = get_scoped_queryset(users_qs, request.user, 'user')
-
-    if query:
-        users_qs = users_qs.filter(
-            Q(name__icontains=query) |
-            Q(email__icontains=query) |
-            Q(username__icontains=query) |
-            Q(code__icontains=query)
-        )
-
-    if role_filter:
-        users_qs = users_qs.filter(role__id=role_filter)
-
-    if status_filter == 'active':
-        users_qs = users_qs.filter(is_active=True)
-    elif status_filter == 'inactive':
-        users_qs = users_qs.filter(is_active=False)
+    users_qs, query, role_filter, status_filter, area_filter = _get_filtered_users_queryset(request)
 
     active_filters = []
     if query:
@@ -233,6 +244,10 @@ def users_list(request):
             active_filters.append({'label': 'الدور', 'value': selected_role.display_name, 'param': 'role'})
     if status_filter:
         active_filters.append({'label': 'الحالة', 'value': 'مفعل' if status_filter == 'active' else 'معطل', 'param': 'status'})
+    if area_filter:
+        selected_area_obj = Area.objects.filter(pk=area_filter).first()
+        if selected_area_obj:
+            active_filters.append({'label': 'المنطقة', 'value': selected_area_obj.name, 'param': 'area'})
 
     paginator, page_obj = paginate_queryset(request, users_qs, default_per_page=25)
 
@@ -453,6 +468,22 @@ def user_edit(request, pk):
 
     hierarchical_areas = get_hierarchical_areas(request.user)
 
+    from inventory.models import Warehouse
+    from treasury.models import Vault
+
+    def _get_user_edit_context(user_areas_ids=None):
+        return {
+            'target_user': target_user,
+            'roles': roles,
+            'areas': Area.objects.all().order_by('name'),
+            'hierarchical_areas': hierarchical_areas,
+            'selected_area_ids': user_areas_ids if user_areas_ids is not None else list(target_user.assigned_areas.values_list('id', flat=True)),
+            'scoped_warehouses': get_scoped_queryset(Warehouse.objects.filter(is_active=True).select_related('area'), request.user, 'warehouse'),
+            'scoped_vaults': get_scoped_queryset(Vault.objects.filter(is_active=True).select_related('area'), request.user, 'vault'),
+            'current_warehouse': Warehouse.objects.filter(assigned_user=target_user, is_active=True).first(),
+            'current_vault': Vault.objects.filter(assigned_user=target_user, is_active=True).first(),
+        }
+
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         email = request.POST.get('email', '').strip().lower()
@@ -463,34 +494,19 @@ def user_edit(request, pk):
 
         if not name or not email:
             messages.error(request, "الاسم والبريد الإلكتروني حقول إلزامية.")
-            return render(request, 'accounts/user_edit.html', {
-                'target_user': target_user,
-                'roles': roles,
-                'hierarchical_areas': hierarchical_areas,
-                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-            })
+            return render(request, 'accounts/user_edit.html', _get_user_edit_context())
 
         # Check unique email against others
         if User.objects.filter(email__iexact=email).exclude(pk=target_user.pk).exists():
             messages.error(request, f"البريد الإلكتروني '{email}' مسجل لمستخدم آخر.")
-            return render(request, 'accounts/user_edit.html', {
-                'target_user': target_user,
-                'roles': roles,
-                'hierarchical_areas': hierarchical_areas,
-                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-            })
+            return render(request, 'accounts/user_edit.html', _get_user_edit_context())
 
         # Safeguard: cannot deactivate last superadmin
         if target_user.is_superuser and not is_active:
             active_superusers = User.objects.filter(is_superuser=True, is_active=True).exclude(pk=target_user.pk).count()
             if active_superusers == 0:
                 messages.error(request, "لا يمكن تعطيل مدير النظام الأعلى الأخير للنظام لمنع قفل النظام!")
-                return render(request, 'accounts/user_edit.html', {
-                    'target_user': target_user,
-                    'roles': roles,
-                    'hierarchical_areas': hierarchical_areas,
-                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-                })
+                return render(request, 'accounts/user_edit.html', _get_user_edit_context())
 
         old_values = {
             'name': target_user.name,
@@ -513,21 +529,11 @@ def user_edit(request, pk):
             new_role = Role.get_supported_roles().filter(pk=role_id).first() or Role.objects.filter(pk=role_id, is_active=True).first()
             if not new_role:
                 messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
-                return render(request, 'accounts/user_edit.html', {
-                    'target_user': target_user,
-                    'roles': roles,
-                    'hierarchical_areas': hierarchical_areas,
-                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-                })
+                return render(request, 'accounts/user_edit.html', _get_user_edit_context())
             # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
             if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
                 messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
-                return render(request, 'accounts/user_edit.html', {
-                    'target_user': target_user,
-                    'roles': roles,
-                    'hierarchical_areas': hierarchical_areas,
-                    'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-                })
+                return render(request, 'accounts/user_edit.html', _get_user_edit_context())
             target_user.role = new_role
         else:
             if not target_user.is_superuser:
@@ -541,13 +547,30 @@ def user_edit(request, pk):
         is_valid, err_msg, cleaned_ids = validate_assigned_areas_for_user(request.user, area_ids)
         if not is_valid:
             messages.error(request, err_msg)
-            return render(request, 'accounts/user_edit.html', {
-                'target_user': target_user,
-                'roles': roles,
-                'hierarchical_areas': hierarchical_areas,
-                'selected_area_ids': list(target_user.assigned_areas.values_list('id', flat=True)),
-            })
+            return render(request, 'accounts/user_edit.html', _get_user_edit_context(cleaned_ids))
         target_user.assigned_areas.set(cleaned_ids)
+
+        # Update linked Warehouse and Vault
+        assigned_warehouse_id = request.POST.get('assigned_warehouse', '').strip()
+        assigned_vault_id = request.POST.get('assigned_vault', '').strip()
+
+        if assigned_warehouse_id:
+            new_wh = Warehouse.objects.filter(pk=assigned_warehouse_id).first()
+            if new_wh and can_user_access_object(request.user, new_wh, 'edit'):
+                Warehouse.objects.filter(assigned_user=target_user).exclude(pk=new_wh.pk).update(assigned_user=None)
+                new_wh.assigned_user = target_user
+                new_wh.save(update_fields=['assigned_user'])
+        elif 'assigned_warehouse' in request.POST:
+            Warehouse.objects.filter(assigned_user=target_user).update(assigned_user=None)
+
+        if assigned_vault_id:
+            new_v = Vault.objects.filter(pk=assigned_vault_id).first()
+            if new_v and can_user_access_object(request.user, new_v, 'edit'):
+                Vault.objects.filter(assigned_user=target_user).exclude(pk=new_v.pk).update(assigned_user=None)
+                new_v.assigned_user = target_user
+                new_v.save(update_fields=['assigned_user'])
+        elif 'assigned_vault' in request.POST:
+            Vault.objects.filter(assigned_user=target_user).update(assigned_user=None)
 
         from accounts.services import is_representative, ensure_representative_resources
         if is_representative(target_user):
@@ -560,6 +583,8 @@ def user_edit(request, pk):
             'is_active': target_user.is_active,
             'code': target_user.code,
             'mobile': target_user.mobile,
+            'warehouse': target_user.get_default_warehouse().name if target_user.get_default_warehouse() else None,
+            'vault': target_user.get_default_treasury().name if target_user.get_default_treasury() else None,
         }
 
         # Record Security Audit Log with previous and new values
@@ -581,15 +606,7 @@ def user_edit(request, pk):
         messages.success(request, f"تم تحديث بيانات المستخدم '{target_user.name}' بنجاح.")
         return redirect('user_detail', pk=target_user.pk)
 
-    selected_area_ids = list(target_user.assigned_areas.values_list('id', flat=True))
-    areas = Area.objects.all().order_by('name')
-    return render(request, 'accounts/user_edit.html', {
-        'target_user': target_user,
-        'roles': roles,
-        'areas': areas,
-        'hierarchical_areas': hierarchical_areas,
-        'selected_area_ids': selected_area_ids,
-    })
+    return render(request, 'accounts/user_edit.html', _get_user_edit_context())
 
 
 @login_required
@@ -705,21 +722,64 @@ def user_toggle_bypass_location(request, pk):
 @require_permission('users:users/export')
 def users_export(request):
     """
-    Exports users list to CSV with UTF-8 BOM for Arabic Excel compatibility.
+    Exports scoped and filtered users list to styled Excel (.xlsx).
     """
-    response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="users_list.csv"'
-    response.write('\ufeff'.encode('utf8'))
+    if is_accountant(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/export', 'عذراً، لا يمتلك المحاسب صلاحية تصدير المستخدمين.')
 
-    writer = csv.writer(response)
-    writer.writerow(['المعرف', 'الاسم', 'البريد الإلكتروني', 'الكود', 'الدور الوظيفي', 'الحالة', 'الهاتف', 'تاريخ الإنشاء'])
+    if is_representative(request.user) and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/export', 'عذراً، لا تمتلك صلاحية تصدير المستخدمين.')
 
-    for u in User.objects.select_related('role').order_by('name'):
-        status = 'مفعل' if u.is_active else 'معطل'
-        role = u.role.display_name if u.role else ('مدير نظام' if u.is_superuser else '-')
-        writer.writerow([u.id, u.name, u.email, u.code, role, status, u.mobile, u.created_at.strftime('%Y-%m-%d %H:%M')])
+    users_qs, _, _, _, _ = _get_filtered_users_queryset(request)
+    from master_data.excel_utils import export_to_excel_response
 
-    return response
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'الاسم الكامل', 'key': lambda u: u.name or u.username, 'width': 28, 'align': 'right'},
+        {'header': 'اسم المستخدم', 'key': 'username', 'width': 22, 'align': 'center'},
+        {'header': 'البريد الإلكتروني', 'key': 'email', 'width': 26, 'align': 'center'},
+        {'header': 'الكود', 'key': 'code', 'width': 14, 'align': 'center'},
+        {'header': 'الدور الوظيفي', 'key': lambda u: u.role.display_name if u.role else ('مدير نظام' if u.is_superuser else '-'), 'width': 20, 'align': 'center'},
+        {'header': 'المناطق', 'key': lambda u: '، '.join(a.name for a in u.assigned_areas.all()) or '-', 'width': 28, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda u: 'مفعل' if u.is_active else 'معطل', 'width': 12, 'align': 'center'},
+        {'header': 'الهاتف', 'key': 'mobile', 'width': 16, 'align': 'center'},
+        {'header': 'تاريخ الإنشاء', 'key': lambda u: u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '', 'width': 18, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        users_qs,
+        columns,
+        filename="users_export",
+        sheet_title="دليل المستخدمين",
+        report_title="تقرير حسابات المستخدمين والصلاحيات",
+        user=request.user,
+    )
+
+
+@login_required
+@require_permission('users:users/delete')
+def user_delete(request, pk):
+    """
+    Safely delete a user account while preserving financial, inventory, and audit history.
+    """
+    if request.method != 'POST':
+        return render_forbidden_response(request, 'users:users/delete', 'طريقة الطلب غير مسموح بها.')
+
+    target_user = get_object_or_404(User.objects.select_related('role'), pk=pk)
+    if not can_user_access_object(request.user, target_user, 'manage'):
+        return render_forbidden_response(request, 'users:users/delete', 'غير مصرح لك بحذف هذا المستخدم خارج نطاق صلاحيتك.')
+
+    from django.core.exceptions import ValidationError
+    from .services import delete_user_safely
+
+    try:
+        delete_user_safely(target_user, request.user, request=request)
+        messages.success(request, f"تم حذف حساب المستخدم '{target_user.name or target_user.username}' بنجاح مع الحفاظ على سلامة السجلات التاريخية.")
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+    except Exception as e:
+        messages.error(request, f"تعذر حذف المستخدم: {e}")
+
+    return redirect('users_list')
 
 
 @login_required
@@ -848,9 +908,25 @@ def user_effective_permissions(request, pk):
 def get_grouped_permissions():
     """
     Helper returning the hierarchical permission matrix structured by Module -> Pages -> Actions,
-    hydrated with database Permission objects.
+    hydrated with database Permission objects (auto-creating any newly registered codenames).
     """
+    from .permission_registry import get_all_registered_permissions
+
     db_perms = {p.codename: p for p in Permission.objects.all()}
+    role_ct = None
+    for reg in get_all_registered_permissions():
+        c = reg['codename']
+        if c not in db_perms:
+            if role_ct is None:
+                role_ct = ContentType.objects.get_for_model(Role)
+            p_obj, _ = Permission.objects.get_or_create(
+                codename=c,
+                defaults={'name': reg['name'][:255], 'content_type': role_ct},
+            )
+            db_perms[c] = p_obj
+        elif db_perms[c].name != reg['name'][:255]:
+            db_perms[c].name = reg['name'][:255]
+            db_perms[c].save(update_fields=['name'])
 
     modules_tree = []
     for mod_key, mod_info in ERP_PERMISSIONS_CATALOG.items():
@@ -1038,8 +1114,8 @@ def role_edit(request, pk):
     role = get_object_or_404(Role, pk=pk)
 
     if request.method == 'POST':
-        # Protect system SuperAdmin role
-        if role.name == 'SuperAdmin':
+        # Protect system SuperAdmin role (case-insensitive)
+        if role.name.lower() == 'superadmin' or role.is_super:
             # Cannot rename or de-escalate SuperAdmin
             role.is_active = True
             role.is_super = True
@@ -1314,6 +1390,71 @@ def audit_logs_list(request):
         'active_filters': active_filters,
         'users': all_users,
     })
+
+
+@login_required
+@require_permission('settings:auditLogs/export')
+def audit_logs_export(request):
+    """Export filtered SecurityAuditLog records to Excel."""
+    from datetime import datetime, time
+    from django.utils import timezone
+    from master_data.excel_utils import export_to_excel_response
+
+    module_filter = request.GET.get('module', '').strip()
+    action_filter = request.GET.get('action', '').strip()
+    user_filter = request.GET.get('user', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    query = request.GET.get('q', '').strip()
+
+    logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
+    if module_filter:
+        logs_qs = logs_qs.filter(module=module_filter)
+    if action_filter:
+        logs_qs = logs_qs.filter(action_type=action_filter)
+    if user_filter and user_filter.isdigit():
+        logs_qs = logs_qs.filter(actor_id=int(user_filter))
+    if date_from:
+        try:
+            df = datetime.strptime(date_from, '%Y-%m-%d')
+            logs_qs = logs_qs.filter(created_at__gte=timezone.make_aware(datetime.combine(df.date(), time.min)))
+        except (ValueError, TypeError):
+            pass
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, '%Y-%m-%d')
+            logs_qs = logs_qs.filter(created_at__lte=timezone.make_aware(datetime.combine(dt.date(), time.max)))
+        except (ValueError, TypeError):
+            pass
+    if query:
+        logs_qs = logs_qs.filter(
+            Q(description__icontains=query) |
+            Q(record_id__icontains=query) |
+            Q(record_name__icontains=query) |
+            Q(actor__name__icontains=query) |
+            Q(actor__username__icontains=query) |
+            Q(target_user__name__icontains=query) |
+            Q(ip_address__icontains=query)
+        )
+
+    columns = [
+        {'header': 'التاريخ والوقت', 'key': lambda l: l.created_at.strftime('%Y-%m-%d %H:%M:%S') if l.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'الموديول', 'key': lambda l: l.get_module_display(), 'width': 18, 'align': 'center'},
+        {'header': 'نوع العملية', 'key': lambda l: l.get_action_type_display(), 'width': 24, 'align': 'center'},
+        {'header': 'المنفذ', 'key': lambda l: (l.actor.name or l.actor.username) if l.actor else 'النظام تلقائياً', 'width': 22, 'align': 'right'},
+        {'header': 'السجل المستهدف', 'key': lambda l: l.record_name or l.record_id or '', 'width': 26, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda l: l.status or '', 'width': 14, 'align': 'center'},
+        {'header': 'عنوان IP', 'key': lambda l: l.ip_address or '', 'width': 16, 'align': 'center'},
+        {'header': 'الوصف', 'key': lambda l: l.description or '', 'width': 42, 'align': 'right'},
+    ]
+    return export_to_excel_response(
+        logs_qs,
+        columns,
+        filename="audit_logs_export",
+        sheet_title="سجل التدقيق",
+        report_title="سجل التدقيق الأمني الشامل",
+        user=request.user,
+    )
 
 
 @login_required

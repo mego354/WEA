@@ -14,7 +14,7 @@ from treasury.models import VendorAccount, Vault, VendorPayment
 from catalog.models import Product
 from contacts.models import Contact
 from sales.models import SalesOrder, SalesReturnOrder, Collection, CustomerAccount
-from activities.models import Visit
+from activities.models import Visit, AgreementType
 from accounts.permissions import (
     require_permission, has_perm_or_admin, get_scoped_queryset,
     is_manager_or_higher, is_accountant, is_representative,
@@ -24,7 +24,7 @@ from django.contrib.auth import get_user_model
 from inventory.models import Warehouse, InventoryStock
 from .models import (
     CompanyProfile, LocationSettings, Area, ExpenseType,
-    TicketType, ApprovalRequestType, AgreementType,
+    TicketType, ApprovalRequestType,
     SalesSettings, PurchaseSettings, ContactFieldSetting,
     DataSyncConfig
 )
@@ -186,33 +186,18 @@ def home_view(request):
                     selected_rep = None
                     messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
 
-    start_date_str = request.GET.get('start_date', '').strip()
-    end_date_str = request.GET.get('end_date', '').strip()
-    period = request.GET.get('period', '').strip()
-
-    start_date = None
-    end_date = None
-    if period == 'all':
-        display_range = "كل الوقت"
-        start_date_str = ''
-        end_date_str = ''
-    elif start_date_str and end_date_str:
-        try:
-            start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
-            display_range = f"{start_date.strftime('%d/%m/%Y')} – {end_date.strftime('%d/%m/%Y')}"
-        except ValueError:
-            start_date = datetime.date(2026, 10, 1)
-            end_date = datetime.date(2026, 10, 31)
-            start_date_str = '2026-10-01'
-            end_date_str = '2026-10-31'
-            display_range = "01/10/2026 – 31/10/2026"
+    from master_data.date_filter_utils import resolve_date_range
+    start_date, end_date, active_preset, start_date_str, end_date_str = resolve_date_range(
+        request, default_preset='this_month'
+    )
+    if start_date and end_date:
+        display_range = f"{start_date.strftime('%d/%m/%Y')} – {end_date.strftime('%d/%m/%Y')}"
+    elif start_date:
+        display_range = f"من {start_date.strftime('%d/%m/%Y')}"
+    elif end_date:
+        display_range = f"حتى {end_date.strftime('%d/%m/%Y')}"
     else:
-        start_date = datetime.date(2026, 10, 1)
-        end_date = datetime.date(2026, 10, 31)
-        start_date_str = '2026-10-01'
-        end_date_str = '2026-10-31'
-        display_range = "01/10/2026 – 31/10/2026"
+        display_range = "كل الوقت"
 
     # Querysets strictly filtered by authorized scope and selected rep (if any)
     if selected_rep:
@@ -387,7 +372,7 @@ def home_view(request):
         'display_range': display_range,
         'start_date_str': start_date_str,
         'end_date_str': end_date_str,
-        'period': period,
+        'period': active_preset,
         'kpi_cards': kpi_cards,
         'charts_json': charts_json,
         'available_charts': available_chart_keys,
@@ -591,6 +576,18 @@ def area_delete(request, pk):
     area = get_object_or_404(Area, pk=pk)
     if area.subareas.exists():
         messages.error(request, f"لا يمكن حذف المنطقة '{area.name}' لأنها تحتوي على {area.subareas.count()} منطقة فرعية.")
+        return redirect('areas_settings')
+
+    linked_contacts = Contact.objects.filter(Q(area=area) | Q(brick=area)).count()
+    linked_warehouses = Warehouse.objects.filter(area=area).count()
+    linked_vaults = Vault.objects.filter(area=area).count()
+    linked_users = get_user_model().objects.filter(assigned_areas=area).count()
+    if linked_contacts or linked_warehouses or linked_vaults or linked_users:
+        messages.error(
+            request,
+            f"لا يمكن حذف المنطقة '{area.name}' لارتباطها بسجلات قائمة "
+            f"(عملاء: {linked_contacts}، مخازن: {linked_warehouses}، خزن: {linked_vaults}، مستخدمين: {linked_users})."
+        )
         return redirect('areas_settings')
 
     name = area.name

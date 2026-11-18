@@ -782,6 +782,46 @@ class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
         exp_multi = self.client.get(reverse('contacts_export') + f'?brick_id={self.nasr.id}')
         self.assertEqual(exp_multi.status_code, 200)
 
+    def test_contact_edit_brick_scope_idor_rejection_and_search_api_total_count(self):
+        from accounts.models import Permission
+        p_edit = Permission.objects.get(codename='contacts:contacts/edit')
+        p_view = Permission.objects.get(codename='contacts:contacts/view')
+        p_mod = Permission.objects.get(codename='module:contacts')
+        self.rep_nasr.has_custom_permissions = True
+        self.rep_nasr.user_permissions.add(p_edit, p_view, p_mod)
+        self.rep_nasr.save()
+        self.rep_nasr.clear_perm_cache()
+
+        contact = Contact.objects.create(
+            name='صيدلية نصر الأصلية', contact_type='organization', is_customer=True, status='customer',
+            area=self.cairo, brick=self.nasr, created_by=self.rep_nasr
+        )
+        self.client.force_login(self.rep_nasr)
+
+        # Rep attempts IDOR: modify contact's brick to Dokki (outside Cairo / Nasr City scope)
+        bad_post = self.client.post(reverse('contact_edit', kwargs={'pk': contact.pk}), {
+            'contact_type': 'organization',
+            'status': 'customer',
+            'relations': ['عميل'],
+            'name': 'صيدلية نصر الأصلية',
+            'address_title[]': ['الفرع الرئيسي'],
+            'address_area[]': [str(self.giza.id)],
+            'address_sub_area[]': [str(self.dokki.id)],
+            'sub_area': str(self.dokki.id),
+        })
+        # Remains on edit page and displays scope error message
+        self.assertEqual(bad_post.status_code, 200)
+        contact.refresh_from_db()
+        self.assertNotEqual(contact.brick, self.dokki)
+        self.assertEqual(contact.brick, self.nasr)
+
+        # Verify customers_search_api returns total_count
+        res_api = self.client.get(reverse('customers_search_api') + '?q=نصر')
+        self.assertEqual(res_api.status_code, 200)
+        data = res_api.json()
+        self.assertIn('total_count', data)
+        self.assertGreaterEqual(data['total_count'], 1)
+
 
 class SupplierActivationServiceTests(TestCase):
     """Tests safe matching and supplier flag activation without duplication."""

@@ -30,7 +30,7 @@
         </div>
     </div>
 
-    <form method="POST" id="memoForm" class="space-y-6">
+    <form method="POST" id="memoForm" enctype="multipart/form-data" class="space-y-6">
         {% csrf_token %}
         <input type="hidden" name="memo_type" value="{{ memo_type }}">
 
@@ -47,11 +47,13 @@
                     <label class="block font-bold text-slate-700 mb-1.5">
                         المخزن المنفذ عليه الحركة <span class="text-rose-500">*</span>
                     </label>
-                    <select name="warehouse" required
+                    <select name="warehouse" id="memo_warehouse_select" required onchange="fetchMemoWarehouseStock()"
+                            data-smart-select="true"
+                            data-search-placeholder="ابحث باسم المخزن أو الكود..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر المخزن --</option>
                         {% for wh in warehouses %}
-                        <option value="{{ wh.id }}">{{ wh.name }} ({{ wh.code }})</option>
+                        <option value="{{ wh.id }}" {% if form_data.warehouse|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }} ({{ wh.code }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -61,7 +63,7 @@
                     <label class="block font-bold text-slate-700 mb-1.5">
                         البيان / سبب الإذن <span class="text-rose-500">*</span>
                     </label>
-                    <input type="text" name="statement" required placeholder="مثال: تسوية بضاعة واردة، تالف، تسوية جردية..."
+                    <input type="text" name="statement" value="{{ form_data.statement|default:'' }}" required placeholder="مثال: تسوية بضاعة واردة، تالف، تسوية جردية..."
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
 
@@ -69,7 +71,7 @@
                 <div class="col-span-full">
                     <label class="block font-bold text-slate-700 mb-1.5">ملاحظات إضافية</label>
                     <textarea name="notes" rows="2" placeholder="أي تفاصيل أو مستندات مؤيدة للحركة..."
-                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors"></textarea>
+                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">{{ form_data.notes|default:'' }}</textarea>
                 </div>
             </div>
         </div>
@@ -93,14 +95,14 @@
                 <table class="w-full text-right text-xs" id="itemsTable">
                     <thead class="hidden md:table-header-group bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                         <tr>
+                            <th class="py-2.5 px-2 w-10 text-center">#</th>
                             <th class="py-2.5 px-3 min-w-[220px]">المنتج</th>
-                            <th class="py-2.5 px-2 w-28 text-center">الكمية</th>
-                            {% if memo_type == 'inward' %}
+                            <th class="py-2.5 px-2 w-24 text-center">الكمية</th>
                             <th class="py-2.5 px-2 w-28 text-center">تكلفة الوحدة</th>
-                            {% endif %}
-                            <th class="py-2.5 px-2 w-32 text-center">رقم التشغيل {% if profile.is_batch_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
+                            <th class="py-2.5 px-2 w-28 text-center">رقم التشغيل {% if profile.is_batch_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
                             <th class="py-2.5 px-2 w-32 text-center">تاريخ الصلاحية {% if profile.is_expiry_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
-                            <th class="py-2.5 px-2 w-12 text-center">حذف</th>
+                            <th class="py-2.5 px-2 w-24 text-center">المجموع</th>
+                            <th class="py-2.5 px-2 w-10 text-center">حذف</th>
                         </tr>
                     </thead>
                     <tbody id="itemsTableBody" class="block md:table-row-group space-y-3 md:space-y-0 md:divide-y md:divide-slate-100">
@@ -109,6 +111,24 @@
                 </table>
             </div>
         </div>
+
+        <!-- Summary Card -->
+        <div class="bg-slate-900 text-white rounded-xl p-4 sm:p-5 shadow-sm grid grid-cols-3 gap-4 text-center sm:text-right">
+            <div>
+                <div class="text-[11px] text-slate-400">عدد البنود</div>
+                <div id="memo-total-items" class="text-base sm:text-lg font-black text-white font-mono">0</div>
+            </div>
+            <div>
+                <div class="text-[11px] text-slate-400">إجمالي الكميات</div>
+                <div id="memo-total-qty" class="text-base sm:text-lg font-black text-[#27bebe] font-mono">0</div>
+            </div>
+            <div>
+                <div class="text-[11px] text-slate-400">التكلفة التقديرية</div>
+                <div id="memo-total-value" class="text-base sm:text-lg font-black text-emerald-400 font-mono">0.00 ج.م</div>
+            </div>
+        </div>
+
+        {% include 'components/attachments_uploader.html' with title="مرفقات الإذن (صور / PDF)" %}
 
         <!-- Bottom Actions Bar -->
         <div class="flex items-center justify-end gap-3 pt-4">
@@ -129,8 +149,8 @@
         {
             id: "{{ p.id }}",
             name: "{{ p.name|escapejs }}",
-            sku: "{{ p.sku_code }}",
-            cost: {{ p.default_purchase_cost|default:"0.00"|stringformat:".2f" }}
+            sku: "{{ p.sku_code|escapejs }}",
+            cost: Number("{{ p.default_purchase_cost|default:'0.00' }}") || 0
         },
         {% endfor %}
     ];
@@ -140,42 +160,169 @@
     const isMemoInward = {% if memo_type == 'inward' %}true{% else %}false{% endif %};
 
     let rowCount = 0;
+    let memoWarehouseStock = {};
 
-    function createRow(index) {
+    function fetchMemoWarehouseStock() {
+        const whSelect = document.getElementById('memo_warehouse_select');
+        const whId = whSelect ? whSelect.value : null;
+        if (!whId) {
+            memoWarehouseStock = {};
+            updateAllMemoStockDisplays();
+            return;
+        }
+        fetch(`/inventory/api/warehouse-stock/?warehouse_id=${whId}`)
+            .then(res => res.json())
+            .then(data => {
+                memoWarehouseStock = {};
+                if (data.products) {
+                    data.products.forEach(p => {
+                        memoWarehouseStock[p.id] = p;
+                    });
+                }
+                updateAllMemoStockDisplays();
+            })
+            .catch(err => console.error("Error loading memo warehouse stock", err));
+    }
+
+    function updateAllMemoStockDisplays() {
+        const rows = document.querySelectorAll('#itemsTableBody .item-row');
+        rows.forEach(r => {
+            const m = r.id.match(/row-(\d+)/);
+            if (m) updateMemoRowStock(m[1]);
+        });
+        updateMemoSummary();
+    }
+
+    function updateMemoRowStock(index) {
+        const row = document.getElementById(`row-${index}`);
+        if (!row) return;
+        const select = row.querySelector('select[name="product_id[]"]');
+        const prodId = select ? select.value : null;
+        const stockEl = document.getElementById(`avail-stock-memo-${index}`);
+        const warnEl = document.getElementById(`stock-warn-memo-${index}`);
+        const qtyInput = row.querySelector('input[name="quantity[]"]');
+
+        if (!prodId || !memoWarehouseStock[prodId]) {
+            if (stockEl) stockEl.innerText = '-';
+            if (warnEl) warnEl.classList.add('hidden');
+            if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+            updateMemoRowTotal(index);
+            return;
+        }
+
+        const avail = parseFloat(memoWarehouseStock[prodId].qty_available) || 0;
+        if (stockEl) stockEl.innerText = avail.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+
+        const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+        if (!isMemoInward && qty > avail) {
+            if (warnEl) warnEl.classList.remove('hidden');
+            if (qtyInput) qtyInput.classList.add('border-rose-500', 'text-rose-600');
+        } else {
+            if (warnEl) warnEl.classList.add('hidden');
+            if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+        }
+        updateMemoRowTotal(index);
+    }
+
+    function updateMemoRowTotal(index) {
+        const row = document.getElementById(`row-${index}`);
+        if (!row) return;
+        const qty = parseFloat(row.querySelector('input[name="quantity[]"]')?.value || 0) || 0;
+        const cost = parseFloat(row.querySelector('input[name="unit_cost[]"]')?.value || 0) || 0;
+        const total = qty * cost;
+        const totalEl = document.getElementById(`row-total-${index}`);
+        const totalMobileEl = document.getElementById(`row-total-mobile-${index}`);
+        const formatted = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (totalEl) totalEl.innerText = formatted;
+        if (totalMobileEl) totalMobileEl.innerText = formatted;
+        updateMemoSummary();
+    }
+
+    function updateMemoSummary() {
+        const rows = document.querySelectorAll('#itemsTableBody .item-row');
+        let totalQty = 0;
+        let totalValue = 0;
+        rows.forEach(row => {
+            const qty = parseFloat(row.querySelector('input[name="quantity[]"]')?.value || 0) || 0;
+            const cost = parseFloat(row.querySelector('input[name="unit_cost[]"]')?.value || 0) || 0;
+            totalQty += qty;
+            totalValue += qty * cost;
+        });
+        const itemsEl = document.getElementById('memo-total-items');
+        const qtyEl = document.getElementById('memo-total-qty');
+        const valEl = document.getElementById('memo-total-value');
+        if (itemsEl) itemsEl.innerText = rows.length;
+        if (qtyEl) qtyEl.innerText = totalQty.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        if (valEl) valEl.innerText = totalValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ج.م';
+    }
+
+    function renumberMemoRows() {
+        document.querySelectorAll('#itemsTableBody .item-row').forEach((row, idx) => {
+            const num = idx + 1;
+            const dNum = row.querySelector('.row-index-desktop');
+            const mNum = row.querySelector('.row-index-mobile');
+            if (dNum) dNum.innerText = num;
+            if (mNum) mNum.innerText = `البند #${num}`;
+        });
+    }
+
+    function createRow(index, itemData = null) {
         let options = '<option value="">-- اختر الصنف --</option>';
         availableProducts.forEach(p => {
-            options += `<option value="${p.id}" data-cost="${p.cost}">[${p.sku}] ${p.name}</option>`;
+            const selected = itemData && String(itemData.product_id || itemData.productId) === String(p.id) ? 'selected' : '';
+            options += `<option value="${p.id}" data-cost="${p.cost}" ${selected}>[${p.sku}] ${p.name}</option>`;
         });
 
-        const costFieldDesktop = isMemoInward ? `
+        const qty = itemData ? (itemData.quantity || '1') : '1';
+        const cost = itemData ? (itemData.unit_cost || '0.00') : '0.00';
+        const batch = itemData ? (itemData.batch_number || '') : '';
+        const expiry = itemData ? (itemData.expiry_date || '') : '';
+
+        const costFieldDesktop = `
             <td class="hidden md:table-cell py-2 px-2">
-                <input type="number" step="0.01" min="0" name="unit_cost[]" value="0.00" required
+                <input type="number" step="0.01" min="0" name="unit_cost[]" value="${cost}" oninput="updateMemoRowTotal(${index})" ${isMemoInward ? 'required' : ''}
                        class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
             </td>
-        ` : '';
+        `;
 
-        const costFieldMobile = isMemoInward ? `
+        const costFieldMobile = `
             <div>
                 <label class="block text-[10px] font-bold text-slate-600 mb-0.5">تكلفة الوحدة</label>
-                <input type="number" step="0.01" min="0" name="unit_cost_mobile_${index}" value="0.00" oninput="syncMobileCost(${index}, this)"
+                <input type="number" step="0.01" min="0" name="unit_cost_mobile_${index}" value="${cost}" oninput="syncMobileCost(${index}, this)"
                        class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
             </div>
-        ` : '';
+        `;
+
+        const stockBadge = `
+            <div class="mt-1 flex items-center justify-between text-[11px]">
+                <span class="text-slate-400">المتاح بالمخزن:</span>
+                <span id="avail-stock-memo-${index}" class="font-mono font-bold text-slate-700">-</span>
+            </div>
+            <div id="stock-warn-memo-${index}" class="hidden text-[10px] text-rose-600 font-bold mt-0.5">
+                الكمية المنصرفة تتجاوز الرصيد المتاح!
+            </div>
+        `;
 
         return `
             <tr id="row-${index}" class="item-row block md:table-row bg-slate-50/60 md:bg-transparent p-4 md:p-0 rounded-xl md:rounded-none border border-slate-200 md:border-none shadow-xs md:shadow-none mb-3 md:mb-0 space-y-2 md:space-y-0">
+                <!-- Index (Desktop) -->
+                <td class="hidden md:table-cell py-2 px-2 text-center font-mono font-bold text-slate-400 row-index-desktop">${index + 1}</td>
+
                 <!-- Product Select -->
                 <td class="block md:table-cell py-1.5 md:py-2 px-2">
                     <div class="flex items-center justify-between md:hidden mb-1">
-                        <span class="text-[11px] font-bold text-slate-600">البند #${index + 1} - الصنف <span class="text-rose-500">*</span></span>
+                        <span class="text-[11px] font-bold text-slate-600"><span class="row-index-mobile">البند #${index + 1}</span> - الصنف <span class="text-rose-500">*</span></span>
                         <button type="button" onclick="removeRow(${index})" class="p-1 text-slate-400 hover:text-red-500">
                             <span class="material-symbols-outlined text-base">delete</span>
                         </button>
                     </div>
                     <select name="product_id[]" required onchange="onProductSelect(${index}, this)"
+                            data-smart-select="true"
+                            data-search-placeholder="ابحث باسم الصنف أو الكود..."
                             class="w-full px-2.5 py-2 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-[#27bebe] transition-colors">
                         ${options}
                     </select>
+                    ${stockBadge}
                 </td>
 
                 <!-- Inputs on Mobile Grid -->
@@ -183,7 +330,7 @@
                     <div class="grid grid-cols-2 md:grid-cols-1 gap-2">
                         <div>
                             <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">الكمية</label>
-                            <input type="number" step="0.01" min="0.01" name="quantity[]" value="1" required
+                            <input type="number" step="1" min="1" inputmode="numeric" pattern="[0-9]*" name="quantity[]" value="${qty}" required oninput="updateMemoRowStock(${index})"
                                    class="w-full text-center px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
                         </div>
                         ${costFieldMobile}
@@ -195,15 +342,23 @@
                 <!-- Batch Number -->
                 <td class="block md:table-cell py-1 md:py-2 px-2">
                     <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">رقم التشغيل (Batch No)</label>
-                    <input type="text" name="batch_number[]" placeholder="Batch No" ${isBatchMandatory ? 'required' : ''}
+                    <input type="text" name="batch_number[]" value="${batch}" placeholder="Batch No" ${isBatchMandatory ? 'required' : ''}
                            class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                 </td>
 
                 <!-- Expiry Date -->
                 <td class="block md:table-cell py-1 md:py-2 px-2">
                     <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">تاريخ الصلاحية</label>
-                    <input type="date" name="expiry_date[]" ${isExpiryMandatory ? 'required' : ''}
+                    <input type="date" name="expiry_date[]" value="${expiry}" ${isExpiryMandatory ? 'required' : ''}
                            class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
+                </td>
+
+                <!-- Line Total -->
+                <td class="block md:table-cell py-1 md:py-2 px-2 text-center">
+                    <div class="flex items-center justify-between md:justify-center text-xs font-mono font-bold text-slate-700 bg-white md:bg-transparent px-2.5 py-1.5 md:p-0 rounded-lg border border-slate-200 md:border-none">
+                        <span class="md:hidden text-[10px] text-slate-500 font-sans">المجموع:</span>
+                        <span id="row-total-${index}">0.00</span>
+                    </div>
                 </td>
 
                 <!-- Delete (Desktop) -->
@@ -216,9 +371,16 @@
         `;
     }
 
-    function addRow() {
+    function addRow(itemData = null) {
         const tbody = document.getElementById('itemsTableBody');
-        tbody.insertAdjacentHTML('beforeend', createRow(rowCount));
+        const idx = rowCount;
+        tbody.insertAdjacentHTML('beforeend', createRow(idx, itemData));
+        const newRow = document.getElementById(`row-${idx}`);
+        if (newRow && window.ERPSmartSelect) {
+            window.ERPSmartSelect.initAll(newRow);
+        }
+        updateMemoRowStock(idx);
+        renumberMemoRows();
         rowCount++;
     }
 
@@ -227,6 +389,8 @@
         const allRows = document.querySelectorAll('#itemsTableBody .item-row');
         if (allRows.length > 1) {
             if (row) row.remove();
+            renumberMemoRows();
+            updateMemoSummary();
         } else {
             alert('يجب وجود بند واحد على الأقل في الإذن المخزني.');
         }
@@ -234,14 +398,17 @@
 
     function onProductSelect(index, selectEl) {
         const selected = selectEl.options[selectEl.selectedIndex];
-        const cost = selected.getAttribute('data-cost') || '0.00';
+        const prodId = selectEl.value;
+        const stockInfo = prodId ? memoWarehouseStock[prodId] : null;
+        const cost = (stockInfo && stockInfo.cost !== undefined) ? stockInfo.cost : (selected ? (selected.getAttribute('data-cost') || '0.00') : '0.00');
         const row = document.getElementById(`row-${index}`);
-        if (row && isMemoInward) {
+        if (row) {
             const costDesktop = row.querySelector('input[name="unit_cost[]"]');
             const costMobile = row.querySelector(`input[name="unit_cost_mobile_${index}"]`);
             if (costDesktop) costDesktop.value = cost;
             if (costMobile) costMobile.value = cost;
         }
+        updateMemoRowStock(index);
     }
 
     function syncMobileCost(index, input) {
@@ -249,11 +416,29 @@
         if (row) {
             const costDesktop = row.querySelector('input[name="unit_cost[]"]');
             if (costDesktop) costDesktop.value = input.value;
+            updateMemoRowTotal(index);
         }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        addRow();
+        fetchMemoWarehouseStock();
+
+        {% if submitted_items %}
+            const submitted = [
+                {% for itm in submitted_items %}
+                {
+                    product_id: "{{ itm.product_id }}",
+                    quantity: "{{ itm.quantity|default:'1' }}",
+                    unit_cost: "{{ itm.unit_cost|default:'0.00' }}",
+                    batch_number: "{{ itm.batch_number|escapejs }}",
+                    expiry_date: "{{ itm.expiry_date|escapejs }}"
+                },
+                {% endfor %}
+            ];
+            submitted.forEach(itm => addRow(itm));
+        {% else %}
+            addRow();
+        {% endif %}
     });
 </script>
 {% endblock %}

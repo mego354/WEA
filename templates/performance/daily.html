@@ -58,12 +58,15 @@
             {% endif %}
         </div>
 
-        {% if request.user|has_permission:'performance:daily/export' %}
-        <a href="{% url 'performance_daily_export' %}?date={{ target_date_str }}" class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 min-h-[38px]">
-            <span class="material-symbols-outlined text-base">download</span>
-            <span>تصدير اليوم إلى Excel</span>
-        </a>
-        {% endif %}
+        <div class="flex items-center gap-2 shrink-0">
+            {% include 'components/table_column_picker.html' with table_id='performance_daily_table' %}
+            {% if request.user|has_permission:'performance:daily/export' %}
+            <a href="{% url 'performance_daily_export' %}?date={{ target_date_str }}" class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 min-h-[38px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير اليوم إلى Excel</span>
+            </a>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Daily 4 Summary Cards (vs Yesterday) -->
@@ -128,25 +131,24 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="w-full text-right text-xs">
+            <table id="performance_daily_table" data-col-table="performance_daily_table" class="w-full text-right text-xs">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-3">المندوب</th>
-                        <th class="py-3 px-3">المنطقة</th>
-                        <th class="py-3 px-3 text-center">أول تسجيل</th>
-                        <th class="py-3 px-3 text-center">آخر تسجيل</th>
-                        <th class="py-3 px-3 text-center">الساعات</th>
-                        <th class="py-3 px-3 text-center">المخططة</th>
-                        <th class="py-3 px-3 text-center">المنفذة</th>
-                        <th class="py-3 px-3 text-center">خارج الخطة</th>
-                        <th class="py-3 px-3 text-center">مزدوجة</th>
-                        <th class="py-3 px-3 text-center">الشرح</th>
-                        <th class="py-3 px-3 text-center">دقة الموقع %</th>
-                        <th class="py-3 px-3 text-center">صور</th>
-                        <th class="py-3 px-3 text-center">الطلبيات</th>
-                        <th class="py-3 px-3 text-left">المبيعات (ج.م)</th>
-                        <th class="py-3 px-3 text-left">التحصيلات (ج.م)</th>
-                        <th class="py-3 px-3 text-center">الحالة</th>
+                        <th class="py-3 px-3" data-col="rep" data-col-required="true">المندوب</th>
+                        <th class="py-3 px-3" data-col="area">المنطقة</th>
+                        <th class="py-3 px-3 text-center" data-col="first_checkin">أول تسجيل</th>
+                        <th class="py-3 px-3 text-center" data-col="last_checkin">آخر تسجيل</th>
+                        <th class="py-3 px-3 text-center" data-col="hours">الساعات</th>
+                        <th class="py-3 px-3 text-center" data-col="planned">المخططة</th>
+                        <th class="py-3 px-3 text-center" data-col="executed">المنفذة</th>
+                        <th class="py-3 px-3 text-center" data-col="unplanned">خارج الخطة</th>
+                        <th class="py-3 px-3 text-center" data-col="double">مزدوجة</th>
+                        <th class="py-3 px-3 text-center" data-col="detailing">الشرح</th>
+                        <th class="py-3 px-3 text-center" data-col="geo_accuracy">دقة الموقع %</th>
+                        <th class="py-3 px-3 text-center" data-col="orders">الطلبيات</th>
+                        <th class="py-3 px-3 text-left" data-col="sales" data-col-required="true">المبيعات (ج.م)</th>
+                        <th class="py-3 px-3 text-left" data-col="collections">التحصيلات (ج.م)</th>
+                        <th class="py-3 px-3 text-center" data-col="status">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -167,7 +169,6 @@
                                 {{ r.in_range_pct }}%
                             </span>
                         </td>
-                        <td class="py-3 px-3 text-center text-slate-600">{{ r.photos_taken }}</td>
                         <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.orders_count }}</td>
                         <td class="py-3 px-3 text-left font-bold text-slate-900">{{ r.orders_val|floatformat:2 }}</td>
                         <td class="py-3 px-3 text-left font-bold text-emerald-700">{{ r.cols_val|floatformat:2 }}</td>

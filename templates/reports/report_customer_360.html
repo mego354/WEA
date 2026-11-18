@@ -22,14 +22,15 @@
             </p>
         </div>
 
-        {% if request.user|has_permission:'reports:sales/export' %}
-        <div class="self-start sm:self-auto">
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            {% include 'components/table_column_picker.html' with table_id='report_customer_360_table' %}
+            {% if request.user|has_permission:'reports:sales/export' %}
             <a href="{% url 'report_customer_360_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}&area={{ selected_area }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">download</span>
                 <span>تصدير Excel</span>
             </a>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- Summary KPI Cards -->
@@ -65,7 +66,16 @@
                     <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
                     <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
                     <option value="year" {% if period == 'year' %}selected{% endif %}>العام الحالي</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة</option>
                 </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
+                <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
+                <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
             </div>
 
             <div>
@@ -90,27 +100,27 @@
     <!-- 22-Column Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
-            <table class="w-full text-right text-xs whitespace-nowrap">
+            <table id="report_customer_360_table" data-col-table="report_customer_360_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs">العميل</th>
-                        <th class="py-3 px-3">النوع</th>
-                        <th class="py-3 px-3 text-center">التصنيف</th>
-                        <th class="py-3 px-3">المحافظة</th>
-                        <th class="py-3 px-3">المربع</th>
-                        <th class="py-3 px-3">المندوب</th>
-                        <th class="py-3 px-3 text-center">الزيارات</th>
-                        <th class="py-3 px-3 text-center">آخر زيارة</th>
-                        <th class="py-3 px-3 text-center">أوامر البيع</th>
-                        <th class="py-3 px-3 text-left">إجمالي المبيعات</th>
-                        <th class="py-3 px-3 text-left">الخصومات</th>
-                        <th class="py-3 px-3 text-left">صافي المبيعات</th>
-                        <th class="py-3 px-3 text-left">المرتجعات</th>
-                        <th class="py-3 px-3 text-left">التحصيلات</th>
-                        <th class="py-3 px-3 text-left font-bold text-slate-900">الرصيد المدين</th>
-                        <th class="py-3 px-3 text-left text-rose-600 font-bold">المتأخرات</th>
-                        <th class="py-3 px-3 text-left">الحد الائتماني</th>
-                        <th class="py-3 px-3 text-center">استهلاك الحد %</th>
+                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs" data-col="customer" data-col-required="true">العميل</th>
+                        <th class="py-3 px-3" data-col="type">النوع</th>
+                        <th class="py-3 px-3 text-center" data-col="category">التصنيف</th>
+                        <th class="py-3 px-3" data-col="area">المحافظة</th>
+                        <th class="py-3 px-3" data-col="brick">المربع</th>
+                        <th class="py-3 px-3" data-col="rep">المندوب</th>
+                        <th class="py-3 px-3 text-center" data-col="visits">الزيارات</th>
+                        <th class="py-3 px-3 text-center" data-col="last_visit">آخر زيارة</th>
+                        <th class="py-3 px-3 text-center" data-col="orders">أوامر البيع</th>
+                        <th class="py-3 px-3 text-left" data-col="gross_sales">إجمالي المبيعات</th>
+                        <th class="py-3 px-3 text-left" data-col="discounts">الخصومات</th>
+                        <th class="py-3 px-3 text-left" data-col="net_sales" data-col-required="true">صافي المبيعات</th>
+                        <th class="py-3 px-3 text-left" data-col="returns">المرتجعات</th>
+                        <th class="py-3 px-3 text-left" data-col="collections">التحصيلات</th>
+                        <th class="py-3 px-3 text-left font-bold text-slate-900" data-col="debit_balance">الرصيد المدين</th>
+                        <th class="py-3 px-3 text-left text-rose-600 font-bold" data-col="overdue">المتأخرات</th>
+                        <th class="py-3 px-3 text-left" data-col="credit_limit">الحد الائتماني</th>
+                        <th class="py-3 px-3 text-center" data-col="limit_usage">استهلاك الحد %</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">

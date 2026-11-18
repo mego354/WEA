@@ -149,7 +149,8 @@ class SettingsService:
         profile.currency = data.get('currency', profile.currency).strip() or 'EGP'
 
         if files and 'logo' in files:
-            profile.logo = files['logo']
+            from master_data.media_service import replace_model_file
+            replace_model_file(profile, 'logo', files['logo'])
 
         profile.save()
         cls.clear_cache('company_profile')

@@ -513,3 +513,427 @@ class InventoryCostAveragingAndEnhancementTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertContains(res, "يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود")
 
+
+class InventoryPhase2ImprovementsTests(TestCase):
+    """
+    Verifies Phase 2 architectural improvements in Inventory:
+    1. /inventory/api/warehouse-stock/ availability calculations and warehouse scoping (prevent IDOR)
+    2. Outward memo stock validation preventing over-dispensing
+    3. Form error recovery preserving user inputs and dynamic line items in inventory_memo_create and product_transfer_create
+    """
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+        self.cairo = Area.objects.create(code='INV-P2-CAI', name='القاهرة', area_type='governorate')
+        self.nasr = Area.objects.create(code='INV-P2-NC', name='مدينة نصر', area_type='subarea', parent=self.cairo)
+        self.giza = Area.objects.create(code='INV-P2-GIZ', name='الجيزة', area_type='governorate')
+        self.dokki = Area.objects.create(code='INV-P2-DOK', name='الدقي', area_type='subarea', parent=self.giza)
+
+        self.role_super = Role.objects.get(name='superadmin')
+        self.role_rep = Role.objects.get(name='rep')
+
+        self.superadmin = User.objects.create_superuser(username='inv_p2_super', email='inv_p2_super@test.com', password='pass')
+        self.rep_cairo = User.objects.create_user(username='inv_p2_rep_cai', role=self.role_rep)
+        self.rep_cairo.assigned_areas.add(self.nasr)
+        self.rep_giza = User.objects.create_user(username='inv_p2_rep_giz', role=self.role_rep)
+        self.rep_giza.assigned_areas.add(self.dokki)
+
+        from accounts.services import get_representative_warehouse
+        self.wh_cairo = get_representative_warehouse(self.rep_cairo)
+        self.wh_giza = get_representative_warehouse(self.rep_giza)
+
+        self.cat = ProductCategory.objects.create(name='أدوية عامة', code='INV-GEN')
+        self.prod = Product.objects.create(
+            name='كونجستال أقراص',
+            sku_code='CONG-TAB',
+            retail_price=Decimal('35.00'),
+            category=self.cat,
+            sellable=True
+        )
+
+        self.stock_cairo = InventoryStock.objects.create(
+            warehouse=self.wh_cairo,
+            product=self.prod,
+            qty_on_hand=Decimal('100.00'),
+            qty_reserved=Decimal('15.00'),
+            product_cost=Decimal('20.00')
+        )
+
+    def test_warehouse_stock_api_availability_and_scoping(self):
+        """API returns available, on_hand, and reserved stock, respecting warehouse data scope."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.get(reverse('inventory_warehouse_stock_api') + f'?warehouse_id={self.wh_cairo.id}')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['warehouse_id'], self.wh_cairo.id)
+        prod_data = next((p for p in data['products'] if p['id'] == self.prod.id), None)
+        self.assertIsNotNone(prod_data)
+        self.assertEqual(prod_data['qty_on_hand'], 100.0)
+        self.assertEqual(prod_data['qty_reserved'], 15.0)
+        self.assertEqual(prod_data['qty_available'], 85.0)
+
+        # Scoping: rep_giza cannot query rep_cairo custody warehouse -> 403
+        self.client.force_login(self.rep_giza)
+        bad_resp = self.client.get(reverse('inventory_warehouse_stock_api') + f'?warehouse_id={self.wh_cairo.id}')
+        self.assertEqual(bad_resp.status_code, 403)
+
+    def test_outward_memo_stock_validation(self):
+        """Creating an outward memo fails if quantity exceeds available stock."""
+        items_data = [{'product': self.prod, 'quantity': Decimal('90.00')}]  # Available is only 85
+        with self.assertRaises(ValidationError) as ctx:
+            InventoryMemoService.create_memo(
+                warehouse=self.wh_cairo,
+                memo_type='outward',
+                statement='صرف بضاعة فائضة',
+                items_data=items_data,
+                user=self.superadmin
+            )
+        self.assertIn("غير كافٍ لصرف", str(ctx.exception))
+
+    def test_memo_create_form_error_recovery(self):
+        """Form validation errors in inventory_memo_create preserve entered dynamic rows without redirect."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(reverse('inventory_memo_create'), {
+            'warehouse': self.wh_cairo.id,
+            'memo_type': 'outward',
+            'statement': 'إذن صرف اختباري',
+            'product_id[]': [self.prod.id],
+            'quantity[]': ['120.00'],  # Exceeds available 85
+            'notes': 'ملاحظات إذن صرف مهمة'
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('form_data', resp.context)
+        self.assertEqual(resp.context['form_data']['statement'], 'إذن صرف اختباري')
+        self.assertIn('submitted_items', resp.context)
+        self.assertEqual(len(resp.context['submitted_items']), 1)
+        self.assertEqual(resp.context['submitted_items'][0]['quantity'], '120.00')
+
+    def test_product_transfer_create_form_error_recovery(self):
+        """Form validation errors in product_transfer_create preserve entered dynamic rows."""
+        self.client.force_login(self.superadmin)
+        resp = self.client.post(reverse('product_transfer_create'), {
+            'source_warehouse': self.wh_cairo.id,
+            'destination_warehouse': self.wh_cairo.id,  # Same warehouse -> invalid
+            'products[]': [self.prod.id],
+            'quantities[]': ['10.00'],
+            'notes': 'تحويل خاطئ لنفس المخزن'
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('form_data', resp.context)
+        self.assertEqual(resp.context['form_data']['notes'], 'تحويل خاطئ لنفس المخزن')
+        self.assertIn('submitted_items', resp.context)
+        self.assertEqual(len(resp.context['submitted_items']), 1)
+
+
+class WarehouseCrudAndScopingTests(TestCase):
+    """
+    Verifies Warehouse CRUD operations, data scoping (SuperAdmin / Manager / Rep),
+    safe deletion integrity validations (blocking delete when stock on hand > 0 or memos exist),
+    audit logging, and advanced filters in warehouses_list.
+    """
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-WH-CRUD', area_type='governorate')
+        self.nasr_city = Area.objects.create(name='مدينة نصر', code='NC-WH-CRUD', area_type='subarea', parent=self.cairo)
+        self.giza = Area.objects.create(name='الجيزة', code='GIZ-WH-CRUD', area_type='governorate')
+
+        self.role_super = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        self.role_manager = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.role_rep = Role.objects.get(name=Role.ROLE_REP)
+
+        from django.contrib.auth.models import Permission
+        p_manage = Permission.objects.get(codename='inventory:warehouses/manage')
+        p_delete = Permission.objects.get(codename='inventory:warehouses/delete')
+        self.role_manager.permissions.add(p_manage, p_delete)
+
+        self.superadmin = User.objects.create_superuser(
+            username='wh_crud_admin', email='wh_crud_admin@wea.com', password='Password123!', role=self.role_super
+        )
+        self.manager_cairo = User.objects.create_user(
+            username='wh_crud_mgr_cai', email='wh_crud_mgr_cai@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.manager_cairo.assigned_areas.add(self.cairo)
+
+        self.manager_giza = User.objects.create_user(
+            username='wh_crud_mgr_giz', email='wh_crud_mgr_giz@wea.com', password='Password123!', role=self.role_manager
+        )
+        self.manager_giza.assigned_areas.add(self.giza)
+
+        self.rep_cairo = User.objects.create_user(
+            username='wh_crud_rep_cai', email='wh_crud_rep_cai@wea.com', password='Password123!', role=self.role_rep
+        )
+        self.rep_cairo.assigned_areas.add(self.nasr_city)
+
+        self.wh_main = Warehouse.objects.create(
+            name='المخزن الرئيسي بالقاهرة',
+            code='WH-MAIN-001',
+            area=self.cairo,
+            is_main=True,
+            is_active=True
+        )
+        self.wh_nasr = Warehouse.objects.create(
+            name='مخزن عهدة مدينة نصر',
+            code='WH-REP-NC-01',
+            area=self.nasr_city,
+            is_rep_warehouse=True,
+            assigned_user=self.rep_cairo,
+            is_active=True
+        )
+        self.wh_giza = Warehouse.objects.create(
+            name='مخزن فرعي الجيزة',
+            code='WH-GIZ-001',
+            area=self.giza,
+            is_main=False,
+            is_rep_warehouse=False,
+            is_active=False
+        )
+
+    def test_warehouse_create_view_and_audit_log(self):
+        """Superadmin creates a warehouse with GPS coordinates and audit logging."""
+        from accounts.models import SecurityAuditLog
+        self.client.force_login(self.superadmin)
+        post_data = {
+            'name': 'مخزن جديد اختباري',
+            'code': 'WH-TEST-NEW',
+            'area': self.cairo.id,
+            'address': 'شارع الطيران',
+            'latitude': '30.0444',
+            'longitude': '31.2357',
+            'is_active': 'on'
+        }
+        res = self.client.post(reverse('warehouse_create'), post_data)
+        self.assertRedirects(res, reverse('warehouses_list'))
+
+        wh = Warehouse.objects.filter(code='WH-TEST-NEW').first()
+        self.assertIsNotNone(wh)
+        self.assertEqual(wh.name, 'مخزن جديد اختباري')
+        self.assertEqual(wh.area, self.cairo)
+        self.assertAlmostEqual(float(wh.latitude), 30.0444, places=4)
+        self.assertAlmostEqual(float(wh.longitude), 31.2357, places=4)
+
+        audit = SecurityAuditLog.objects.filter(action_type='WAREHOUSE_CREATED', record_id=wh.id).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.actor, self.superadmin)
+
+    def test_warehouse_edit_scoping(self):
+        """Managers can edit warehouses in their main area/subareas, but are blocked outside their region."""
+        # Manager Cairo edits Nasr City warehouse (within Cairo region) -> Allowed
+        self.client.force_login(self.manager_cairo)
+        get_res = self.client.get(reverse('warehouse_edit', args=[self.wh_nasr.id]))
+        self.assertEqual(get_res.status_code, 200)
+
+        post_res = self.client.post(reverse('warehouse_edit', args=[self.wh_nasr.id]), {
+            'name': 'مخزن عهدة مدينة نصر المعدل',
+            'code': 'WH-REP-NC-01',
+            'area': self.nasr_city.id,
+            'assigned_user': self.rep_cairo.id,
+            'is_active': 'on'
+        })
+        self.assertRedirects(post_res, reverse('warehouses_list'))
+        self.wh_nasr.refresh_from_db()
+        self.assertEqual(self.wh_nasr.name, 'مخزن عهدة مدينة نصر المعدل')
+
+        # Manager Giza attempts to edit Nasr City warehouse -> Forbidden 403
+        self.client.force_login(self.manager_giza)
+        bad_get = self.client.get(reverse('warehouse_edit', args=[self.wh_nasr.id]))
+        self.assertEqual(bad_get.status_code, 403)
+
+        bad_post = self.client.post(reverse('warehouse_edit', args=[self.wh_nasr.id]), {
+            'name': 'محاولة اختراق مخزن القاهرة',
+            'code': 'WH-REP-NC-01',
+        })
+        self.assertEqual(bad_post.status_code, 403)
+
+    def test_warehouse_delete_success(self):
+        """Deleting an empty warehouse with no stock, memos, or transactions succeeds with audit log."""
+        from accounts.models import SecurityAuditLog
+        wh_to_del = Warehouse.objects.create(name='مخزن فارغ للحذف', code='WH-DEL-ME', area=self.cairo)
+        wh_id = wh_to_del.id
+
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('warehouse_delete', args=[wh_id]))
+        self.assertRedirects(res, reverse('warehouses_list'))
+        self.assertFalse(Warehouse.objects.filter(id=wh_id).exists())
+
+        audit = SecurityAuditLog.objects.filter(action_type='WAREHOUSE_DELETED', record_id=wh_id).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.actor, self.superadmin)
+
+    def test_warehouse_delete_blocked_when_stock_on_hand_exists(self):
+        """Warehouse cannot be deleted if active stock on hand exists."""
+        cat = ProductCategory.objects.create(name='تصنيف فحص الحذف', code='CAT-DEL-CHK')
+        prod = Product.objects.create(name='منتج فحص الحذف', sku_code='PRD-DEL-CHK', category=cat, retail_price=Decimal('10.00'))
+        InventoryStock.objects.create(warehouse=self.wh_main, product=prod, qty_on_hand=Decimal('25.00'))
+
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('warehouse_delete', args=[self.wh_main.id]), follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Warehouse.objects.filter(id=self.wh_main.id).exists())
+        self.assertContains(res, "لا يمكن حذف المخزن لوجود أرصدة مخزنية حالية به")
+
+    def test_warehouse_delete_blocked_when_memo_exists(self):
+        """Warehouse cannot be deleted if inventory memos are linked to it."""
+        wh_memo = Warehouse.objects.create(name='مخزن بأذونات مخزنية', code='WH-MEMO-CHK', area=self.cairo)
+        InventoryMemo.objects.create(
+            warehouse=wh_memo,
+            memo_type='inward',
+            statement='إذن إضافة رصيد تجريبي',
+            created_by=self.superadmin
+        )
+
+        self.client.force_login(self.superadmin)
+        res = self.client.post(reverse('warehouse_delete', args=[wh_memo.id]), follow=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Warehouse.objects.filter(id=wh_memo.id).exists())
+        self.assertContains(res, "لا يمكن حذف المخزن لوجود أذونات مخزنية مسجلة عليه")
+
+    def test_warehouse_delete_scoping(self):
+        """Out-of-region managers cannot delete warehouses they do not manage."""
+        self.client.force_login(self.manager_giza)
+        res = self.client.post(reverse('warehouse_delete', args=[self.wh_nasr.id]))
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(Warehouse.objects.filter(id=self.wh_nasr.id).exists())
+
+    def test_warehouses_list_advanced_filters(self):
+        """Advanced filters drawer correctly isolates warehouse types, statuses, areas, and users."""
+        self.client.force_login(self.superadmin)
+
+        # Filter by type: main
+        res_main = self.client.get(reverse('warehouses_list') + '?type=main')
+        self.assertContains(res_main, self.wh_main.name)
+        self.assertNotContains(res_main, self.wh_nasr.name)
+
+        # Filter by type: rep
+        res_rep = self.client.get(reverse('warehouses_list') + '?type=rep')
+        self.assertContains(res_rep, self.wh_nasr.name)
+        self.assertNotContains(res_rep, self.wh_main.name)
+
+        # Filter by status: inactive
+        res_inact = self.client.get(reverse('warehouses_list') + '?status=inactive')
+        self.assertContains(res_inact, self.wh_giza.name)
+        self.assertNotContains(res_inact, self.wh_main.name)
+
+        # Filter by governorate/area (includes child subarea warehouses)
+        res_area = self.client.get(reverse('warehouses_list') + f'?area={self.cairo.id}')
+        self.assertContains(res_area, self.wh_main.name)
+        self.assertContains(res_area, self.wh_nasr.name)
+        self.assertNotContains(res_area, self.wh_giza.name)
+
+        # Filter by assigned user
+        res_user = self.client.get(reverse('warehouses_list') + f'?assigned_user={self.rep_cairo.id}')
+        self.assertContains(res_user, self.wh_nasr.name)
+        self.assertNotContains(res_user, self.wh_main.name)
+
+
+
+
+
+class Phase2InventoryMemosAndExportsTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from accounts.models import Role, Permission
+        from catalog.models import Product, ProductCategory
+        from inventory.models import Warehouse, InventoryStock
+        from master_data.models import Area, CompanyProfile
+
+        User = get_user_model()
+        CompanyProfile.objects.get_or_create(pk=1, defaults={'company_name': 'WEA Test Pharma'})
+
+        self.cairo = Area.objects.create(name='القاهرة اختبار', code='CAI-T1')
+        self.giza = Area.objects.create(name='الجيزة اختبار', code='GIZ-T1')
+
+        self.super_role, _ = Role.objects.get_or_create(name='superadmin', defaults={'display_name': 'Super Admin', 'is_super': True})
+        self.rep_role, _ = Role.objects.get_or_create(name='rep', defaults={'display_name': 'Rep'})
+
+        # Ensure required permissions are assigned
+        perms = Permission.objects.filter(codename__in=[
+            'module:inventory',
+            'inventory:memos/manage', 'inventory:memos/export',
+            'inventory:warehouses/export', 'inventory:transfers/export',
+            'inventory:stocks/view', 'inventory:transfers/list',
+        ])
+        self.rep_role.permissions.add(*perms)
+
+        self.superadmin = User.objects.create_superuser(username='inv_p2_super', email='inv_p2_super@wea.com', password='TestPassword123!', role=self.super_role)
+        self.rep_cairo = User.objects.create_user(username='inv_p2_rep', email='inv_p2_rep@wea.com', password='TestPassword123!', role=self.rep_role)
+        self.rep_cairo.assigned_areas.add(self.cairo)
+
+        self.cat = ProductCategory.objects.create(name='أدوية اختبار', code='CAT-P2')
+        self.prod = Product.objects.create(name='دواء اختبار', sku_code='SKU-P2-01', category=self.cat, retail_price=Decimal('50.00'), default_purchase_cost=Decimal('30.00'))
+
+        self.wh_cairo = Warehouse.objects.create(name='مخزن القاهرة P2', code='WH-C-P2', area=self.cairo, assigned_user=self.rep_cairo, is_rep_warehouse=True)
+        self.wh_giza = Warehouse.objects.create(name='مخزن الجيزة P2', code='WH-G-P2', area=self.giza)
+        InventoryStock.objects.create(warehouse=self.wh_cairo, product=self.prod, qty_on_hand=Decimal('20.00'))
+
+    def test_memo_create_inward_with_integer_qty_and_400_recovery(self):
+        from django.urls import reverse
+        from inventory.models import InventoryMemo
+
+        self.client.force_login(self.superadmin)
+        # Valid inward memo
+        resp = self.client.post(reverse('inventory_memo_create'), {
+            'memo_type': 'inward',
+            'warehouse': self.wh_cairo.id,
+            'statement': 'إضافة رصيد افتتاحي',
+            'product_id[]': [self.prod.id],
+            'quantity[]': ['5'],
+            'unit_cost[]': ['30.00'],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(InventoryMemo.objects.filter(warehouse=self.wh_cairo, statement='إضافة رصيد افتتاحي').exists())
+
+        # Fractional quantity returns 400 and preserves form_data & submitted_items
+        bad_resp = self.client.post(reverse('inventory_memo_create'), {
+            'memo_type': 'outward',
+            'warehouse': self.wh_cairo.id,
+            'statement': 'صرف خاطئ عشري',
+            'product_id[]': [self.prod.id],
+            'quantity[]': ['2.5'],
+            'unit_cost[]': ['30.00'],
+        })
+        self.assertEqual(bad_resp.status_code, 400)
+        self.assertEqual(bad_resp.context['form_data']['statement'], 'صرف خاطئ عشري')
+        self.assertEqual(len(bad_resp.context['submitted_items']), 1)
+        self.assertEqual(bad_resp.context['submitted_items'][0]['quantity'], '2.5')
+
+    def test_service_rejects_fractional_quantities(self):
+        from django.core.exceptions import ValidationError
+        from inventory.services import InventoryMemoService, ProductTransferService
+
+        with self.assertRaises(ValidationError):
+            InventoryMemoService.create_memo(
+                warehouse=self.wh_cairo,
+                memo_type='inward',
+                items_data=[{'product': self.prod, 'quantity': Decimal('1.5'), 'unit_cost': Decimal('30.00')}],
+                user=self.superadmin,
+                statement='كسر',
+            )
+
+        with self.assertRaises(ValidationError):
+            ProductTransferService.create_request(
+                requesting_user=self.superadmin,
+                destination_warehouse=self.wh_giza,
+                source_warehouse=self.wh_cairo,
+                items_data=[{'product': self.prod, 'quantity': Decimal('0.5')}],
+            )
+
+    def test_new_inventory_exports_and_smart_search_scoping(self):
+        from django.urls import reverse
+        self.client.force_login(self.rep_cairo)
+
+        for url_name in ['warehouses_export', 'inventory_memos_export', 'product_transfers_export']:
+            resp = self.client.get(reverse(url_name))
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('spreadsheetml.sheet', resp['Content-Type'])
+
+        # Smart search must only return cairo warehouse, never giza
+        sug_resp = self.client.get(reverse('list_suggestions_api'), {'module': 'warehouses', 'q': 'مخزن'})
+        self.assertEqual(sug_resp.status_code, 200)
+        labels = [r['label'] for r in sug_resp.json()['results']]
+        self.assertTrue(any('القاهرة' in lbl for lbl in labels))
+        self.assertFalse(any('الجيزة' in lbl for lbl in labels))

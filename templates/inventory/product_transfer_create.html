@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" id="transferForm" class="space-y-6">
+<form method="POST" enctype="multipart/form-data" id="transferForm" class="space-y-6">
     {% csrf_token %}
 
     <!-- Top Action Bar -->
@@ -22,21 +22,8 @@
         </div>
         <div class="flex items-center gap-2">
             <a href="{% url 'product_transfers_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
-                إلغاء
+                العودة للقائمة
             </a>
-            <button type="submit" class="inline-flex items-center gap-1.5 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all">
-                <span class="material-symbols-outlined text-base">send</span>
-                <span>إرسال الطلب للاعتماد</span>
-            </button>
-        </div>
-    </div>
-
-    <!-- Alert / Validation Notice -->
-    <div class="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs leading-relaxed flex items-start gap-3">
-        <span class="material-symbols-outlined text-amber-600 text-lg mt-0.5">verified_user</span>
-        <div>
-            <p class="font-bold text-amber-950">قاعدة النطاق الجغرافي الموحد (Same Main Area Policy):</p>
-            <p>يسمح بالتحويل المخزني حصرياً بين المخازن التابعة لنفس المنطقة الرئيسية (المحافظة). لا يتم نقل المخزون فعلياً إلا بعد اعتماد الطلب من قبل الإدارة المالية (SuperAdmin / المحاسب المعتمد).</p>
         </div>
     </div>
 
@@ -48,7 +35,21 @@
         </h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <!-- Destination Warehouse -->
+            <!-- Source Warehouse (First) -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">المخزن المحول منه (المصدر) <span class="text-rose-500">*</span></label>
+                <select name="source_warehouse" id="source_warehouse_select" required onchange="fetchSourceWarehouseStock()"
+                        data-smart-select="true"
+                        data-search-placeholder="ابحث باسم المخزن المحول منه..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                    <option value="">-- اختر المخزن المحول منه --</option>
+                    {% for wh in source_warehouses %}
+                    <option value="{{ wh.id }}" {% if form_data.source_warehouse|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }} - {% if wh.assigned_user %}(مندوب: {{ wh.assigned_user.get_full_name|default:wh.assigned_user.username }}){% elif wh.is_main %}(مخزن رئيسي){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Destination Warehouse (Second) -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">مخزن الاستلام (الوجهة) <span class="text-rose-500">*</span></label>
                 {% if user_rep_wh %}
@@ -61,31 +62,23 @@
                 </div>
                 <input type="hidden" name="destination_warehouse" value="{{ user_rep_wh.id }}">
                 {% else %}
-                <select name="destination_warehouse" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                <select name="destination_warehouse" required
+                        data-smart-select="true"
+                        data-search-placeholder="ابحث باسم مخزن الاستلام..."
+                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
                     <option value="">-- اختر مخزن الاستلام --</option>
                     {% for wh in dest_warehouses %}
-                    <option value="{{ wh.id }}">{{ wh.name }} ({% with ma=wh.main_area %}{{ ma.name|default:"عام" }}{% endwith %})</option>
+                    <option value="{{ wh.id }}" {% if form_data.destination_warehouse|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }} ({% with ma=wh.main_area %}{{ ma.name|default:"عام" }}{% endwith %})</option>
                     {% endfor %}
                 </select>
                 {% endif %}
-            </div>
-
-            <!-- Source Warehouse -->
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">المخزن المحول منه (المصدر) <span class="text-rose-500">*</span></label>
-                <select name="source_warehouse" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
-                    <option value="">-- اختر المخزن المحول منه --</option>
-                    {% for wh in source_warehouses %}
-                    <option value="{{ wh.id }}">{{ wh.name }} - {% if wh.assigned_user %}(مندوب: {{ wh.assigned_user.get_full_name|default:wh.assigned_user.username }}){% elif wh.is_main %}(مخزن رئيسي){% endif %}</option>
-                    {% endfor %}
-                </select>
             </div>
         </div>
 
         <div>
             <label class="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات أو مبررات طلب التحويل</label>
             <textarea name="notes" rows="2" placeholder="اكتب أي ملاحظات موجهة للإدارة أو المحاسب لاعتماد التحويل..."
-                      class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                      class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">{{ form_data.notes|default:'' }}</textarea>
         </div>
     </div>
 
@@ -113,55 +106,173 @@
                     </tr>
                 </thead>
                 <tbody id="itemsTableBody" class="divide-y divide-slate-100">
-                    <tr class="item-row">
-                        <td class="p-2.5">
-                            <select name="products[]" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium">
-                                <option value="">-- اختر الصنف --</option>
-                                {% for p in products %}
-                                <option value="{{ p.id }}">{{ p.name }} (كود: {{ p.sku_code }})</option>
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td class="p-2.5">
-                            <input type="number" name="quantities[]" min="1" step="1" value="1" required
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900">
-                        </td>
-                        <td class="p-2.5">
-                            <input type="text" name="batches[]" placeholder="اختياري"
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                        </td>
-                        <td class="p-2.5 text-center">
-                            <button type="button" onclick="removeItemRow(this)" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors">
-                                <span class="material-symbols-outlined text-base">delete</span>
-                            </button>
-                        </td>
-                    </tr>
+                    <!-- Populated via JS -->
                 </tbody>
             </table>
         </div>
     </div>
+    {% include 'components/attachments_uploader.html' with title='مرفقات طلب التحويل (صور / PDF)' %}
+
+    <!-- Bottom Submit Actions Bar -->
+    <div class="flex items-center justify-end gap-3 pt-2">
+        <a href="{% url 'product_transfers_list' %}" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[44px] flex items-center">
+            إلغاء
+        </a>
+        <button type="submit" class="inline-flex items-center gap-1.5 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all min-h-[44px]">
+            <span class="material-symbols-outlined text-base">send</span>
+            <span>إرسال الطلب للاعتماد</span>
+        </button>
+    </div>
 </form>
 
 <script>
-function addItemRow() {
-    const tbody = document.getElementById('itemsTableBody');
-    const firstRow = tbody.querySelector('.item-row');
-    const newRow = firstRow.cloneNode(true);
-    newRow.querySelectorAll('input').forEach(input => {
-        if (input.name === 'quantities[]') input.value = '1';
-        else input.value = '';
-    });
-    newRow.querySelector('select').selectedIndex = 0;
-    tbody.appendChild(newRow);
+const availableProducts = [
+    {% for p in products %}
+    {
+        id: "{{ p.id }}",
+        name: "{{ p.name|escapejs }}",
+        sku: "{{ p.sku_code }}"
+    },
+    {% endfor %}
+];
+
+let sourceWarehouseStock = {};
+let transferRowCount = 0;
+
+function fetchSourceWarehouseStock() {
+    const srcSelect = document.getElementById('source_warehouse_select');
+    const srcId = srcSelect ? srcSelect.value : null;
+    if (!srcId) {
+        sourceWarehouseStock = {};
+        updateAllTransferStockDisplays();
+        return;
+    }
+    fetch(`/inventory/api/warehouse-stock/?warehouse_id=${srcId}`)
+        .then(res => res.json())
+        .then(data => {
+            sourceWarehouseStock = {};
+            if (data.products) {
+                data.products.forEach(p => {
+                    sourceWarehouseStock[p.id] = p;
+                });
+            }
+            updateAllTransferStockDisplays();
+        })
+        .catch(err => console.error("Error loading source warehouse stock", err));
 }
 
-function removeItemRow(btn) {
+function updateAllTransferStockDisplays() {
+    const rows = document.querySelectorAll('#itemsTableBody .item-row');
+    rows.forEach(r => {
+        const m = r.id.match(/transfer-row-(\d+)/);
+        if (m) updateTransferRowStock(m[1]);
+    });
+}
+
+function updateTransferRowStock(index) {
+    const row = document.getElementById(`transfer-row-${index}`);
+    if (!row) return;
+    const select = row.querySelector('select[name="products[]"]');
+    const prodId = select ? select.value : null;
+    const stockEl = document.getElementById(`avail-stock-transfer-${index}`);
+    const warnEl = document.getElementById(`warn-transfer-${index}`);
+    const qtyInput = row.querySelector('input[name="quantities[]"]');
+
+    if (!prodId || !sourceWarehouseStock[prodId]) {
+        if (stockEl) stockEl.innerText = '-';
+        if (warnEl) warnEl.classList.add('hidden');
+        if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+        return;
+    }
+
+    const avail = parseFloat(sourceWarehouseStock[prodId].qty_available) || 0;
+    if (stockEl) stockEl.innerText = avail.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+
+    const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+    if (qty > avail) {
+        if (warnEl) warnEl.classList.remove('hidden');
+        if (qtyInput) qtyInput.classList.add('border-rose-500', 'text-rose-600');
+    } else {
+        if (warnEl) warnEl.classList.add('hidden');
+        if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+    }
+}
+
+function createTransferRow(index, itemData = null) {
+    let options = '<option value="">-- اختر الصنف --</option>';
+    availableProducts.forEach(p => {
+        const selected = itemData && String(itemData.product_id || itemData.product) === String(p.id) ? 'selected' : '';
+        options += `<option value="${p.id}" ${selected}>${p.name} (كود: ${p.sku})</option>`;
+    });
+
+    const qty = itemData ? (itemData.quantity || 1) : 1;
+    const batch = itemData ? (itemData.batch_number || '') : '';
+
+    return `
+        <tr id="transfer-row-${index}" class="item-row">
+            <td class="p-2.5">
+                <select name="products[]" required onchange="updateTransferRowStock(${index})" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium">
+                    ${options}
+                </select>
+                <div class="mt-1 flex items-center justify-between text-[11px]">
+                    <span class="text-slate-400">المتاح بالمخزن المصدر:</span>
+                    <span id="avail-stock-transfer-${index}" class="font-mono font-bold text-slate-700">-</span>
+                </div>
+                <div id="warn-transfer-${index}" class="hidden text-[10px] text-rose-600 font-bold mt-0.5">
+                    الكمية المطلوبة تتجاوز الرصيد المتاح بالمخزن المصدر!
+                </div>
+            </td>
+            <td class="p-2.5">
+                <input type="number" name="quantities[]" min="1" step="1" value="${qty}" required oninput="updateTransferRowStock(${index})"
+                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900">
+            </td>
+            <td class="p-2.5">
+                <input type="text" name="batches[]" value="${batch}" placeholder="اختياري"
+                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+            </td>
+            <td class="p-2.5 text-center">
+                <button type="button" onclick="removeTransferRow(${index})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        </tr>
+    `;
+}
+
+function addItemRow(itemData = null) {
+    const tbody = document.getElementById('itemsTableBody');
+    tbody.insertAdjacentHTML('beforeend', createTransferRow(transferRowCount, itemData));
+    updateTransferRowStock(transferRowCount);
+    transferRowCount++;
+}
+
+function removeTransferRow(index) {
     const tbody = document.getElementById('itemsTableBody');
     if (tbody.querySelectorAll('.item-row').length > 1) {
-        btn.closest('.item-row').remove();
+        const row = document.getElementById(`transfer-row-${index}`);
+        if (row) row.remove();
     } else {
         alert('يجب الإبقاء على بند واحد على الأقل في طلب التحويل.');
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchSourceWarehouseStock();
+
+    {% if submitted_items %}
+        const submitted = [
+            {% for itm in submitted_items %}
+            {
+                product_id: "{{ itm.product_id }}",
+                quantity: {{ itm.quantity|default:"1" }},
+                batch_number: "{{ itm.batch_number|escapejs }}"
+            },
+            {% endfor %}
+        ];
+        submitted.forEach(itm => addItemRow(itm));
+    {% else %}
+        addItemRow();
+    {% endif %}
+});
 </script>
 {% endblock %}

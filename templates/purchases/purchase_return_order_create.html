@@ -14,16 +14,12 @@
 
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
             <a href="{% url 'purchase_return_orders_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                إلغاء
+                العودة للقائمة
             </a>
-            <button type="submit" form="return-form" class="px-5 sm:px-6 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-base">check</span>
-                <span>حفظ أمر الإرجاع</span>
-            </button>
         </div>
     </div>
 
-    <form id="return-form" method="POST" class="space-y-6">
+    <form id="return-form" method="POST" enctype="multipart/form-data" class="space-y-6">
         {% csrf_token %}
 
         <!-- Supplier & Origin Warehouse Details -->
@@ -39,14 +35,14 @@
                     <label class="block font-bold text-slate-700 mb-1.5">
                         المورد المستلم <span class="text-red-500">*</span>
                     </label>
-                    <select name="supplier" required
+                    <select name="supplier" id="supplier_select" required
                             data-smart-select="true"
                             data-search-url="{% url 'purchases_suppliers_search_api' %}"
                             data-search-placeholder="ابحث باسم المورد، الكود، الرقم، أو المنطقة..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         <option value="">-- اختر المورد --</option>
                         {% for s in suppliers %}
-                        <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_po and selected_po.supplier_id == s.id %}selected{% endif %}>
+                        <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_po and selected_po.supplier_id == s.id or form_data.supplier|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>
                             {{ s.name }} ({{ s.formatted_number }})
                         </option>
                         {% endfor %}
@@ -58,13 +54,13 @@
                     <label class="block font-bold text-slate-700 mb-1.5">
                         المخزن المنصرف منه البضاعة <span class="text-red-500">*</span>
                     </label>
-                    <select name="warehouse" required
+                    <select name="warehouse" id="warehouse_select" required
                             data-smart-select="true"
                             data-search-url="{% url 'purchases_warehouses_search_api' %}"
                             data-search-placeholder="ابحث باسم المخزن أو الكود..."
                             class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                         {% for w in warehouses %}
-                        <option value="{{ w.id }}" data-subtext="{{ w.code }}{% if w.area %} | {{ w.area.name }}{% endif %}" data-search="{{ w.code }} {{ w.area.name|default:'' }}" {% if selected_po and selected_po.target_warehouse_id == w.id %}selected{% endif %}>
+                        <option value="{{ w.id }}" data-subtext="{{ w.code }}{% if w.area %} | {{ w.area.name }}{% endif %}" data-search="{{ w.code }} {{ w.area.name|default:'' }}" {% if selected_po and selected_po.target_warehouse_id == w.id or form_data.warehouse|stringformat:"s" == w.id|stringformat:"s" %}selected{% endif %}>
                             {{ w.name }}
                         </option>
                         {% endfor %}
@@ -74,28 +70,36 @@
                 <!-- Return Date -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">تاريخ الإرجاع</label>
-                    <input type="date" name="order_date" value="{% now 'Y-m-d' %}"
+                    <input type="date" name="order_date" value="{% if form_data.order_date %}{{ form_data.order_date }}{% else %}{% now 'Y-m-d' %}{% endif %}"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
 
                 <!-- Linked PO -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">مرتبط بأمر شراء سابق (اختياري)</label>
-                    <input type="text" name="purchase_order" value="{% if selected_po %}{{ selected_po.id }}{% endif %}" placeholder="رقم أمر الشراء الأصلي إن وجد"
-                           class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg font-mono text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                    <select name="purchase_order" id="purchase_order_select" onchange="handlePOSelection(this.value)"
+                            data-smart-select="true"
+                            data-search-url="{% url 'purchases_orders_search_api' %}?for_return=1"
+                            data-search-placeholder="ابحث برقم أمر الشراء أو اسم المورد..."
+                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                        <option value="">-- اختياري (بدون ربط) --</option>
+                        {% if selected_po %}
+                        <option value="{{ selected_po.id }}" selected>{{ selected_po.order_number }} — {{ selected_po.supplier.name }} ({{ selected_po.order_date|date:"Y-m-d" }})</option>
+                        {% endif %}
+                    </select>
                 </div>
 
                 <!-- Delivery Agent -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">مسئول الاستلام / الشحن</label>
-                    <input type="text" name="delivery_agent" placeholder="اسم مندوب الشحن أو المستلم"
+                    <input type="text" name="delivery_agent" value="{{ form_data.delivery_agent|default:'' }}" placeholder="اسم مندوب الشحن أو المستلم"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
 
                 <!-- Delivery Time -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">وقت الاستلام</label>
-                    <input type="text" name="delivery_time" placeholder="مثال: 12:00 م"
+                    <input type="text" name="delivery_time" value="{{ form_data.delivery_time|default:'' }}" placeholder="مثال: 12:00 م"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
                 </div>
             </div>
@@ -176,7 +180,7 @@
             <div class="md:col-span-2 bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3">
                 <label class="block font-bold text-slate-700 text-xs">أسباب الإرجاع وملاحظات إضافية</label>
                 <textarea name="notes" rows="4" placeholder="اكتب سبب إرجاع الأصناف (مثال: انتهاء الصلاحية أو كسر في العبوات)..."
-                          class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white"></textarea>
+                          class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white">{{ form_data.notes|default:'' }}</textarea>
             </div>
 
             <!-- Financial Totals Box -->
@@ -203,11 +207,34 @@
             </div>
         </div>
 
+        {% include 'components/attachments_uploader.html' with title='مرفقات مرتجع المشتريات (صور / PDF)' %}
+
+        <!-- Bottom Submit Actions Bar -->
+        <div class="flex items-center justify-end gap-3 pt-4">
+            <a href="{% url 'purchase_return_orders_list' %}" class="px-5 py-2.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px] flex items-center">
+                إلغاء
+            </a>
+            <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all flex items-center gap-1.5 min-h-[44px]">
+                <span class="material-symbols-outlined text-base">check</span>
+                <span>حفظ أمر الإرجاع</span>
+            </button>
+        </div>
     </form>
 
 </div>
 
 <script>
+const availableProducts = [
+    {% for p in products %}
+    {
+        id: "{{ p.id }}",
+        name: "{{ p.name|escapejs }}",
+        sku: "{{ p.sku_code|escapejs }}",
+        cost: Number("{{ p.default_purchase_cost|default:'0.00' }}") || 0
+    },
+    {% endfor %}
+];
+
 function handleProductSelect(selectElem) {
     const selectedOpt = selectElem.options[selectElem.selectedIndex];
     const cost = selectedOpt.getAttribute('data-cost') || '0.00';
@@ -222,10 +249,25 @@ function calculateTotals() {
     let grandTotal = 0;
 
     rows.forEach(row => {
-        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+        const qtyInput = row.querySelector('.item-qty');
+        const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
         const price = parseFloat(row.querySelector('.item-price').value) || 0;
+        const maxQty = parseFloat(qtyInput ? qtyInput.getAttribute('max') : null);
+        const warnEl = row.querySelector('.qty-max-warning');
+
+        if (maxQty && qty > maxQty) {
+            if (warnEl) warnEl.classList.remove('hidden');
+            if (qtyInput) qtyInput.classList.add('border-rose-500', 'text-rose-600');
+        } else {
+            if (warnEl) warnEl.classList.add('hidden');
+            if (qtyInput) qtyInput.classList.remove('border-rose-500', 'text-rose-600');
+        }
+
         const subtotal = qty * price;
-        row.querySelector('.item-subtotal').textContent = subtotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const subtotalEl = row.querySelector('.item-subtotal');
+        if (subtotalEl) {
+            subtotalEl.textContent = subtotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
         totalQty += qty;
         grandTotal += subtotal;
     });
@@ -235,19 +277,61 @@ function calculateTotals() {
     document.getElementById('summary-grand-total').textContent = grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-function addReturnItemRow() {
+function createReturnRowHtml(itemData = null) {
+    let options = '<option value="">-- اختر الصنف --</option>';
+    availableProducts.forEach(p => {
+        const selected = itemData && String(itemData.product_id || itemData.productId) === String(p.id) ? 'selected' : '';
+        options += `<option value="${p.id}" data-cost="${p.cost}" ${selected}>${p.name} (${p.sku})</option>`;
+    });
+
+    const price = itemData ? (itemData.unit_price || itemData.unitPrice || '0.00') : '0.00';
+    const qty = itemData ? (itemData.quantity || '1') : '1';
+    const batch = itemData ? (itemData.batch_number || '') : '';
+    const expiry = itemData ? (itemData.expiry_date || '') : '';
+    const maxAttr = itemData && itemData.remaining_returnable ? `max="${itemData.remaining_returnable}"` : '';
+    const remInfo = itemData && itemData.remaining_returnable ? `<span class="text-[10px] text-[#27bebe] font-bold block mt-0.5">المتبقي: ${itemData.remaining_returnable}</span>` : '';
+
+    return `
+        <tr class="item-row">
+            <td class="py-2 px-3">
+                <select name="product_id[]" required onchange="handleProductSelect(this)"
+                        class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs">
+                    ${options}
+                </select>
+                ${remInfo}
+            </td>
+            <td class="py-2 px-3">
+                <input type="number" step="0.01" min="0" name="unit_price[]" value="${price}" oninput="calculateTotals()"
+                       class="item-price w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono font-bold text-slate-800">
+            </td>
+            <td class="py-2 px-3">
+                <input type="number" step="1" name="quantity[]" value="${qty}" min="1" ${maxAttr} oninput="calculateTotals()"
+                       class="item-qty w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono font-bold text-slate-900">
+                <span class="qty-max-warning hidden text-[10px] text-rose-600 font-bold block">تتجاوز المتبقي!</span>
+            </td>
+            <td class="py-2 px-3">
+                <input type="text" name="batch_number[]" value="${batch}" placeholder="Batch No"
+                       class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+            </td>
+            <td class="py-2 px-3">
+                <input type="date" name="expiry_date[]" value="${expiry}"
+                       class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
+            </td>
+            <td class="py-2 px-3 font-mono font-bold text-slate-900 item-subtotal">
+                0.00
+            </td>
+            <td class="py-2 px-3 text-center">
+                <button type="button" onclick="removeRow(this)" class="p-1 text-slate-400 hover:text-red-600 rounded">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        </tr>
+    `;
+}
+
+function addReturnItemRow(itemData = null) {
     const tbody = document.getElementById('items-tbody');
-    const firstRow = document.querySelector('.item-row');
-    const newRow = firstRow.cloneNode(true);
-
-    newRow.querySelector('select').selectedIndex = 0;
-    newRow.querySelector('.item-price').value = "0.00";
-    newRow.querySelector('.item-qty').value = "1";
-    newRow.querySelector('input[name="batch_number[]"]').value = "";
-    newRow.querySelector('input[name="expiry_date[]"]').value = "";
-    newRow.querySelector('.item-subtotal').textContent = "0.00";
-
-    tbody.appendChild(newRow);
+    tbody.insertAdjacentHTML('beforeend', createReturnRowHtml(itemData));
     calculateTotals();
 }
 
@@ -261,6 +345,79 @@ function removeRow(btn) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', calculateTotals);
+function handlePOSelection(poId) {
+    if (!poId) return;
+
+    fetch(`/purchases/api/orders/${poId}/return-details/`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            if (data.supplier_id) {
+                const sSelect = document.getElementById('supplier_select');
+                if (sSelect) {
+                    sSelect.value = data.supplier_id;
+                    if (window.ERPSmartSelect) window.ERPSmartSelect.refresh(sSelect);
+                }
+            }
+
+            if (data.warehouse_id) {
+                const wSelect = document.getElementById('warehouse_select');
+                if (wSelect) {
+                    wSelect.value = data.warehouse_id;
+                    if (window.ERPSmartSelect) window.ERPSmartSelect.refresh(wSelect);
+                }
+            }
+
+            const tbody = document.getElementById('items-tbody');
+            tbody.innerHTML = '';
+
+            if (data.items && data.items.length > 0) {
+                data.items.forEach(itm => {
+                    const remQty = parseFloat(itm.remaining_returnable) || 0;
+                    if (remQty > 0) {
+                        addReturnItemRow({
+                            product_id: itm.product_id,
+                            unit_price: itm.unit_price,
+                            quantity: Math.min(1, remQty),
+                            remaining_returnable: remQty,
+                            batch_number: itm.batch_number,
+                            expiry_date: itm.expiry_date
+                        });
+                    }
+                });
+            }
+
+            if (tbody.children.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">لا توجد كميات قابلة للإرجاع في هذا الطلب أو تم إرجاع كامل الأصناف مسبقاً.</td></tr>`;
+            }
+            calculateTotals();
+        })
+        .catch(err => console.error("Error fetching purchase order details", err));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    {% if submitted_items %}
+        const tbody = document.getElementById('items-tbody');
+        tbody.innerHTML = '';
+        const submitted = [
+            {% for itm in submitted_items %}
+            {
+                product_id: "{{ itm.product_id }}",
+                unit_price: "{{ itm.unit_price|default:'0.00' }}",
+                quantity: "{{ itm.quantity|default:'1' }}",
+                batch_number: "{{ itm.batch_number|escapejs }}",
+                expiry_date: "{{ itm.expiry_date|escapejs }}"
+            },
+            {% endfor %}
+        ];
+        submitted.forEach(itm => addReturnItemRow(itm));
+    {% else %}
+        calculateTotals();
+    {% endif %}
+});
 </script>
 {% endblock %}

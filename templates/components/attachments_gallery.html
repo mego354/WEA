@@ -1,0 +1,65 @@
+{% load erp_tags %}
+{% get_erp_attachments target_obj as erp_attachments %}
+<div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#27bebe] text-lg">attach_file</span>
+            <span>المرفقات والمستندات ({{ erp_attachments|length }})</span>
+        </h3>
+        {% if can_upload|default:True %}
+        <form method="POST" action="{% url 'erp_attachment_upload' model_key target_obj.pk %}" enctype="multipart/form-data" class="inline-flex items-center gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl cursor-pointer transition-colors shadow-2xs">
+                <span class="material-symbols-outlined text-sm">upload_file</span>
+                <span>إضافة مرفق</span>
+                <input type="file" name="attachments" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" class="hidden" onchange="this.form.submit()">
+            </label>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if erp_attachments %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {% for att in erp_attachments %}
+        <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50/80 border border-slate-200 text-xs">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-lg {% if att.is_pdf %}bg-rose-50 text-rose-600{% else %}bg-teal-50 text-[#27bebe]{% endif %} flex items-center justify-center shrink-0 border border-slate-200">
+                    <span class="material-symbols-outlined text-lg">{% if att.is_pdf %}picture_as_pdf{% else %}image{% endif %}</span>
+                </div>
+                <div class="min-w-0">
+                    <div class="font-bold text-slate-900 truncate" title="{{ att.original_filename }}">{{ att.original_filename }}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">{{ att.size_display }} • {{ att.created_at|date:"Y-m-d" }}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+                {% if att.is_image %}
+                <button type="button" onclick="openAttachmentImagePreview('{% url 'erp_attachment_view' att.pk %}', '{{ att.original_filename|escapejs }}')"
+                        class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white transition-colors" title="معاينة الصورة">
+                    <span class="material-symbols-outlined text-base">visibility</span>
+                </button>
+                {% else %}
+                <a href="{% url 'erp_attachment_view' att.pk %}" target="_blank"
+                   class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white transition-colors" title="فتح المستند">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                </a>
+                {% endif %}
+                <a href="{% url 'erp_attachment_download' att.pk %}"
+                   class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-white transition-colors" title="تحميل">
+                    <span class="material-symbols-outlined text-base">download</span>
+                </a>
+                {% if can_delete|default:True %}
+                <button type="button"
+                        onclick="showConfirmDeleteModal({ action: '{% url 'erp_attachment_delete' att.pk %}', title: 'حذف المرفق', itemName: '{{ att.original_filename|escapejs }}' })"
+                        class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors" title="حذف المرفق">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-xs text-slate-400">لا توجد مرفقات مسجلة حتى الآن.</div>
+    {% endif %}
+</div>

@@ -110,16 +110,23 @@ erDiagram
    - Dynamic classification (`lead`, `customer`, `vendor`).
    - Support for dynamic User-Defined Fields (UDF), customer todos, and interaction timeline.
 
-4. **Visit (`activities.Visit`)**:
+4. **Visit Plan (`activities.VisitPlan`)**:
+   - Represents a distinct bulk visit planning submission with a unique auto-generated `plan_id` (e.g. `PLAN-YYYYMMDD-0001`).
+   - Links all visits generated during the bulk submission to the plan (`visit.plan_id`).
+   - Bulk creation comment is stored strictly at plan-level (`comment`) and displayed in `planned-visits/` and `agenda/` directly above each plan below the day name.
+   - Enforces approval workflow: plans created by representatives lacking `activities:visits/approve` are created as `pending` approval and can be approved/rejected at the plan level (`/planned-visits/plan/<pk>/action/<action>/`).
+
+5. **Visit (`activities.Visit`)**:
    - Workflow state: `planned` → `started` → `finished`.
    - Approval state: `pending` → `approved` / `disapproved`.
-   - Unplanned visits created directly via `/visits/create/` (`is_planned=False`).
-   - Planned visits generated directly by bulk daily planning (`/planned-visits/bulk-add/`) creating linked `PlannedVisitItem` and `Visit(is_planned=True, status='planned')` records atomically, with fallback execution support for legacy unlinked items.
-   - Stores scheduled `time` (`TimeField`) and localized 12-hour formatted representation.
-   - GPS coordinates with distance verification against client address within configurable tolerance; OpenStreetMap Leaflet tile rendering with `SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'` and automatic fallback tiles.
-   - GPS bypass permission moved entirely to centralized Role Settings (`activities:visits/bypass_gps`), eliminating insecure per-user bypass checkboxes.
+   - Unplanned visits created directly via `/visits/create/` (`is_planned=False`) are auto-approved (`'approved'`) and can be started immediately.
+   - Planned visits created via bulk planning (`is_planned=True`) require manager approval (`pending`) if creator lacks `activities:visits/approve`.
+   - Date validation: Visits can only be started when `visit.date == timezone.localdate()`. Time fields and time setting have been completely removed.
+   - Outcome and comments: `visit_outcome` and `feedback` removed from direct model fields; outcome is collected via Question #1 (`نتيجة الزيارة`) in every `VisitTemplate` and accessed via `visit.outcome_display`.
+   - GPS verification & forced bypass: Enforces `activities:visits/bypass_gps` for starting and ending visits outside tolerance; records separate forced GPS tracking (`gps_forced_start`, `gps_forced_end`) with audit logs.
+   - Evidence photo capture completely removed: `location_photo`, `photo_captured_at`, and `activities:visits/evidence` removed across the application.
 
-5. **Agreement (`activities.Agreement`)**:
+6. **Agreement (`activities.Agreement`)**:
    - Rep-to-doctor contractual commitments with approval workflow: `new` (قيد الانتظار) → `approved` (معتمد) / `rejected` (مرفوض) → `done` (مكتمل).
    - Edit and Delete operations restricted strictly to unapproved agreements (`status in ['new', 'rejected']`). Once approved, modifying or deleting is blocked on backend and IDOR checks.
    - Customer picker is dynamically scoped via `get_visit_eligible_contacts_queryset`.

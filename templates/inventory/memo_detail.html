@@ -107,7 +107,7 @@
                         <td class="py-3 px-3 text-center text-slate-400 font-mono">{{ forloop.counter }}</td>
                         <td class="py-3 px-3 font-mono font-bold text-brand-700">{{ item.product.sku_code }}</td>
                         <td class="py-3 px-4 font-bold text-slate-900">{{ item.product.name }}</td>
-                        <td class="py-3 px-3 text-center font-mono font-bold text-slate-900">{{ item.quantity|floatformat:2 }}</td>
+                        <td class="py-3 px-3 text-center font-mono font-bold text-slate-900">{{ item.quantity|floatformat:0 }}</td>
                         {% if memo.memo_type == 'inward' %}
                         <td class="py-3 px-3 text-center font-mono text-slate-800">{{ item.unit_cost|floatformat:2 }} ج.م</td>
                         {% endif %}
@@ -123,6 +123,8 @@
             </table>
         </div>
     </div>
+
+    {% include 'components/attachments_gallery.html' with target_obj=memo model_key='inventorymemo' %}
 
 </div>
 {% endblock %}

@@ -1,0 +1,186 @@
+<!-- Reusable Order/Return PDF Customization Modal -->
+<div id="orderPdfModal" class="fixed inset-0 z-[105] hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">picture_as_pdf</span>
+                <span id="orderPdfModalTitle">خيارات تصدير PDF</span>
+            </h3>
+            <button type="button" onclick="closeOrderPdfModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form id="orderPdfForm" method="GET" target="_blank" class="space-y-3 text-xs">
+            <div class="grid grid-cols-2 gap-2.5">
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_company_info" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">بيانات الشركة</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_party_info" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">بيانات العميل / المورد</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_items" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">جدول الأصناف</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_totals" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">الإجماليات والضرائب</span>
+                </label>
+                <label id="optPaymentsWrap" class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_payments" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">الدفعات / التحصيلات</span>
+                </label>
+                <label id="optReturnsWrap" class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_returns" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">المرتجعات المرتبطة</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_notes" value="1" checked class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">الملاحظات</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="include_signatures" value="1" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="font-bold text-slate-700">خانات التوقيعات</span>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="submitOrderPdf(true)" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition-colors">
+                    <span class="material-symbols-outlined text-base">download</span>
+                    <span>تحميل مباشر</span>
+                </button>
+                <button type="button" onclick="submitOrderPdf(false)" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white font-bold rounded-xl shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    <span>معاينة PDF</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reusable Account Statement PDF Modal -->
+<div id="statementPdfModal" class="fixed inset-0 z-[105] hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">receipt_long</span>
+                <span id="statementPdfModalTitle">كشف حساب PDF</span>
+            </h3>
+            <button type="button" onclick="closeStatementPdfModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form id="statementPdfForm" method="GET" target="_blank" class="space-y-3 text-xs">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">من تاريخ</label>
+                    <input type="date" name="start_date" id="stmtStartDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">إلى تاريخ</label>
+                    <input type="date" name="end_date" id="stmtEndDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">تصفية الحركات المعروضة</label>
+                <select name="category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700">
+                    <option value="all">جميع الحركات (فواتير + مرتجعات + دفعات)</option>
+                    <option value="orders">الفواتير فقط</option>
+                    <option value="returns">المرتجعات فقط</option>
+                    <option value="payments">المدفوعات / التحصيلات فقط</option>
+                    <option value="adjustments">التسويات فقط</option>
+                </select>
+            </div>
+
+            <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+                <input type="checkbox" name="include_line_details" value="1" class="rounded text-[#27bebe] focus:ring-[#27bebe]">
+                <span class="font-bold text-slate-700">إظهار تفاصيل أصناف الفواتير داخل كشف الحساب</span>
+            </label>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="submitStatementPdf(true)" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition-colors">
+                    <span class="material-symbols-outlined text-base">download</span>
+                    <span>تحميل PDF</span>
+                </button>
+                <button type="button" onclick="submitStatementPdf(false)" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white font-bold rounded-xl shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    <span>معاينة PDF</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+window._activeOrderPdfUrl = '';
+window._activeStatementPdfUrl = '';
+
+function openOrderPdfModal(pdfUrl, title, docType) {
+    window._activeOrderPdfUrl = pdfUrl;
+    const modal = document.getElementById('orderPdfModal');
+    const titleEl = document.getElementById('orderPdfModalTitle');
+    if (titleEl && title) titleEl.textContent = 'تصدير PDF — ' + title;
+    const isReturn = docType === 'salesreturnorder' || docType === 'purchasereturnorder';
+    const pWrap = document.getElementById('optPaymentsWrap');
+    const rWrap = document.getElementById('optReturnsWrap');
+    if (pWrap) pWrap.classList.toggle('hidden', isReturn);
+    if (rWrap) rWrap.classList.toggle('hidden', isReturn);
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeOrderPdfModal() {
+    const modal = document.getElementById('orderPdfModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function submitOrderPdf(download) {
+    const form = document.getElementById('orderPdfForm');
+    if (!form || !window._activeOrderPdfUrl) return;
+    const params = new URLSearchParams();
+    form.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        params.set(cb.name, cb.checked ? '1' : '0');
+    });
+    if (download) params.set('download', '1');
+    const url = window._activeOrderPdfUrl + '?' + params.toString();
+    window.open(url, '_blank');
+    closeOrderPdfModal();
+}
+
+function openStatementPdfModal(pdfUrl, partyName) {
+    window._activeStatementPdfUrl = pdfUrl;
+    const modal = document.getElementById('statementPdfModal');
+    const titleEl = document.getElementById('statementPdfModalTitle');
+    if (titleEl && partyName) titleEl.textContent = 'كشف حساب PDF — ' + partyName;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const sInput = document.getElementById('stmtStartDate');
+    const eInput = document.getElementById('stmtEndDate');
+    if (sInput && !sInput.value) sInput.value = `${yyyy}-${mm}-01`;
+    if (eInput && !eInput.value) eInput.value = `${yyyy}-${mm}-${dd}`;
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeStatementPdfModal() {
+    const modal = document.getElementById('statementPdfModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function submitStatementPdf(download) {
+    const form = document.getElementById('statementPdfForm');
+    if (!form || !window._activeStatementPdfUrl) return;
+    const params = new URLSearchParams(new FormData(form));
+    if (!form.querySelector('input[name="include_line_details"]').checked) {
+        params.set('include_line_details', '0');
+    }
+    if (download) params.set('download', '1');
+    window.open(window._activeStatementPdfUrl + '?' + params.toString(), '_blank');
+    closeStatementPdfModal();
+}
+</script>

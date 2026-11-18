@@ -20,26 +20,28 @@
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
             <!-- View Toggle: Table / Cards -->
             <div class="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
-                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}"
                    class="p-2 {% if view_mode == 'table' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض جدولي">
                     <span class="material-symbols-outlined text-base">table_chart</span>
                 </a>
-                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}"
+                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}"
                    class="p-2 {% if view_mode == 'cards' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض بطاقات">
                     <span class="material-symbols-outlined text-base">view_agenda</span>
                 </a>
             </div>
 
             <!-- Export to Excel -->
-            <a href="{% url 'visits_export' %}?q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
+            <a href="{% url 'visits_export' %}?q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&plan_type={{ selected_plan_type|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير البيانات">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
                 <span class="hidden sm:inline">تصدير البيانات</span>
             </a>
 
-            <!-- Column Picker -->
+            <!-- Column Picker (Table View Only) -->
+            {% if view_mode == 'table' %}
             {% include 'components/table_column_picker.html' with table_id='visits_table' %}
+            {% endif %}
 
             <!-- Create Visit Button -->
             <a href="{% url 'visit_create' %}"
@@ -119,9 +121,10 @@
                 {% if selected_owner %}<input type="hidden" name="owner" value="{{ selected_owner }}">{% endif %}
                 {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
                 {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                {% if selected_distance_ignored %}<input type="hidden" name="distance_ignored" value="{{ selected_distance_ignored }}">{% endif %}
 
                 <div class="relative flex-1 w-full sm:w-auto">
-                    <input type="text" name="q" value="{{ selected_q }}" placeholder="بحث بالعميل أو المسؤول أو رقم الزيارة..."
+                    <input type="text" name="q" value="{{ selected_q }}" data-smart-search-module="visits" placeholder="بحث بالعميل أو المسؤول أو رقم الزيارة..."
                            class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
                     <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
                 </div>
@@ -165,9 +168,10 @@
                         <th data-col="owner" data-col-label="المسؤول" class="py-3.5 px-4">المسؤول</th>
                         <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4">المنطقة</th>
                         <th data-col="account_type" data-col-label="نوع الاكونت" class="py-3.5 px-4">نوع الاكونت</th>
-                        <th data-col="is_successful" data-col-label="ناجحة" class="py-3.5 px-4 text-center">ناجحة</th>
+                        <th data-col="questionnaire_answers" data-col-label="إجابات الاستبيان" class="py-3.5 px-4">إجابات الاستبيان</th>
                         <th data-col="doubled" data-col-label="مزدوجة" class="py-3.5 px-4 text-center">مزدوجة</th>
                         <th data-col="approval" data-col-label="الاعتماد" class="py-3.5 px-4 text-center">الاعتماد</th>
+                        <th data-col="distance_status" data-col-label="تجاوز المسافة" class="py-3.5 px-4 text-center">تجاوز المسافة</th>
                         <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center w-20">إجراءات</th>
                     </tr>
                 </thead>
@@ -182,8 +186,11 @@
                                 {% elif v.verification_status == 'force_bypassed' %}
                                 <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاوز التحقق بموافقة إدارية">gpp_maybe</span>
                                 {% endif %}
-                                {% if v.has_photo_evidence %}
-                                <span class="material-symbols-outlined text-xs text-sky-600" title="تم التقاط صورة إثبات الموقع">photo_camera</span>
+                                {% if v.gps_forced_start %}
+                                <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند بدء الزيارة">near_me_disabled</span>
+                                {% endif %}
+                                {% if v.gps_forced_end %}
+                                <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند إنهاء الزيارة">wrong_location</span>
                                 {% endif %}
                             </div>
                         </td>
@@ -209,12 +216,6 @@
                         </td>
                         <td data-col="date" class="py-3 px-4 font-mono">
                             <div class="text-slate-800 font-bold">{{ v.date|date:"d/m/Y" }}</div>
-                            <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')"
-                                    class="visit-time-btn-{{ v.pk }} text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 inline-flex items-center gap-0.5 mt-0.5 transition-colors"
-                                    title="تحديد أو تعديل وقت الزيارة">
-                                <span class="material-symbols-outlined text-[11px]">schedule</span>
-                                <span class="visit-time-label-{{ v.pk }}">{{ v.formatted_time|default:"تحديد الوقت" }}</span>
-                            </button>
                         </td>
                         <td data-col="started_at" class="py-3 px-4 text-slate-500 font-mono text-[11px]">
                             {{ v.started_at|date:"H:i"|default:"-" }}
@@ -223,7 +224,7 @@
                             {{ v.ended_at|date:"H:i"|default:"-" }}
                         </td>
                         <td data-col="duration" class="py-3 px-4 text-slate-600 font-mono">
-                            {% if v.duration %}{{ v.duration }} ث{% else %}-{% endif %}
+                            {{ v.duration_formatted|default:"–" }}
                         </td>
                         <td data-col="owner" class="py-3 px-4 text-slate-800">
                             {{ v.owner.get_full_name|default:v.owner.username }}
@@ -236,12 +237,28 @@
                                 {{ v.contact.account_type|default:"Clinic" }}
                             </span>
                         </td>
-                        <td data-col="is_successful" class="py-3 px-4 text-center">
-                            {% if v.is_successful %}
-                            <span class="text-emerald-600 font-bold">✓</span>
+                        <td data-col="questionnaire_answers" class="py-3 px-4 max-w-[240px]">
+                            {% with qa_list=v.get_qa_display_list %}
+                            {% if qa_list %}
+                            <div class="flex flex-col gap-1">
+                                {% with first_qa=qa_list.0 %}
+                                <div class="text-[11px] text-slate-700 truncate" title="{{ first_qa.question_text }}: {{ first_qa.answer }}">
+                                    <span class="font-bold text-slate-900">{{ first_qa.answer }}</span>
+                                </div>
+                                {% endwith %}
+                                <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')"
+                                        class="inline-flex items-center gap-1 self-start px-2 py-0.5 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold transition-colors">
+                                    <span class="material-symbols-outlined text-[13px]">quiz</span>
+                                    <span>عرض الإجابات ({{ qa_list|length }})</span>
+                                </button>
+                            </div>
                             {% else %}
-                            <span class="text-slate-300">✗</span>
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium whitespace-nowrap">
+                                <span class="material-symbols-outlined text-[12px]">hourglass_empty</span>
+                                <span>لم يتم تسجيل إجابات بعد</span>
+                            </span>
                             {% endif %}
+                            {% endwith %}
                         </td>
                         <td data-col="doubled" class="py-3 px-4 text-center">
                             {% if v.doubled %}
@@ -254,6 +271,27 @@
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
                                 {{ v.approval_display_ar }}
                             </span>
+                        </td>
+                        <td data-col="distance_status" class="py-3 px-4 text-center">
+                            {% if v.gps_forced_start and v.gps_forced_end %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200" title="تم تجاوز قيد المسافة عند البدء والإنهاء">
+                                تجاوز (بدء وإنهاء)
+                            </span>
+                            {% elif v.gps_forced_start %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="تم تجاوز قيد المسافة عند البدء">
+                                تجاوز (بدء)
+                            </span>
+                            {% elif v.gps_forced_end %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="تم تجاوز قيد المسافة عند الإنهاء">
+                                تجاوز (إنهاء)
+                            </span>
+                            {% elif v.verification_status == 'verified' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="الموقع ضمن النطاق المسموح">
+                                ضمن النطاق
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 text-xs">—</span>
+                            {% endif %}
                         </td>
                         <td data-col="actions" class="py-3 px-4 text-center">
                             <div class="flex items-center justify-center gap-1">
@@ -269,9 +307,11 @@
                                     <span class="material-symbols-outlined text-lg">cancel</span>
                                 </button>
                                 {% endif %}
-                                <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="تحديد أو تعديل وقت الزيارة">
-                                    <span class="material-symbols-outlined text-lg">schedule</span>
+                                {% if v.questionnaire_answers %}
+                                <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="p-1 rounded-md text-slate-400 hover:text-teal-600 hover:bg-slate-100 inline-flex items-center" title="عرض إجابات الاستبيان">
+                                    <span class="material-symbols-outlined text-lg">quiz</span>
                                 </button>
+                                {% endif %}
                                 <a href="{% url 'visit_detail' v.pk %}" class="p-1 rounded-md text-slate-400 hover:text-[#27bebe] hover:bg-slate-100 inline-flex items-center" title="عرض التفاصيل">
                                     <span class="material-symbols-outlined text-lg">visibility</span>
                                 </a>
@@ -285,7 +325,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="14" class="py-12 text-center text-slate-400">
+                        <td colspan="15" class="py-12 text-center text-slate-400">
                             <div class="flex flex-col items-center justify-center gap-2">
                                 <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
                                 <p class="text-sm font-medium">لا توجد زيارات مسجلة تطابق معايير البحث.</p>
@@ -305,8 +345,16 @@
             <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div class="flex items-center gap-1.5">
                     <span class="font-mono font-bold text-slate-900 text-sm">#{{ v.serial_num }}</span>
-                    {% if v.has_photo_evidence %}
-                    <span class="material-symbols-outlined text-xs text-sky-600" title="يوجد صورة إثبات للموقع">photo_camera</span>
+                    {% if v.verification_status == 'verified' %}
+                    <span class="material-symbols-outlined text-xs text-emerald-500" title="تم التحقق من الموقع">gpp_good</span>
+                    {% elif v.verification_status == 'force_bypassed' %}
+                    <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاوز التحقق">gpp_maybe</span>
+                    {% endif %}
+                    {% if v.gps_forced_start %}
+                    <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند بدء الزيارة">near_me_disabled</span>
+                    {% endif %}
+                    {% if v.gps_forced_end %}
+                    <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند إنهاء الزيارة">wrong_location</span>
                     {% endif %}
                 </div>
                 <div class="flex items-center gap-1.5">
@@ -330,16 +378,12 @@
 
             <div class="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl font-mono">
                 <div class="flex justify-between items-center">
-                    <span class="text-slate-400">التاريخ والوقت:</span>
-                    <div class="flex items-center gap-1.5">
-                        <span>{{ v.date|date:"d/m/Y" }}</span>
-                        <button type="button" onclick="openSetTimeModal('{{ v.pk }}', '{{ v.serial_num }}', '{{ v.time|time:'H:i'|default:'' }}')"
-                                class="visit-time-btn-{{ v.pk }} text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-200 inline-flex items-center gap-0.5 transition-colors"
-                                title="تحديد أو تعديل وقت الزيارة">
-                            <span class="material-symbols-outlined text-[11px]">schedule</span>
-                            <span class="visit-time-label-{{ v.pk }}">{{ v.formatted_time|default:"تحديد الوقت" }}</span>
-                        </button>
-                    </div>
+                    <span class="text-slate-400">التاريخ:</span>
+                    <span class="font-bold text-slate-800">{{ v.date|date:"d/m/Y" }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">المدة:</span>
+                    <span class="font-bold text-slate-700">{{ v.duration_formatted|default:"–" }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-slate-400">المسؤول:</span>
@@ -351,6 +395,22 @@
                     <span class="font-sans text-[#27bebe]">{{ v.template.display_name_ar }}</span>
                 </div>
                 {% endif %}
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">تجاوز المسافة:</span>
+                    <div>
+                        {% if v.gps_forced_start and v.gps_forced_end %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">تجاوز (بدء وإنهاء)</span>
+                        {% elif v.gps_forced_start %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">تجاوز (بدء)</span>
+                        {% elif v.gps_forced_end %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">تجاوز (إنهاء)</span>
+                        {% elif v.verification_status == 'verified' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ضمن النطاق</span>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">—</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
 
             <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
@@ -367,6 +427,11 @@
                     <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="رفض الزيارة">
                         <span class="material-symbols-outlined text-sm">cancel</span>
                         <span>رفض</span>
+                    </button>
+                    {% endif %}
+                    {% if v.questionnaire_answers %}
+                    <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="p-1 rounded-md text-slate-400 hover:text-teal-600 hover:bg-slate-100 inline-flex items-center" title="عرض إجابات الاستبيان">
+                        <span class="material-symbols-outlined text-lg">quiz</span>
                     </button>
                     {% endif %}
                     {% if v.user_can_delete %}
@@ -391,6 +456,22 @@
     </div>
     {% endif %}
 
+    <!-- Shared Questionnaire Answers Data Containers (Table & Cards) -->
+    {% for v in visits %}
+    {% if v.questionnaire_answers %}
+    <div id="visit-answers-data-{{ v.pk }}" class="hidden" data-serial="#{{ v.serial_num }}" data-contact="{{ v.contact.name|escape }}" data-template="{{ v.template.display_name_ar|default:v.template.name|default:'-' }}">
+        {% for qa in v.get_qa_display_list %}
+        <div class="py-2.5 border-b border-slate-100 last:border-0 text-xs text-right">
+            <span class="font-bold text-slate-700 block">{{ qa.question_text }}</span>
+            <span class="text-slate-900 font-medium block mt-1 bg-slate-50 p-2 rounded-lg border border-slate-200/60">{{ qa.answer }}</span>
+        </div>
+        {% empty %}
+        <p class="text-xs text-slate-400 py-2">لا توجد إجابات مسجلة.</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
     <!-- Pagination Bar -->
     <div class="mt-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
         {% include 'components/pagination.html' %}
@@ -413,15 +494,17 @@
                 {% if selected_q %}<input type="hidden" name="q" value="{{ selected_q }}">{% endif %}
                 <input type="hidden" name="view" value="{{ view_mode }}">
 
+                {% if can_filter_owner %}
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول</label>
-                    <select name="owner" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                    <select name="owner" data-smart-select="true" data-search-placeholder="ابحث عن المسؤول..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                         <option value="">جميع المسؤولين</option>
                         {% for u in users %}
-                        <option value="{{ u.id }}" {% if selected_owner == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                        <option value="{{ u.id }}" {% if selected_owner == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
                         {% endfor %}
                     </select>
                 </div>
+                {% endif %}
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة الاعتماد</label>
@@ -450,6 +533,17 @@
                         <option value="started" {% if selected_status == 'started' %}selected{% endif %}>جارية (Started)</option>
                         <option value="planned" {% if selected_status == 'planned' %}selected{% endif %}>مخططة (Planned)</option>
                         <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>ملغاة (Cancelled)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تجاوز المسافة (GPS)</label>
+                    <select name="distance_ignored" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">جميع الحالات</option>
+                        <option value="any" {% if selected_distance_ignored == 'any' %}selected{% endif %}>تم تجاوز المسافة (بدء أو إنهاء)</option>
+                        <option value="start" {% if selected_distance_ignored == 'start' %}selected{% endif %}>تجاوز المسافة عند البدء فقط</option>
+                        <option value="end" {% if selected_distance_ignored == 'end' %}selected{% endif %}>تجاوز المسافة عند الإنهاء فقط</option>
+                        <option value="none" {% if selected_distance_ignored == 'none' %}selected{% endif %}>ضمن النطاق (لم يتم التجاوز)</option>
                     </select>
                 </div>
 
@@ -507,168 +601,51 @@ function closeVisitListRejectModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// Quick action time modal functions (Requirement 7)
-function openSetTimeModal(visitId, serialNum, currentTime) {
-    const modal = document.getElementById('visit-time-modal');
-    const visitIdInput = document.getElementById('time-modal-visit-id');
-    const timeInput = document.getElementById('time-modal-input');
-    const serialSpan = document.getElementById('time-modal-serial');
-    const feedback = document.getElementById('time-modal-feedback');
+// Interactive Questionnaire Answers Modal (Requirement 6)
+function openVisitAnswersModal(visitId) {
+    const dataContainer = document.getElementById(`visit-answers-data-${visitId}`);
+    if (!dataContainer) return;
+    const modal = document.getElementById('visit-answers-modal');
+    const titleEl = document.getElementById('visit-answers-modal-title');
+    const subEl = document.getElementById('visit-answers-modal-sub');
+    const bodyEl = document.getElementById('visit-answers-modal-body');
 
-    if (visitIdInput) visitIdInput.value = visitId;
-    if (serialSpan) serialSpan.textContent = `#${serialNum}`;
-    if (timeInput) {
-        timeInput.value = currentTime || '';
-    }
-    if (feedback) {
-        feedback.className = 'text-xs font-bold hidden py-1';
-        feedback.textContent = '';
-    }
-    if (modal) {
-        modal.classList.remove('hidden');
-        if (timeInput) timeInput.focus();
-    }
+    if (titleEl) titleEl.textContent = `إجابات الاستبيان — زيارة ${dataContainer.dataset.serial || ''}`;
+    if (subEl) subEl.textContent = `${dataContainer.dataset.contact || ''} • قالب: ${dataContainer.dataset.template || ''}`;
+    if (bodyEl) bodyEl.innerHTML = dataContainer.innerHTML;
+    if (modal) modal.classList.remove('hidden');
 }
 
-function closeSetTimeModal() {
-    const modal = document.getElementById('visit-time-modal');
+function closeVisitAnswersModal() {
+    const modal = document.getElementById('visit-answers-modal');
     if (modal) modal.classList.add('hidden');
-}
-
-function setTimePreset(preset) {
-    const timeInput = document.getElementById('time-modal-input');
-    if (!timeInput) return;
-    if (preset === 'now') {
-        const now = new Date();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(now.getMinutes()).padStart(2, '0');
-        timeInput.value = `${hh}:${mm}`;
-    } else {
-        timeInput.value = preset;
-    }
-}
-
-async function submitVisitTimeAjax(e) {
-    if (e) e.preventDefault();
-    const visitId = document.getElementById('time-modal-visit-id')?.value;
-    const timeVal = document.getElementById('time-modal-input')?.value;
-    const saveBtn = document.getElementById('time-modal-save-btn');
-    const feedback = document.getElementById('time-modal-feedback');
-
-    if (!visitId || !timeVal) {
-        if (feedback) {
-            feedback.textContent = 'يرجى إدخال الوقت المطلوب.';
-            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
-        }
-        return;
-    }
-
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> <span>جاري الحفظ...</span>`;
-    }
-
-    try {
-        const formData = new FormData();
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        formData.append('time', timeVal);
-
-        const resp = await fetch(`/activities/visits/${visitId}/set-time/`, {
-            method: 'POST',
-            body: formData,
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        });
-        const data = await resp.json();
-
-        if (data.success) {
-            // Update labels in table and card rows without page reload
-            document.querySelectorAll(`.visit-time-label-${visitId}`).forEach(el => {
-                el.textContent = data.display_time || data.time_12 || timeVal;
-            });
-            document.querySelectorAll(`.visit-time-btn-${visitId}`).forEach(el => {
-                el.setAttribute('onclick', `openSetTimeModal('${visitId}', '', '${data.time_24 || timeVal}')`);
-            });
-
-            if (feedback) {
-                feedback.textContent = data.message || 'تم تحديث وقت الزيارة بنجاح.';
-                feedback.className = 'text-xs font-bold text-emerald-600 block py-1';
-            }
-
-            setTimeout(() => {
-                closeSetTimeModal();
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
-                }
-            }, 600);
-        } else {
-            if (feedback) {
-                feedback.textContent = data.detail || data.message || 'حدث خطأ أثناء حفظ الوقت.';
-                feedback.className = 'text-xs font-bold text-rose-600 block py-1';
-            }
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
-            }
-        }
-    } catch (err) {
-        console.error('Error saving visit time:', err);
-        if (feedback) {
-            feedback.textContent = 'تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.';
-            feedback.className = 'text-xs font-bold text-rose-600 block py-1';
-        }
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span> <span>حفظ الوقت</span>`;
-        }
-    }
 }
 </script>
 
-<!-- VISIT TIME QUICK ACTION MODAL (Requirement 7) -->
-<div id="visit-time-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div class="flex items-center gap-2 text-[#27bebe]">
-                <span class="material-symbols-outlined text-xl">schedule</span>
-                <h3 class="font-bold text-slate-900 text-sm">تحديد وقت الزيارة <span id="time-modal-serial" class="text-teal-600 font-mono"></span></h3>
+<!-- VISIT QUESTIONNAIRE ANSWERS MODAL (Requirement 6) -->
+<div id="visit-answers-modal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-teal-50/70">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">quiz</span>
+                <div>
+                    <h3 class="font-bold text-slate-900 text-sm" id="visit-answers-modal-title">إجابات الاستبيان</h3>
+                    <p class="text-[11px] text-slate-500 font-medium" id="visit-answers-modal-sub"></p>
+                </div>
             </div>
-            <button type="button" onclick="closeSetTimeModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-                <span class="material-symbols-outlined text-lg">close</span>
+            <button type="button" onclick="closeVisitAnswersModal()" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
             </button>
         </div>
 
-        <form id="visit-time-form" onsubmit="submitVisitTimeAjax(event)" class="space-y-3">
-            <input type="hidden" id="time-modal-visit-id" value="">
-            
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">الوقت المحدد *</label>
-                <input type="time" id="time-modal-input" required class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
-            </div>
+        <div id="visit-answers-modal-body" class="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+        </div>
 
-            <!-- Quick time suggestions -->
-            <div class="space-y-1">
-                <span class="text-[10px] font-bold text-slate-400">اقتراحات سريعة:</span>
-                <div class="flex flex-wrap gap-1.5">
-                    <button type="button" onclick="setTimePreset('now')" class="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 text-[11px] font-bold transition-colors">الآن</button>
-                    <button type="button" onclick="setTimePreset('09:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">صباحاً (09:00)</button>
-                    <button type="button" onclick="setTimePreset('13:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">ظهراً (13:00)</button>
-                    <button type="button" onclick="setTimePreset('17:00')" class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px] font-bold transition-colors">مساءً (17:00)</button>
-                </div>
-            </div>
-
-            <div id="time-modal-feedback" class="text-xs font-bold hidden py-1"></div>
-
-            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
-                <button type="submit" id="time-modal-save-btn" class="flex-1 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm">check</span>
-                    <span>حفظ الوقت</span>
-                </button>
-                <button type="button" onclick="closeSetTimeModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">
-                    إلغاء
-                </button>
-            </div>
-        </form>
+        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+            <button type="button" onclick="closeVisitAnswersModal()" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors">
+                إغلاق
+            </button>
+        </div>
     </div>
 </div>
 

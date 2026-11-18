@@ -155,3 +155,19 @@ python manage.py execute_wea_migration --phase=15
 | **15** | Quantitative Verification | Executes 5 core quantitative assertions verifying exact counts, balances, and territorial coverage. |
 
 
+
+
+## Cloudflare R2 Media Storage Configuration
+
+Set the following environment variables to enable Cloudflare R2 (`master_data.storage.CloudflareR2Storage`). When any required key is omitted, `config/settings.py` falls back to local `FileSystemStorage` for development:
+
+- `CLOUDFLARE_R2_ACCESS_KEY`
+- `CLOUDFLARE_R2_SECRET_KEY`
+- `CLOUDFLARE_R2_BUCKET_NAME`
+- `CLOUDFLARE_R2_ENDPOINT_URL`
+- `CLOUDFLARE_R2_CUSTOM_DOMAIN` (optional)
+- `MEDIA_MAX_UPLOAD_SIZE_MB` (default `10`)
+
+Management commands for storage operations:
+- `python manage.py cleanup_r2_storage` — retries queued deletions in `PendingStorageDeletion`.
+- `python manage.py migrate_media_to_r2` — migrates existing local media files (`ERPAttachment`, `CompanyProfile.logo`, `Product.thumbnail`, `User.avatar`) to R2.

@@ -226,7 +226,8 @@ class Contact(models.Model):
         """Sum of unpaid balances across active sales orders for this customer."""
         if not self.is_customer or not self.pk:
             return Decimal('0.00')
-        active_orders = self.sales_orders.exclude(status='cancelled')
+        from sales.models import SalesOrder
+        active_orders = SalesOrder.with_payment_totals(self.sales_orders.exclude(status='cancelled'))
         return sum((order.outstanding_balance for order in active_orders), Decimal('0.00'))
 
     @property

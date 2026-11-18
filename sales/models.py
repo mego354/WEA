@@ -78,6 +78,13 @@ class SalesOrder(models.Model):
         ('cancelled', 'Cancelled / ملغي'),
     ]
 
+    PAYMENT_STATUS_CHOICES = [
+        ('credit', 'آجل'),
+        ('partial', 'جزئي'),
+        ('paid', 'مدفوع بالكامل'),
+        ('returned', 'مرتجع'),
+    ]
+
     serial_num = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم المسلسل")
     order_number = models.CharField(max_length=50, unique=True, verbose_name="رقم أمر البيع")
     customer = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="sales_orders", verbose_name="العميل")
@@ -89,6 +96,7 @@ class SalesOrder(models.Model):
     due_date = models.DateField(null=True, blank=True, db_index=True, verbose_name="تاريخ الاستحقاق")
     
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name="الحالة")
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='credit', db_index=True, verbose_name="حالة السداد التجارية")
     memo = models.OneToOneField(InventoryMemo, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales_order", verbose_name="إذن صرف المخزن")
     
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="إجمالي الأصناف قبل الخصم (ج.م)")
@@ -138,8 +146,47 @@ class SalesOrder(models.Model):
         return mapping.get(self.status, 'bg-gray-100 text-gray-800 border-gray-300')
 
     @property
+    def payment_status_display_ar(self):
+        mapping = {
+            'credit': 'آجل',
+            'partial': 'جزئي',
+            'paid': 'مدفوع بالكامل',
+            'returned': 'مرتجع',
+        }
+        return mapping.get(self.payment_status, self.get_payment_status_display())
+
+    @property
+    def payment_status_badge_class(self):
+        mapping = {
+            'credit': 'bg-slate-100 text-slate-700 border-slate-300',
+            'partial': 'bg-amber-100 text-amber-800 border-amber-300',
+            'paid': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'returned': 'bg-rose-100 text-rose-800 border-rose-300',
+        }
+        return mapping.get(self.payment_status, 'bg-slate-100 text-slate-700 border-slate-300')
+
+    @classmethod
+    def with_payment_totals(cls, queryset=None):
+        """Annotate SalesOrders with `_annotated_total_paid` in SQL to prevent N+1 queries."""
+        from django.db.models import DecimalField, Sum, Value
+        from django.db.models.functions import Coalesce
+        qs = queryset if queryset is not None else cls.objects.all()
+        return qs.annotate(
+            _annotated_total_paid=Coalesce(
+                Sum('collections__amount'),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        )
+
+    @property
     def total_paid(self):
         """Total payments collected and linked to this sales order."""
+        annotated = getattr(self, '_annotated_total_paid', None)
+        if annotated is not None:
+            return annotated
+        if hasattr(self, '_prefetched_objects_cache') and 'collections' in self._prefetched_objects_cache:
+            return sum((c.amount for c in self.collections.all()), Decimal('0.00'))
         res = self.collections.all().aggregate(total=models.Sum('amount'))['total']
         return res or Decimal('0.00')
 

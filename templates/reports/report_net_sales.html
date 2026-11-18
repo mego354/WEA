@@ -22,14 +22,15 @@
             </p>
         </div>
 
-        {% if request.user|has_permission:'reports:sales/export' %}
-        <div class="self-start sm:self-auto">
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            {% include 'components/table_column_picker.html' with table_id='report_net_sales_table' %}
+            {% if request.user|has_permission:'reports:sales/export' %}
             <a href="{% url 'report_net_sales_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">download</span>
                 <span>تصدير Excel</span>
             </a>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- Summary KPI Cards -->
@@ -67,7 +68,16 @@
                     <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
                     <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
                     <option value="year" {% if period == 'year' %}selected{% endif %}>العام الحالي</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة</option>
                 </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
+                <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
+                <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
             </div>
 
             <div>
@@ -82,21 +92,21 @@
     <!-- 21-Column Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
-            <table class="w-full text-right text-xs whitespace-nowrap">
+            <table id="report_net_sales_table" data-col-table="report_net_sales_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs">اسم الصنف / المنتج</th>
-                        <th class="py-3 px-3 text-center">الكمية المسلمة</th>
-                        <th class="py-3 px-3 text-left">المبيعات المسلمة (ج.م)</th>
-                        <th class="py-3 px-3 text-center">كمية المرتجع</th>
-                        <th class="py-3 px-3 text-left text-rose-600">قيمة المرتجع (ج.م)</th>
-                        <th class="py-3 px-3 text-center font-bold text-slate-900">صافي الكمية المباعة</th>
-                        <th class="py-3 px-3 text-left font-bold text-brand-600">صافي المبيعات (ج.م)</th>
-                        <th class="py-3 px-3 text-left">متوسط تكلفة الوحدة</th>
-                        <th class="py-3 px-3 text-left">تكلفة المبيعات COGS</th>
-                        <th class="py-3 px-3 text-left font-bold text-emerald-600">مجمل الربح (ج.م)</th>
-                        <th class="py-3 px-3 text-center font-black text-emerald-700">هامش الربح %</th>
-                        <th class="py-3 px-3 text-left">سعر الجمهور</th>
+                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs" data-col="product" data-col-required="true">اسم الصنف / المنتج</th>
+                        <th class="py-3 px-3 text-center" data-col="delivered_qty">الكمية المسلمة</th>
+                        <th class="py-3 px-3 text-left" data-col="delivered_sales">المبيعات المسلمة (ج.م)</th>
+                        <th class="py-3 px-3 text-center" data-col="return_qty">كمية المرتجع</th>
+                        <th class="py-3 px-3 text-left text-rose-600" data-col="return_val">قيمة المرتجع (ج.م)</th>
+                        <th class="py-3 px-3 text-center font-bold text-slate-900" data-col="net_qty">صافي الكمية المباعة</th>
+                        <th class="py-3 px-3 text-left font-bold text-brand-600" data-col="net_sales" data-col-required="true">صافي المبيعات (ج.م)</th>
+                        <th class="py-3 px-3 text-left" data-col="avg_cost">متوسط تكلفة الوحدة</th>
+                        <th class="py-3 px-3 text-left" data-col="cogs">تكلفة المبيعات COGS</th>
+                        <th class="py-3 px-3 text-left font-bold text-emerald-600" data-col="gross_profit">مجمل الربح (ج.م)</th>
+                        <th class="py-3 px-3 text-center font-black text-emerald-700" data-col="profit_margin">هامش الربح %</th>
+                        <th class="py-3 px-3 text-left" data-col="public_price">سعر الجمهور</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">

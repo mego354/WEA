@@ -1,0 +1,236 @@
+{% extends 'layouts/base.html' %}
+{% load humanize %}
+
+{% block title %}التخزين السحابي وحاسبة Cloudflare R2{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6 pb-16">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">cloud_upload</span>
+                <span>إعدادات التخزين السحابي وحاسبة Cloudflare R2</span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">مراقبة الاستهلاك المسجل وتقدير التكلفة الشهرية وفق افتراضات تسعير Cloudflare R2.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if r2_enabled %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Cloudflare R2 مفعل ({{ bucket_name }})</span>
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>وضع التطوير المحلي (FileSystemStorage)</span>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Disclaimer Alert -->
+    <div class="p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-xs flex items-start gap-2.5">
+        <span class="material-symbols-outlined text-sky-600 text-lg shrink-0">info</span>
+        <div>
+            <strong>ملاحظة هامة:</strong> الأرقام المعروضة هي <strong>تقديرات استرشادية</strong> محسوبة من عمليات الرفع والقراءة المسجلة داخل النظام، وليست فاتورة Cloudflare R2 الحية. بيانات الاعتماد (Access Key / Secret Key) تُقرأ حصرياً من متغيرات البيئة ولا تُعرض أو تُخزن في قاعدة البيانات.
+        </div>
+    </div>
+
+    <!-- Warnings -->
+    {% if estimate.warnings %}
+    <div class="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-1">
+        <div class="font-bold flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-amber-600 text-base">warning</span>
+            <span>تنبيهات الاقتراب من الحد المجاني:</span>
+        </div>
+        <ul class="list-disc list-inside space-y-0.5 pr-4">
+            {% for w in estimate.warnings %}
+            <li>{{ w }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Usage & Cost Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-bold">
+                <span>المساحة المستخدمة</span>
+                <span class="material-symbols-outlined text-[#27bebe] text-lg">hard_drive</span>
+            </div>
+            <div class="text-xl font-black text-slate-900 font-mono">{{ estimate.storage_gb|floatformat:4 }} GB</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div class="h-1.5 rounded-full {% if estimate.storage_pct >= 100 %}bg-rose-500{% elif estimate.storage_pct >= 80 %}bg-amber-500{% else %}bg-[#27bebe]{% endif %}" style="width: {% if estimate.storage_pct > 100 %}100{% else %}{{ estimate.storage_pct }}{% endif %}%"></div>
+            </div>
+            <div class="text-[11px] text-slate-500">{{ estimate.storage_pct }}% من الحد المجاني ({{ cfg.free_storage_gb }} GB) • {{ cfg.tracked_objects_count }} ملف</div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-bold">
+                <span>عمليات الكتابة (Class A)</span>
+                <span class="material-symbols-outlined text-indigo-500 text-lg">upload_file</span>
+            </div>
+            <div class="text-xl font-black text-slate-900 font-mono">{{ estimate.class_a_ops|intcomma }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div class="h-1.5 rounded-full bg-indigo-500" style="width: {% if estimate.class_a_pct > 100 %}100{% else %}{{ estimate.class_a_pct }}{% endif %}%"></div>
+            </div>
+            <div class="text-[11px] text-slate-500">{{ estimate.class_a_pct }}% من {{ cfg.free_class_a_ops|intcomma }} / شهر</div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-bold">
+                <span>عمليات القراءة (Class B)</span>
+                <span class="material-symbols-outlined text-emerald-500 text-lg">visibility</span>
+            </div>
+            <div class="text-xl font-black text-slate-900 font-mono">{{ estimate.class_b_ops|intcomma }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div class="h-1.5 rounded-full bg-emerald-500" style="width: {% if estimate.class_b_pct > 100 %}100{% else %}{{ estimate.class_b_pct }}{% endif %}%"></div>
+            </div>
+            <div class="text-[11px] text-slate-500">{{ estimate.class_b_pct }}% من {{ cfg.free_class_b_ops|intcomma }} / شهر</div>
+        </div>
+
+        <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-4 shadow-sm space-y-1.5">
+            <div class="flex items-center justify-between text-xs text-slate-300 font-bold">
+                <span>التكلفة الشهرية التقديرية</span>
+                <span class="material-symbols-outlined text-[#27bebe] text-lg">payments</span>
+            </div>
+            <div class="text-2xl font-black font-mono text-[#27bebe]">${{ estimate.total_usd|floatformat:2 }}</div>
+            <div class="text-xs font-bold text-slate-200 font-mono">≈ {{ estimate.total_egp|floatformat:2|intcomma }} ج.م</div>
+            <div class="text-[10px] text-slate-400">بعد خصم الباقة المجانية الشهرية</div>
+        </div>
+    </div>
+
+    <!-- Maintenance Actions -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div class="text-xs text-slate-600">
+            <span class="font-bold text-slate-800">صيانة المرفقات:</span>
+            <span>إجمالي المرفقات: <strong class="font-mono">{{ total_attachments_count }}</strong> | طابور الحذف المعلق: <strong class="font-mono {% if pending_deletions_count > 0 %}text-rose-600{% endif %}">{{ pending_deletions_count }}</strong> | الحد الأقصى للملف: <strong>{{ max_upload_mb }} MB</strong></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <form method="POST" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="recalculate">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                    <span>إعادة احتساب المساحة</span>
+                </button>
+            </form>
+            {% if pending_deletions_count > 0 %}
+            <form method="POST" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="retry_deletions">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition-colors">
+                    <span class="material-symbols-outlined text-base">cleaning_services</span>
+                    <span>إعادة محاولة الحذف المعلق ({{ pending_deletions_count }})</span>
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Pricing Assumptions Form -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">tune</span>
+                <span>افتراضات تسعير Cloudflare R2</span>
+            </h2>
+            <form method="POST" class="space-y-3 text-xs">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_pricing">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الحد المجاني للتخزين (GB)</label>
+                        <input type="number" step="0.01" name="free_storage_gb" value="{{ cfg.free_storage_gb|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">سعر التخزين ($ / GB-شهر)</label>
+                        <input type="number" step="0.0001" name="price_per_gb_month_usd" value="{{ cfg.price_per_gb_month_usd|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الحد المجاني Class A / شهر</label>
+                        <input type="number" step="1" name="free_class_a_ops" value="{{ cfg.free_class_a_ops }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">سعر مليون Class A ($)</label>
+                        <input type="number" step="0.0001" name="price_per_million_class_a_usd" value="{{ cfg.price_per_million_class_a_usd|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الحد المجاني Class B / شهر</label>
+                        <input type="number" step="1" name="free_class_b_ops" value="{{ cfg.free_class_b_ops }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">سعر مليون Class B ($)</label>
+                        <input type="number" step="0.0001" name="price_per_million_class_b_usd" value="{{ cfg.price_per_million_class_b_usd|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">سعر Egress ($ / GB)</label>
+                        <input type="number" step="0.0001" name="egress_price_per_gb_usd" value="{{ cfg.egress_price_per_gb_usd|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">سعر صرف الدولار (ج.م)</label>
+                        <input type="number" step="0.01" name="usd_to_egp_rate" value="{{ cfg.usd_to_egp_rate|stringformat:'s' }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex justify-end">
+                    <button type="submit" class="px-5 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white font-bold rounded-xl shadow-xs transition-colors">
+                        حفظ افتراضات التسعير
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Monthly Cost Simulator -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">calculate</span>
+                <span>محاكي التكلفة الشهرية (What-If Simulator)</span>
+            </h2>
+            <form method="GET" class="space-y-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">حجم التخزين المتوقع (GB)</label>
+                        <input type="number" step="0.1" name="sim_storage_gb" value="{{ sim_inputs.sim_storage_gb }}" placeholder="مثال: 25" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">عمليات Class A المتوقعة</label>
+                        <input type="number" step="1000" name="sim_class_a" value="{{ sim_inputs.sim_class_a }}" placeholder="مثال: 1500000" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">عمليات Class B المتوقعة</label>
+                        <input type="number" step="10000" name="sim_class_b" value="{{ sim_inputs.sim_class_b }}" placeholder="مثال: 12000000" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">نقل البيانات Egress (GB)</label>
+                        <input type="number" step="1" name="sim_egress_gb" value="{{ sim_inputs.sim_egress_gb }}" placeholder="0" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors">
+                        حساب المحاكاة
+                    </button>
+                </div>
+            </form>
+
+            {% if sim_estimate %}
+            <div class="p-4 rounded-xl bg-teal-50/70 border border-teal-200 text-xs space-y-2">
+                <div class="font-bold text-teal-950">نتيجة المحاكاة الشهرية:</div>
+                <div class="grid grid-cols-2 gap-2 text-[11px]">
+                    <span>التخزين الزائد: {{ sim_estimate.billable_storage_gb }} GB</span>
+                    <span class="font-mono font-bold">${{ sim_estimate.storage_cost_usd }}</span>
+                    <span>Class A الزائد: {{ sim_estimate.billable_class_a_ops|intcomma }}</span>
+                    <span class="font-mono font-bold">${{ sim_estimate.class_a_cost_usd }}</span>
+                    <span>Class B الزائد: {{ sim_estimate.billable_class_b_ops|intcomma }}</span>
+                    <span class="font-mono font-bold">${{ sim_estimate.class_b_cost_usd }}</span>
+                </div>
+                <div class="pt-2 border-t border-teal-200 flex items-center justify-between font-black text-sm text-teal-950">
+                    <span>الإجمالي التقديري:</span>
+                    <span class="font-mono">${{ sim_estimate.total_usd|floatformat:2 }} ({{ sim_estimate.total_egp|floatformat:2|intcomma }} ج.م)</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

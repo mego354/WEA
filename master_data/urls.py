@@ -1,14 +1,24 @@
 from django.urls import path
 from django.shortcuts import redirect
 from . import views
+from . import attachment_views
+from . import list_search_api
 
 urlpatterns = [
     path('', views.home_view, name='home'),
     path('settings/', lambda request: redirect('users_list'), name='settings_root'),
     path('settings/users/', lambda request: redirect('users_settings'), name='settings_users_redirect'),
 
-    # Company Branding
+    # Company Branding & R2 Storage Calculator
     path('settings/branding/', views.branding_settings_view, name='branding_settings'),
+    path('settings/storage/', attachment_views.r2_storage_settings_view, name='r2_storage_settings'),
+
+    # Unified Protected Attachments (R2 / Local)
+    path('attachments/<str:model_key>/<int:object_id>/upload/', attachment_views.erp_attachment_upload, name='erp_attachment_upload'),
+    path('attachments/<str:model_key>/<int:object_id>/list/', attachment_views.erp_attachments_list_api, name='erp_attachments_list_api'),
+    path('attachments/<int:attachment_id>/view/', attachment_views.erp_attachment_view, name='erp_attachment_view'),
+    path('attachments/<int:attachment_id>/download/', attachment_views.erp_attachment_download, name='erp_attachment_download'),
+    path('attachments/<int:attachment_id>/delete/', attachment_views.erp_attachment_delete, name='erp_attachment_delete'),
 
     # Location Settings & Geofence API
     path('settings/location/', views.location_settings_view, name='location_settings'),
@@ -56,5 +66,6 @@ urlpatterns = [
     # Geocoding & Map Proxy APIs
     path('api/geocoding/search/', views.geocoding_search_api, name='geocoding_search_api'),
     path('api/geocoding/reverse/', views.geocoding_reverse_api, name='geocoding_reverse_api'),
+    path('api/list-suggestions/', list_search_api.list_suggestions_api, name='list_suggestions_api'),
 ]
 

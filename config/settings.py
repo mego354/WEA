@@ -94,6 +94,30 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_MAX_UPLOAD_SIZE_MB = int(os.getenv('MEDIA_MAX_UPLOAD_SIZE_MB', '10'))
+
+# Cloudflare R2 Object Storage (Credentials exclusively via environment variables)
+CLOUDFLARE_R2_ACCESS_KEY = os.getenv('CLOUDFLARE_R2_ACCESS_KEY', '').strip()
+CLOUDFLARE_R2_SECRET_KEY = os.getenv('CLOUDFLARE_R2_SECRET_KEY', '').strip()
+CLOUDFLARE_R2_BUCKET_NAME = os.getenv('CLOUDFLARE_R2_BUCKET_NAME', '').strip()
+CLOUDFLARE_R2_ENDPOINT_URL = os.getenv('CLOUDFLARE_R2_ENDPOINT_URL', '').strip()
+CLOUDFLARE_R2_CUSTOM_DOMAIN = os.getenv('CLOUDFLARE_R2_CUSTOM_DOMAIN', '').strip()
+
+R2_ENABLED = all([
+    CLOUDFLARE_R2_ACCESS_KEY,
+    CLOUDFLARE_R2_SECRET_KEY,
+    CLOUDFLARE_R2_BUCKET_NAME,
+    CLOUDFLARE_R2_ENDPOINT_URL,
+])
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'master_data.storage.CloudflareR2Storage' if R2_ENABLED else 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

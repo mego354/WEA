@@ -9,10 +9,12 @@ from django.core.exceptions import ValidationError
 from master_data.excel_utils import export_to_excel_response
 from master_data.pagination_utils import paginate_queryset
 from master_data.search_utils import filter_by_arabic_search
+from master_data.validation_utils import parse_positive_integer_quantity
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, is_accountant, is_manager_or_higher,
-    can_user_perform_stock_in, can_user_perform_stock_out, can_user_perform_transfer
+    can_user_perform_stock_in, can_user_perform_stock_out, can_user_perform_transfer,
+    get_visible_assignees_queryset
 )
 from accounts.services import is_representative, get_representative_warehouse
 from catalog.models import Product
@@ -20,7 +22,7 @@ from .models import (
     Warehouse, InventoryStock, InventoryLot, InventoryMemo,
     ProductTransferRequest, ProductTransferRequestItem
 )
-from .services import ProductTransferService, InventoryMemoService
+from .services import ProductTransferService, InventoryMemoService, AuditLogService, WarehouseService
 
 
 @require_permission('inventory:stocks/view')
@@ -37,6 +39,23 @@ def inventory_stock_list(request):
         qs = qs.filter(warehouse_id=warehouse_id)
         wh = Warehouse.objects.filter(id=warehouse_id).first()
         active_filters.append({'label': f'المخزن: {wh.name if wh else warehouse_id}', 'param': 'warehouse'})
+
+    stock_status = request.GET.get('stock_status')
+    if stock_status == 'low_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__gt=0, avail__lte=5)
+        active_filters.append({'label': 'الحالة: مخزون منخفض (≤ 5)', 'param': 'stock_status'})
+    elif stock_status == 'out_of_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__lte=0)
+        active_filters.append({'label': 'الحالة: نفد المخزون', 'param': 'stock_status'})
+    elif stock_status == 'in_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__gt=0)
+        active_filters.append({'label': 'الحالة: متوفر بالمخزن', 'param': 'stock_status'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['product__name', 'product__sku_code'])
@@ -79,6 +98,7 @@ def inventory_stock_list(request):
         'paginator': paginator,
         'warehouses': warehouses,
         'selected_warehouse_id': warehouse_id,
+        'selected_stock_status': stock_status,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
@@ -98,6 +118,20 @@ def inventory_stock_export(request):
     if warehouse_id:
         qs = qs.filter(warehouse_id=warehouse_id)
 
+    stock_status = request.GET.get('stock_status')
+    if stock_status == 'low_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__gt=0, avail__lte=5)
+    elif stock_status == 'out_of_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__lte=0)
+    elif stock_status == 'in_stock':
+        qs = qs.annotate(
+            avail=ExpressionWrapper(F('qty_on_hand') - F('qty_reserved'), output_field=DecimalField(max_digits=12, decimal_places=2))
+        ).filter(avail__gt=0)
+
     if search:
         qs = qs.filter(
             Q(product__name__icontains=search) |
@@ -109,9 +143,9 @@ def inventory_stock_export(request):
         {'header': 'كود المنتج (SKU)', 'key': lambda s: s.product.sku_code, 'width': 18, 'align': 'center'},
         {'header': 'اسم المنتج', 'key': lambda s: s.product.name, 'width': 35, 'align': 'right'},
         {'header': 'التصنيف', 'key': lambda s: s.product.category.name if s.product.category else '', 'width': 20, 'align': 'right'},
-        {'header': 'الكمية الفعلية بالمخزن', 'key': lambda s: float(s.qty_on_hand), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
-        {'header': 'الكمية المحجوزة', 'key': lambda s: float(s.qty_reserved), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
-        {'header': 'الكمية المتاحة للبيع', 'key': lambda s: float(s.qty_available), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
+        {'header': 'الكمية الفعلية بالمخزن', 'key': lambda s: int(s.qty_on_hand), 'format': '#,##0', 'width': 20, 'align': 'right'},
+        {'header': 'الكمية المحجوزة', 'key': lambda s: int(s.qty_reserved), 'format': '#,##0', 'width': 18, 'align': 'right'},
+        {'header': 'الكمية المتاحة للبيع', 'key': lambda s: int(s.qty_available), 'format': '#,##0', 'width': 20, 'align': 'right'},
         {'header': 'سعر تكلفة الوحدة', 'key': lambda s: float(s.product_cost), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
         {'header': 'إجمالي قيمة التكلفة', 'key': lambda s: float(s.total_cost), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
         {'header': 'سعر البيع للجمهور', 'key': lambda s: float(s.product.retail_price) if s.product.retail_price else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
@@ -125,65 +159,75 @@ def inventory_stock_export(request):
 def warehouses_list(request):
     """
     List of warehouses scoped by manager region or rep ownership.
-    Managers see main warehouses + warehouses of reps in their main area.
+    Provides advanced filter drawer, real-time scoped statistics, and CRUD actions.
     """
     if not has_perm_or_admin(request.user, ['inventory:warehouses/manage', 'inventory:stocks/view']):
         return render_forbidden_response(request, "لا تملك صلاحية عرض قائمة المخازن.")
 
     search = request.GET.get('search', '').strip()
-    qs = Warehouse.objects.select_related('manager', 'assigned_user', 'area', 'area__parent').all().order_by('name')
+    wh_type = request.GET.get('type', '').strip()
+    status = request.GET.get('status', '').strip()
+    area_id = request.GET.get('area', '').strip()
+    assigned_user_id = request.GET.get('assigned_user', '').strip()
+
+    qs = Warehouse.objects.select_related('manager', 'assigned_user', 'area', 'area__parent').all().order_by('-is_main', 'name')
     qs = get_scoped_queryset(qs, request.user, 'warehouse')
-
-    if request.method == 'POST':
-        if not has_perm_or_admin(request.user, 'inventory:warehouses/manage'):
-            return render_forbidden_response(request, "لا تملك صلاحية إنشاء مخزن جديد.")
-        name = request.POST.get('name', '').strip()
-        code = request.POST.get('code', '').strip()
-        address = request.POST.get('address', '').strip()
-        lat_raw = request.POST.get('latitude', '').strip()
-        lng_raw = request.POST.get('longitude', '').strip()
-        lat = None
-        lng = None
-        if lat_raw and lng_raw:
-            try:
-                lat = Decimal(str(lat_raw))
-                lng = Decimal(str(lng_raw))
-            except Exception:
-                pass
-
-        if not name or not code:
-            messages.error(request, "يرجى إدخال اسم وكود المخزن بشكل صحيح.")
-            return redirect('warehouses_list')
-
-        if Warehouse.objects.filter(Q(name__iexact=name) | Q(code__iexact=code)).exists():
-            messages.error(request, f"يوجد مخزن مسجل مسبقاً بنفس الاسم أو الكود ({name} / {code}).")
-            return redirect('warehouses_list')
-
-        wh = Warehouse.objects.create(name=name, code=code, address=address, latitude=lat, longitude=lng)
-        AuditLogService.log(
-            action_type='WAREHOUSE_CREATED',
-            module='inventory',
-            actor=request.user,
-            record_id=wh.id,
-            record_name=wh.name,
-            description=f"إنشاء مخزن جديد: {wh.name} ({wh.code})",
-            new_values={'name': wh.name, 'code': wh.code, 'address': wh.address}
-        )
-        messages.success(request, f"تم إنشاء المخزن '{name}' بنجاح.")
-        return redirect('warehouses_list')
 
     active_filters = []
     if search:
         qs = filter_by_arabic_search(qs, search, ['name', 'code'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
-    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+    if wh_type == 'main':
+        qs = qs.filter(is_main=True)
+        active_filters.append({'label': 'النوع', 'value': 'مستودع رئيسي', 'param': 'type'})
+    elif wh_type == 'rep':
+        qs = qs.filter(is_rep_warehouse=True)
+        active_filters.append({'label': 'النوع', 'value': 'عهدة مندوب', 'param': 'type'})
+    elif wh_type == 'standard':
+        qs = qs.filter(is_main=False, is_rep_warehouse=False)
+        active_filters.append({'label': 'النوع', 'value': 'مخزن فرعي عادي', 'param': 'type'})
+
+    if status == 'active':
+        qs = qs.filter(is_active=True)
+        active_filters.append({'label': 'الحالة', 'value': 'نشط', 'param': 'status'})
+    elif status == 'inactive':
+        qs = qs.filter(is_active=False)
+        active_filters.append({'label': 'الحالة', 'value': 'معطل', 'param': 'status'})
+
+    from master_data.models import Area
+    if area_id:
+        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
+        area_obj = Area.objects.filter(id=area_id).first()
+        active_filters.append({'label': 'المنطقة', 'value': area_obj.name if area_obj else area_id, 'param': 'area'})
+
+    from django.contrib.auth import get_user_model
+    UserModel = get_user_model()
+    if assigned_user_id:
+        qs = qs.filter(assigned_user_id=assigned_user_id)
+        u_obj = UserModel.objects.filter(id=assigned_user_id).first()
+        active_filters.append({'label': 'المسؤول', 'value': u_obj.get_full_name() or u_obj.username if u_obj else assigned_user_id, 'param': 'assigned_user'})
+
+    # If POST to warehouses_list: create warehouse from modal
+    if request.method == 'POST':
+        if not has_perm_or_admin(request.user, 'inventory:warehouses/manage'):
+            return render_forbidden_response(request, "لا تملك صلاحية إنشاء مخزن جديد.")
+        try:
+            wh = WarehouseService.create_warehouse(request.POST, request.user, request=request)
+            messages.success(request, f"تم إنشاء المخزن '{wh.name}' بنجاح.")
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        except Exception as e:
+            messages.error(request, f"حدث خطأ أثناء حفظ المخزن: {e}")
+        return redirect('warehouses_list')
+
+    paginator, page_obj = paginate_queryset(request, qs, default_per_page=24, max_per_page=100)
 
     # Dedicated real scoped statistics cards matching active filters
     wh_agg = qs.aggregate(
         total_warehouses=Count('id'),
         main_warehouses=Count('id', filter=Q(is_main=True)),
-        rep_warehouses=Count('id', filter=Q(assigned_user__isnull=False)),
+        rep_warehouses=Count('id', filter=Q(is_rep_warehouse=True)),
         active_warehouses=Count('id', filter=Q(is_active=True)),
     )
     stats = {
@@ -193,17 +237,152 @@ def warehouses_list(request):
         'active_warehouses': wh_agg['active_warehouses'] or 0,
     }
 
+    from accounts.scope_service import ScopeResolutionService
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'inventory')
+
     context = {
         'warehouses': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
         'search_query': search,
+        'selected_type': wh_type,
+        'selected_status': status,
+        'selected_area': area_id,
+        'selected_assigned_user': assigned_user_id,
         'active_filters': active_filters,
         'total_count': paginator.count,
         'stats': stats,
+        'areas': areas,
+        'assignees': assignees,
         'can_manage_warehouses': has_perm_or_admin(request.user, 'inventory:warehouses/manage'),
     }
     return render(request, 'inventory/warehouses_list.html', context)
+
+
+@require_permission('inventory:warehouses/export')
+def warehouses_export(request):
+    """Export filtered and scoped warehouses to Excel."""
+    search = request.GET.get('search', '').strip()
+    wh_type = request.GET.get('type', '').strip()
+    status = request.GET.get('status', '').strip()
+    area_id = request.GET.get('area', '').strip()
+    assigned_user_id = request.GET.get('assigned_user', '').strip()
+
+    qs = Warehouse.objects.select_related('manager', 'assigned_user', 'area', 'area__parent').all().order_by('-is_main', 'name')
+    qs = get_scoped_queryset(qs, request.user, 'warehouse')
+
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['name', 'code'])
+    if wh_type == 'main':
+        qs = qs.filter(is_main=True)
+    elif wh_type == 'rep':
+        qs = qs.filter(is_rep_warehouse=True)
+    elif wh_type == 'standard':
+        qs = qs.filter(is_main=False, is_rep_warehouse=False)
+    if status == 'active':
+        qs = qs.filter(is_active=True)
+    elif status == 'inactive':
+        qs = qs.filter(is_active=False)
+    if area_id:
+        qs = qs.filter(Q(area_id=area_id) | Q(area__parent_id=area_id))
+    if assigned_user_id:
+        qs = qs.filter(assigned_user_id=assigned_user_id)
+
+    columns = [
+        {'header': 'الكود', 'key': 'code', 'width': 16, 'align': 'center'},
+        {'header': 'اسم المخزن', 'key': 'name', 'width': 28, 'align': 'right'},
+        {'header': 'النوع', 'key': lambda w: 'رئيسي' if w.is_main else ('عهدة مندوب' if w.is_rep_warehouse else 'فرعي'), 'width': 16, 'align': 'center'},
+        {'header': 'المنطقة', 'key': lambda w: w.area.name if w.area else '', 'width': 20, 'align': 'right'},
+        {'header': 'المسؤول', 'key': lambda w: (w.assigned_user.name or w.assigned_user.username) if w.assigned_user else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda w: 'نشط' if w.is_active else 'معطل', 'width': 12, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="warehouses_export",
+        sheet_title="المخازن",
+        report_title="دليل المخازن ومراكز التوزيع",
+        user=request.user,
+    )
+
+
+@require_permission('inventory:warehouses/manage')
+def warehouse_create(request):
+    """
+    Dedicated view for creating a new warehouse with location picker and scoping.
+    """
+    from accounts.scope_service import ScopeResolutionService
+    if request.method == 'POST':
+        try:
+            wh = WarehouseService.create_warehouse(request.POST, request.user, request=request)
+            messages.success(request, f"تم إنشاء المخزن '{wh.name}' بنجاح.")
+            return redirect('warehouses_list')
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        except Exception as e:
+            messages.error(request, f"حدث خطأ أثناء حفظ المخزن: {e}")
+
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'inventory')
+    return render(request, 'inventory/warehouse_form.html', {
+        'is_create': True,
+        'areas': areas,
+        'assignees': assignees,
+    })
+
+
+@require_permission('inventory:warehouses/manage')
+def warehouse_edit(request, pk):
+    """
+    Edit warehouse details, linked custodian/user, area, coordinates, and operational flags.
+    """
+    from accounts.scope_service import ScopeResolutionService
+    warehouse = get_object_or_404(Warehouse, pk=pk)
+    if not can_user_access_object(request.user, warehouse, 'edit'):
+        return render_forbidden_response(request, "لا تملك صلاحية تعديل بيانات هذا المخزن.")
+
+    if request.method == 'POST':
+        try:
+            wh = WarehouseService.update_warehouse(warehouse, request.POST, request.user, request=request)
+            messages.success(request, f"تم تحديث بيانات المخزن '{wh.name}' بنجاح.")
+            return redirect('warehouses_list')
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+        except Exception as e:
+            messages.error(request, f"حدث خطأ أثناء تحديث بيانات المخزن: {e}")
+
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    assignees = get_visible_assignees_queryset(request.user, 'inventory')
+    return render(request, 'inventory/warehouse_form.html', {
+        'is_create': False,
+        'warehouse': warehouse,
+        'areas': areas,
+        'assignees': assignees,
+    })
+
+
+@require_permission(['inventory:warehouses/manage', 'inventory:warehouses/delete'])
+def warehouse_delete(request, pk):
+    """
+    Safely delete an empty warehouse with strict foreign key & stock protection.
+    """
+    if request.method != 'POST':
+        return render_forbidden_response(request, "طريقة الطلب غير مسموح بها.")
+
+    warehouse = get_object_or_404(Warehouse, pk=pk)
+    if not can_user_access_object(request.user, warehouse, 'delete'):
+        return render_forbidden_response(request, "لا تملك صلاحية حذف هذا المخزن.")
+
+    try:
+        WarehouseService.delete_warehouse(warehouse, request.user, request=request)
+        messages.success(request, "تم حذف المخزن بنجاح.")
+    except ValidationError as e:
+        messages.error(request, str(e.message if hasattr(e, 'message') else e))
+    except Exception as e:
+        messages.error(request, f"تعذر حذف المخزن: {e}")
+
+    return redirect('warehouses_list')
 
 
 @require_permission('inventory:memos/manage')
@@ -229,6 +408,15 @@ def inventory_memos_list(request):
         type_label = 'إذن إضافة' if memo_type == 'inward' else 'إذن صرف / خصم'
         active_filters.append({'label': f'النوع: {type_label}', 'param': 'memo_type'})
 
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+
     if search:
         qs = filter_by_arabic_search(qs, search, ['memo_number', 'statement'])
         active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
@@ -248,6 +436,8 @@ def inventory_memos_list(request):
         'warehouses': warehouses,
         'selected_warehouse_id': warehouse_id,
         'selected_memo_type': memo_type,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
@@ -256,6 +446,51 @@ def inventory_memos_list(request):
         'can_transfer': can_transfer,
     }
     return render(request, 'inventory/memos_list.html', context)
+
+
+@require_permission('inventory:memos/export')
+def inventory_memos_export(request):
+    """Export filtered and scoped inventory memos to Excel."""
+    search = request.GET.get('search', '').strip()
+    warehouse_id = request.GET.get('warehouse')
+    memo_type = request.GET.get('memo_type')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    qs = InventoryMemo.objects.select_related('warehouse', 'created_by').annotate(
+        items_count=Count('items')
+    ).order_by('-created_at')
+    qs = get_scoped_queryset(qs, request.user, 'inventorymemo')
+
+    if warehouse_id:
+        qs = qs.filter(warehouse_id=warehouse_id)
+    if memo_type in ['inward', 'outward']:
+        qs = qs.filter(memo_type=memo_type)
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    if search:
+        qs = filter_by_arabic_search(qs, search, ['memo_number', 'statement'])
+
+    columns = [
+        {'header': 'رقم الإذن', 'key': 'memo_number', 'width': 18, 'align': 'center'},
+        {'header': 'نوع الحركة', 'key': lambda m: 'إذن إضافة' if m.memo_type == 'inward' else 'إذن صرف / خصم', 'width': 18, 'align': 'center'},
+        {'header': 'المخزن', 'key': lambda m: m.warehouse.name if m.warehouse else '', 'width': 24, 'align': 'right'},
+        {'header': 'البيان والسبب', 'key': lambda m: m.statement or '', 'width': 32, 'align': 'right'},
+        {'header': 'عدد الأصناف', 'key': lambda m: int(m.items_count or 0), 'format': '#,##0', 'width': 14, 'align': 'center'},
+        {'header': 'تاريخ التنفيذ', 'key': lambda m: m.created_at.strftime('%Y-%m-%d %H:%M') if m.created_at else '', 'width': 20, 'align': 'center'},
+        {'header': 'المسئول', 'key': lambda m: (m.created_by.name or m.created_by.username) if m.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda m: m.get_status_display() if hasattr(m, 'get_status_display') else m.status, 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="inventory_memos_export",
+        sheet_title="أذونات المخزن",
+        report_title="سجل أذونات الحركات المخزنية",
+        user=request.user,
+    )
 
 
 @login_required
@@ -271,20 +506,44 @@ def inventory_memo_create(request):
         if not can_user_perform_stock_out(request.user):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء إذن صرف مخزني.")
 
+    scoped_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
+    products = Product.objects.filter(is_active=True).order_by('name')
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+
+    def render_memo_form_error(err_text, status_code=400):
+        messages.error(request, err_text)
+        sub_items = []
+        for idx, p_id in enumerate(product_ids):
+            if not p_id:
+                continue
+            sub_items.append({
+                'product_id': p_id,
+                'quantity': quantities[idx] if idx < len(quantities) else '1',
+                'unit_cost': unit_costs[idx] if idx < len(unit_costs) else '0',
+                'batch_number': batches[idx] if idx < len(batches) else '',
+                'expiry_date': expiries[idx] if idx < len(expiries) else '',
+            })
+        ctx = {
+            'memo_type': memo_type,
+            'warehouses': scoped_warehouses,
+            'products': products,
+            'profile': profile,
+            'form_data': {
+                'warehouse': warehouse_id,
+                'statement': statement,
+                'notes': notes,
+            },
+            'submitted_items': sub_items,
+        }
+        return render(request, 'inventory/memo_create.html', ctx, status=status_code)
+
     if request.method == 'POST':
         warehouse_id = request.POST.get('warehouse')
         statement = request.POST.get('statement', '').strip()
         notes = request.POST.get('notes', '').strip()
         memo_type = request.POST.get('memo_type', memo_type)
-
-        if not warehouse_id:
-            messages.error(request, "يرجى اختيار المخزن.")
-            return redirect(f"{request.path}?memo_type={memo_type}")
-
-        warehouse = get_object_or_404(Warehouse, id=warehouse_id)
-
-        if not can_user_access_object(request.user, warehouse, 'operate'):
-            return render_forbidden_response(request, "غير مصرح لك بإجراء حركة على هذا المخزن.")
 
         product_ids = request.POST.getlist('product_id[]')
         quantities = request.POST.getlist('quantity[]')
@@ -292,36 +551,43 @@ def inventory_memo_create(request):
         batches = request.POST.getlist('batch_number[]')
         expiries = request.POST.getlist('expiry_date[]')
 
+        if not warehouse_id:
+            return render_memo_form_error("يرجى اختيار المخزن.")
+
+        warehouse = get_object_or_404(Warehouse, id=warehouse_id)
+
+        if not can_user_access_object(request.user, warehouse, 'operate'):
+            return render_forbidden_response(request, "غير مصرح لك بإجراء حركة على هذا المخزن.")
+
         items_data = []
-        for i, p_id in enumerate(product_ids):
-            if not p_id:
-                continue
-            qty_val = quantities[i] if i < len(quantities) else '0'
-            cost_val = unit_costs[i] if i < len(unit_costs) else '0'
-            batch_val = batches[i] if i < len(batches) else ''
-            expiry_val = expiries[i] if i < len(expiries) else None
+        try:
+            for i, p_id in enumerate(product_ids):
+                if not p_id:
+                    continue
+                qty_val = quantities[i] if i < len(quantities) else ''
+                cost_val = unit_costs[i] if i < len(unit_costs) else '0'
+                batch_val = batches[i] if i < len(batches) else ''
+                expiry_val = expiries[i] if i < len(expiries) else None
 
-            try:
-                qty_dec = Decimal(str(qty_val))
-            except Exception:
-                qty_dec = Decimal('0.00')
+                qty_dec = parse_positive_integer_quantity(qty_val)
 
-            try:
-                cost_dec = Decimal(str(cost_val)) if cost_val else Decimal('0.00')
-            except Exception:
-                cost_dec = Decimal('0.00')
+                try:
+                    cost_dec = Decimal(str(cost_val)) if cost_val else Decimal('0.00')
+                except Exception:
+                    cost_dec = Decimal('0.00')
 
-            items_data.append({
-                'product': int(p_id),
-                'quantity': qty_dec,
-                'unit_cost': cost_dec,
-                'batch_number': batch_val,
-                'expiry_date': expiry_val or None,
-            })
+                items_data.append({
+                    'product': int(p_id),
+                    'quantity': qty_dec,
+                    'unit_cost': cost_dec,
+                    'batch_number': batch_val,
+                    'expiry_date': expiry_val or None,
+                })
+        except ValidationError as e:
+            return render_memo_form_error(str(e.message if hasattr(e, 'message') else e))
 
         if not items_data:
-            messages.error(request, "يرجى إضافة صنف واحد على الأقل.")
-            return redirect(f"{request.path}?memo_type={memo_type}")
+            return render_memo_form_error("يرجى إضافة صنف واحد على الأقل.")
 
         try:
             memo = InventoryMemoService.create_memo(
@@ -332,18 +598,14 @@ def inventory_memo_create(request):
                 user=request.user,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(memo, request)
             type_label = "إذن الإضافة" if memo_type == 'inward' else "إذن الصرف"
             messages.success(request, f"تم إنشاء وتنفيذ {type_label} بنجاح برقم {memo.memo_number}.")
             return redirect('inventory_memo_detail', pk=memo.pk)
         except ValidationError as e:
-            messages.error(request, str(e.message if hasattr(e, 'message') else e))
-            return redirect(f"{request.path}?memo_type={memo_type}")
-
-    scoped_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
-    products = Product.objects.filter(is_active=True).order_by('name')
-
-    from master_data.models import CompanyProfile
-    profile = CompanyProfile.get_settings()
+            return render_memo_form_error(str(e.message if hasattr(e, 'message') else e))
 
     context = {
         'memo_type': memo_type,
@@ -396,6 +658,15 @@ def product_transfers_list(request):
         status_labels = dict(ProductTransferRequest.STATUS_CHOICES)
         active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
 
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+
     if search:
         qs = filter_by_arabic_search(
             qs, search,
@@ -413,12 +684,57 @@ def product_transfers_list(request):
         'page_obj': page_obj,
         'paginator': paginator,
         'current_status': status_filter,
+        'selected_date_from': date_from,
+        'selected_date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
         'total_count': paginator.count,
         'can_approve': can_approve,
     }
     return render(request, 'inventory/product_transfers_list.html', context)
+
+
+@require_permission('inventory:transfers/export')
+def product_transfers_export(request):
+    """Export filtered and scoped product transfer requests to Excel."""
+    status_filter = request.GET.get('status', 'all')
+    search = request.GET.get('search', '').strip()
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    qs = ProductTransferRequest.objects.select_related(
+        'requesting_user', 'destination_warehouse', 'source_warehouse', 'approved_by', 'executed_by'
+    ).order_by('-created_at')
+    qs = get_scoped_queryset(qs, request.user, 'producttransferrequest')
+
+    if status_filter != 'all':
+        qs = qs.filter(status=status_filter)
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    if search:
+        qs = filter_by_arabic_search(
+            qs, search,
+            ['reference_number', 'requesting_user__username', 'requesting_user__first_name', 'requesting_user__last_name', 'destination_warehouse__name', 'source_warehouse__name']
+        )
+
+    columns = [
+        {'header': 'رقم الطلب', 'key': 'reference_number', 'width': 18, 'align': 'center'},
+        {'header': 'من مخزن', 'key': lambda t: t.source_warehouse.name if t.source_warehouse else '', 'width': 24, 'align': 'right'},
+        {'header': 'إلى مخزن', 'key': lambda t: t.destination_warehouse.name if t.destination_warehouse else '', 'width': 24, 'align': 'right'},
+        {'header': 'مقدم الطلب', 'key': lambda t: (t.requesting_user.name or t.requesting_user.username) if t.requesting_user else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda t: t.get_status_display(), 'width': 16, 'align': 'center'},
+        {'header': 'تاريخ الإنشاء', 'key': lambda t: t.created_at.strftime('%Y-%m-%d %H:%M') if t.created_at else '', 'width': 20, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="product_transfers_export",
+        sheet_title="التحويلات المخزنية",
+        report_title="سجل طلبات التحويل المخزني",
+        user=request.user,
+    )
 
 
 @require_permission('inventory:transfers/create')
@@ -432,10 +748,57 @@ def product_transfer_create(request):
     # Resolve default destination warehouse for representative
     user_rep_wh = get_representative_warehouse(request.user) if is_representative(request.user) else None
 
+    dest_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
+    dest_main_area = user_rep_wh.main_area if user_rep_wh else None
+
+    # Available source warehouses (scoped without artificial area locks for authorized users)
+    if user_rep_wh:
+        all_active_whs = Warehouse.objects.filter(is_active=True).select_related('area', 'assigned_user')
+        source_warehouses = [
+            w for w in all_active_whs
+            if w.id != user_rep_wh.id and (
+                w.is_main or (w.main_area and dest_main_area and w.main_area.id == dest_main_area.id)
+            )
+        ]
+    else:
+        source_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
+
+    products = Product.objects.filter(is_active=True).order_by('name')
+
+    def render_transfer_form_error(err_text):
+        messages.error(request, err_text)
+        sub_items = []
+        for idx, p_id in enumerate(product_ids):
+            if not p_id:
+                continue
+            sub_items.append({
+                'product_id': p_id,
+                'quantity': quantities[idx] if idx < len(quantities) else '1',
+                'batch_number': batches[idx] if idx < len(batches) else '',
+            })
+        ctx = {
+            'dest_warehouses': dest_warehouses,
+            'user_rep_wh': user_rep_wh,
+            'source_warehouses': source_warehouses,
+            'products': products,
+            'form_data': {
+                'source_warehouse': source_wh_id,
+                'destination_warehouse': dest_wh_id,
+                'notes': notes,
+            },
+            'submitted_items': sub_items,
+        }
+        return render(request, 'inventory/product_transfer_create.html', ctx)
+
     if request.method == 'POST':
         source_wh_id = request.POST.get('source_warehouse')
         dest_wh_id = request.POST.get('destination_warehouse')
         notes = request.POST.get('notes', '').strip()
+
+        # Parse submitted line items early so error recovery never fails with UnboundLocalError
+        product_ids = request.POST.getlist('products[]')
+        quantities = request.POST.getlist('quantities[]')
+        batches = request.POST.getlist('batches[]') if 'batches[]' in request.POST else []
 
         # Resolve destination warehouse
         if dest_wh_id:
@@ -443,40 +806,32 @@ def product_transfer_create(request):
         elif user_rep_wh:
             destination_warehouse = user_rep_wh
         else:
-            messages.error(request, "يرجى اختيار مخزن الاستلام.")
-            return redirect('product_transfer_create')
+            return render_transfer_form_error("يرجى اختيار مخزن الاستلام.")
 
         if not source_wh_id:
-            messages.error(request, "يرجى اختيار المخزن المحول منه.")
-            return redirect('product_transfer_create')
+            return render_transfer_form_error("يرجى اختيار المخزن المحول منه.")
 
         source_warehouse = get_object_or_404(Warehouse, id=source_wh_id)
 
-        # Parse submitted line items
-        product_ids = request.POST.getlist('products[]')
-        quantities = request.POST.getlist('quantities[]')
-        batches = request.POST.getlist('batches[]') if 'batches[]' in request.POST else []
-
         items_data = []
-        for i, p_id in enumerate(product_ids):
-            if not p_id:
-                continue
-            qty_val = quantities[i] if i < len(quantities) else '0'
-            try:
-                qty_dec = Decimal(str(qty_val))
-            except Exception:
-                qty_dec = Decimal('0.00')
+        try:
+            for i, p_id in enumerate(product_ids):
+                if not p_id:
+                    continue
+                qty_val = quantities[i] if i < len(quantities) else ''
+                qty_dec = parse_positive_integer_quantity(qty_val)
 
-            batch_val = batches[i] if i < len(batches) else ''
-            items_data.append({
-                'product': int(p_id),
-                'quantity': qty_dec,
-                'batch_number': batch_val
-            })
+                batch_val = batches[i] if i < len(batches) else ''
+                items_data.append({
+                    'product': int(p_id),
+                    'quantity': qty_dec,
+                    'batch_number': batch_val
+                })
+        except ValidationError as e:
+            return render_transfer_form_error(str(e.message if hasattr(e, 'message') else e))
 
         if not items_data:
-            messages.error(request, "يرجى إضافة صنف واحد على الأقل.")
-            return redirect('product_transfer_create')
+            return render_transfer_form_error("يرجى إضافة صنف واحد على الأقل.")
 
         try:
             transfer_req = ProductTransferService.create_request(
@@ -486,28 +841,13 @@ def product_transfer_create(request):
                 items_data=items_data,
                 notes=notes
             )
+            if request.FILES.getlist('attachments'):
+                from master_data.media_service import store_attachments_from_request
+                store_attachments_from_request(transfer_req, request)
             messages.success(request, f"تم إنشاء طلب التحويل المخزني بنجاح ({transfer_req.reference_number}) وهو قيد المراجعة والاعتماد.")
             return redirect('product_transfer_detail', pk=transfer_req.pk)
         except ValidationError as e:
-            messages.error(request, str(e.message if hasattr(e, 'message') else e))
-            return redirect('product_transfer_create')
-
-    # Available destination warehouses
-    dest_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
-    dest_main_area = user_rep_wh.main_area if user_rep_wh else None
-
-    # Available source warehouses: filter to same main area as destination
-    all_active_whs = Warehouse.objects.filter(is_active=True).select_related('area', 'assigned_user')
-    if dest_main_area:
-        # Same main area filter
-        source_warehouses = [
-            w for w in all_active_whs
-            if w.main_area and w.main_area.id == dest_main_area.id and (not user_rep_wh or w.id != user_rep_wh.id)
-        ]
-    else:
-        source_warehouses = all_active_whs
-
-    products = Product.objects.filter(is_active=True).order_by('name')
+            return render_transfer_form_error(str(e.message if hasattr(e, 'message') else e))
 
     context = {
         'dest_warehouses': dest_warehouses,
@@ -635,3 +975,53 @@ def product_transfer_action(request, pk, action):
         messages.error(request, err_msg)
 
     return redirect('product_transfer_detail', pk=transfer_req.pk)
+
+
+@require_permission([
+    'inventory:stocks/view',
+    'sales:orders/create',
+    'sales:orders/edit',
+    'inventory:transfers/create',
+    'inventory:memos/manage',
+    'purchases:orders/create'
+])
+def inventory_warehouse_stock_api(request):
+    """
+    Returns available product stock for a given warehouse.
+    Enforces warehouse data-scope access check.
+    """
+    warehouse_id = request.GET.get('warehouse_id') or request.GET.get('warehouse')
+    if not warehouse_id or not str(warehouse_id).isdigit():
+        return JsonResponse({'error': 'يرجى تحديد المخزن.'}, status=400)
+
+    warehouse = get_object_or_404(Warehouse, id=int(warehouse_id))
+    if not can_user_access_object(request.user, warehouse, 'view'):
+        return JsonResponse({'error': 'غير مصرح لك بالوصول لبيانات هذا المخزن.'}, status=403)
+
+    stocks = InventoryStock.objects.filter(warehouse=warehouse).select_related('product')
+    stocks_map = {s.product_id: s for s in stocks}
+
+    products = Product.objects.filter(is_active=True).order_by('name')
+    results = []
+    for p in products:
+        st = stocks_map.get(p.id)
+        qty_on_hand = st.qty_on_hand if st else Decimal('0.00')
+        qty_reserved = st.qty_reserved if st else Decimal('0.00')
+        qty_available = max(Decimal('0.00'), qty_on_hand - qty_reserved)
+        results.append({
+            'id': p.id,
+            'name': p.name,
+            'sku': p.sku_code,
+            'price': str(p.retail_price or '0.00'),
+            'cost': str(st.product_cost if st and st.product_cost else (p.default_purchase_cost or '0.00')),
+            'qty_on_hand': float(qty_on_hand),
+            'qty_reserved': float(qty_reserved),
+            'qty_available': float(qty_available),
+        })
+
+    return JsonResponse({
+        'warehouse_id': warehouse.id,
+        'warehouse_name': warehouse.name,
+        'count': len(results),
+        'products': results
+    })

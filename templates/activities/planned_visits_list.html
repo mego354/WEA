@@ -96,64 +96,115 @@
                     </div>
                 </div>
 
-                <!-- Day Content: Visits List -->
-                <div id="day-body-{{ forloop.counter }}" class="p-4 sm:p-6 space-y-3">
-                    {% if day.items %}
-                    <div class="space-y-2">
-                        {% for it in day.items %}
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 hover:border-[#27bebe]/50 transition-colors gap-2">
-                            <div class="flex items-center gap-3">
-                                <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs font-mono">
-                                    {{ it.order }}
-                                </span>
-                                <div>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="font-bold text-slate-900 text-xs">{{ it.contact.name }}</span>
-                                        {% if it.contact.customer_category %}
-                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">{{ it.contact.customer_category }}</span>
-                                        {% endif %}
-                                        {% if can_view_others and it.plan_day.assignee %}
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                            <span class="material-symbols-outlined text-[11px] text-[#27bebe]">person</span>
-                                            <span>{{ it.plan_day.assignee.get_full_name|default:it.plan_day.assignee.username }}</span>
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                                        <span>{{ it.contact.specialty|default:it.contact.account_type }}</span>
-                                        {% if it.contact.area %}• <span>{{ it.contact.area.name }}</span>{% endif %}
-                                        {% if it.template %}• <span class="text-[#27bebe] font-medium">{{ it.template.display_name_ar }}</span>{% endif %}
-                                    </div>
+                <!-- Day Content: Visits List Grouped by Plan -->
+                <div id="day-body-{{ forloop.counter }}" class="p-4 sm:p-6 space-y-4">
+                    {% if day.plans %}
+                        {% for pl_group in day.plans %}
+                        <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                            <!-- Plan Header: ID, Assignee, Status, and Actions -->
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold font-mono">
+                                        <span class="material-symbols-outlined text-xs text-[#27bebe]">assignment</span>
+                                        <span>{{ pl_group.plan_id }}</span>
+                                    </span>
+                                    {% if pl_group.assignee %}
+                                    <span class="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                                        <span class="material-symbols-outlined text-xs text-slate-400">person</span>
+                                        <span>{{ pl_group.assignee.get_full_name|default:pl_group.assignee.username }}</span>
+                                    </span>
+                                    {% endif %}
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border {% if pl_group.approval_status == 'approved' %}bg-emerald-50 text-emerald-700 border-emerald-200{% elif pl_group.approval_status == 'disapproved' %}bg-rose-50 text-rose-700 border-rose-200{% else %}bg-amber-50 text-amber-700 border-amber-200{% endif %}">
+                                        {% if pl_group.approval_status == 'approved' %}معتمدة{% elif pl_group.approval_status == 'disapproved' %}مرفوضة{% else %}قيد الاعتماد{% endif %}
+                                    </span>
                                 </div>
+
+                                <!-- Plan-Level Approval Actions -->
+                                {% if pl_group.can_approve and pl_group.plan and pl_group.approval_status != 'approved' %}
+                                <div class="flex items-center gap-1.5">
+                                    <form method="POST" action="{% url 'plan_action' pl_group.plan.pk 'approve' %}" class="inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-colors">
+                                            <span class="material-symbols-outlined text-xs">check_circle</span>
+                                            <span>اعتماد الخطة</span>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{% url 'plan_action' pl_group.plan.pk 'disapprove' %}" class="inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-colors">
+                                            <span class="material-symbols-outlined text-xs">cancel</span>
+                                            <span>رفض الخطة</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
                             </div>
 
-                            <!-- Actions & Live Visit Status -->
-                            <div class="flex items-center gap-2 flex-wrap">
-                                {% if it.visit %}
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border {{ it.visit.approval_badge_class }}">{{ it.visit.approval_display_ar }}</span>
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border {{ it.visit.status_badge_class }}">{{ it.visit.status_display_ar }}</span>
-                                    <a href="{% url 'visit_detail' it.visit.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 {% if it.visit.status == 'finished' %}bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200{% else %}bg-[#27bebe] hover:bg-[#1fa8a8] text-white border-[#27bebe]{% endif %} border text-xs font-bold rounded-lg shadow-xs transition-colors">
-                                        <span class="material-symbols-outlined text-sm">{% if it.visit.status == 'finished' %}visibility{% else %}open_in_new{% endif %}</span>
-                                        <span>زيارة #{{ it.visit.serial_num }}</span>
-                                    </a>
-                                    {% if it.visit.status == 'planned' %}
-                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
-                                        <span class="material-symbols-outlined text-base">delete</span>
-                                    </button>
-                                    {% endif %}
-                                {% else %}
-                                    <a href="{% url 'planned_visit_item_execute' it.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
-                                        <span class="material-symbols-outlined text-sm">directions_walk</span>
-                                        <span>تنفيذ الزيارة</span>
-                                    </a>
-                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
-                                        <span class="material-symbols-outlined text-base">delete</span>
-                                    </button>
-                                {% endif %}
+                            <!-- Plan Comment (Requirement 4.C: Directly above each plan and below day name) -->
+                            {% if pl_group.comment %}
+                            <div class="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
+                                <span class="material-symbols-outlined text-sm text-[#27bebe] mt-0.5 shrink-0">notes</span>
+                                <div class="space-y-0.5">
+                                    <span class="font-bold text-[11px] text-slate-500 block">ملاحظات الخطة:</span>
+                                    <p class="leading-relaxed">{{ pl_group.comment }}</p>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Visits in this Plan -->
+                            <div class="space-y-2">
+                                {% for it in pl_group.items %}
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 hover:border-[#27bebe]/50 transition-colors gap-2">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs font-mono">
+                                            {{ it.order }}
+                                        </span>
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="font-bold text-slate-900 text-xs">{{ it.contact.name }}</span>
+                                                {% if it.contact.customer_category %}
+                                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">{{ it.contact.customer_category }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                                                <span>{{ it.contact.specialty|default:it.contact.account_type }}</span>
+                                                {% if it.contact.area %}• <span>{{ it.contact.area.name }}</span>{% endif %}
+                                                {% if it.template %}• <span class="text-[#27bebe] font-medium">{{ it.template.display_name_ar }}</span>{% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Actions & Live Visit Status -->
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        {% if it.visit %}
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border {{ it.visit.approval_badge_class }}">{{ it.visit.approval_display_ar }}</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border {{ it.visit.status_badge_class }}">{{ it.visit.status_display_ar }}</span>
+                                            <a href="{% url 'visit_detail' it.visit.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 {% if it.visit.status == 'finished' %}bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200{% else %}bg-[#27bebe] hover:bg-[#1fa8a8] text-white border-[#27bebe]{% endif %} border text-xs font-bold rounded-lg shadow-xs transition-colors">
+                                                <span class="material-symbols-outlined text-sm">{% if it.visit.status == 'finished' %}visibility{% else %}open_in_new{% endif %}</span>
+                                                <span>زيارة #{{ it.visit.serial_num }}</span>
+                                            </a>
+                                            {% if it.visit.status == 'planned' %}
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                                <span class="material-symbols-outlined text-base">delete</span>
+                                            </button>
+                                            {% endif %}
+                                        {% else %}
+                                            <a href="{% url 'planned_visit_item_execute' it.pk %}" class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs transition-colors">
+                                                <span class="material-symbols-outlined text-sm">directions_walk</span>
+                                                <span>تنفيذ الزيارة</span>
+                                            </a>
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                                <span class="material-symbols-outlined text-base">delete</span>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
                             </div>
                         </div>
                         {% endfor %}
-                    </div>
                     {% else %}
                     <p class="text-xs text-slate-400 text-center py-3">لا توجد زيارات مجدولة في هذا اليوم حتى الآن.</p>
                     {% endif %}
@@ -208,15 +259,8 @@
                            class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                 </div>
 
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">نوع العميل (Account Type)</label>
-                    <select name="account_type" id="filter_account_type" onchange="applyDrawerFilterAjax(event)" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
-                        <option value="">جميع الأنواع</option>
-                        {% for acc in account_types %}
-                        <option value="{{ acc }}" {% if selected_account_type == acc %}selected{% endif %}>{{ acc }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <!-- نوع العميل / Account Type (اختيار متعدد) -->
+                {% include 'components/account_type_multiselect.html' with component_id='planned' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types on_change_callback='applyDrawerFilterAjax' label='نوع العميل / Account Type (اختيار متعدد)' %}
 
                 {% url 'planned_visits_search_areas_api' as planned_areas_url %}
                 {% url 'planned_visits_search_bricks_api' as planned_bricks_url %}
@@ -852,6 +896,9 @@ function resetDrawerFilters() {
     }
     if (window.ERPMultiselectInstances && window.ERPMultiselectInstances.planned) {
         window.ERPMultiselectInstances.planned.clearAll();
+    }
+    if (window.ERPAccountTypeInstances && window.ERPAccountTypeInstances.planned) {
+        window.ERPAccountTypeInstances.planned.clearAll();
     }
     applyDrawerFilterAjax();
 }

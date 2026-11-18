@@ -76,9 +76,14 @@ This document outlines the user interface specifications, front-end architecture
 ## 5. Table Standards & Column Customization
 
 1. **Column Manager (`table_column_manager.js`)**:
-   - Interactive column visibility picker (`#column-picker-dropdown`).
-   - Preferences saved in browser `localStorage` keyed by page route.
-   - Column reordering and visibility updates apply without page reloads.
+   - Interactive column visibility picker (`#col-picker-dropdown` via `templates/components/table_column_picker.html`) enabled across all operational list views, reports, and performance tables.
+   - Desktop/tablet renders icon + `"الأعمدة"` label; mobile renders compact icon-only button with RTL viewport-collision flipping (`left`/`right` auto-flip) to prevent clipping.
+   - Required columns support both `data-required="true"` and `data-col-required="true"`; column visibility toggles use inline `style.display='none'` so responsive Tailwind classes are preserved.
+   - Preferences saved in browser `localStorage` keyed by table ID / route.
+2. **List Smart Search (`static/js/list_smart_search.js`)**:
+   - Automatically attaches debounced (`220ms`) scoped suggestions via `GET /api/list-suggestions/?module=<module>&q=<query>` to any list search `<input data-smart-search-module="...">`.
+3. **Excel Exports (`master_data/excel_utils.py`)**:
+   - Unified `.xlsx` exports include dynamic `CompanyProfile` branding headers (company name, contact info, report title, export timestamp/user) and respect active list filters and user data scope.
 2. **Horizontal Scrolling & Pinning**:
    - Tables wrap in `overflow-x-auto`.
    - First column (checkbox/ID) and trailing action column (buttons) can be pinned with sticky positioning.
@@ -103,3 +108,15 @@ This document outlines the user interface specifications, front-end architecture
   - Preserves native `<select>` `name`, `value`, `required` validation (without focusability errors), `change` events (including filter auto-submit and cascading order dropdowns via `MutationObserver` and `window.ERPSmartSelect.refresh(...)`), keyboard navigation (`ArrowDown`/`ArrowUp`/`Enter`/`Escape`), and viewport collision flipping for desktop and mobile RTL screens.
 
 
+- **Unified Viewport-Safe Row Action Menu (`static/js/row_action_menu.js`, `templates/components/row_action_menu.html`)**:
+  - Replaces inline multi-button clusters and native `confirm(...)` dialogs in list tables with a fixed-position (`z-[110]`) RTL `more_vert` dropdown portal so menus are never clipped inside `overflow-x-auto` tables.
+- **Unified Detail Page Action Menu (`templates/components/detail_action_menu.html`)**:
+  - Keeps primary workflow state-transition buttons visible in detail headers while grouping secondary actions (PDF export, print, edit, cancel, delete) inside a `more_vert` dropdown.
+- **Unified Transaction Attachments (`attachments_uploader.html`, `attachments_gallery.html`, `attachments_modal.html`)**:
+  - Supports multi-file image/PDF uploads on create/edit forms, inline galleries on detail pages, and a shared modal (`openAttachmentsModal`) for list-only records (`Collection`, `VendorPayment`, `VaultTransaction`).
+- **Unified Date Range Filter (`templates/components/date_range_filter.html`, `master_data/date_filter_utils.py`)**:
+  - Transactional list pages default to `all_time`; Reports, Performance views, and `/home/` default to `this_month`.
+- **Bottom-Only Form Primary Submit Actions**:
+  - Create/edit forms place primary submit actions at the bottom of the form only.
+- **Configurable PDF Invoices & Account Statements (`templates/components/pdf_export_modal.html`, `master_data/pdf_service.py`)**:
+  - A4 RTL ReportLab PDFs with Arabic reshaping/BiDi, `CompanyProfile` branding, page numbers (`صفحة X من Y`), section toggles for orders/returns, and opening/running/closing balance statements.

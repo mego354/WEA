@@ -48,8 +48,18 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
         return any(has_perm_or_admin(user, p) for p in perm_codename)
 
     # Normalize redundant alias codenames for single source of truth
-    if perm_codename == 'treasury:vaults/transactions':
-        perm_codename = 'treasury:transactions/list'
+    perm_aliases = {
+        'treasury:vaults/transactions': 'treasury:transactions/list',
+        'sales:customer_accounts/list': 'sales:customers/accounting',
+        'sales:customer_accounts/view': 'sales:customers/accounting',
+        'sales:customers/accounts': 'sales:customers/accounting',
+        'sales:customer_accounts/export': 'sales:customers/accounting_export',
+        'sales:customers/accounts_export': 'sales:customers/accounting_export',
+        'sales:customer_transactions/list': 'sales:customers/transactions',
+        'sales:customer_transactions/view': 'sales:customers/transactions',
+        'sales:customer_transactions/export': 'sales:customers/transactions_export',
+    }
+    perm_codename = perm_aliases.get(perm_codename, perm_codename)
 
     # 1. If user has custom permissions configured directly,
     # those direct user permissions are 100% authoritative (no settings bypass).
@@ -466,11 +476,7 @@ def can_user_perform_stock_in(user, warehouse=None) -> bool:
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
-        return True
-    if is_accountant(user):
-        if warehouse:
-            return can_user_access_object(user, warehouse, 'operate')
+    if role and getattr(role, 'is_super', False):
         return True
 
     from master_data.models import CompanyProfile
@@ -478,10 +484,10 @@ def can_user_perform_stock_in(user, warehouse=None) -> bool:
     configured_roles = profile.roles_can_stock_in.all()
 
     if configured_roles.exists():
-        if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
+        if not (role and role.is_active and (configured_roles.filter(id=role.id).exists() or is_accountant(user))):
             return False
     else:
-        if not has_perm_or_admin(user, 'inventory:memos/manage') and not is_manager_or_higher(user):
+        if not (has_perm_or_admin(user, 'inventory:memos/manage') or is_accountant(user)):
             return False
 
     if warehouse:
@@ -496,11 +502,7 @@ def can_user_perform_stock_out(user, warehouse=None) -> bool:
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
-        return True
-    if is_accountant(user):
-        if warehouse:
-            return can_user_access_object(user, warehouse, 'operate')
+    if role and getattr(role, 'is_super', False):
         return True
 
     from master_data.models import CompanyProfile
@@ -508,10 +510,10 @@ def can_user_perform_stock_out(user, warehouse=None) -> bool:
     configured_roles = profile.roles_can_stock_out.all()
 
     if configured_roles.exists():
-        if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
+        if not (role and role.is_active and (configured_roles.filter(id=role.id).exists() or is_accountant(user))):
             return False
     else:
-        if not has_perm_or_admin(user, 'inventory:memos/manage') and not is_manager_or_higher(user):
+        if not (has_perm_or_admin(user, 'inventory:memos/manage') or is_accountant(user)):
             return False
 
     if warehouse:
@@ -526,7 +528,7 @@ def can_user_perform_transfer(user, source_warehouse=None, dest_warehouse=None) 
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and (role.is_super or role.name in ['superadmin', 'SuperAdmin', 'CEO', 'Admin']):
+    if role and getattr(role, 'is_super', False):
         return True
     if is_accountant(user):
         return True
@@ -538,15 +540,14 @@ def can_user_perform_transfer(user, source_warehouse=None, dest_warehouse=None) 
     if configured_roles.exists():
         if not (role and role.is_active and configured_roles.filter(id=role.id).exists()):
             return False
+    else:
+        if not (has_perm_or_admin(user, ['inventory:transfers/create', 'inventory:transfers/manage', 'inventory:transfers/approve']) or is_representative(user)):
+            return False
 
     if dest_warehouse:
         if dest_warehouse.assigned_user_id == user.id:
-            pass  # Rep requesting into own warehouse
-        elif is_manager_or_higher(user):
-            rep = dest_warehouse.assigned_user
-            if rep and not is_manager_eligible_for_user(user, rep):
-                return False
-        elif not has_perm_or_admin(user, ['inventory:transfers/approve', 'inventory:transfers/manage']):
+            pass  # Rep requesting into own custody warehouse
+        elif not can_user_access_object(user, dest_warehouse, 'view'):
             return False
 
     return True

@@ -70,14 +70,24 @@
             <div class="flex-1 relative">
                 <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم الطلب، اسم المندوب، أو المخزن..."
+                       data-smart-search-module="product_transfers"
                        class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
             </div>
+            {% include 'components/date_range_filter.html' with date_from=request.GET.date_from date_to=request.GET.date_to active_preset=request.GET.preset|default:'all_time' %}
+
             <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5">
                 <span class="material-symbols-outlined text-base">search</span>
                 <span>بحث</span>
             </button>
 
-            <!-- Column Picker -->
+            <!-- Column Picker & Export -->
+            {% if request.user|has_permission:'inventory:transfers/export' %}
+            <a href="{% url 'product_transfers_export' %}?search={{ search_query|urlencode }}&status={{ current_status|urlencode }}&date_from={{ selected_date_from|default:''|urlencode }}&date_to={{ selected_date_to|default:''|urlencode }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">تصدير Excel</span>
+            </a>
+            {% endif %}
             {% include 'components/table_column_picker.html' with table_id='transfers_table' %}
         </form>
     </div>

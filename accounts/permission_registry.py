@@ -36,6 +36,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'سجل التدقيق الأمني للعمليات الحساسة',
                 'actions': [
                     ('settings:auditLogs/view', 'عرض وتصفح سجل التدقيق الأمني', 'admin'),
+                    ('settings:auditLogs/export', 'تصدير سجل التدقيق الأمني إلى Excel', 'export'),
                 ]
             }
         }
@@ -66,6 +67,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('catalog:categories/create', 'إضافة تصنيف منتجات جديد', 'write'),
                     ('catalog:categories/edit', 'تعديل بيانات التصنيف', 'write'),
                     ('catalog:categories/delete', 'حذف تصنيف منتجات', 'delete'),
+                    ('catalog:categories/export', 'تصدير تصنيفات المنتجات إلى Excel', 'export'),
                 ]
             }
         }
@@ -105,12 +107,15 @@ ERP_PERMISSIONS_CATALOG = {
                     ('purchases:orders/view', 'عرض تفاصيل أمر المشتريات والبنود', 'read'),
                     ('purchases:orders/create', 'إنشاء أمر مشتريات جديد', 'write'),
                     ('purchases:orders/edit', 'تعديل أمر المشتريات والخصومات والكميات', 'write'),
+                    ('purchases:orders/delete', 'حذف أمر مشتريات مع عكس القيود والمخزون', 'delete'),
                     ('purchases:orders/approve', 'اعتماد أمر المشتريات (Approve)', 'workflow'),
                     ('purchases:orders/stock', 'إدخال أمر المشتريات للمخزن (Stock / Picked)', 'workflow'),
                     ('purchases:orders/invoice', 'ترحيل فاتورة الشراء لحساب المورد (Invoice / Settle)', 'financial'),
                     ('purchases:orders/undoInvoice', 'إلغاء ترحيل فاتورة المشتريات من الحسابات', 'financial'),
                     ('purchases:orders/cancel', 'إلغاء أمر المشتريات', 'workflow'),
+                    ('purchases:orders/manage_payment_status', 'تعديل وتحديد حالة سداد أمر الشراء التجارية', 'workflow'),
                     ('purchases:orders/export', 'تصدير أوامر المشتريات إلى Excel', 'export'),
+                    ('purchases:orders/pdf', 'إصدار وطباعة فاتورة أمر الشراء PDF', 'export'),
                 ]
             },
             'returns': {
@@ -119,9 +124,18 @@ ERP_PERMISSIONS_CATALOG = {
                     ('purchases:returns/list', 'عرض قائمة مرتجعات المشتريات', 'read'),
                     ('purchases:returns/view', 'عرض تفاصيل إذن مرتجع المشتريات', 'read'),
                     ('purchases:returns/create', 'إنشاء إذن مرتجع مشتريات جديد', 'write'),
+                    ('purchases:returns/edit', 'تعديل أمر مرتجع المشتريات', 'write'),
+                    ('purchases:returns/delete', 'حذف أمر مرتجع المشتريات وعكس القيود', 'delete'),
                     ('purchases:returns/approve', 'اعتماد أو رفض أمر مرتجع المشتريات', 'workflow'),
                     ('purchases:returns/manage', 'تنفيذ وتسوية حركات مرتجع المشتريات', 'workflow'),
                     ('purchases:returns/export', 'تصدير مرتجعات المشتريات إلى Excel', 'export'),
+                    ('purchases:returns/pdf', 'إصدار إشعار مرتجع المشتريات PDF', 'export'),
+                ]
+            },
+            'statements': {
+                'name_ar': 'كشوف حسابات الموردين PDF',
+                'actions': [
+                    ('purchases:statements/pdf', 'إصدار كشف حساب مورد PDF', 'export'),
                 ]
             }
         }
@@ -140,11 +154,14 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:orders/view', 'عرض تفاصيل أمر البيع والأسعار', 'read'),
                     ('sales:orders/create', 'إنشاء وتجهيز أمر بيع جديد', 'write'),
                     ('sales:orders/edit', 'تعديل بيانات أمر البيع والبنود قبل الاعتماد', 'write'),
+                    ('sales:orders/delete', 'حذف أمر بيع مع عكس القيود والمخزون', 'delete'),
                     ('sales:orders/approve', 'اعتماد أمر البيع من مدير المبيعات', 'workflow'),
                     ('sales:orders/unstock', 'صرف بضاعة أمر البيع من المخزن (Delivered)', 'workflow'),
                     ('sales:orders/invoice', 'ترحيل فاتورة البيع لحساب العميل المدين', 'financial'),
                     ('sales:orders/cancel', 'إلغاء أمر البيع', 'workflow'),
+                    ('sales:orders/manage_payment_status', 'تعديل وتحديد حالة سداد أمر البيع التجارية', 'workflow'),
                     ('sales:orders/export', 'تصدير أوامر البيع إلى Excel', 'export'),
+                    ('sales:orders/pdf', 'إصدار وطباعة فاتورة البيع PDF', 'export'),
                 ]
             },
             'returns': {
@@ -153,10 +170,13 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:returns/list', 'عرض قائمة مرتجعات المبيعات', 'read'),
                     ('sales:returns/view', 'عرض تفاصيل وأمر مرتجع المبيعات', 'read'),
                     ('sales:returns/create', 'إنشاء أمر مرتجع مبيعات جديد', 'write'),
+                    ('sales:returns/edit', 'تعديل أمر مرتجع المبيعات', 'write'),
+                    ('sales:returns/delete', 'حذف أمر مرتجع المشتريات وعكس القيود', 'delete'),
                     ('sales:returns/approve', 'اعتماد أو رفض أمر مرتجع المبيعات', 'workflow'),
                     ('sales:returns/manage', 'استلام وتسوية مرتجع المبيعات', 'workflow'),
                     ('sales:returns/cancel', 'إلغاء أمر مرتجع المبيعات', 'workflow'),
                     ('sales:returns/export', 'تصدير مرتجعات المبيعات إلى Excel', 'export'),
+                    ('sales:returns/pdf', 'إصدار إشعار مرتجع المبيعات PDF', 'export'),
                 ]
             },
             'collections': {
@@ -167,11 +187,19 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:collections/export', 'تصدير سجل التحصيلات إلى Excel', 'export'),
                 ]
             },
-            'customer_accounting': {
-                'name_ar': 'حسابات ومعاملات العملاء',
+            'customer_accounts': {
+                'name_ar': 'حسابات وأرصدة العملاء (sales/customers/accounts/)',
                 'actions': [
-                    ('sales:customers/accounting', 'عرض كشف حسابات أرصدة العملاء', 'read'),
-                    ('sales:customers/transactions', 'عرض كشف المعاملات المدينة والدائنة للعملاء', 'read'),
+                    ('sales:customers/accounting', 'عرض صفحة كشف حسابات وأرصدة العملاء', 'read'),
+                    ('sales:customers/accounting_export', 'تصدير كشف حسابات وأرصدة العملاء إلى Excel', 'export'),
+                    ('sales:statements/pdf', 'إصدار كشف حساب عميل PDF', 'export'),
+                ]
+            },
+            'customer_transactions': {
+                'name_ar': 'عمليات وحركات العملاء (sales/customer-transactions/)',
+                'actions': [
+                    ('sales:customers/transactions', 'عرض صفحة دفتر عمليات وحركات العملاء', 'read'),
+                    ('sales:customers/transactions_export', 'تصدير سجل عمليات وحركات العملاء إلى Excel', 'export'),
                 ]
             }
         }
@@ -194,12 +222,15 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'دليل المخازن ومراكز التوزيع',
                 'actions': [
                     ('inventory:warehouses/manage', 'إدارة وإضافة وتعديل بيانات المخازن', 'write'),
+                    ('inventory:warehouses/delete', 'حذف المخازن الخالية من الحركات والأرصدة', 'admin'),
+                    ('inventory:warehouses/export', 'تصدير دليل المخازن إلى Excel', 'export'),
                 ]
             },
             'memos': {
                 'name_ar': 'أذونات المخزن (إضافة وصرف وتحويل)',
                 'actions': [
                     ('inventory:memos/manage', 'إنشاء واعتماد أذونات الإضافة والصرف المخزني', 'workflow'),
+                    ('inventory:memos/export', 'تصدير أذونات المخزن إلى Excel', 'export'),
                 ]
             },
             'transfers': {
@@ -211,6 +242,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('inventory:transfers/approve', 'اعتماد أو رفض طلب التحويل المخزني', 'workflow'),
                     ('inventory:transfers/execute', 'تنفيذ التحويل المخزني ونقل البضاعة', 'workflow'),
                     ('inventory:transfers/cancel', 'إلغاء طلب التحويل المخزني', 'workflow'),
+                    ('inventory:transfers/export', 'تصدير طلبات التحويل المخزني إلى Excel', 'export'),
                 ]
             }
         }
@@ -234,7 +266,9 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('treasury:vaults/view', 'عرض الخزن النقدية وأرصدتها الحالية المصرح بها', 'read'),
                     ('treasury:vaults/manage', 'إدارة وإنشاء وتعديل وتفعيل الخزن النقدية', 'admin'),
+                    ('treasury:vaults/delete', 'حذف الخزن النقدية الخالية من الحركات والأرصدة', 'admin'),
                     ('treasury:vaults/transfer', 'إجراء تحويلات نقدية بين الخزن والحسابات المصرح بها', 'financial'),
+                    ('treasury:vaults/export', 'تصدير الخزن النقدية وأرصدتها إلى Excel', 'export'),
                 ]
             },
             'transactions': {
@@ -245,6 +279,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('treasury:transactions/edit', 'تعديل بيانات وحركات الخزينة غير المقفلة', 'write'),
                     ('treasury:transactions/approve', 'اعتماد حركات الخزينة والتحويلات المالية', 'workflow'),
                     ('treasury:transactions/reverse', 'عكس وتسوية الحركات النقدية الخاطئة (Financial Reversal)', 'financial'),
+                    ('treasury:transactions/export', 'تصدير حركات وسندات الخزن إلى Excel', 'export'),
                 ]
             },
             'vendor_payments': {
@@ -264,7 +299,9 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'حسابات وعمليات الموردين',
                 'actions': [
                     ('treasury:vendors/accounting', 'عرض أرصدة وكشوفات حسابات الموردين', 'read'),
+                    ('treasury:vendors/accounting_export', 'تصدير أرصدة حسابات الموردين إلى Excel', 'export'),
                     ('treasury:vendors/transactions', 'عرض دفتر قيود وعمليات الموردين التفصيلية', 'read'),
+                    ('treasury:vendors/transactions_export', 'تصدير دفتر قيود الموردين إلى Excel', 'export'),
                 ]
             }
         }
@@ -280,13 +317,12 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'الزيارات الميدانية',
                 'actions': [
                     ('activities:visits/list', 'عرض قائمة وسجل الزيارات الميدانية', 'read'),
-                    ('activities:visits/view', 'عرض تفاصيل الزيارة والصور والاستبيان وموقع GPS', 'read'),
+                    ('activities:visits/view', 'عرض تفاصيل الزيارة والاستبيان وموقع GPS', 'read'),
                     ('activities:visits/create', 'تسجيل وبدء زيارة ميدانية (مخططة أو حرة)', 'write'),
                     ('activities:visits/edit', 'تعديل بيانات الزيارة الميدانية', 'write'),
                     ('activities:visits/edit_answers', 'تعديل إجابات استبيان الزيارة بعد اكتمالها', 'write'),
                     ('activities:visits/delete', 'حذف الزيارات غير المنتهية', 'delete'),
                     ('activities:visits/approve', 'اعتماد أو رفض الزيارة الميدانية من المشرف', 'workflow'),
-                    ('activities:visits/evidence', 'رفع وتوثيق صورة الإثبات والموقع الجغرافي', 'write'),
                     ('activities:visits/export', 'تصدير تقارير الزيارات الميدانية إلى Excel', 'export'),
                     ('activities:visits/bypass_gps', 'تجاوز قيد المسافة (صلاحية مدير / مشرف)', 'workflow'),
                     ('activities:visits/gps_request_exception', 'طلب استثناء تجاوز المسافة الجغرافية (GBS)', 'workflow'),
@@ -397,6 +433,12 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'قوالب واستبيانات الزيارات الميدانية',
                 'actions': [
                     ('settings:visitsTemplates/manage', 'تصميم وإدارة قوالب الزيارات وأسئلة الاستبيانات', 'admin'),
+                ]
+            },
+            'storage': {
+                'name_ar': 'التخزين السحابي وحاسبة تكلفة Cloudflare R2',
+                'actions': [
+                    ('settings:storage/manage', 'عرض وتعديل إعدادات وحاسبة تكلفة التخزين السحابي (R2)', 'admin'),
                 ]
             }
         }

@@ -19,7 +19,7 @@ from django.urls import reverse
 
 from .models import (
     Agreement, AgreementType, VisitTemplate, VisitTemplateQuestion,
-    PlannedVisitDay, PlannedVisitItem, Visit,
+    PlannedVisitDay, PlannedVisitItem, Visit, VisitPlan,
     VisitSampleItem, VisitExpense, ApprovalAuditLog, AgendaTodo
 )
 from .forms import (
@@ -39,6 +39,7 @@ from .services import (
     build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields
 )
 from master_data.search_utils import filter_by_arabic_search
+from accounts.scope_service import ScopeResolutionService
 from accounts.permissions import (
     require_permission, has_perm_or_admin, render_forbidden_response,
     get_scoped_queryset, can_user_access_object, get_user_managed_representatives,
@@ -101,19 +102,27 @@ def can_user_approve_contact_visit(user, contact=None, module_type='visits', vis
 
 def resolve_visit_creation_approval(user, contact, is_planned, location_settings, visit_owner=None):
     """
-    Centralized approval resolution for newly created visits:
-    - Planned visits: Do not require approval upon creation (auto-approved).
-    - Unplanned visits: Require approval after creation (unless manager approval is disabled globally
-      or the user has supervisory approval authority).
+    Approval resolution for newly created visits:
+    - Unplanned visits (is_planned=False): Auto-approved upon creation.
+    - Planned visits (is_planned=True): Require approval if creator lacks supervisory approval
+      authority (activities:visits/approve) or if anti-self-approval applies.
     Returns (approval_status, approved_by, approved_at).
     """
-    if is_planned:
-        return 'approved', None, timezone.now()
+    if not is_planned:
+        # Unplanned visits are auto-approved
+        return 'approved', user, timezone.now()
 
-    if not location_settings.require_manager_approval_for_visits:
+    # Planned visits:
+    target_owner = visit_owner or user
+    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser
+
+    # Anti-self-approval: a user cannot approve their own planned visit
+    if target_owner.id == user.id and not is_super:
+        return 'pending', None, None
+
+    if can_user_approve_contact_visit(user, contact=contact, module_type='visits', visit_owner=target_owner):
         return 'approved', user, timezone.now()
-    if can_user_approve_contact_visit(user, contact=contact, module_type='visits', visit_owner=visit_owner):
-        return 'approved', user, timezone.now()
+
     return 'pending', None, None
 
 
@@ -176,23 +185,83 @@ def agreements_list(request):
         t_obj = AgreementType.objects.filter(id=type_id).first()
         active_filters.append({'label': f'النوع: {t_obj.name if t_obj else type_id}', 'param': 'type'})
 
-    # Status Filter
+    # Status Filter (Exact 2-status lifecycle: new and done)
     status = request.GET.get('status')
     if status:
-        qs = qs.filter(status=status)
-        status_labels = dict(Agreement.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
+        if status == 'done':
+            qs = qs.filter(status__in=['done', 'approved'])
+            active_filters.append({'label': 'الحالة: منجزة', 'param': 'status'})
+        elif status == 'new':
+            qs = qs.filter(status__in=['new', 'disapproved'])
+            active_filters.append({'label': 'الحالة: جديدة', 'param': 'status'})
+        else:
+            qs = qs.filter(status=status)
+            status_labels = dict(Agreement.STATUS_CHOICES)
+            active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
+
+    # Customer Filter
+    customer_id = request.GET.get('customer')
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+        c_obj = Contact.objects.filter(id=customer_id).first()
+        active_filters.append({'label': f'العميل: {c_obj.name if c_obj else customer_id}', 'param': 'customer'})
 
     # Assignee Filter (created_by)
     creator_id = request.GET.get('creator')
     if creator_id:
-        qs = qs.filter(created_by_id=creator_id)
-        u_obj = User.objects.filter(id=creator_id).first()
-        active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else creator_id}', 'param': 'creator'})
+        visible_users_qs = get_visible_assignees_queryset(request.user, 'activities')
+        if visible_users_qs.filter(id=creator_id).exists():
+            qs = qs.filter(created_by_id=creator_id)
+            u_obj = visible_users_qs.filter(id=creator_id).first()
+            active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else creator_id}', 'param': 'creator'})
+        else:
+            creator_id = None
+
+    # Amount Range Filters (Min & Max with partial boundaries support)
+    amount_min = request.GET.get('amount_min', '').strip()
+    amount_max = request.GET.get('amount_max', '').strip()
+    if amount_min:
+        try:
+            amt_min_val = Decimal(amount_min)
+            qs = qs.filter(amount__gte=amt_min_val)
+            active_filters.append({'label': f'الحد الأدنى للمبلغ: {amt_min_val:,.2f} ج.م', 'param': 'amount_min'})
+        except Exception:
+            amount_min = ''
+    if amount_max:
+        try:
+            amt_max_val = Decimal(amount_max)
+            qs = qs.filter(amount__lte=amt_max_val)
+            active_filters.append({'label': f'الحد الأقصى للمبلغ: {amt_max_val:,.2f} ج.م', 'param': 'amount_max'})
+        except Exception:
+            amount_max = ''
+
+    # Governorate (Main Area) Filter
+    gov_id = request.GET.get('governorate', '').strip()
+    if gov_id:
+        try:
+            gov_id_int = int(gov_id)
+            qs = qs.filter(Q(customer__area_id=gov_id_int) | Q(customer__area__parent_id=gov_id_int))
+            from master_data.models import Area
+            g_obj = Area.objects.filter(id=gov_id_int).first()
+            active_filters.append({'label': f'المحافظة: {g_obj.name if g_obj else gov_id}', 'param': 'governorate'})
+        except Exception:
+            gov_id = ''
+
+    # Brick (Sub-Area) Filter
+    brick_id = request.GET.get('brick', '').strip()
+    if brick_id:
+        try:
+            brick_id_int = int(brick_id)
+            qs = qs.filter(customer__area_id=brick_id_int)
+            from master_data.models import Area
+            b_obj = Area.objects.filter(id=brick_id_int).first()
+            active_filters.append({'label': f'المنطقة (Brick): {b_obj.name if b_obj else brick_id}', 'param': 'brick'})
+        except Exception:
+            brick_id = ''
 
     # Date Range Filters
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
     if date_from:
         qs = qs.filter(date__gte=date_from)
         active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
@@ -200,8 +269,20 @@ def agreements_list(request):
         qs = qs.filter(date__lte=date_to)
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
-    # Summary Metrics (matches reference aggregate API)
-    total_amount = qs.aggregate(s=Sum('amount'))['s'] or 0.00
+    # Summary Metrics (matches reference aggregate API - committed amount is done/approved)
+    agreements_agg = qs.aggregate(
+        total_count=Count('id'),
+        all_amount=Sum('amount'),
+        done_amount=Sum('amount', filter=Q(status__in=['done', 'approved'])),
+        new_amount=Sum('amount', filter=Q(status='new')),
+        done_count=Count('id', filter=Q(status__in=['done', 'approved'])),
+        new_count=Count('id', filter=Q(status='new')),
+    )
+    total_amount = agreements_agg['done_amount'] or Decimal('0.00')
+    done_amount = agreements_agg['done_amount'] or Decimal('0.00')
+    new_amount = agreements_agg['new_amount'] or Decimal('0.00')
+    done_count = agreements_agg['done_count'] or 0
+    new_count = agreements_agg['new_count'] or 0
 
     # Handle inline Create via POST
     if request.method == 'POST' and 'create_agreement' in request.POST:
@@ -212,16 +293,7 @@ def agreements_list(request):
             agreement = form.save(commit=False)
             agreement.created_by = request.user
             agreement.updated_by = request.user
-
-            from master_data.models import LocationSettings
-            loc_settings = LocationSettings.get_settings()
-            if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
-                agreement.status = 'approved'
-                agreement.approved_by = request.user
-                agreement.approved_at = timezone.now()
-            else:
-                agreement.status = 'new'
-
+            agreement.status = 'new'
             agreement.save()
 
             ApprovalAuditLog.objects.create(
@@ -265,18 +337,27 @@ def agreements_list(request):
     # Filter dropdown options (strictly scoped)
     agreement_types = AgreementType.objects.filter(is_active=True)
     users = get_visible_assignees_queryset(request.user, 'activities').order_by('first_name', 'username')
+    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
+    bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'activities')
+    customers = get_scoped_queryset(Contact.objects.filter(status='customer'), request.user, 'contact').order_by('name')[:150]
 
-    agreements_agg = qs.aggregate(
-        total_count=Count('id'),
-        total_amount=Sum('amount'),
-        approved_count=Count('id', filter=Q(status='approved')),
-        pending_count=Count('id', filter=Q(status='new')),
+    user_scope = ScopeResolutionService.get_user_scope(request.user, 'activities')
+    can_filter_creator = (
+        request.user.is_superuser
+        or bool(request.user.role and request.user.role.is_super)
+        or user_scope in ['area', 'all']
     )
+
     agreements_stats = {
         'total_count': agreements_agg['total_count'] or 0,
-        'total_amount': agreements_agg['total_amount'] or Decimal('0.00'),
-        'approved_count': agreements_agg['approved_count'] or 0,
-        'pending_count': agreements_agg['pending_count'] or 0,
+        'total_amount': total_amount,
+        'pending_amount': new_amount,
+        'done_amount': done_amount,
+        'approved_amount': done_amount,
+        'approved_count': done_count,
+        'done_count': done_count,
+        'pending_count': new_count,
+        'new_count': new_count,
     }
 
     context = {
@@ -288,10 +369,19 @@ def agreements_list(request):
         'form': form,
         'agreement_types': agreement_types,
         'users': users,
+        'governorates': governorates,
+        'bricks': bricks,
+        'customers': customers,
+        'can_filter_creator': can_filter_creator,
         'selected_q': q,
         'selected_type': type_id,
         'selected_status': status,
+        'selected_customer': customer_id,
         'selected_creator': creator_id,
+        'selected_amount_min': amount_min,
+        'selected_amount_max': amount_max,
+        'selected_governorate': gov_id,
+        'selected_brick': brick_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
         'active_filters': active_filters,
@@ -337,11 +427,14 @@ def agreements_bulk_status(request):
     scoped_agreements = get_scoped_queryset(Agreement.objects.filter(pk__in=selected_ids), request.user, 'agreement')
 
     status_names = {
-        'new': 'بانتظار الاعتماد',
-        'approved': 'معتمد',
-        'disapproved': 'مرفوض',
-        'done': 'تم الإنجاز',
+        'new': 'جديدة',
+        'done': 'منجزة',
+        'approved': 'منجزة',
+        'disapproved': 'جديدة',
     }
+
+    target_status = 'done' if new_status in ['done', 'approved'] else 'new'
+    action_act = 'done' if target_status == 'done' else 'reopen'
 
     updated_count = 0
     skipped_self = 0
@@ -349,29 +442,25 @@ def agreements_bulk_status(request):
 
     for ag in scoped_agreements:
         # Check action permission & anti-self-approval
-        action_map = {'approved': 'approve', 'disapproved': 'disapprove', 'done': 'done', 'new': 'reopen'}
-        act = action_map.get(new_status, 'approve')
-        if not can_user_access_object(request.user, ag, act):
+        if not can_user_access_object(request.user, ag, action_act):
             skipped_self += 1
             continue
 
-        if new_status == 'done' and ag.status != 'approved':
-            continue
-
         status_before = ag.status
-        if status_before == new_status:
+        if status_before == target_status:
             continue
 
-        ag.status = new_status
+        ag.status = target_status
         ag.updated_by = request.user
         ag.updated_at = now
-        if new_status == 'approved':
+        if target_status == 'done':
             ag.approved_by = request.user
             ag.approved_at = now
             ag.waiting_for_reapproval = False
-        elif new_status == 'disapproved':
-            ag.approved_by = request.user
-            ag.approved_at = now
+        else:
+            ag.approved_by = None
+            ag.approved_at = None
+            ag.waiting_for_reapproval = False
 
         ag.save()
         updated_count += 1
@@ -379,23 +468,23 @@ def agreements_bulk_status(request):
         ApprovalAuditLog.objects.create(
             record_type='agreement',
             agreement=ag,
-            action='approved' if new_status == 'approved' else ('rejected' if new_status == 'disapproved' else 'status_changed'),
+            action='approved' if target_status == 'done' else 'status_changed',
             actor=request.user,
             status_before=status_before,
-            status_after=new_status,
-            reason=f"تحديث جماعي للحالة إلى '{status_names.get(new_status, new_status)}'",
-            changes=[{'field': 'الحالة', 'old': status_names.get(status_before, status_before), 'new': status_names.get(new_status, new_status)}],
+            status_after=target_status,
+            reason=f"تحديث جماعي للحالة إلى '{status_names.get(target_status, target_status)}'",
+            changes=[{'field': 'الحالة', 'old': status_names.get(status_before, status_before), 'new': status_names.get(target_status, target_status)}],
             ip_address=request.META.get('REMOTE_ADDR'),
         )
         AuditLogService.log(
-            action_type='AGREEMENT_APPROVED' if new_status == 'approved' else ('AGREEMENT_REJECTED' if new_status == 'disapproved' else 'AGREEMENT_STATUS_CHANGED'),
+            action_type='AGREEMENT_APPROVED' if target_status == 'done' else 'AGREEMENT_STATUS_CHANGED',
             module='activities',
             actor=request.user,
             record_id=ag.id,
             record_name=f"اتفاقية #{ag.serial_num}",
-            description=f"تحديث حالة الاتفاقية من '{status_before}' إلى '{new_status}' (تحديث جماعي)",
+            description=f"تحديث حالة الاتفاقية من '{status_before}' إلى '{target_status}' (تحديث جماعي)",
             previous_values={'status': status_before},
-            new_values={'status': new_status},
+            new_values={'status': target_status},
             status='SUCCESS',
             request=request,
         )
@@ -404,7 +493,7 @@ def agreements_bulk_status(request):
         messages.warning(request, f"تم تخطي {skipped_self} اتفاقية لا تملك صلاحية اعتمادها أو أنك منشئها (منع الاعتماد الذاتي).")
 
     if updated_count > 0:
-        messages.success(request, f"تم تغيير حالة {updated_count} اتفاقية إلى '{status_names.get(new_status, new_status)}' بنجاح.")
+        messages.success(request, f"تم تغيير حالة {updated_count} اتفاقية إلى '{status_names.get(target_status, target_status)}' بنجاح.")
     elif skipped_self == 0:
         messages.info(request, "لم يتم تعديل أي اتفاقية (قد تكون بالحالة المطلوبة بالفعل).")
 
@@ -500,8 +589,8 @@ def agreement_edit(request, pk):
     if not can_user_access_object(request.user, agreement, 'edit'):
         return render_forbidden_response(request, "لا يمكنك تعديل هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
 
-    if agreement.status not in ['new', 'disapproved']:
-        messages.warning(request, "لا يمكن تعديل الاتفاقية بعد اعتمادها أو إنجازها.")
+    if agreement.status == 'done' and not (request.user.is_superuser or is_manager_or_higher(request.user)):
+        messages.warning(request, "لا يمكن تعديل الاتفاقية بعد إنجازها.")
         return redirect('agreement_detail', pk=agreement.pk)
 
     before_snap = _agreement_snapshot(agreement)
@@ -592,52 +681,33 @@ def agreement_action(request, pk, action):
     reason = request.POST.get('reason', '').strip()
 
     status_map = {
-        'new': 'بانتظار الاعتماد',
-        'approved': 'معتمد',
-        'disapproved': 'مرفوض',
-        'done': 'تم الإنجاز',
+        'new': 'جديدة',
+        'done': 'منجزة',
+        'approved': 'منجزة',
+        'disapproved': 'جديدة',
     }
 
-    if action == 'approve':
-        agreement.status = 'approved'
+    if action in ('done', 'approve'):
+        agreement.status = 'done'
         agreement.approved_by = request.user
         agreement.approved_at = now
         agreement.waiting_for_reapproval = False
         agreement.updated_by = request.user
         agreement.save()
-        messages.success(request, f"تم اعتماد الاتفاقية #{agreement.serial_num} بنجاح.")
-        log_action = 'approved'
-        log_reason = reason or "اعتماد الاتفاقية من قبل المدير"
-    elif action == 'disapprove':
-        agreement.status = 'disapproved'
-        agreement.approved_by = request.user
-        agreement.approved_at = now
-        agreement.approval_notes = reason
-        agreement.updated_by = request.user
-        agreement.save()
-        messages.error(request, f"تم رفض الاتفاقية #{agreement.serial_num}.")
-        log_action = 'rejected'
-        log_reason = reason or "رفض الاتفاقية"
-    elif action == 'done':
-        if status_before != 'approved':
-            messages.error(request, "لا يمكن إنجاز اتفاقية غير معتمدة.")
-            return redirect('agreement_detail', pk=agreement.pk)
-        agreement.status = 'done'
-        agreement.updated_by = request.user
-        agreement.save()
         messages.success(request, f"تم إنجاز الاتفاقية #{agreement.serial_num} بنجاح.")
         log_action = 'status_changed'
         log_reason = reason or "إنجاز الاتفاقية بنجاح"
-    elif action == 'reopen':
+    elif action in ('reopen', 'new', 'disapprove'):
         agreement.status = 'new'
-        agreement.waiting_for_reapproval = True
+        agreement.waiting_for_reapproval = False
         agreement.approved_by = None
         agreement.approved_at = None
+        agreement.approval_notes = reason
         agreement.updated_by = request.user
         agreement.save()
-        messages.info(request, f"تم إعادة فتح الاتفاقية #{agreement.serial_num} وباتت بانتظار الاعتماد.")
+        messages.info(request, f"تم إعادة فتح الاتفاقية #{agreement.serial_num} وباتت جديدة.")
         log_action = 'status_changed'
-        log_reason = reason or "إعادة فتح الاتفاقية للمراجعة والاعتماد"
+        log_reason = reason or "إعادة فتح الاتفاقية"
     else:
         messages.error(request, "إجراء غير معروف.")
         return redirect('agreement_detail', pk=agreement.pk)
@@ -687,8 +757,8 @@ def agreement_delete(request, pk):
     if not can_user_access_object(request.user, agreement, 'delete'):
         return render_forbidden_response(request, "لا يمكنك حذف هذه الاتفاقية.")
 
-    if agreement.status not in ['new', 'disapproved']:
-        messages.error(request, "لا يمكن حذف اتفاقية بعد اعتمادها أو إنجازها.")
+    if agreement.status == 'done' and not (request.user.is_superuser or is_manager_or_higher(request.user)):
+        messages.error(request, "لا يمكن حذف اتفاقية بعد إنجازها.")
         return redirect('agreement_detail', pk=agreement.pk)
 
     serial = agreement.serial_num
@@ -739,96 +809,26 @@ def agreements_export(request):
     if request.GET.get('date_to'):
         qs = qs.filter(date__lte=request.GET.get('date_to'))
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "الاتفاقيات"
-    ws.views.sheetView[0].rightToLeft = True
-
-    # Styling
-    header_fill = PatternFill(start_color="27BEBE", end_color="27BEBE", fill_type="solid")
-    header_font = Font(name="Cairo", size=11, bold=True, color="FFFFFF")
-    data_font = Font(name="Cairo", size=10)
-    thin_border = Border(
-        left=Side(style='thin', color='E2E8F0'),
-        right=Side(style='thin', color='E2E8F0'),
-        top=Side(style='thin', color='E2E8F0'),
-        bottom=Side(style='thin', color='E2E8F0')
+    from master_data.excel_utils import export_to_excel_response
+    columns = [
+        {'header': '#', 'key': lambda a: f"#{a.serial_num}", 'width': 12, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda a: a.customer.name if a.customer else '', 'width': 28, 'align': 'right'},
+        {'header': 'كود العميل', 'key': lambda a: a.customer.code if a.customer else '', 'width': 16, 'align': 'center'},
+        {'header': 'العنوان', 'key': 'title', 'width': 28, 'align': 'right'},
+        {'header': 'النوع', 'key': lambda a: a.type.name if a.type else '', 'width': 18, 'align': 'center'},
+        {'header': 'المبلغ (ج.م)', 'key': lambda a: float(a.amount or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
+        {'header': 'التاريخ', 'key': lambda a: a.date.strftime('%Y-%m-%d') if a.date else '', 'width': 16, 'align': 'center'},
+        {'header': 'المنشئ', 'key': lambda a: a.created_by.get_full_name() or a.created_by.username if a.created_by else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda a: a.status_display_ar, 'width': 16, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="agreements_export",
+        sheet_title="الاتفاقيات",
+        report_title="سجل الاتفاقيات التجارية",
+        user=request.user,
     )
-
-    headers = ["#", "العميل", "كود العميل", "العنوان", "النوع", "المبلغ (ج.م)", "التاريخ", "المنشئ", "الحالة"]
-    ws.append(headers)
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    for a in qs:
-        row = [
-            f"#{a.serial_num}",
-            a.customer.name if a.customer else "",
-            a.customer.code if a.customer else "",
-            a.title,
-            a.type.name if a.type else "",
-            float(a.amount),
-            a.date.strftime("%Y-%m-%d") if a.date else "",
-            a.created_by.get_full_name() or a.created_by.username if a.created_by else "",
-            a.status_display_ar
-        ]
-        ws.append(row)
-
-    # Style rows & adjust widths
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
-            cell.font = data_font
-            cell.border = thin_border
-            cell.alignment = Alignment(vertical="center")
-
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = openpyxl.utils.get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-
-    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response['Content-Disposition'] = f'attachment; filename="agreements_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
-    wb.save(response)
-    return response
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    for a in qs:
-        row = [
-            f"#{a.serial_num}",
-            a.customer.name if a.customer else "",
-            a.customer.code if a.customer else "",
-            a.title,
-            a.type.name if a.type else "",
-            float(a.amount),
-            a.date.strftime("%Y-%m-%d") if a.date else "",
-            a.created_by.get_full_name() or a.created_by.username if a.created_by else "",
-            a.status_display_ar
-        ]
-        ws.append(row)
-
-    # Style rows & adjust widths
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
-            cell.font = data_font
-            cell.border = thin_border
-            cell.alignment = Alignment(vertical="center")
-
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = openpyxl.utils.get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-
-    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response['Content-Disposition'] = f'attachment; filename="agreements_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
-    wb.save(response)
-    return response
 
 
 # -----------------------------------------------------------------------------
@@ -898,19 +898,35 @@ def planned_visits_list(request):
             assignee__in=all_reps,
             date__range=[start_date, end_date]
         ).select_related('assignee').prefetch_related(
-            'items__contact', 'items__template', 'items__visit', 'items__plan_day__assignee'
+            'items__contact', 'items__template', 'items__visit', 'items__plan_day__assignee', 'items__plan'
         )
     else:
         plan_days = PlannedVisitDay.objects.filter(
             assignee=selected_rep,
             date__range=[start_date, end_date]
         ).select_related('assignee').prefetch_related(
-            'items__contact', 'items__template', 'items__visit', 'items__plan_day__assignee'
+            'items__contact', 'items__template', 'items__visit', 'items__plan_day__assignee', 'items__plan'
         )
 
     plan_days_by_date = {}
     for p in plan_days:
         plan_days_by_date.setdefault(p.date, []).append(p)
+
+    # Scoped VisitPlan query for grouping visits by plan under each day (Requirement 4)
+    scoped_plans_qs = get_scoped_queryset(VisitPlan.objects.all(), request.user, 'visitplan', 'view').filter(
+        date__range=[start_date, end_date]
+    ).select_related('assignee', 'created_by', 'approved_by').prefetch_related(
+        'planned_items__contact', 'planned_items__template', 'planned_items__visit',
+        'planned_items__contact__area', 'planned_items__contact__brick', 'visits'
+    )
+    if not is_all_reps_view:
+        scoped_plans_qs = scoped_plans_qs.filter(assignee=selected_rep)
+    elif not is_super and view_scope != 'all':
+        scoped_plans_qs = scoped_plans_qs.filter(assignee__in=all_reps)
+
+    plans_by_date = {}
+    for pl in scoped_plans_qs:
+        plans_by_date.setdefault(pl.date, []).append(pl)
 
     # Build calendar day cards and scheduled map for duplicate prevention
     current_date = start_date
@@ -927,21 +943,61 @@ def planned_visits_list(request):
     }
 
     while current_date <= end_date:
-        day_plans = plan_days_by_date.get(current_date, [])
-        items = []
-        for p in day_plans:
-            items.extend(list(p.items.all()))
+        day_plans = plans_by_date.get(current_date, [])
+        plan_groups = []
+        all_day_items = []
+        covered_item_ids = set()
+
+        for pl in day_plans:
+            pl_items = list(pl.planned_items.all().order_by('order', 'id'))
+            all_day_items.extend(pl_items)
+            for it in pl_items:
+                covered_item_ids.add(it.id)
+            can_approve_pl = can_manage_approvals(request.user) and can_user_access_object(request.user, pl, 'approve')
+            plan_groups.append({
+                'plan': pl,
+                'plan_id': pl.plan_id,
+                'comment': pl.comment,
+                'approval_status': pl.approval_status,
+                'assignee': pl.assignee,
+                'can_approve': can_approve_pl,
+                'items': pl_items,
+                'items_count': len(pl_items),
+            })
+
+        # Check for any legacy unlinked items in PlannedVisitDay
+        legacy_days = plan_days_by_date.get(current_date, [])
+        unlinked_items = []
+        for pvd in legacy_days:
+            for it in pvd.items.all():
+                if it.id not in covered_item_ids:
+                    unlinked_items.append(it)
+                    all_day_items.append(it)
+
+        if unlinked_items:
+            plan_groups.append({
+                'plan': None,
+                'plan_id': 'خطة عامة',
+                'comment': '',
+                'approval_status': 'approved',
+                'assignee': selected_rep or (unlinked_items[0].plan_day.assignee if unlinked_items else request.user),
+                'can_approve': False,
+                'items': unlinked_items,
+                'items_count': len(unlinked_items),
+            })
+
         d_key = current_date.strftime('%Y-%m-%d')
-        scheduled_contacts_by_date[d_key] = [it.contact_id for it in items]
+        scheduled_contacts_by_date[d_key] = [it.contact_id for it in all_day_items]
         days_list.append({
             'date': current_date,
             'date_str': d_key,
             'weekday_ar': arabic_weekdays[current_date.weekday()],
             'formatted_date': current_date.strftime('%d/%m/%Y'),
-            'plan_day': day_plans[0] if day_plans else None,
-            'items': items,
-            'items_count': len(items),
-            'is_planned': len(items) > 0,
+            'plans': plan_groups,
+            'plan_day': legacy_days[0] if legacy_days else None,
+            'items': all_day_items,
+            'items_count': len(all_day_items),
+            'is_planned': len(all_day_items) > 0,
         })
         current_date += datetime.timedelta(days=1)
 
@@ -992,7 +1048,16 @@ def planned_visits_list(request):
     main_area_filter = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
     area_filter = str(brick_ids[0]) if len(brick_ids) == 1 else ''
 
-    account_type_filter = (request.GET.get('account_type') or '').strip()
+    # Parse multi-select Account Type (Requirement 5)
+    raw_account_types = request.GET.getlist('account_type') or request.GET.getlist('account_type[]')
+    selected_account_types = []
+    for at in raw_account_types:
+        for p in str(at).split(','):
+            p = p.strip()
+            if p and p != 'all' and p not in selected_account_types:
+                selected_account_types.append(p)
+
+    account_type_filter = selected_account_types[0] if selected_account_types else ''
     category_filter = (request.GET.get('customer_category') or '').strip()
     specialty_filter = (request.GET.get('specialty') or '').strip()
     search_contact = (request.GET.get('contact_search') or '').strip()
@@ -1013,8 +1078,8 @@ def planned_visits_list(request):
             Q(addresses__brick_id__in=brick_ids)
         ).distinct()
 
-    if account_type_filter:
-        contacts_qs = contacts_qs.filter(account_type__iexact=account_type_filter)
+    if selected_account_types:
+        contacts_qs = contacts_qs.filter(account_type__in=selected_account_types)
     if category_filter:
         contacts_qs = contacts_qs.filter(customer_category__iexact=category_filter)
     if specialty_filter:
@@ -1140,6 +1205,7 @@ def planned_visits_list(request):
         'selected_main_areas_chips': selected_main_areas_chips,
         'selected_bricks_chips': selected_bricks_chips,
         'selected_account_type': account_type_filter,
+        'selected_account_types': selected_account_types,
         'selected_customer_category': category_filter,
         'selected_specialty': specialty_filter,
         'selected_contact_search': search_contact,
@@ -1610,6 +1676,31 @@ def planned_visits_bulk_add(request):
             date=target_date,
             defaults={'created_by': request.user}
         )
+
+        # Plan-Based Architecture (Requirement 4): Distinct VisitPlan with unique plan_id
+        has_approval_perm = has_perm_or_admin(request.user, 'activities:visits/approve')
+        is_self = (assignee.id == request.user.id)
+        is_super = (request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+
+        if not has_approval_perm or (is_self and not is_super):
+            plan_approval_status = 'pending'
+            plan_approved_by = None
+            plan_approved_at = None
+        else:
+            plan_approval_status = 'approved'
+            plan_approved_by = request.user
+            plan_approved_at = timezone.now()
+
+        plan_instance = VisitPlan.objects.create(
+            assignee=assignee,
+            date=target_date,
+            comment=notes,
+            approval_status=plan_approval_status,
+            approved_by=plan_approved_by,
+            approved_at=plan_approved_at,
+            created_by=request.user
+        )
+
         existing_contact_ids = set(
             PlannedVisitItem.objects.filter(plan_day=plan_day).values_list('contact_id', flat=True)
         )
@@ -1642,9 +1733,6 @@ def planned_visits_bulk_add(request):
             current_order += 1
             next_serial += 1
 
-            approval_status, approved_by, approved_at = resolve_visit_creation_approval(
-                request.user, c, True, location_settings, visit_owner=assignee
-            )
             visit = Visit.objects.create(
                 serial_num=next_serial,
                 contact=c,
@@ -1652,13 +1740,13 @@ def planned_visits_bulk_add(request):
                 date=target_date,
                 status='planned',
                 is_planned=True,
-                approval_status=approval_status,
-                approved_by=approved_by,
-                approved_at=approved_at,
+                approval_status=plan_approval_status,
+                approved_by=plan_approved_by,
+                approved_at=plan_approved_at,
                 allowed_distance=location_settings.get_effective_tolerance(item_template),
                 owner=assignee,
                 created_by=request.user,
-                feedback=notes,
+                plan=plan_instance,
                 location_verified=False,
                 verification_status='unverified',
                 location_status='زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)',
@@ -1668,7 +1756,8 @@ def planned_visits_bulk_add(request):
                 order=current_order,
                 contact=c,
                 template=item_template,
-                notes=notes,
+                plan=plan_instance,
+                notes='',
                 visit=visit,
                 is_executed=False,
             )
@@ -1679,12 +1768,33 @@ def planned_visits_bulk_add(request):
                 actor=request.user,
                 status_before='',
                 status_after=visit.approval_status,
-                reason=f"إنشاء زيارة مخططة جماعية للعميل {c.name}",
+                reason=f"إنشاء زيارة مخططة جماعية ضمن الخطة {plan_instance.plan_id} للعميل {c.name}",
                 ip_address=request.META.get('REMOTE_ADDR')
             )
             created_items.append(item)
             created_visit_ids.append(visit.id)
             blocked_duplicate_ids.add(cid)
+
+        if not created_items:
+            plan_instance.delete()
+        else:
+            AuditLogService.log(
+                action='create',
+                action_type='VISIT_PLAN_CREATED',
+                module='activities',
+                user=request.user,
+                request=request,
+                record_id=plan_instance.pk,
+                object_repr=f"VisitPlan #{plan_instance.plan_id}",
+                new_values={
+                    'plan_id': plan_instance.plan_id,
+                    'date': date_str,
+                    'assignee_id': assignee.id,
+                    'visits_count': len(created_items),
+                    'approval_status': plan_approval_status,
+                    'comment': notes
+                }
+            )
 
         if created_items:
             AuditLogService.log(
@@ -1819,40 +1929,27 @@ def planned_visits_export(request):
     if date_to:
         items = items.filter(plan_day__date__lte=date_to)
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "خطة الزيارات"
-    ws.views.sheetView[0].rightToLeft = True
-
-    header_fill = PatternFill(start_color="27BEBE", end_color="27BEBE", fill_type="solid")
-    header_font = Font(name="Cairo", size=11, bold=True, color="FFFFFF")
-
-    headers = ["التاريخ", "المسؤول", "الترتيب", "العميل", "الكود", "المنطقة", "نوع الحساب", "القالب", "تم التنفيذ", "رقم الزيارة"]
-    ws.append(headers)
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    for it in items:
-        ws.append([
-            it.plan_day.date.strftime("%Y-%m-%d"),
-            it.plan_day.assignee.get_full_name() or it.plan_day.assignee.username,
-            it.order,
-            it.contact.name,
-            it.contact.code,
-            it.contact.area.name if it.contact.area else "",
-            it.contact.account_type or "",
-            it.template.display_name_ar if it.template else "",
-            "نعم" if it.is_executed else "لا",
-            f"#{it.visit.serial_num}" if it.visit else ""
-        ])
-
-    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response['Content-Disposition'] = f'attachment; filename="planned_visits_{timezone.now().strftime("%Y%m%d")}.xlsx"'
-    wb.save(response)
-    return response
+    from master_data.excel_utils import export_to_excel_response
+    columns = [
+        {'header': 'التاريخ', 'key': lambda it: it.plan_day.date.strftime('%Y-%m-%d') if it.plan_day and it.plan_day.date else '', 'width': 16, 'align': 'center'},
+        {'header': 'المسؤول', 'key': lambda it: (it.plan_day.assignee.get_full_name() or it.plan_day.assignee.username) if it.plan_day and it.plan_day.assignee else '', 'width': 22, 'align': 'right'},
+        {'header': 'الترتيب', 'key': lambda it: int(it.order or 0), 'format': '#,##0', 'width': 10, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda it: it.contact.name if it.contact else '', 'width': 28, 'align': 'right'},
+        {'header': 'الكود', 'key': lambda it: it.contact.code if it.contact else '', 'width': 14, 'align': 'center'},
+        {'header': 'المنطقة', 'key': lambda it: it.contact.area.name if it.contact and it.contact.area else '', 'width': 20, 'align': 'right'},
+        {'header': 'نوع الحساب', 'key': lambda it: it.contact.account_type if it.contact else '', 'width': 18, 'align': 'center'},
+        {'header': 'القالب', 'key': lambda it: it.template.display_name_ar if it.template else '', 'width': 20, 'align': 'right'},
+        {'header': 'تم التنفيذ', 'key': lambda it: 'نعم' if it.is_executed else 'لا', 'width': 12, 'align': 'center'},
+        {'header': 'رقم الزيارة', 'key': lambda it: f"#{it.visit.serial_num}" if it.visit else '', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        items,
+        columns,
+        filename="planned_visits_export",
+        sheet_title="خطة الزيارات",
+        report_title="جدول خطة الزيارات",
+        user=request.user,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -1865,7 +1962,12 @@ def visits_list(request):
     Visits list with table & cards views, complete filters, status indicators, and export.
     Matches https://weapharma.bricks-rep.com/visits
     """
-    qs = Visit.objects.select_related('contact', 'template', 'owner', 'created_by').prefetch_related('samples__product').all().order_by('-serial_num')
+    qs = (
+        Visit.objects.select_related('contact', 'contact__area', 'contact__brick', 'template', 'owner', 'created_by')
+        .prefetch_related('samples__product', 'template__questions')
+        .all()
+        .order_by('-serial_num')
+    )
     qs = get_scoped_queryset(qs, request.user, 'visit')
 
     # Search
@@ -1873,54 +1975,70 @@ def visits_list(request):
     active_filters = []
 
     if q:
-        qs = qs.filter(
-            Q(contact__name__icontains=q) |
-            Q(contact__code__icontains=q) |
-            Q(serial_num__icontains=q) |
-            Q(owner__first_name__icontains=q) |
-            Q(owner__username__icontains=q)
+        qs = filter_by_arabic_search(
+            qs,
+            ['contact__name', 'contact__code', 'owner__name', 'owner__username'],
+            q,
+            raw_fields=['contact__code'],
+            numeric_id_field='serial_num',
         )
-        active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
+        active_filters.append({'label': 'بحث', 'value': q, 'param': 'q'})
 
     # Status
     status = request.GET.get('status')
     if status:
         qs = qs.filter(status=status)
         status_labels = dict(Visit.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status, status)}', 'param': 'status'})
+        active_filters.append({'label': 'الحالة', 'value': status_labels.get(status, status), 'param': 'status'})
 
     # Approval Status
     approval_status = request.GET.get('approval_status')
     if approval_status:
         qs = qs.filter(approval_status=approval_status)
         approval_labels = dict(Visit.APPROVAL_CHOICES)
-        active_filters.append({'label': f'حالة الاعتماد: {approval_labels.get(approval_status, approval_status)}', 'param': 'approval_status'})
+        active_filters.append({'label': 'حالة الاعتماد', 'value': approval_labels.get(approval_status, approval_status), 'param': 'approval_status'})
 
     # Planned vs Unplanned Classification Filter (Requirement 5)
     plan_type = request.GET.get('plan_type')
     if plan_type == 'planned':
         qs = qs.filter(is_planned=True)
-        active_filters.append({'label': 'النوع: زيارة مخططة', 'param': 'plan_type'})
+        active_filters.append({'label': 'النوع', 'value': 'زيارة مخططة', 'param': 'plan_type'})
     elif plan_type == 'unplanned':
         qs = qs.filter(is_planned=False)
-        active_filters.append({'label': 'النوع: زيارة خارج الخطة', 'param': 'plan_type'})
+        active_filters.append({'label': 'النوع', 'value': 'زيارة خارج الخطة', 'param': 'plan_type'})
 
     # Representative (owner)
     rep_id = request.GET.get('owner')
     if rep_id:
         qs = qs.filter(owner_id=rep_id)
-        u_obj = User.objects.filter(id=rep_id).first()
-        active_filters.append({'label': f'المسؤول: {u_obj.get_full_name() or u_obj.username if u_obj else rep_id}', 'param': 'owner'})
+        u_obj = get_visible_assignees_queryset(request.user, 'activities').filter(id=rep_id).first()
+        active_filters.append({'label': 'المسؤول', 'value': (u_obj.name or u_obj.username) if u_obj else rep_id, 'param': 'owner'})
 
     # Date Range
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     if date_from:
         qs = qs.filter(date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
     if date_to:
         qs = qs.filter(date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
+
+    # Distance Ignored / Bypassed Filter
+    distance_ignored = request.GET.get('distance_ignored')
+    if distance_ignored:
+        if distance_ignored == 'any':
+            qs = qs.filter(Q(gps_forced_start=True) | Q(gps_forced_end=True))
+            active_filters.append({'label': 'تجاوز المسافة', 'value': 'بدء أو إنهاء', 'param': 'distance_ignored'})
+        elif distance_ignored == 'start':
+            qs = qs.filter(gps_forced_start=True)
+            active_filters.append({'label': 'تجاوز المسافة', 'value': 'عند البدء', 'param': 'distance_ignored'})
+        elif distance_ignored == 'end':
+            qs = qs.filter(gps_forced_end=True)
+            active_filters.append({'label': 'تجاوز المسافة', 'value': 'عند الإنهاء', 'param': 'distance_ignored'})
+        elif distance_ignored == 'none':
+            qs = qs.filter(gps_forced_start=False, gps_forced_end=False)
+            active_filters.append({'label': 'تجاوز المسافة', 'value': 'ضمن النطاق (لم يتم التجاوز)', 'param': 'distance_ignored'})
 
     # View Mode: table or cards
     view_mode = request.GET.get('view', 'table')
@@ -1945,9 +2063,8 @@ def visits_list(request):
             can_user_access_object(request.user, v, 'delete')
         )
 
-    # Filter dropdowns
-    users = User.objects.filter(is_active=True).order_by('first_name', 'username')
-    contacts = Contact.objects.all().order_by('name')[:50]
+    # Scoped filter dropdowns
+    users = get_visible_assignees_queryset(request.user, 'activities')
     templates = VisitTemplate.objects.filter(active=True)
 
     visits_agg = qs.aggregate(
@@ -1972,7 +2089,7 @@ def visits_list(request):
         'unplanned_count': unplanned_count,
         'view_mode': view_mode,
         'users': users,
-        'contacts': contacts,
+        'can_filter_owner': users.count() > 1 or getattr(request.user, 'is_super_admin', False) or request.user.is_superuser,
         'templates': templates,
         'selected_q': q,
         'selected_status': status,
@@ -1981,6 +2098,7 @@ def visits_list(request):
         'selected_owner': rep_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'selected_distance_ignored': distance_ignored,
         'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user),
     }
@@ -2027,7 +2145,7 @@ def visit_detail(request, pk):
             questions = template.get_active_questions()
             parent_answers = {}
 
-            # First pass: collect parent answers
+            # First pass: collect parent answers (preserving any already-saved answers such as check-in)
             for q in questions:
                 field_name = f'question_{q.id}'
                 val = request.POST.get(field_name) or request.POST.getlist(field_name)
@@ -2037,6 +2155,8 @@ def visit_detail(request, pk):
                     val = ''
                 if q.question_type == 'multiple_choice':
                     val = request.POST.getlist(field_name)
+                if not val and str(q.id) in answers:
+                    val = answers[str(q.id)]
                 if val:
                     parent_answers[q.id] = val
 
@@ -2062,6 +2182,8 @@ def visit_detail(request, pk):
                     val = ''
                 if q.question_type == 'multiple_choice':
                     val = request.POST.getlist(field_name)
+                if (val is None or val == '' or val == []) and q.stage == 'start_only' and str(q.id) in answers:
+                    val = answers[str(q.id)]
 
                 # Validate required questions strictly when completing
                 if action == 'complete' and q.is_required and (val is None or val == '' or val == []):
@@ -2070,22 +2192,19 @@ def visit_detail(request, pk):
                 if val is not None and val != '':
                     answers[str(q.id)] = val
 
-        # Handle Location & Photo Evidence
+        # Handle Location Verification
         lat = request.POST.get('latitude') or visit.latitude
         lng = request.POST.get('longitude') or visit.longitude
         acc = request.POST.get('device_accuracy') or visit.device_accuracy
-        photo_file = request.FILES.get('location_photo')
         force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
-        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
         if force_bypass_raw and not can_bypass_gps:
-            validation_errors.append("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
+            validation_errors.append("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS).")
         force_bypass = bool(force_bypass_raw)
-        request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
         bypass_reason = (request.POST.get('bypass_reason') or '').strip()
 
         # Enforce GPS and Distance Validation when completing visit (Section 3.C & 3.D)
         if action == 'complete':
-            if location_settings.verify_visits and not force_bypass and not can_bypass_gps and not request_distance_exception:
+            if location_settings.verify_visits and not force_bypass and not can_bypass_gps:
                 if not lat or not lng:
                     validation_errors.append("تحديد الموقع الجغرافي (GPS) إلزامي للمندوب لإنهاء الزيارة.")
 
@@ -2094,16 +2213,15 @@ def visit_detail(request, pk):
                     verify_visit_location(
                         visit, request.user, visit.contact,
                         visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                        photo_file=photo_file, force_bypass=force_bypass,
+                        force_bypass=force_bypass,
                         bypass_reason=bypass_reason, stage='end',
-                        request_distance_exception=request_distance_exception,
                         strict_distance=bool(location_settings.verify_visits and location_settings.verify_end_visit_distance)
                     )
                 except ValidationError as ve:
                     err_text = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
                     validation_errors.append(err_text)
                 except Exception as e:
-                    validation_errors.append(f"خطأ في معالجة الموقع أو الصورة: {str(e)}")
+                    validation_errors.append(f"خطأ في معالجة الموقع: {str(e)}")
 
         if validation_errors:
             # Preserve answers when a validation error occurs!
@@ -2121,22 +2239,22 @@ def visit_detail(request, pk):
         else:
             with transaction.atomic():
                 visit.questionnaire_answers = answers
-                feedback = request.POST.get('feedback', '')
-                if feedback:
-                    visit.feedback = feedback
 
-                # Outcome
-                visit_outcome = request.POST.get('visit_outcome', '').strip()
-                if visit_outcome:
-                    visit.visit_outcome = visit_outcome
-                    visit.is_successful = (visit_outcome == 'successful')
+                # Outcome is determined by Question 1 of the template
+                if template:
+                    first_q = template.get_active_questions().order_by('order', 'id').first()
+                    if first_q:
+                        ans_q1 = answers.get(str(first_q.id))
+                        if ans_q1:
+                            ans_str = str(ans_q1).strip().lower()
+                            visit.is_successful = ('ناجح' in ans_str or 'successful' in ans_str)
 
-                if action != 'complete' and (lat or lng or photo_file or force_bypass):
+                if action != 'complete' and (lat or lng or force_bypass):
                     try:
                         verify_visit_location(
                             visit, request.user, visit.contact,
                             visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                            photo_file=photo_file, force_bypass=force_bypass,
+                            force_bypass=force_bypass,
                             bypass_reason=bypass_reason, stage='end',
                             request_distance_exception=request_distance_exception,
                             strict_distance=False
@@ -2176,35 +2294,7 @@ def visit_detail(request, pk):
                         planned_item.is_executed = True
                         planned_item.save(update_fields=['is_executed'])
 
-                    if visit.requires_approval_due_to_distance:
-                        ApprovalAuditLog.objects.create(
-                            record_type='visit',
-                            visit=visit,
-                            action='distance_exception_requested',
-                            actor=request.user,
-                            status_before=old_status,
-                            status_after='pending',
-                            reason=f"طلب استثناء لتجاوز المسافة عند الإنهاء ({visit.distance}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason}",
-                            ip_address=request.META.get('REMOTE_ADDR')
-                        )
-                        AuditLogService.log(
-                            action='update',
-                            action_type='VISIT_DISTANCE_EXCEPTION_REQUESTED',
-                            module='visits',
-                            user=request.user,
-                            request=request,
-                            record_id=visit.pk,
-                            object_repr=f"Visit #{visit.serial_num}",
-                            new_values={
-                                'stage': 'end',
-                                'distance': float(visit.distance) if visit.distance is not None else None,
-                                'allowed_distance': visit.allowed_distance,
-                                'distance_discrepancy': visit.distance_discrepancy,
-                                'bypass_reason': bypass_reason,
-                                'approval_status': visit.approval_status,
-                            }
-                        )
-                    elif visit.verification_status == 'force_bypassed':
+                    if visit.verification_status == 'force_bypassed' or visit.gps_forced_end:
                         ApprovalAuditLog.objects.create(
                             record_type='visit',
                             visit=visit,
@@ -2267,19 +2357,12 @@ def visit_detail(request, pk):
                     else:
                         messages.success(request, f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}.")
                 else:
-                    # Save Draft (Status remains 'started', resumable)
-                    visit.save()
-                    AuditLogService.log(
-                        action='update',
-                        action_type='VISIT_DRAFT_SAVED',
-                        module='visits',
-                        user=request.user,
-                        request=request,
-                        record_id=visit.pk,
-                        object_repr=f"Visit #{visit.serial_num}",
-                        new_values={'questionnaire_answers': answers, 'feedback': visit.feedback}
-                    )
-                    messages.success(request, f"تم حفظ مسودة إجابات الزيارة #{visit.serial_num} بنجاح (الزيارة لا تزال جارية).")
+                    msg = "تم إيقاف حفظ المسودات للزيارات؛ يرجى إنهاء وتوثيق الزيارة مباشرة."
+                    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'message': msg}, status=400)
+                    messages.warning(request, msg)
+                    return redirect('visit_detail', pk=visit.pk)
 
             is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
             if is_ajax:
@@ -2550,83 +2633,16 @@ def visit_create(request):
                         visit.started_at = None
                         visit.allowed_distance = location_settings.get_effective_tolerance(template)
 
-                        # Visits submitted through visit_create require manager approval for reps (Section 4)
+                        # Visits submitted through visit_create: resolve approval based on is_planned_visit
                         visit.approval_status, visit.approved_by, visit.approved_at = resolve_visit_creation_approval(
-                            request.user, contact, False, location_settings, visit_owner=owner
+                            request.user, contact, is_planned_visit, location_settings, visit_owner=owner
                         )
 
-                        lat = request.POST.get('latitude') or request.POST.get('lat')
-                        lng = request.POST.get('longitude') or request.POST.get('lng')
-                        acc = request.POST.get('device_accuracy')
-                        photo_file = request.FILES.get('location_photo')
-                        force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
-                        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
-                        force_bypass = bool(force_bypass_raw)
-                        request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
-                        bypass_reason = (request.POST.get('bypass_reason') or '').strip()
-
-                        try:
-                            if force_bypass and not can_bypass_gps:
-                                raise ValidationError("عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر.")
-                            if not is_planned_visit:
-                                if location_settings.verify_visits and location_settings.verify_unplanned_visit_distance:
-                                    verify_visit_location(
-                                        visit, request.user, contact,
-                                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                        photo_file=photo_file, force_bypass=force_bypass,
-                                        bypass_reason=bypass_reason, stage='create',
-                                        request_distance_exception=request_distance_exception,
-                                        strict_distance=True
-                                    )
-                                elif lat or lng or photo_file or force_bypass:
-                                    verify_visit_location(
-                                        visit, request.user, contact,
-                                        visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                        photo_file=photo_file, force_bypass=force_bypass,
-                                        bypass_reason=bypass_reason, stage='create',
-                                        request_distance_exception=request_distance_exception,
-                                        strict_distance=False
-                                    )
-                                else:
-                                    visit.location_verified = False
-                                    visit.verification_status = 'unverified'
-                                    visit.location_status = 'بانتظار التحقق من الموقع الجغرافي'
-                            else:
-                                # Planned visits: distance validation is NOT required during creation, verified at start/end
-                                visit.location_verified = False
-                                visit.verification_status = 'unverified'
-                                visit.location_status = 'زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)'
-                                if (lat or lng or force_bypass) and location_settings.verify_visits:
-                                    try:
-                                        verify_visit_location(
-                                            visit, request.user, contact,
-                                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                                            photo_file=photo_file, force_bypass=force_bypass,
-                                            bypass_reason=bypass_reason, stage='create',
-                                            request_distance_exception=request_distance_exception,
-                                            strict_distance=False
-                                        )
-                                    except ValidationError:
-                                        raise
-                                    except Exception:
-                                        pass
-                        except ValidationError as ve:
-                            err_msg = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
-                            form.add_error(None, err_msg)
-                            return render(request, 'activities/visit_form.html', {
-                                'form': form,
-                                'contacts': contacts,
-                                'templates': templates,
-                                'location_settings': location_settings,
-                                'planned_item': planned_item,
-                                'planned_item_id': planned_item.id if planned_item else None,
-                                'is_planned_workflow': is_planned_visit,
-                                'verify_visits_enabled': location_settings.verify_visits,
-                                'verify_unplanned_distance': location_settings.verify_unplanned_visit_distance,
-                                'can_bypass_gps': can_bypass_gps,
-                                'can_request_gps_exception': can_request_gps_exception,
-                                'default_tolerance': location_settings.tolerance,
-                            })
+                        # Distance verification is not needed to create a visit at all (planned and unplanned are identical)
+                        visit.location_verified = False
+                        visit.verification_status = 'unverified'
+                        visit.location_status = 'بانتظار بدء الزيارة والتحقق من الموقع الجغرافي'
+                        visit.requires_approval_due_to_distance = False
 
                         visit.save()
 
@@ -2677,28 +2693,6 @@ def visit_create(request):
                             reason=f"إنشاء {'زيارة مخططة' if visit.is_planned else 'زيارة خارج الخطة'} للعميل {contact.name}",
                             ip_address=request.META.get('REMOTE_ADDR')
                         )
-                        if visit.requires_approval_due_to_distance:
-                            ApprovalAuditLog.objects.create(
-                                record_type='visit',
-                                visit=visit,
-                                action='distance_exception_requested',
-                                actor=request.user,
-                                status_before='planned',
-                                status_after='pending',
-                                reason=f"طلب استثناء لتجاوز المسافة عند الإنشاء ({visit.distance}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason}",
-                                ip_address=request.META.get('REMOTE_ADDR')
-                            )
-                        elif visit.verification_status == 'force_bypassed':
-                            ApprovalAuditLog.objects.create(
-                                record_type='visit',
-                                visit=visit,
-                                action='distance_bypass',
-                                actor=request.user,
-                                status_before='planned',
-                                status_after=visit.approval_status,
-                                reason=f"تجاوز المسافة عند الإنشاء ({visit.distance or 0}م مقابل المسموح {visit.allowed_distance}م): {bypass_reason or 'تجاوز مباشر بصلاحية المدير/المشرف'}",
-                                ip_address=request.META.get('REMOTE_ADDR')
-                            )
 
                         AuditLogService.log(
                             action='create',
@@ -2860,13 +2854,6 @@ def visit_edit(request, pk):
                 cleaned_date = form.cleaned_data.get('date')
                 cleaned_template = form.cleaned_data.get('template')
 
-                # Before start/end, editing is restricted to date/template/time; in-progress visits can update feedback
-                feedback = None
-                if visit.status == 'started':
-                    feedback = request.POST.get('feedback')
-                    if feedback is not None:
-                        visit.feedback = feedback
-
                 # Preserve other fields strictly
                 visit.date = cleaned_date
                 visit.template = cleaned_template
@@ -2918,8 +2905,6 @@ def visit_edit(request, pk):
                     status_after = 'pending'
 
                 fields_to_save = ['date', 'template', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at']
-                if feedback is not None:
-                    fields_to_save.append('feedback')
                 visit.save(update_fields=fields_to_save)
 
                 new_values = {
@@ -3107,155 +3092,116 @@ def visit_update_answers(request, pk):
     return redirect('visit_detail', pk=pk)
 
 
-@require_permission('activities:visits/edit')
-def visit_set_time(request, pk):
+@login_required
+def plan_action(request, pk, action):
     """
-    Quick-action endpoint to set or update a visit's scheduled time
-    without a full page reload (Requirement 7).
-    Enforces authorization, regional/ABAC data scope, validates time format,
-    updates Visit.time and Visit.visit_time, and records to SecurityAuditLog.
+    Plan-Level Approval Workflow (Requirement 4.B):
+    Approve or reject an entire visit plan and all its associated visits.
+    Enforces activities:visits/approve permission, organizational data scope,
+    and anti-self-approval rule.
     """
-    if request.method != 'POST':
-        return JsonResponse({'error': 'MethodNotAllowed', 'detail': 'POST method required.'}, status=405)
+    plan = get_object_or_404(VisitPlan, pk=pk)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    next_url = request.POST.get('next') or request.GET.get('next')
 
-    visit = get_object_or_404(Visit.objects.select_related('contact', 'owner'), pk=pk)
+    def get_redirect():
+        if next_url and next_url.startswith('/'):
+            return redirect(next_url)
+        return redirect('planned_visits_list')
 
-    # Restriction: Time can only be set/edited before the visit has started and ended
-    if visit.status in ('started', 'finished') or visit.ended_at is not None:
-        return JsonResponse({
-            'success': False,
-            'error': 'ValidationError',
-            'detail': 'لا يمكن تعديل وقت الزيارة بعد بدئها أو اكتمالها.'
-        }, status=400)
+    if action in ('approve', 'disapprove', 'reject'):
+        if not can_manage_approvals(request.user) or not can_user_access_object(request.user, plan, action):
+            msg = "غير مصرح لك باتخاذ إجراء اعتماد على هذه الخطة (خارج نطاق صلاحياتك أو لا يمكن للمستخدم اعتماد خطته بنفسه)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            messages.error(request, msg)
+            return get_redirect()
 
-    # Scoping check: Representatives can only edit their own visits within their scope
-    if not can_user_access_object(request.user, visit, 'edit'):
-        return JsonResponse({
-            'success': False,
-            'error': 'PermissionDenied',
-            'detail': 'غير مصرح لك بتعديل وقت هذه الزيارة خارج نطاقك الجغرافي أو صلاحياتك.'
-        }, status=403)
+        notes = request.POST.get('approval_notes', '').strip() or request.POST.get('reason', '').strip()
 
-    raw_time = (request.POST.get('time') or '').strip()
-    if not raw_time:
-        return JsonResponse({
-            'success': False,
-            'error': 'ValidationError',
-            'detail': 'يرجى تحديد وقت الزيارة.'
-        }, status=400)
+        with transaction.atomic():
+            if action == 'approve':
+                plan.approval_status = 'approved'
+                plan.approved_by = request.user
+                plan.approved_at = timezone.now()
+                plan.approval_notes = notes
+                plan.save(update_fields=['approval_status', 'approved_by', 'approved_at', 'approval_notes', 'updated_at'])
 
-    # Parse time (supports HH:MM or HH:MM:SS or 12h formats)
-    parsed_time = None
-    for fmt in ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M%p'):
-        try:
-            parsed_time = datetime.datetime.strptime(raw_time, fmt).time()
-            break
-        except ValueError:
-            continue
+                # Update all visits in this plan
+                plan.visits.update(
+                    approval_status='approved',
+                    approved_by=request.user,
+                    approved_at=timezone.now()
+                )
 
-    if not parsed_time:
-        return JsonResponse({
-            'success': False,
-            'error': 'ValidationError',
-            'detail': 'صيغة الوقت غير صالحة. يرجى إدخال الوقت بصيغة (HH:MM).'
-        }, status=400)
+                for v in plan.visits.all():
+                    ApprovalAuditLog.objects.create(
+                        record_type='visit',
+                        visit=v,
+                        action='approved',
+                        actor=request.user,
+                        status_before='pending',
+                        status_after='approved',
+                        reason=f"اعتماد خطة الزيارات رقم {plan.plan_id}: {notes or 'تم الاعتماد'}",
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
 
-    old_time_str = visit.time.strftime('%H:%M') if visit.time else None
-    new_time_str = parsed_time.strftime('%H:%M')
-    prev_approval = visit.approval_status
+                AuditLogService.log(
+                    action='update',
+                    action_type='VISIT_PLAN_APPROVED',
+                    module='activities',
+                    user=request.user,
+                    request=request,
+                    record_id=plan.pk,
+                    object_repr=f"VisitPlan #{plan.plan_id}",
+                    new_values={'approval_status': 'approved', 'reason': notes}
+                )
+                msg = f"تم اعتماد خطة الزيارات رقم {plan.plan_id} وجميع زياراتها بنجاح."
 
-    with transaction.atomic():
-        visit.time = parsed_time
-        if visit.date:
-            combined_dt = datetime.datetime.combine(visit.date, parsed_time)
-            visit.visit_time = timezone.make_aware(combined_dt) if timezone.is_naive(combined_dt) else combined_dt
+            else:
+                plan.approval_status = 'disapproved'
+                plan.approved_by = request.user
+                plan.approved_at = timezone.now()
+                plan.approval_notes = notes
+                plan.save(update_fields=['approval_status', 'approved_by', 'approved_at', 'approval_notes', 'updated_at'])
 
-        # Requirement C & D: Editing time triggers re-approval
-        visit.approval_status = 'pending'
-        visit.waiting_for_reapproval = True
-        visit.approved_by = None
-        visit.approved_at = None
-        visit.save(update_fields=['time', 'visit_time', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
+                plan.visits.update(
+                    approval_status='disapproved',
+                    approved_by=request.user,
+                    approved_at=timezone.now(),
+                    approval_notes=notes
+                )
 
-        time_change = [{
-            'field': 'وقت الزيارة',
-            'old': old_time_str or 'غير محدد',
-            'new': new_time_str,
-        }]
+                for v in plan.visits.all():
+                    ApprovalAuditLog.objects.create(
+                        record_type='visit',
+                        visit=v,
+                        action='rejected',
+                        actor=request.user,
+                        status_before='pending',
+                        status_after='disapproved',
+                        reason=f"رفض خطة الزيارات رقم {plan.plan_id}: {notes or 'تم الرفض'}",
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
 
-        ApprovalAuditLog.objects.create(
-            record_type='visit',
-            visit=visit,
-            action='edited_reapproval_required',
-            actor=request.user,
-            status_before=prev_approval,
-            status_after='pending',
-            reason=f"تحديد/تعديل وقت الزيارة إلى {new_time_str} (يتطلب إعادة اعتماد المدير)",
-            changes=time_change,
-            approval_required=True,
-            context_data={'previous_approval_status': prev_approval},
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
+                AuditLogService.log(
+                    action='update',
+                    action_type='VISIT_PLAN_DISAPPROVED',
+                    module='activities',
+                    user=request.user,
+                    request=request,
+                    record_id=plan.pk,
+                    object_repr=f"VisitPlan #{plan.plan_id}",
+                    new_values={'approval_status': 'disapproved', 'reason': notes}
+                )
+                msg = f"تم رفض خطة الزيارات رقم {plan.plan_id}."
 
-        AuditLogService.log(
-            action='update',
-            action_type='VISIT_TIME_UPDATED',
-            module='visits',
-            user=request.user,
-            request=request,
-            record_id=visit.pk,
-            record_name=f"Visit #{visit.serial_num}",
-            description=f"تعديل وقت الزيارة #{visit.serial_num} إلى {new_time_str} وتحويلها للاعتماد",
-            previous_values={'time': old_time_str, 'approval_status': prev_approval},
-            new_values={'time': new_time_str, 'approval_status': 'pending', 'waiting_for_reapproval': True},
-        )
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg, 'approval_status': plan.approval_status})
+        messages.success(request, msg)
+        return get_redirect()
 
-    formatted_12h = parsed_time.strftime('%I:%M %p')
-    arabic_period = 'م' if parsed_time.hour >= 12 else 'ص'
-    display_time_ar = f"{parsed_time.strftime('%I:%M')} {arabic_period}"
-
-    return JsonResponse({
-        'success': True,
-        'message': f"تم تحديث وقت الزيارة بنجاح إلى {display_time_ar}.",
-        'time_24': new_time_str,
-        'time_12': formatted_12h,
-        'display_time': display_time_ar,
-    })
-
-
-@require_permission('activities:visits/evidence')
-def visit_evidence_photo(request, pk):
-    """
-    Secure Evidence Photo Access (Requirement 7).
-    Prevents unauthorized access to another representative's private evidence photo.
-    Authorized users:
-    - Visit owner (conducted by)
-    - Visit creator
-    - Area managers / supervisors
-    - Superusers and staff
-    """
-    visit = get_object_or_404(Visit, pk=pk)
-    if not visit.location_photo:
-        raise Http404("لا توجد صورة إثبات موقع مسجلة لهذه الزيارة.")
-
-    user = request.user
-    can_view = (
-        user.is_superuser or
-        getattr(user, 'is_super_admin', False) or
-        visit.owner_id == user.pk or
-        visit.created_by_id == user.pk or
-        (user.role and user.role.is_area_manager) or
-        can_manage_approvals(user)
-    )
-
-    if not can_view:
-        return HttpResponseForbidden("عذراً، غير مصرح لك بالوصول إلى صورة الإثبات الخاصة بزيارة مستخدم آخر.")
-
-    try:
-        content_type, _ = mimetypes.guess_type(visit.location_photo.name)
-        return FileResponse(visit.location_photo.open('rb'), content_type=content_type or 'image/jpeg')
-    except Exception:
-        raise Http404("تعذر فتح ملف صورة الإثبات.")
+    return JsonResponse({'success': False, 'message': 'إجراء غير صالح'}, status=400)
 
 
 
@@ -3294,15 +3240,13 @@ def visit_action(request, pk, action):
         loc_settings = LocationSettings.get_settings()
         can_bypass_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='start')
         force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
-        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
         if force_bypass_raw and not can_bypass_gps:
-            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
+            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS)."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=400)
             messages.error(request, msg)
             return get_redirect()
         force_bypass = bool(force_bypass_raw)
-        request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
 
         # Collect check-in questions (stage == 'start_only')
         checkin_answers = {}
@@ -3325,9 +3269,7 @@ def visit_action(request, pk, action):
                 lat=request.POST.get('latitude') or request.GET.get('latitude'),
                 lng=request.POST.get('longitude') or request.GET.get('longitude'),
                 accuracy=request.POST.get('device_accuracy') or request.GET.get('device_accuracy'),
-                photo_file=request.FILES.get('location_photo'),
                 force_bypass=force_bypass,
-                request_distance_exception=request_distance_exception,
                 bypass_reason=request.POST.get('bypass_reason', ''),
                 checkin_answers=checkin_answers
             )
@@ -3347,27 +3289,21 @@ def visit_action(request, pk, action):
         loc_settings = LocationSettings.get_settings()
         can_bypass_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='end')
         force_bypass_raw = request.POST.get('force_bypass_location') in ('1', 'true', 'True', 'on')
-        request_exception_raw = request.POST.get('request_distance_exception') in ('1', 'true', 'True', 'on')
         if force_bypass_raw and not can_bypass_gps:
-            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS) المباشر."
+            msg = "عذراً، لا تملك صلاحية تجاوز التحقق الجغرافي (GPS)."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=400)
             messages.error(request, msg)
             return get_redirect()
         force_bypass = bool(force_bypass_raw)
-        request_distance_exception = bool(request_exception_raw and not can_bypass_gps)
         try:
             end_visit(
                 visit, request.user, request=request,
                 lat=request.POST.get('latitude'),
                 lng=request.POST.get('longitude'),
                 accuracy=request.POST.get('device_accuracy'),
-                photo_file=request.FILES.get('location_photo'),
                 force_bypass=force_bypass,
-                request_distance_exception=request_distance_exception,
-                bypass_reason=request.POST.get('bypass_reason', ''),
-                feedback=request.POST.get('feedback', ''),
-                visit_outcome=request.POST.get('visit_outcome', '')
+                bypass_reason=request.POST.get('bypass_reason', '')
             )
             msg = f"تم إنهاء وتوثيق الزيارة #{visit.serial_num} بنجاح. استغرقت الزيارة {visit.duration_formatted}."
             if is_ajax:
@@ -3544,76 +3480,11 @@ def visit_action(request, pk, action):
         return get_redirect()
 
     elif action == 'send_to_agenda':
-        # Business rule: visit MUST be approved before sending it to the agenda
-        if visit.approval_status != 'approved':
-            msg = "عذراً، يجب اعتماد الزيارة أولاً من مدير المنطقة قبل إرسالها إلى جدول الأعمال."
-            if is_ajax:
-                return JsonResponse({'success': False, 'message': msg}, status=400)
-            messages.error(request, msg)
-            return get_redirect()
-
-        can_access = (
-            request.user.is_superuser or
-            getattr(request.user, 'is_super_admin', False) or
-            can_user_access_object(request.user, visit, 'view')
-        )
-        if not can_access:
-            msg = "غير مصرح لك بإرسال هذه الزيارة إلى جدول الأعمال."
-            if is_ajax:
-                return JsonResponse({'success': False, 'message': msg}, status=403)
-            messages.error(request, msg)
-            return get_redirect()
-
-        pday, _ = PlannedVisitDay.objects.get_or_create(
-            assignee=visit.owner,
-            date=visit.date,
-            defaults={'created_by': request.user}
-        )
-
-        existing_item = PlannedVisitItem.objects.filter(visit=visit).first()
-        if not existing_item:
-            existing_contact_item = PlannedVisitItem.objects.filter(plan_day=pday, contact=visit.contact).first()
-            if existing_contact_item and not existing_contact_item.visit:
-                existing_item = existing_contact_item
-                existing_item.visit = visit
-                existing_item.is_executed = (visit.status == 'finished')
-                existing_item.template = visit.template or existing_item.template
-                existing_item.save()
-            else:
-                max_order = pday.items.count() + 1
-                existing_item = PlannedVisitItem.objects.create(
-                    plan_day=pday,
-                    order=max_order,
-                    contact=visit.contact,
-                    template=visit.template,
-                    visit=visit,
-                    is_executed=(visit.status == 'finished'),
-                    notes=visit.feedback or f"زيارة معتمدة #{visit.serial_num}"
-                )
-
-        visit.is_planned = True
-        visit.save(update_fields=['is_planned'])
-
-        ApprovalAuditLog.objects.create(
-            record_type='visit',
-            visit=visit,
-            action='sent_to_agenda',
-            actor=request.user,
-            status_before=visit.approval_status,
-            status_after='in_agenda',
-            reason=f"إرسال الزيارة المعتمة #{visit.serial_num} إلى جدول الأعمال ليوم {visit.date}",
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-
-        msg = f"تم إرسال الزيارة المعتمة #{visit.serial_num} بنجاح إلى جدول أعمال ({visit.owner.get_full_name() or visit.owner.username}) ليوم {visit.date.strftime('%d/%m/%Y')}."
+        msg = "تظهر جميع الزيارات المعتمدة غير الملغاة تلقائياً في جدول الأعمال دون الحاجة لإرسال يدوي."
         if is_ajax:
-            return JsonResponse({
-                'success': True,
-                'message': msg,
-                'agenda_url': f"{reverse('agenda')}?date={visit.date.strftime('%Y-%m-%d')}&assignee={visit.owner_id}"
-            })
-        messages.success(request, msg)
-        return redirect(f"{reverse('agenda')}?date={visit.date.strftime('%Y-%m-%d')}&assignee={visit.owner_id}")
+            return JsonResponse({'success': False, 'message': msg}, status=410)
+        messages.info(request, msg)
+        return get_redirect()
 
     else:
         msg = "إجراء غير معروف."
@@ -3626,65 +3497,73 @@ def visit_action(request, pk, action):
 
 @require_permission('activities:visits/export')
 def visits_export(request):
-    """Export visits to Excel (.xlsx)."""
-    qs = Visit.objects.select_related('contact', 'template', 'owner').prefetch_related('samples__product').all()
+    """Export visits to Excel (.xlsx) with CompanyProfile branding and full filter parity."""
+    from master_data.excel_utils import export_to_excel_response
+
+    qs = (
+        Visit.objects.select_related('contact', 'template', 'owner')
+        .prefetch_related('samples__product', 'template__questions')
+        .all()
+        .order_by('-serial_num')
+    )
     qs = get_scoped_queryset(qs, request.user, 'visit')
 
-    # Same filters
     q = request.GET.get('q', '').strip()
     if q:
-        qs = qs.filter(Q(contact__name__icontains=q) | Q(serial_num__icontains=q))
+        qs = filter_by_arabic_search(
+            qs,
+            ['contact__name', 'contact__code', 'owner__name', 'owner__username'],
+            q,
+            raw_fields=['contact__code'],
+            numeric_id_field='serial_num',
+        )
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET.get('status'))
     if request.GET.get('approval_status'):
         qs = qs.filter(approval_status=request.GET.get('approval_status'))
+    plan_type = request.GET.get('plan_type')
+    if plan_type == 'planned':
+        qs = qs.filter(is_planned=True)
+    elif plan_type == 'unplanned':
+        qs = qs.filter(is_planned=False)
     if request.GET.get('owner'):
         qs = qs.filter(owner_id=request.GET.get('owner'))
     if request.GET.get('date_from'):
         qs = qs.filter(date__gte=request.GET.get('date_from'))
     if request.GET.get('date_to'):
         qs = qs.filter(date__lte=request.GET.get('date_to'))
+    distance_ignored = request.GET.get('distance_ignored')
+    if distance_ignored == 'any':
+        qs = qs.filter(Q(gps_forced_start=True) | Q(gps_forced_end=True))
+    elif distance_ignored == 'start':
+        qs = qs.filter(gps_forced_start=True)
+    elif distance_ignored == 'end':
+        qs = qs.filter(gps_forced_end=True)
+    elif distance_ignored == 'none':
+        qs = qs.filter(gps_forced_start=False, gps_forced_end=False)
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "الزيارات"
-    ws.views.sheetView[0].rightToLeft = True
-
-    header_fill = PatternFill(start_color="27BEBE", end_color="27BEBE", fill_type="solid")
-    header_font = Font(name="Cairo", size=11, bold=True, color="FFFFFF")
-
-    headers = [
-        "رقم الزيارة", "العميل", "كود العميل", "التاريخ", "المسؤول",
-        "القالب", "الحالة", "حالة الاعتماد", "زيارة ناجحة", "مزدوجة", "المدة (ثواني)", "العينات الموزعة"
+    columns = [
+        {'header': 'رقم الزيارة', 'key': lambda v: f"#{v.serial_num}", 'width': 14, 'align': 'center'},
+        {'header': 'العميل', 'key': lambda v: v.contact.name if v.contact else '', 'width': 30, 'align': 'right'},
+        {'header': 'كود العميل', 'key': lambda v: v.contact.code if v.contact else '', 'width': 14, 'align': 'center'},
+        {'header': 'التاريخ', 'key': lambda v: v.date.strftime('%Y-%m-%d') if v.date else '', 'width': 14, 'align': 'center'},
+        {'header': 'المسؤول', 'key': lambda v: (v.owner.name or v.owner.username) if v.owner else '', 'width': 22, 'align': 'right'},
+        {'header': 'القالب', 'key': lambda v: v.template.display_name_ar if v.template else '', 'width': 22, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda v: v.status_display_ar, 'width': 14, 'align': 'center'},
+        {'header': 'حالة الاعتماد', 'key': lambda v: v.approval_display_ar, 'width': 14, 'align': 'center'},
+        {'header': 'إجابات الاستبيان', 'key': lambda v: ' | '.join(f"{qa['question_text']}: {qa['answer']}" for qa in v.get_qa_display_list()) or 'لم يتم تسجيل إجابات بعد', 'width': 45, 'align': 'right'},
+        {'header': 'مزدوجة', 'key': lambda v: 'نعم' if v.doubled else 'لا', 'width': 10, 'align': 'center'},
+        {'header': 'المدة (ثواني)', 'key': 'duration', 'width': 14, 'align': 'center'},
+        {'header': 'العينات الموزعة', 'key': lambda v: ', '.join(f"{s.product.name} ({s.quantity})" for s in v.samples.all()), 'width': 30, 'align': 'right'},
     ]
-    ws.append(headers)
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    for v in qs:
-        samples_str = ", ".join([f"{s.product.name} ({s.quantity})" for s in v.samples.all()])
-        ws.append([
-            f"#{v.serial_num}",
-            v.contact.name if v.contact else "",
-            v.contact.code if v.contact else "",
-            v.date.strftime("%Y-%m-%d") if v.date else "",
-            v.owner.get_full_name() or v.owner.username if v.owner else "",
-            v.template.display_name_ar if v.template else "",
-            v.status_display_ar,
-            v.approval_display_ar,
-            "نعم" if v.is_successful else "لا",
-            "نعم" if v.doubled else "لا",
-            v.duration,
-            samples_str
-        ])
-
-    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response['Content-Disposition'] = f'attachment; filename="visits_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx"'
-    wb.save(response)
-    return response
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename=f"visits_{timezone.now().strftime('%Y%m%d_%H%M')}",
+        sheet_title="سجل الزيارات",
+        report_title="تقرير سجل الزيارات الميدانية",
+        user=request.user,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -3883,7 +3762,7 @@ def template_question_add(request, template_pk):
         text_ar = request.POST.get('text_ar', '').strip()
         text_en = request.POST.get('text_en', '').strip()
         question_type = request.POST.get('question_type', 'single_choice')
-        stage = request.POST.get('stage', 'all')
+        stage = 'end_only'
         is_required = request.POST.get('is_required') in ['true', '1', 'on']
         is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
         conditional_parent_id = request.POST.get('conditional_parent') or None
@@ -3952,7 +3831,7 @@ def template_question_edit(request, question_pk):
         text_ar = request.POST.get('text_ar', '').strip()
         text_en = request.POST.get('text_en', '').strip()
         question_type = request.POST.get('question_type', question.question_type)
-        stage = request.POST.get('stage', question.stage)
+        stage = 'end_only'
         is_required = request.POST.get('is_required') in ['true', '1', 'on']
         is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
         conditional_parent_id = request.POST.get('conditional_parent') or None
@@ -4041,6 +3920,7 @@ def template_questions_reorder(request, template_pk):
 
 
 @login_required
+@require_permission('activities:visits/list')
 def agenda_view(request):
     """
     Agenda Tab (جدول الاعمال)
@@ -4101,93 +3981,207 @@ def agenda_view(request):
     arabic_days = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
     weekday_ar = arabic_days[selected_date.weekday()]
 
-    # Query Planned visits for that day
-    plan_day = PlannedVisitDay.objects.filter(assignee=selected_rep, date=selected_date).first()
-    planned_items = []
-    planned_visit_ids = set()
     from master_data.models import LocationSettings
     loc_settings = LocationSettings.get_settings()
-
-    if plan_day:
-        raw_items = list(plan_day.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
-        for itm in raw_items:
-            if not itm.visit_id:
-                # Ensure every planned item has a linked auto-approved Visit record
-                next_serial = (Visit.objects.aggregate(m=Max('serial_num'))['m'] or 1000) + 1
-                approval_status, approved_by, approved_at = resolve_visit_creation_approval(
-                    request.user, itm.contact, True, loc_settings, visit_owner=selected_rep
-                )
-                v = Visit.objects.create(
-                    serial_num=next_serial,
-                    contact=itm.contact,
-                    template=itm.template,
-                    date=selected_date,
-                    status='planned',
-                    is_planned=True,
-                    approval_status=approval_status,
-                    approved_by=approved_by,
-                    approved_at=approved_at,
-                    allowed_distance=loc_settings.get_effective_tolerance(itm.template),
-                    owner=selected_rep,
-                    created_by=itm.plan_day.created_by or request.user,
-                    feedback=itm.notes,
-                    location_verified=False,
-                    verification_status='unverified',
-                    location_status='زيارة مخططة (بانتظار بدء التنفيذ والتحقق من الموقع)',
-                )
-                itm.visit = v
-                itm.save(update_fields=['visit'])
-            planned_items.append(itm)
-            if itm.visit_id:
-                planned_visit_ids.add(itm.visit_id)
-
-    # Query out-of-plan / ad-hoc visits executed for that day
-    unplanned_visits = Visit.objects.filter(
-        owner=selected_rep,
-        date=selected_date
-    ).exclude(
-        id__in=planned_visit_ids
-    ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num')
-
     user_can_manage = can_manage_approvals(request.user)
     can_bypass_start_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='start')
     can_request_gps_exception = loc_settings.can_user_request_distance_exception(request.user)
 
+    # Scoped VisitPlan query for grouping visits by plan under agenda (Requirement 4)
+    scoped_plans_qs = get_scoped_queryset(VisitPlan.objects.all(), request.user, 'visitplan', 'view').filter(
+        date=selected_date
+    ).select_related('assignee', 'created_by', 'approved_by').prefetch_related(
+        'planned_items__contact', 'planned_items__template', 'planned_items__visit',
+        'planned_items__contact__area', 'planned_items__contact__brick', 'visits'
+    )
+    if selected_rep:
+        scoped_plans_qs = scoped_plans_qs.filter(assignee=selected_rep)
+
+    plan_groups = []
+    planned_visit_ids = set()
+    covered_item_ids = set()
     agenda_visits = []
-    for itm in planned_items:
-        v = itm.visit
-        can_approve = bool(
+
+    for pl in scoped_plans_qs:
+        pl_items = list(pl.planned_items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        can_approve_pl = bool(
             user_can_manage and
-            v.owner_id != request.user.id and
-            can_user_access_object(request.user, v, 'approve')
+            pl.assignee_id != request.user.id and
+            can_user_access_object(request.user, pl, 'approve')
         )
-        can_start, _ = can_start_visit(v, request.user)
-        start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-        agenda_visits.append({
-            'type': 'planned',
-            'source_item': itm,
-            'visit': v,
-            'contact': itm.contact,
-            'template': itm.template or v.template,
-            'order': itm.order,
-            'status': v.status,
-            'status_display': v.status_display_ar,
-            'status_badge_class': v.status_badge_class,
-            'approval_status': v.approval_status,
-            'approval_display': v.approval_display_ar,
-            'approval_badge_class': v.approval_badge_class,
-            'is_executed': (v.status == 'finished'),
-            'can_approve': can_approve,
-            'can_start': can_start,
-            'start_questions': start_questions,
-            'effective_allowed_distance': v.effective_allowed_distance,
-            'detail_url': reverse('visit_detail', args=[v.pk]),
-            'action_url': reverse('visit_detail', args=[v.pk]),
-            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-            'notes': itm.notes,
+        group_visits = []
+        for itm in pl_items:
+            covered_item_ids.add(itm.id)
+            v = itm.visit
+            if v and v.status != 'cancelled' and (v.approval_status == 'approved' or v.is_planned or (user_can_manage and v.approval_status == 'pending')):
+                if v.id in planned_visit_ids:
+                    continue
+                planned_visit_ids.add(v.id)
+                can_approve = bool(
+                    user_can_manage and
+                    v.owner_id != request.user.id and
+                    can_user_access_object(request.user, v, 'approve')
+                )
+                can_start, _ = can_start_visit(v, request.user)
+                start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
+                v_data = {
+                    'type': 'planned',
+                    'source_item': itm,
+                    'visit': v,
+                    'contact': itm.contact,
+                    'template': itm.template or v.template,
+                    'order': itm.order,
+                    'status': v.status,
+                    'status_display': v.status_display_ar,
+                    'status_badge_class': v.status_badge_class,
+                    'approval_status': v.approval_status,
+                    'approval_display': v.approval_display_ar,
+                    'approval_badge_class': v.approval_badge_class,
+                    'is_executed': (v.status == 'finished'),
+                    'can_approve': can_approve,
+                    'can_start': can_start,
+                    'start_questions': start_questions,
+                    'effective_allowed_distance': v.effective_allowed_distance,
+                    'detail_url': reverse('visit_detail', args=[v.pk]),
+                    'action_url': reverse('visit_detail', args=[v.pk]),
+                    'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
+                }
+                group_visits.append(v_data)
+                agenda_visits.append(v_data)
+            elif not v:
+                v_data = {
+                    'type': 'planned',
+                    'source_item': itm,
+                    'visit': None,
+                    'contact': itm.contact,
+                    'template': itm.template,
+                    'order': itm.order,
+                    'status': 'planned',
+                    'status_display': 'مخططة (بانتظار التنفيذ)',
+                    'status_badge_class': 'bg-slate-100 text-slate-700 border-slate-200',
+                    'approval_status': pl.approval_status,
+                    'approval_display': pl.get_approval_status_display() if hasattr(pl, 'get_approval_status_display') else pl.approval_status,
+                    'approval_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200' if pl.approval_status == 'approved' else 'bg-amber-50 text-amber-700 border-amber-200',
+                    'is_executed': itm.is_executed,
+                    'can_approve': False,
+                    'can_start': False,
+                    'start_questions': [],
+                    'effective_allowed_distance': loc_settings.get_effective_tolerance(itm.template),
+                    'detail_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
+                    'action_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
+                    'action_label': 'بدء الزيارة',
+                }
+                group_visits.append(v_data)
+                agenda_visits.append(v_data)
+
+        plan_groups.append({
+            'plan': pl,
+            'plan_id': pl.plan_id,
+            'comment': pl.comment,
+            'approval_status': pl.approval_status,
+            'assignee': pl.assignee,
+            'can_approve': can_approve_pl,
+            'visits': group_visits,
+            'items_count': len(group_visits),
         })
 
-    for v in unplanned_visits:
+    # Legacy unlinked PlannedVisitDay items
+    legacy_plan_days = PlannedVisitDay.objects.filter(assignee=selected_rep, date=selected_date)
+    unlinked_visits = []
+    for pvd in legacy_plan_days:
+        raw_items = list(pvd.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        for itm in raw_items:
+            if itm.id in covered_item_ids:
+                continue
+            covered_item_ids.add(itm.id)
+            v = itm.visit
+            if v and v.status != 'cancelled' and (v.approval_status == 'approved' or v.is_planned):
+                if v.id in planned_visit_ids:
+                    continue
+                planned_visit_ids.add(v.id)
+                can_approve = bool(
+                    user_can_manage and
+                    v.owner_id != request.user.id and
+                    can_user_access_object(request.user, v, 'approve')
+                )
+                can_start, _ = can_start_visit(v, request.user)
+                start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
+                v_data = {
+                    'type': 'planned',
+                    'source_item': itm,
+                    'visit': v,
+                    'contact': itm.contact,
+                    'template': itm.template or v.template,
+                    'order': itm.order,
+                    'status': v.status,
+                    'status_display': v.status_display_ar,
+                    'status_badge_class': v.status_badge_class,
+                    'approval_status': v.approval_status,
+                    'approval_display': v.approval_display_ar,
+                    'approval_badge_class': v.approval_badge_class,
+                    'is_executed': (v.status == 'finished'),
+                    'can_approve': can_approve,
+                    'can_start': can_start,
+                    'start_questions': start_questions,
+                    'effective_allowed_distance': v.effective_allowed_distance,
+                    'detail_url': reverse('visit_detail', args=[v.pk]),
+                    'action_url': reverse('visit_detail', args=[v.pk]),
+                    'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
+                }
+                unlinked_visits.append(v_data)
+                agenda_visits.append(v_data)
+            elif not v:
+                v_data = {
+                    'type': 'planned',
+                    'source_item': itm,
+                    'visit': None,
+                    'contact': itm.contact,
+                    'template': itm.template,
+                    'order': itm.order,
+                    'status': 'planned',
+                    'status_display': 'مخططة (بانتظار التنفيذ)',
+                    'status_badge_class': 'bg-slate-100 text-slate-700 border-slate-200',
+                    'approval_status': 'approved',
+                    'approval_display': 'معتمدة',
+                    'approval_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    'is_executed': itm.is_executed,
+                    'can_approve': False,
+                    'can_start': False,
+                    'start_questions': [],
+                    'effective_allowed_distance': loc_settings.get_effective_tolerance(itm.template),
+                    'detail_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
+                    'action_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
+                    'action_label': 'بدء الزيارة',
+                }
+                unlinked_visits.append(v_data)
+                agenda_visits.append(v_data)
+
+    if unlinked_visits:
+        plan_groups.append({
+            'plan': None,
+            'plan_id': 'خطة عامة',
+            'comment': '',
+            'approval_status': 'approved',
+            'assignee': selected_rep,
+            'can_approve': False,
+            'visits': unlinked_visits,
+            'items_count': len(unlinked_visits),
+        })
+
+    # Query approved non-cancelled visits (plus pending for managers) not already shown via a VisitPlan/PlannedVisitDay
+    allowed_approvals = ['approved', 'pending'] if user_can_manage else ['approved']
+    unplanned_visits_qs = Visit.objects.filter(
+        owner=selected_rep,
+        date=selected_date,
+        approval_status__in=allowed_approvals,
+    ).exclude(
+        status='cancelled'
+    ).exclude(
+        id__in=planned_visit_ids
+    ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num')
+
+    unplanned_visit_cards = []
+    for v in unplanned_visits_qs:
         can_approve = bool(
             user_can_manage and
             v.owner_id != request.user.id and
@@ -4195,7 +4189,7 @@ def agenda_view(request):
         )
         can_start, _ = can_start_visit(v, request.user)
         start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-        agenda_visits.append({
+        u_data = {
             'type': 'unplanned',
             'source_item': None,
             'visit': v,
@@ -4216,8 +4210,9 @@ def agenda_view(request):
             'detail_url': reverse('visit_detail', args=[v.pk]),
             'action_url': reverse('visit_detail', args=[v.pk]),
             'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-            'notes': v.feedback,
-        })
+        }
+        unplanned_visit_cards.append(u_data)
+        agenda_visits.append(u_data)
 
     # Todos
     todos = AgendaTodo.objects.filter(user=selected_rep, date=selected_date).order_by('is_completed', '-created_at')
@@ -4236,6 +4231,8 @@ def agenda_view(request):
         'today_date': today.strftime('%Y-%m-%d'),
         'is_today': selected_date == today,
         'weekday_ar': weekday_ar,
+        'plan_groups': plan_groups,
+        'unplanned_visit_cards': unplanned_visit_cards,
         'agenda_visits': agenda_visits,
         'visits_count': len(agenda_visits),
         'todos': todos,

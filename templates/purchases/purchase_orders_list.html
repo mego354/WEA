@@ -25,7 +25,7 @@
             </button>
 
             <!-- Export to Excel -->
-            <a href="{% url 'purchase_orders_export' %}?search={{ search_query }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}"
+            <a href="{% url 'purchase_orders_export' %}?search={{ search_query|urlencode }}&payment_status={{ current_payment_status|default:'all'|urlencode }}&supplier={{ selected_supplier|default:''|urlencode }}&date_from={{ date_from|default:''|urlencode }}&date_to={{ date_to|default:''|urlencode }}&total_min={{ total_min|default:''|urlencode }}&total_max={{ total_max|default:''|urlencode }}&remaining_min={{ remaining_min|default:''|urlencode }}&remaining_max={{ remaining_max|default:''|urlencode }}"
                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير إلى Excel (.xlsx)">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
@@ -67,27 +67,27 @@
             </div>
         </div>
 
-        <!-- Card 3: Pending Manager Approval -->
+        <!-- Card 3: Total Paid -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">بانتظار الاعتماد</span>
-                <span class="p-1.5 sm:p-2 bg-amber-50 text-amber-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">pending_actions</span>
-            </div>
-            <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-sm sm:text-lg lg:text-xl font-black text-amber-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_pending|stat_number }}">{{ stats.total_pending|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-amber-600 block leading-tight mt-0.5">أمر بانتظار المدير</span>
-            </div>
-        </div>
-
-        <!-- Card 4: Settled / Invoiced Orders -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
-            <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">أوامر مرحلة ومفوترة</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المسدد</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">verified</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
-                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_settled|stat_number }}">{{ stats.total_settled|stat_number }}</span>
-                <span class="text-[10px] sm:text-xs text-emerald-600 block leading-tight mt-0.5">أمر مكتمل</span>
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-emerald-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_paid|stat_number }} ج.م">{{ stats.total_paid|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-emerald-600 block leading-tight mt-0.5">مسدد فعلياً</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Total Remaining -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+            <div class="flex items-start justify-between gap-1.5 min-w-0">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المتبقي</span>
+                <span class="p-1.5 sm:p-2 bg-rose-50 text-rose-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">pending_actions</span>
+            </div>
+            <div class="mt-2 sm:mt-3 min-w-0">
+                <span class="text-sm sm:text-lg lg:text-xl font-black text-rose-700 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_remaining|stat_number }} ج.م">{{ stats.total_remaining|stat_number }} <span class="text-[10px] sm:text-xs font-normal">ج.م</span></span>
+                <span class="text-[10px] sm:text-xs text-rose-600 block leading-tight mt-0.5">مستحق للموردين</span>
             </div>
         </div>
     </div>
@@ -100,6 +100,7 @@
                 {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
                 <div class="relative flex-1 w-full sm:w-auto">
                     <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالمورد أو رقم الأمر أو المنطقة..."
+                       data-smart-search-module="purchase_orders"
                            class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
                     <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
                 </div>
@@ -217,10 +218,10 @@
                             {{ o.outstanding_balance|intcomma }} جنيه
                         </td>
 
-                        <!-- Status Badge -->
-                        <td data-col="status" class="py-3.5 px-4">
-                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ o.status_badge_class }}">
-                                {{ o.status_label_en }}
+                        <!-- Payment Status Badge -->
+                        <td data-col="status" class="py-3.5 px-4 text-center">
+                            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ o.payment_status_badge_class }}">
+                                {{ o.payment_status_display_ar }}
                             </span>
                         </td>
 
@@ -230,12 +231,33 @@
                         </td>
 
                         <!-- Actions -->
-                        <td data-col="actions" class="py-3.5 px-4 text-center">
-                            <a href="{% url 'purchase_order_detail' o.id %}"
-                               class="p-1.5 rounded-lg text-slate-400 hover:text-[#27bebe] hover:bg-teal-50 transition-colors inline-block"
-                               title="عرض التفاصيل">
-                                <span class="material-symbols-outlined text-lg">visibility</span>
-                            </a>
+                        <td data-col="actions" class="py-3.5 px-4 text-center" onclick="event.stopPropagation()">
+                            <div data-row-menu-host class="inline-flex items-center justify-center">
+                                <button type="button" data-row-menu-trigger onclick="openRowActionMenu(this, event)" aria-haspopup="true" aria-expanded="false"
+                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
+                                    <span class="material-symbols-outlined text-lg">more_vert</span>
+                                </button>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'purchase_order_detail' o.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
+                                        <span>عرض التفاصيل</span>
+                                    </a>
+                                    {% if request.user|has_permission:'purchases:orders/pdf' %}
+                                    <button type="button" onclick="openOrderPdfModal('{% url 'purchase_order_pdf' o.id %}', '{{ o.order_number|escapejs }}', 'purchaseorder')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                                        <span>تصدير PDF</span>
+                                    </button>
+                                    {% endif %}
+                                    {% if perms.purchases.delete_purchaseorder or user.is_superuser %}
+                                    <div class="h-px bg-slate-100 my-1"></div>
+                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_delete' o.id %}', title: 'حذف أمر الشراء', itemName: '{{ o.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر الشراء رقم {{ o.order_number|escapejs }}؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
+                                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                        <span>حذف</span>
+                                    </button>
+                                    {% endif %}
+                                </template>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -321,26 +343,54 @@
                 </select>
             </div>
 
-            <!-- Status -->
+            <!-- Payment Status (Requirement B3) -->
             <div>
-                <label class="block font-bold text-slate-700 mb-2">الحالة</label>
-                <select name="status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
-                    <option value="all">كافة الحالات</option>
-                    <option value="settled" {% if current_status == 'settled' %}selected{% endif %}>Settled (تم الترحيل للحسابات)</option>
-                    <option value="picked" {% if current_status == 'picked' %}selected{% endif %}>Picked (دخل المخزن)</option>
-                    <option value="approved" {% if current_status == 'approved' %}selected{% endif %}>Approved (معتمد)</option>
-                    <option value="pending" {% if current_status == 'pending' %}selected{% endif %}>Pending (قيد الانتظار)</option>
-                    <option value="rejected" {% if current_status == 'rejected' %}selected{% endif %}>Rejected (مرفوض)</option>
+                <label class="block font-bold text-slate-700 mb-2">حالة السداد التجارية</label>
+                <select name="payment_status" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    <option value="all">كافة حالات السداد</option>
+                    {% for val, label in payment_statuses %}
+                    <option value="{{ val }}" {% if current_payment_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
                 </select>
+            </div>
+
+            <!-- Financial Total Range (Requirement B1) -->
+            <div>
+                <label class="block font-bold text-slate-700 mb-2">النطاق المالي لقيمة الطلب (ج.م)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <input type="number" step="0.01" name="total_min" value="{{ selected_total_min|default:'' }}" placeholder="من قيمة..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    </div>
+                    <div>
+                        <input type="number" step="0.01" name="total_max" value="{{ selected_total_max|default:'' }}" placeholder="إلى قيمة..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Financial Remaining Balance Range (Requirement B1) -->
+            <div>
+                <label class="block font-bold text-slate-700 mb-2">نطاق الرصيد المتبقي (ج.م)</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <input type="number" step="0.01" name="remaining_min" value="{{ selected_remaining_min|default:'' }}" placeholder="من رصيد..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    </div>
+                    <div>
+                        <input type="number" step="0.01" name="remaining_max" value="{{ selected_remaining_max|default:'' }}" placeholder="إلى رصيد..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
+                    </div>
+                </div>
             </div>
 
             <!-- Date Range -->
             <div>
-                <label class="block font-bold text-slate-700 mb-2">نطاق التاريخ</label>
+                <label class="block font-bold text-slate-700 mb-2">نطاق تاريخ الطلب</label>
                 <div class="grid grid-cols-2 gap-2">
-                    <input type="date" name="date_from" value="{{ date_from|default:'' }}"
+                    <input type="date" name="date_from" value="{{ selected_date_from|default:'' }}"
                            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
-                    <input type="date" name="date_to" value="{{ date_to|default:'' }}"
+                    <input type="date" name="date_to" value="{{ selected_date_to|default:'' }}"
                            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
                 </div>
             </div>
@@ -349,7 +399,7 @@
             <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                 <a href="{% url 'purchase_orders_list' %}"
                    class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
-                    اعادة تعيين
+                    إعادة تعيين
                 </a>
                 <button type="submit"
                         class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm flex-1">
