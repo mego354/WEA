@@ -117,6 +117,8 @@ This document outlines the user interface specifications, front-end architecture
 - **Unified Date Range Filter (`templates/components/date_range_filter.html`, `master_data/date_filter_utils.py`)**:
   - Transactional list pages default to `all_time`; Reports, Performance views, and `/home/` default to `this_month`.
 - **Bottom-Only Form Primary Submit Actions**:
-  - Create/edit forms place primary submit actions at the bottom of the form only.
+  - Create/edit forms and active visit completion forms (`visit_detail.html`) place primary submit actions at the bottom below all questions and fields across desktop, tablet, and mobile (with `save_draft` and unanswered-question client-side notices removed).
+- **Inventory Memo Form Consistency (`templates/inventory/memo_create.html`)**:
+  - Uses the unified white `ملخص الإجماليات` breakdown card, responsive desktop-table / mobile-card item rows with `md:hidden` mobile cost fields, generous column widths (`min-w-[260px]` product, `min-w-[145px]` expiry date), and read-only stock-cost display for outward memos.
 - **Configurable PDF Invoices & Account Statements (`templates/components/pdf_export_modal.html`, `master_data/pdf_service.py`)**:
   - A4 RTL ReportLab PDFs with Arabic reshaping/BiDi, `CompanyProfile` branding, page numbers (`صفحة X من Y`), section toggles for orders/returns, and opening/running/closing balance statements.

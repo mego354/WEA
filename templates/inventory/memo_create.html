@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto pb-16 space-y-6">
+<div class="max-w-6xl mx-auto pb-16 space-y-6">
 
     <!-- Header -->
     <div class="pb-4 border-b border-slate-200">
@@ -91,17 +91,17 @@
             </div>
 
             <!-- Responsive Table & Cards -->
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto scrollbar-thin">
                 <table class="w-full text-right text-xs" id="itemsTable">
                     <thead class="hidden md:table-header-group bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                         <tr>
                             <th class="py-2.5 px-2 w-10 text-center">#</th>
-                            <th class="py-2.5 px-3 min-w-[220px]">المنتج</th>
-                            <th class="py-2.5 px-2 w-24 text-center">الكمية</th>
-                            <th class="py-2.5 px-2 w-28 text-center">تكلفة الوحدة</th>
-                            <th class="py-2.5 px-2 w-28 text-center">رقم التشغيل {% if profile.is_batch_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
-                            <th class="py-2.5 px-2 w-32 text-center">تاريخ الصلاحية {% if profile.is_expiry_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
-                            <th class="py-2.5 px-2 w-24 text-center">المجموع</th>
+                            <th class="py-2.5 px-3 min-w-[260px]">المنتج</th>
+                            <th class="py-2.5 px-2 min-w-[100px] text-center">الكمية</th>
+                            <th class="py-2.5 px-2 min-w-[115px] text-center">تكلفة الوحدة</th>
+                            <th class="py-2.5 px-2 min-w-[130px] text-center">رقم التشغيل {% if profile.is_batch_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
+                            <th class="py-2.5 px-2 min-w-[145px] text-center">تاريخ الصلاحية {% if profile.is_expiry_mandatory %}<span class="text-rose-500">*</span>{% endif %}</th>
+                            <th class="py-2.5 px-2 min-w-[110px] text-left">المجموع</th>
                             <th class="py-2.5 px-2 w-10 text-center">حذف</th>
                         </tr>
                     </thead>
@@ -110,21 +110,26 @@
                     </tbody>
                 </table>
             </div>
+            <div id="memo-row-alert" class="hidden p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold"></div>
         </div>
 
-        <!-- Summary Card -->
-        <div class="bg-slate-900 text-white rounded-xl p-4 sm:p-5 shadow-sm grid grid-cols-3 gap-4 text-center sm:text-right">
-            <div>
-                <div class="text-[11px] text-slate-400">عدد البنود</div>
-                <div id="memo-total-items" class="text-base sm:text-lg font-black text-white font-mono">0</div>
+        <!-- Totals Breakdown Card (Unified with Sales / Purchases) -->
+        <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3 text-xs">
+            <h3 class="font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">receipt</span>
+                <span>ملخص الإجماليات</span>
+            </h3>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>عدد البنود:</span>
+                <span id="memo-total-items" class="font-bold text-slate-800 font-mono">0</span>
             </div>
-            <div>
-                <div class="text-[11px] text-slate-400">إجمالي الكميات</div>
-                <div id="memo-total-qty" class="text-base sm:text-lg font-black text-[#27bebe] font-mono">0</div>
+            <div class="flex items-center justify-between text-slate-600">
+                <span>إجمالي الكميات:</span>
+                <span id="memo-total-qty" class="font-bold text-slate-800 font-mono">0</span>
             </div>
-            <div>
-                <div class="text-[11px] text-slate-400">التكلفة التقديرية</div>
-                <div id="memo-total-value" class="text-base sm:text-lg font-black text-emerald-400 font-mono">0.00 ج.م</div>
+            <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
+                <span class="font-black text-slate-900">التكلفة التقديرية الإجمالية:</span>
+                <span id="memo-total-value" class="font-black text-[#27bebe] text-xl font-mono">0.00 ج.م</span>
             </div>
         </div>
 
@@ -228,13 +233,16 @@
         const row = document.getElementById(`row-${index}`);
         if (!row) return;
         const qty = parseFloat(row.querySelector('input[name="quantity[]"]')?.value || 0) || 0;
-        const cost = parseFloat(row.querySelector('input[name="unit_cost[]"]')?.value || 0) || 0;
+        const costInput = row.querySelector('input[name="unit_cost[]"]');
+        const cost = parseFloat(costInput?.value || 0) || 0;
+        const mobileCostInput = row.querySelector(`input[name="unit_cost_mobile_${index}"]`);
+        if (mobileCostInput && costInput && mobileCostInput.value !== costInput.value) {
+            mobileCostInput.value = costInput.value;
+        }
         const total = qty * cost;
         const totalEl = document.getElementById(`row-total-${index}`);
-        const totalMobileEl = document.getElementById(`row-total-mobile-${index}`);
-        const formatted = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const formatted = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ج.م';
         if (totalEl) totalEl.innerText = formatted;
-        if (totalMobileEl) totalMobileEl.innerText = formatted;
         updateMemoSummary();
     }
 
@@ -278,18 +286,21 @@
         const batch = itemData ? (itemData.batch_number || '') : '';
         const expiry = itemData ? (itemData.expiry_date || '') : '';
 
+        const costReadonlyAttr = isMemoInward ? 'required' : 'readonly tabindex="-1"';
+        const costBgClass = isMemoInward ? 'bg-slate-50 focus:bg-white focus:border-[#27bebe]' : 'bg-slate-100 text-slate-600 cursor-not-allowed';
+
         const costFieldDesktop = `
             <td class="hidden md:table-cell py-2 px-2">
-                <input type="number" step="0.01" min="0" name="unit_cost[]" value="${cost}" oninput="updateMemoRowTotal(${index})" ${isMemoInward ? 'required' : ''}
-                       class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+                <input type="number" step="0.01" min="0" name="unit_cost[]" value="${cost}" oninput="updateMemoRowTotal(${index})" ${costReadonlyAttr}
+                       class="w-full text-center px-2 py-1.5 ${costBgClass} border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none">
             </td>
         `;
 
         const costFieldMobile = `
-            <div>
-                <label class="block text-[10px] font-bold text-slate-600 mb-0.5">تكلفة الوحدة</label>
-                <input type="number" step="0.01" min="0" name="unit_cost_mobile_${index}" value="${cost}" oninput="syncMobileCost(${index}, this)"
-                       class="w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
+            <div class="md:hidden">
+                <label class="block text-[10px] font-bold text-slate-600 mb-0.5">تكلفة الوحدة${isMemoInward ? '' : ' (تلقائي)'}</label>
+                <input type="number" step="0.01" min="0" name="unit_cost_mobile_${index}" value="${cost}" oninput="syncMobileCost(${index}, this)" ${isMemoInward ? '' : 'readonly tabindex="-1"'}
+                       class="w-full text-center px-2 py-1.5 ${isMemoInward ? 'bg-white' : 'bg-slate-100 text-slate-600'} border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-[#27bebe]">
             </div>
         `;
 
@@ -387,12 +398,15 @@
     function removeRow(index) {
         const row = document.getElementById(`row-${index}`);
         const allRows = document.querySelectorAll('#itemsTableBody .item-row');
+        const alertBox = document.getElementById('memo-row-alert');
         if (allRows.length > 1) {
             if (row) row.remove();
+            if (alertBox) alertBox.classList.add('hidden');
             renumberMemoRows();
             updateMemoSummary();
-        } else {
-            alert('يجب وجود بند واحد على الأقل في الإذن المخزني.');
+        } else if (alertBox) {
+            alertBox.innerText = 'يجب وجود بند واحد على الأقل في الإذن المخزني.';
+            alertBox.classList.remove('hidden');
         }
     }
 

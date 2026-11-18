@@ -151,6 +151,7 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
 | Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
 | GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | If granted (`activities:visits/bypass_gps`) / exception via `activities:visits/gps_request_exception` |
+| GPS Suspicious / Fake Location Visibility & Filter | Yes (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | No (never exposed to rep without permission) |
 | Agreement Creation & Edit | Yes | Subordinates (`activities:agreements/create`, `_edit`) | If granted | Own (Assigned Brick) |
 | Agreement Deletion | Yes (`activities:agreements/delete`) | Subordinates | If granted | Own |
 | Agreement Completion (`done`) | Yes (`activities:agreements/approve`) | Subordinates (Not Self) | No | No |

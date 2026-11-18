@@ -102,6 +102,16 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
             visit.distance = Decimal(str(round(dist, 2)))
             visit.distance_discrepancy = max(Decimal('0.00'), visit.distance - visit.allowed_distance)
 
+    # Non-blocking server-side GPS integrity evaluation (never alters distance rules or blocks workflow)
+    from activities.gps_integrity import evaluate_visit_gps_integrity
+    evaluate_visit_gps_integrity(
+        visit,
+        user,
+        contact,
+        stage=stage,
+        client_telemetry=kwargs.get('client_telemetry'),
+    )
+
     # Handle explicit bypass:
     # All users who have activities:visits/bypass_gps (or superadmin) can ignore distance.
     # Bypassing distance will NOT make the visit need an approval.
@@ -378,35 +388,6 @@ def can_submit_answers(visit, user):
         return False, f"لا يمكن تسجيل الإجابات لأن الزيارة ليست جارية (حالتها: {visit.status_display_ar})."
 
     return True, ""
-
-
-def save_visit_answers(visit, user, answers, detailed_product_ids=None):
-    """
-    Saves draft answers and detailing during an active visit without completing/ending it.
-    Visit status strictly remains 'started'.
-    """
-    from django.db import transaction
-    from catalog.models import Product
-
-    can_submit, err = can_submit_answers(visit, user)
-    if not can_submit:
-        raise ValidationError(err)
-
-    with transaction.atomic():
-        visit.questionnaire_answers = answers or {}
-
-        if visit.template and visit.template.is_product_detailing_supported():
-            if detailed_product_ids is not None:
-                eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                historical_ids = set(visit.detailed_products.values_list('id', flat=True))
-                allowed_ids = eligible_ids | historical_ids
-                valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
-                visit.detailed_products.set(valid_ids)
-        else:
-            visit.detailed_products.clear()
-
-        visit.save()
-        return visit
 
 
 def can_end_visit(visit, user, answers=None):

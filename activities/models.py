@@ -533,6 +533,26 @@ class Visit(models.Model):
     gps_forced_end_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_gps_forced_end', verbose_name="تجاوز GPS الإنهاء بواسطة")
     gps_forced_end_at = models.DateTimeField(null=True, blank=True, verbose_name="وقت تجاوز GPS الإنهاء")
 
+    # Server-Side GPS Integrity / Suspicious Location Detection (Read-only to non-authorized roles)
+    GPS_INTEGRITY_STATUS_CHOICES = [
+        ('normal', 'طبيعي'),
+        ('suspicious', 'مشبوه'),
+        ('confirmed_manipulation', 'تلاعب مؤكد'),
+        ('undetermined', 'غير محدد'),
+    ]
+    gps_integrity_status = models.CharField(
+        max_length=32,
+        choices=GPS_INTEGRITY_STATUS_CHOICES,
+        default='normal',
+        db_index=True,
+        verbose_name="حالة نزاهة الموقع (GBS)"
+    )
+    gps_integrity_checked_at = models.DateTimeField(null=True, blank=True, verbose_name="وقت فحص نزاهة الموقع")
+    gps_suspicion_signals = models.JSONField(default=list, blank=True, verbose_name="إشارات الاشتباه في الموقع")
+    gps_suspicion_reason = models.TextField(blank=True, default='', verbose_name="سبب تصنيف الموقع")
+    gps_integrity_context = models.JSONField(default=dict, blank=True, verbose_name="سياق فحص نزاهة الموقع")
+    gps_detector_version = models.CharField(max_length=20, blank=True, default='v1', verbose_name="إصدار محرك فحص الموقع")
+
     bypassed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_bypassed', verbose_name="تم التجاوز بواسطة")
     bypassed_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ ووقت التجاوز")
     bypass_reason = models.CharField(max_length=255, blank=True, default='', verbose_name="سبب التجاوز")
@@ -789,6 +809,26 @@ class Visit(models.Model):
             'unverified': 'غير محقق',
         }
         return mapping.get(self.verification_status, self.verification_status)
+
+    @property
+    def gps_integrity_status_display_ar(self):
+        mapping = {
+            'normal': 'طبيعي',
+            'suspicious': 'مشبوه',
+            'confirmed_manipulation': 'تلاعب مؤكد',
+            'undetermined': 'غير محدد',
+        }
+        return mapping.get(self.gps_integrity_status, self.gps_integrity_status)
+
+    @property
+    def gps_integrity_badge_class(self):
+        mapping = {
+            'normal': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            'suspicious': 'bg-amber-50 text-amber-800 border-amber-300',
+            'confirmed_manipulation': 'bg-rose-50 text-rose-800 border-rose-300',
+            'undetermined': 'bg-slate-100 text-slate-600 border-slate-200',
+        }
+        return mapping.get(self.gps_integrity_status, 'bg-slate-100 text-slate-600 border-slate-200')
 
 
 class PlannedVisitItem(models.Model):

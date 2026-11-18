@@ -326,6 +326,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('activities:visits/export', 'تصدير تقارير الزيارات الميدانية إلى Excel', 'export'),
                     ('activities:visits/bypass_gps', 'تجاوز قيد المسافة (صلاحية مدير / مشرف)', 'workflow'),
                     ('activities:visits/gps_request_exception', 'طلب استثناء تجاوز المسافة الجغرافية (GBS)', 'workflow'),
+                    ('activities:visits/view_gps_suspicion', 'عرض وفلترة تنبيهات الموقع المشبوه أو المزيف (GBS)', 'admin'),
                 ]
             },
             'plans': {

@@ -1622,16 +1622,23 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
 
         today = timezone.now().date()
 
-        # Detailing saved for DR visit
+        # Detailing saved for DR visit on completion
         v_dr = Visit.objects.create(
             contact=self.clinic_contact, template=self.tmpl_clinics_hospitals,
             owner=self.superuser, date=today, status='started'
         )
-        self.client.login(username='admin_boss', password='Password123!')
-        self.client.post(reverse('visit_detail', args=[v_dr.pk]), {
-            'action': 'save_draft',
+        self.client.force_login(self.superuser)
+        dr_payload = {
+            'action': 'complete',
+            'force_bypass_location': '1',
+            'bypass_reason': 'test detailing',
+            'detailed_products_submitted': '1',
             'detailed_products': [self.product_a.id, self.product_b.id]
-        })
+        }
+        for q in self.tmpl_clinics_hospitals.get_active_questions():
+            if q.is_required:
+                dr_payload[f'question_{q.id}'] = 'Yes'
+        self.client.post(reverse('visit_detail', args=[v_dr.pk]), dr_payload)
         v_dr.refresh_from_db()
         self.assertEqual(v_dr.detailed_products.count(), 2)
 
@@ -1641,7 +1648,9 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
             owner=self.superuser, date=today, status='started'
         )
         self.client.post(reverse('visit_detail', args=[v_coaching.pk]), {
-            'action': 'save_draft',
+            'action': 'complete',
+            'latitude': '30.0444',
+            'longitude': '31.2357',
             'detailed_products': [self.product_a.id]
         })
         v_coaching.refresh_from_db()
@@ -6490,3 +6499,155 @@ class Phase2VisitsTemplatesAndQADisplayTests(TestCase):
             exp = self.client.get(reverse(url_name))
             self.assertEqual(exp.status_code, 200)
             self.assertIn('spreadsheetml.sheet', exp['Content-Type'])
+
+
+class VisitGpsIntegrityAndPermissionTests(TestCase):
+    """Tests for server-side GPS integrity detection, layout cleanup, and dedicated permission."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from django.core.management import call_command
+        from accounts.models import Role, Permission
+        from contacts.models import Contact
+        from master_data.models import Area, LocationSettings
+        from activities.models import Visit
+
+        call_command('setup_permissions', '--no-audit')
+        User = get_user_model()
+
+        self.cairo = Area.objects.create(name='القاهرة-GBS', code='CAI-GBS')
+        self.giza = Area.objects.create(name='الجيزة-GBS', code='GIZ-GBS')
+
+        self.super_role = Role.objects.get(name='superadmin')
+        self.mgr_role = Role.objects.get(name='manager')
+        self.rep_role = Role.objects.get(name='rep')
+
+        self.superadmin = User.objects.create_superuser(
+            username='gbs_super', email='gbs_super@wea.com', password='TestPassword123!', role=self.super_role
+        )
+        self.manager = User.objects.create_user(
+            username='gbs_mgr', email='gbs_mgr@wea.com', password='TestPassword123!', role=self.mgr_role
+        )
+        self.manager.assigned_areas.add(self.cairo)
+
+        self.rep = User.objects.create_user(
+            username='gbs_rep', email='gbs_rep@wea.com', password='TestPassword123!', role=self.rep_role
+        )
+        self.rep.assigned_areas.add(self.cairo)
+
+        self.contact_a = Contact.objects.create(
+            name='صيدلية أ', area=self.cairo, latitude=Decimal('30.0444000'), longitude=Decimal('31.2357000'), created_by=self.rep
+        )
+        self.contact_b = Contact.objects.create(
+            name='صيدلية ب', area=self.cairo, latitude=Decimal('30.1444000'), longitude=Decimal('31.3357000'), created_by=self.rep
+        )
+        LocationSettings.objects.update_or_create(pk=1, defaults={'verify_visits': True, 'tolerance': 500})
+
+    def test_gps_integrity_normal_suspicious_confirmed_and_undetermined(self):
+        from activities.models import Visit
+        from activities.services import verify_visit_location
+
+        today = timezone.localdate()
+        # 1. Undetermined when coords missing
+        v_none = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=today, status='started')
+        verify_visit_location(v_none, self.rep, self.contact_a, visit_lat=None, visit_lng=None, strict_distance=False)
+        self.assertEqual(v_none.gps_integrity_status, 'undetermined')
+
+        # 2. Normal
+        from datetime import timedelta
+        v_norm = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=today, status='started')
+        verify_visit_location(v_norm, self.rep, self.contact_a, visit_lat='30.0444000', visit_lng='31.2357000', device_accuracy='12', strict_distance=True)
+        v_norm.ended_at = timezone.now() - timedelta(minutes=10)
+        v_norm.save()
+        self.assertEqual(v_norm.gps_integrity_status, 'normal')
+        self.assertTrue(v_norm.location_verified)
+
+        # 3. Suspicious (zero accuracy)
+        v_acc = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=today, status='started')
+        verify_visit_location(v_acc, self.rep, self.contact_a, visit_lat='30.0444000', visit_lng='31.2357000', device_accuracy='0', strict_distance=True)
+        self.assertEqual(v_acc.gps_integrity_status, 'suspicious')
+        self.assertIn('invalid_or_zero_accuracy', v_acc.gps_suspicion_signals)
+        self.assertTrue(v_acc.location_verified)  # Distance validation preserved!
+
+        # 4. Confirmed manipulation (impossible speed > 500 km/h + exact coordinate clone)
+        from datetime import timedelta
+        v_far = Visit.objects.create(contact=self.contact_b, owner=self.rep, date=today, status='started')
+        verify_visit_location(v_far, self.rep, self.contact_b, visit_lat='30.1444000', visit_lng='31.3357000', device_accuracy='10', strict_distance=False)
+        v_far.ended_at = timezone.now() - timedelta(seconds=30)
+        v_far.save()
+
+        v_clone = Visit.objects.create(contact=self.contact_b, owner=self.rep, date=today, status='started')
+        # Using contact_a's exact coords for contact_b (>14km away) 30 seconds after v_far
+        verify_visit_location(v_clone, self.rep, self.contact_b, visit_lat='30.0444000', visit_lng='31.2357000', device_accuracy='10', strict_distance=False)
+        self.assertEqual(v_clone.gps_integrity_status, 'confirmed_manipulation')
+        self.assertIn('impossible_travel_speed', v_clone.gps_suspicion_signals)
+        self.assertIn('exact_coordinate_clone', v_clone.gps_suspicion_signals)
+
+    def test_gps_integrity_failure_never_breaks_validation(self):
+        from unittest.mock import patch
+        from activities.models import Visit
+        from activities.services import verify_visit_location
+
+        v = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=timezone.localdate(), status='started')
+        with patch('activities.models.Visit.objects.filter', side_effect=RuntimeError('DB hiccup')):
+            verify_visit_location(v, self.rep, self.contact_a, visit_lat='30.0444000', visit_lng='31.2357000', strict_distance=True)
+        self.assertTrue(v.location_verified)
+        self.assertEqual(v.gps_integrity_status, 'undetermined')
+
+    def test_permission_controls_detail_list_and_filter_visibility(self):
+        from django.urls import reverse
+        from accounts.models import Permission
+        from activities.models import Visit
+
+        v_susp = Visit.objects.create(
+            contact=self.contact_a, owner=self.rep, date=timezone.localdate(),
+            status='finished', gps_integrity_status='suspicious',
+            gps_suspicion_signals=['impossible_travel_speed'],
+            gps_suspicion_reason='انتقال غير منطقي'
+        )
+        v_norm = Visit.objects.create(
+            contact=self.contact_a, owner=self.rep, date=timezone.localdate(),
+            status='finished', gps_integrity_status='normal'
+        )
+
+        # Manager WITHOUT permission cannot see card, column, or filter
+        self.client.force_login(self.manager)
+        det_no = self.client.get(reverse('visit_detail', args=[v_susp.pk]))
+        self.assertEqual(det_no.status_code, 200)
+        self.assertNotContains(det_no, 'gps-integrity-card')
+        self.assertNotContains(det_no, 'انتقال غير منطقي')
+
+        lst_no = self.client.get(reverse('visits_list') + '?gps_integrity=suspicious')
+        self.assertEqual(lst_no.status_code, 200)
+        self.assertNotContains(lst_no, 'نزاهة الموقع')
+        # Backend ignored ?gps_integrity=suspicious so both visits appear
+        self.assertEqual(lst_no.context['total_count'], 2)
+
+        # Grant permission to manager role -> now visible and filterable
+        perm = Permission.objects.get(codename='activities:visits/view_gps_suspicion')
+        self.mgr_role.permissions.add(perm)
+
+        det_yes = self.client.get(reverse('visit_detail', args=[v_susp.pk]))
+        self.assertContains(det_yes, 'gps-integrity-card')
+        self.assertContains(det_yes, 'انتقال غير منطقي')
+
+        lst_yes = self.client.get(reverse('visits_list') + '?gps_integrity=suspicious')
+        self.assertContains(lst_yes, 'نزاهة الموقع')
+        self.assertEqual(lst_yes.context['total_count'], 1)
+        self.assertEqual(lst_yes.context['visits'][0].pk, v_susp.pk)
+
+    def test_started_visit_detail_layout_and_removed_draft_elements(self):
+        from django.urls import reverse
+        from activities.models import Visit
+
+        v = Visit.objects.create(
+            contact=self.contact_a, owner=self.rep, date=timezone.localdate(),
+            status='started', approval_status='approved'
+        )
+        self.client.force_login(self.rep)
+        res = self.client.get(reverse('visit_detail', args=[v.pk]))
+        self.assertEqual(res.status_code, 200)
+        self.assertNotContains(res, 'save_draft')
+        self.assertNotContains(res, 'sticky bottom-4')
+        self.assertNotContains(res, 'gps-integrity-card')
+

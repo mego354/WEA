@@ -48,6 +48,11 @@ stateDiagram-v2
   - Forced GPS bypass at start is recorded distinctly in `gps_forced_start`, `gps_forced_start_by`, and `gps_forced_start_at`.
   - Forced GPS bypass at end is recorded distinctly in `gps_forced_end`, `gps_forced_end_by`, and `gps_forced_end_at`.
   - Both actions generate separate `ApprovalAuditLog` records and display dedicated badges in visit list and detail views.
+- **Server-Side GPS Integrity / Suspicious Location Detection (`activities/gps_integrity.py`)**:
+  - Runs non-blockingly inside `verify_visit_location()` at start/end without altering `distance`/`allowed_distance` rules, warning the rep, or auto-rejecting visits.
+  - Evaluates technically supported web/server signals (`invalid_or_zero_accuracy`, `impossible_travel_speed`, `exact_coordinate_clone`, `stale_or_drifted_timestamp`). Browser-based detection cannot inspect OS-level mock location apps/APIs; VPN/IP signals are never treated as standalone proof of GPS spoofing.
+  - Classifies `Visit.gps_integrity_status` as `normal`, `suspicious`, `confirmed_manipulation` (only when multiple high-confidence signals concur), or `undetermined` (missing coords or evaluation failure).
+  - Visibility in `visit_detail`, `visits_list`, `visits_list` filtering (`?gps_integrity=`), and `visits_export` is strictly gated on `activities:visits/view_gps_suspicion` + `ScopeResolutionService`.
 - **Evidence Photos Removed**:
   - Photo evidence capture, storage, and permission (`activities:visits/evidence`) have been completely removed across the entire application.
 

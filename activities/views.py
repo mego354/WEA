@@ -33,11 +33,12 @@ from master_data.models import Area
 from catalog.models import Product
 from .services import (
     verify_visit_location, can_start_visit, start_visit,
-    can_submit_answers, save_visit_answers, can_end_visit, end_visit,
+    can_submit_answers, can_end_visit, end_visit,
     build_visit_timeline, can_delete_unended_visit, delete_unended_visit,
     can_edit_visit_answers, update_visit_questionnaire_answers,
     build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields
 )
+from master_data.date_filter_utils import resolve_date_range
 from master_data.search_utils import filter_by_arabic_search
 from accounts.scope_service import ScopeResolutionService
 from accounts.permissions import (
@@ -165,7 +166,7 @@ def agreements_list(request):
     qs = get_scoped_queryset(qs, request.user, 'agreement')
 
     # Search with Arabic normalization
-    q = request.GET.get('q', '').strip()
+    q = (request.GET.get('search') or request.GET.get('q') or '').strip()
     active_filters = []
 
     if q:
@@ -176,7 +177,7 @@ def agreements_list(request):
             raw_fields=['customer__code'],
             numeric_id_field='serial_num'
         )
-        active_filters.append({'label': f'بحث: {q}', 'param': 'q'})
+        active_filters.append({'label': f'بحث: {q}', 'param': 'search'})
 
     # Type Filter
     type_id = request.GET.get('type')
@@ -259,14 +260,13 @@ def agreements_list(request):
         except Exception:
             brick_id = ''
 
-    # Date Range Filters
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
-    if date_from:
-        qs = qs.filter(date__gte=date_from)
+    # Date Range Filters (Unified resolve_date_range)
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
+    if parsed_from:
+        qs = qs.filter(date__gte=parsed_from)
         active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
-    if date_to:
-        qs = qs.filter(date__lte=date_to)
+    if parsed_to:
+        qs = qs.filter(date__lte=parsed_to)
         active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
 
     # Summary Metrics (matches reference aggregate API - committed amount is done/approved)
@@ -360,6 +360,18 @@ def agreements_list(request):
         'new_count': new_count,
     }
 
+    for a in page_obj.object_list:
+        a.user_can_edit = bool(
+            a.status == 'new'
+            and has_perm_or_admin(request.user, 'activities:agreements/edit')
+            and can_user_access_object(request.user, a, 'edit')
+        )
+        a.user_can_delete = bool(
+            a.status == 'new'
+            and has_perm_or_admin(request.user, 'activities:agreements/delete')
+            and can_user_access_object(request.user, a, 'delete')
+        )
+
     context = {
         'page_obj': page_obj,
         'paginator': paginator,
@@ -384,6 +396,9 @@ def agreements_list(request):
         'selected_brick': brick_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
+        'active_preset': active_preset,
         'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user, 'agreements'),
         'can_create_agreement': has_perm_or_admin(request.user, 'activities:agreements/create'),
@@ -789,7 +804,7 @@ def agreements_export(request):
     qs = get_scoped_queryset(qs, request.user, 'agreement')
 
     # Apply same filters with Arabic normalization
-    q = request.GET.get('q', '').strip()
+    q = (request.GET.get('search') or request.GET.get('q') or '').strip()
     if q:
         qs = filter_by_arabic_search(
             qs,
@@ -804,10 +819,11 @@ def agreements_export(request):
         qs = qs.filter(status=request.GET.get('status'))
     if request.GET.get('creator'):
         qs = qs.filter(created_by_id=request.GET.get('creator'))
-    if request.GET.get('date_from'):
-        qs = qs.filter(date__gte=request.GET.get('date_from'))
-    if request.GET.get('date_to'):
-        qs = qs.filter(date__lte=request.GET.get('date_to'))
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
+    if parsed_from:
+        qs = qs.filter(date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(date__lte=parsed_to)
 
     from master_data.excel_utils import export_to_excel_response
     columns = [
@@ -1956,22 +1972,9 @@ def planned_visits_export(request):
 # VISITS MODULE (الزيارات)
 # -----------------------------------------------------------------------------
 
-@require_permission('activities:visits/list')
-def visits_list(request):
-    """
-    Visits list with table & cards views, complete filters, status indicators, and export.
-    Matches https://weapharma.bricks-rep.com/visits
-    """
-    qs = (
-        Visit.objects.select_related('contact', 'contact__area', 'contact__brick', 'template', 'owner', 'created_by')
-        .prefetch_related('samples__product', 'template__questions')
-        .all()
-        .order_by('-serial_num')
-    )
-    qs = get_scoped_queryset(qs, request.user, 'visit')
-
-    # Search
-    q = request.GET.get('q', '').strip()
+def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
+    """Shared filter pipeline for visits_list and visits_export (respecting DataScope and permissions)."""
+    q = (request.GET.get('search') or request.GET.get('q') or '').strip()
     active_filters = []
 
     if q:
@@ -1982,23 +1985,20 @@ def visits_list(request):
             raw_fields=['contact__code'],
             numeric_id_field='serial_num',
         )
-        active_filters.append({'label': 'بحث', 'value': q, 'param': 'q'})
+        active_filters.append({'label': 'بحث', 'value': q, 'param': 'search'})
 
-    # Status
     status = request.GET.get('status')
     if status:
         qs = qs.filter(status=status)
         status_labels = dict(Visit.STATUS_CHOICES)
         active_filters.append({'label': 'الحالة', 'value': status_labels.get(status, status), 'param': 'status'})
 
-    # Approval Status
     approval_status = request.GET.get('approval_status')
     if approval_status:
         qs = qs.filter(approval_status=approval_status)
         approval_labels = dict(Visit.APPROVAL_CHOICES)
         active_filters.append({'label': 'حالة الاعتماد', 'value': approval_labels.get(approval_status, approval_status), 'param': 'approval_status'})
 
-    # Planned vs Unplanned Classification Filter (Requirement 5)
     plan_type = request.GET.get('plan_type')
     if plan_type == 'planned':
         qs = qs.filter(is_planned=True)
@@ -2007,24 +2007,20 @@ def visits_list(request):
         qs = qs.filter(is_planned=False)
         active_filters.append({'label': 'النوع', 'value': 'زيارة خارج الخطة', 'param': 'plan_type'})
 
-    # Representative (owner)
     rep_id = request.GET.get('owner')
     if rep_id:
         qs = qs.filter(owner_id=rep_id)
         u_obj = get_visible_assignees_queryset(request.user, 'activities').filter(id=rep_id).first()
         active_filters.append({'label': 'المسؤول', 'value': (u_obj.name or u_obj.username) if u_obj else rep_id, 'param': 'owner'})
 
-    # Date Range
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
-    if date_from:
-        qs = qs.filter(date__gte=date_from)
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
+    if parsed_from:
+        qs = qs.filter(date__gte=parsed_from)
         active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
-    if date_to:
-        qs = qs.filter(date__lte=date_to)
+    if parsed_to:
+        qs = qs.filter(date__lte=parsed_to)
         active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
-    # Distance Ignored / Bypassed Filter
     distance_ignored = request.GET.get('distance_ignored')
     if distance_ignored:
         if distance_ignored == 'any':
@@ -2039,6 +2035,59 @@ def visits_list(request):
         elif distance_ignored == 'none':
             qs = qs.filter(gps_forced_start=False, gps_forced_end=False)
             active_filters.append({'label': 'تجاوز المسافة', 'value': 'ضمن النطاق (لم يتم التجاوز)', 'param': 'distance_ignored'})
+
+    # Permission-gated GPS Integrity filter (ignored if user lacks permission)
+    gps_integrity = ''
+    if can_view_gps_suspicion:
+        gps_integrity = (request.GET.get('gps_integrity') or '').strip()
+        valid_integrity = dict(Visit.GPS_INTEGRITY_STATUS_CHOICES)
+        if gps_integrity and gps_integrity in valid_integrity:
+            qs = qs.filter(gps_integrity_status=gps_integrity)
+            active_filters.append({'label': 'نزاهة الموقع (GBS)', 'value': valid_integrity[gps_integrity], 'param': 'gps_integrity'})
+        else:
+            gps_integrity = ''
+
+    return qs, {
+        'q': q,
+        'status': status,
+        'approval_status': approval_status,
+        'plan_type': plan_type,
+        'owner': rep_id,
+        'date_from': date_from,
+        'date_to': date_to,
+        'active_preset': active_preset,
+        'distance_ignored': distance_ignored,
+        'gps_integrity': gps_integrity,
+        'active_filters': active_filters,
+    }
+
+
+@require_permission('activities:visits/list')
+def visits_list(request):
+    """
+    Visits list with table & cards views, complete filters, status indicators, and export.
+    """
+    qs = (
+        Visit.objects.select_related('contact', 'contact__area', 'contact__brick', 'template', 'owner', 'created_by')
+        .prefetch_related('samples__product', 'template__questions')
+        .all()
+        .order_by('-serial_num')
+    )
+    qs = get_scoped_queryset(qs, request.user, 'visit')
+
+    can_view_gps_suspicion = has_perm_or_admin(request.user, 'activities:visits/view_gps_suspicion')
+    qs, f_state = _apply_visits_list_filters(request, qs, can_view_gps_suspicion=can_view_gps_suspicion)
+    q = f_state['q']
+    status = f_state['status']
+    approval_status = f_state['approval_status']
+    plan_type = f_state['plan_type']
+    rep_id = f_state['owner']
+    date_from = f_state['date_from']
+    date_to = f_state['date_to']
+    active_preset = f_state['active_preset']
+    distance_ignored = f_state['distance_ignored']
+    gps_integrity = f_state['gps_integrity']
+    active_filters = f_state['active_filters']
 
     # View Mode: table or cards
     view_mode = request.GET.get('view', 'table')
@@ -2098,7 +2147,13 @@ def visits_list(request):
         'selected_owner': rep_id,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
+        'active_preset': active_preset,
         'selected_distance_ignored': distance_ignored,
+        'can_view_gps_suspicion': can_view_gps_suspicion,
+        'selected_gps_integrity': gps_integrity if can_view_gps_suspicion else '',
+        'gps_integrity_choices': Visit.GPS_INTEGRITY_STATUS_CHOICES if can_view_gps_suspicion else [],
         'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user),
     }
@@ -2136,6 +2191,8 @@ def visit_detail(request, pk):
             return render_forbidden_response(request, "فقط المندوب المسؤول عن الزيارة هو المصرح له بتقديم إجاباتها وإنهائها.")
 
         action = request.POST.get('action', 'complete').strip()
+        if action != 'complete':
+            return redirect('visit_detail', pk=visit.pk)
 
         # Process Questionnaire Answers
         answers = dict(visit.questionnaire_answers or {})
@@ -2467,6 +2524,7 @@ def visit_detail(request, pk):
         'is_in_agenda': is_in_agenda,
         'status_choices': Visit.STATUS_CHOICES,
         'approval_choices': Visit.APPROVAL_CHOICES,
+        'can_view_gps_suspicion': has_perm_or_admin(request.user, 'activities:visits/view_gps_suspicion'),
     })
 
 
@@ -3508,39 +3566,8 @@ def visits_export(request):
     )
     qs = get_scoped_queryset(qs, request.user, 'visit')
 
-    q = request.GET.get('q', '').strip()
-    if q:
-        qs = filter_by_arabic_search(
-            qs,
-            ['contact__name', 'contact__code', 'owner__name', 'owner__username'],
-            q,
-            raw_fields=['contact__code'],
-            numeric_id_field='serial_num',
-        )
-    if request.GET.get('status'):
-        qs = qs.filter(status=request.GET.get('status'))
-    if request.GET.get('approval_status'):
-        qs = qs.filter(approval_status=request.GET.get('approval_status'))
-    plan_type = request.GET.get('plan_type')
-    if plan_type == 'planned':
-        qs = qs.filter(is_planned=True)
-    elif plan_type == 'unplanned':
-        qs = qs.filter(is_planned=False)
-    if request.GET.get('owner'):
-        qs = qs.filter(owner_id=request.GET.get('owner'))
-    if request.GET.get('date_from'):
-        qs = qs.filter(date__gte=request.GET.get('date_from'))
-    if request.GET.get('date_to'):
-        qs = qs.filter(date__lte=request.GET.get('date_to'))
-    distance_ignored = request.GET.get('distance_ignored')
-    if distance_ignored == 'any':
-        qs = qs.filter(Q(gps_forced_start=True) | Q(gps_forced_end=True))
-    elif distance_ignored == 'start':
-        qs = qs.filter(gps_forced_start=True)
-    elif distance_ignored == 'end':
-        qs = qs.filter(gps_forced_end=True)
-    elif distance_ignored == 'none':
-        qs = qs.filter(gps_forced_start=False, gps_forced_end=False)
+    can_view_gps_suspicion = has_perm_or_admin(request.user, 'activities:visits/view_gps_suspicion')
+    qs, _ = _apply_visits_list_filters(request, qs, can_view_gps_suspicion=can_view_gps_suspicion)
 
     columns = [
         {'header': 'رقم الزيارة', 'key': lambda v: f"#{v.serial_num}", 'width': 14, 'align': 'center'},
@@ -3556,6 +3583,9 @@ def visits_export(request):
         {'header': 'المدة (ثواني)', 'key': 'duration', 'width': 14, 'align': 'center'},
         {'header': 'العينات الموزعة', 'key': lambda v: ', '.join(f"{s.product.name} ({s.quantity})" for s in v.samples.all()), 'width': 30, 'align': 'right'},
     ]
+    if can_view_gps_suspicion:
+        columns.append({'header': 'نزاهة الموقع (GBS)', 'key': lambda v: v.gps_integrity_status_display_ar, 'width': 18, 'align': 'center'})
+        columns.append({'header': 'إشارات الاشتباه', 'key': lambda v: v.gps_suspicion_reason or '—', 'width': 35, 'align': 'right'})
     return export_to_excel_response(
         qs,
         columns,

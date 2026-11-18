@@ -169,7 +169,7 @@ class VisitAdmin(admin.ModelAdmin):
     list_filter = (
         'status', 'approval_status', 'is_planned', 'doubled',
         'is_successful', 'location_verified', 'requires_approval_due_to_distance',
-        'waiting_for_reapproval', 'template', 'date'
+        'waiting_for_reapproval', 'gps_integrity_status', 'template', 'date'
     )
     search_fields = (
         'serial_num', 'contact__name', 'contact__code',
@@ -179,7 +179,10 @@ class VisitAdmin(admin.ModelAdmin):
     filter_horizontal = ('detailed_products',)
     readonly_fields = (
         'created_at', 'updated_at', 'started_at', 'ended_at',
-        'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot'
+        'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot',
+        'gps_integrity_status', 'gps_integrity_checked_at',
+        'gps_suspicion_signals', 'gps_suspicion_reason',
+        'gps_integrity_context', 'gps_detector_version',
     )
     inlines = [VisitSampleItemInline, VisitExpenseInline]
     actions = ['approve_selected_visits', 'disapprove_selected_visits']
@@ -218,6 +221,15 @@ class VisitAdmin(admin.ModelAdmin):
                 'bypass_reason',
                 ('approved_by', 'approved_at'),
                 'approval_notes',
+            )
+        }),
+        ('نزاهة الموقع واكتشاف التلاعب (GBS)', {
+            'classes': ('collapse',),
+            'fields': (
+                ('gps_integrity_status', 'gps_integrity_checked_at', 'gps_detector_version'),
+                'gps_suspicion_reason',
+                'gps_suspicion_signals',
+                'gps_integrity_context',
             )
         }),
         ('أوقات النظام والتدقيق', {

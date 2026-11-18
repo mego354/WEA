@@ -97,7 +97,7 @@
             <form method="GET" class="flex-1 max-w-md relative">
                 {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
                 {% if sellable_filter %}<input type="hidden" name="sellable" value="{{ sellable_filter }}">{% endif %}
-                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالاسم، كود الصنف (SKU)، الباركود..."
+                <input type="text" name="search" value="{{ search_query }}" data-smart-search-module="products" placeholder="بحث بالاسم، كود الصنف (SKU)، الباركود..."
                        class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
                 <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
             </form>

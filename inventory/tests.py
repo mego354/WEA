@@ -937,3 +937,18 @@ class Phase2InventoryMemosAndExportsTests(TestCase):
         labels = [r['label'] for r in sug_resp.json()['results']]
         self.assertTrue(any('القاهرة' in lbl for lbl in labels))
         self.assertFalse(any('الجيزة' in lbl for lbl in labels))
+
+    def test_memo_create_ui_consistency_and_summary_card(self):
+        from django.urls import reverse
+        self.client.force_login(self.superadmin)
+        res_in = self.client.get(reverse('inventory_memo_create') + '?memo_type=inward')
+        self.assertEqual(res_in.status_code, 200)
+        self.assertContains(res_in, 'ملخص الإجماليات')
+        self.assertNotContains(res_in, 'bg-slate-900 text-white rounded-xl')
+        self.assertContains(res_in, 'min-w-[260px]')
+        self.assertContains(res_in, 'min-w-[145px]')
+        self.assertContains(res_in, '<div class="md:hidden">')
+
+        res_out = self.client.get(reverse('inventory_memo_create') + '?memo_type=outward')
+        self.assertEqual(res_out.status_code, 200)
+        self.assertContains(res_out, 'readonly tabindex="-1"')

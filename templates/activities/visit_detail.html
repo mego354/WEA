@@ -270,10 +270,10 @@
     {% endif %}
 
     <!-- Main Content Area -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 {% if visit.status != 'started' %}lg:grid-cols-3{% endif %} gap-6">
 
         <!-- Column 1 & 2: Questions, Products, Form -->
-        <div class="lg:col-span-2 space-y-6">
+        <div class="{% if visit.status != 'started' %}lg:col-span-2{% endif %} space-y-6">
 
             <!-- Customer & Template Profile Card -->
             <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
@@ -643,7 +643,8 @@
                     </div>
                 </div>
 
-                <div class="sticky bottom-4 z-20 bg-white/95 backdrop-blur-md border border-slate-200 p-4 rounded-2xl shadow-lg flex items-center justify-end gap-3">
+                <!-- Form Actions (Always below all questions & fields across all screen sizes) -->
+                <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-xs flex items-center justify-end gap-3">
                     <!-- Complete Visit -->
                     <button type="submit" name="action" value="complete" id="complete-visit-btn"
                             class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
@@ -875,6 +876,43 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if can_view_gps_suspicion %}
+            <!-- GPS Integrity / Suspicious Location Detection Card (Permission-Gated) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3" id="gps-integrity-card">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">security</span>
+                        <span>نزاهة الموقع (GBS)</span>
+                    </h3>
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ visit.gps_integrity_badge_class }}">
+                        {{ visit.gps_integrity_status_display_ar }}
+                    </span>
+                </div>
+                <div class="space-y-2 text-xs">
+                    {% if visit.gps_suspicion_reason %}
+                    <div class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+                        <span class="font-bold">السبب:</span> {{ visit.gps_suspicion_reason }}
+                    </div>
+                    {% endif %}
+                    {% if visit.gps_suspicion_signals %}
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for sig in visit.gps_suspicion_signals %}
+                        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] border border-slate-200">{{ sig }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <span>آخر فحص:</span>
+                        <span class="font-mono">{% if visit.gps_integrity_checked_at %}{{ visit.gps_integrity_checked_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>إصدار المحرك:</span>
+                        <span class="font-mono">{{ visit.gps_detector_version|default:"v1" }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Bypass / Exception Audit Notification (Section 3.D & 5.B) -->
             {% if visit.verification_status == 'force_bypassed' or visit.bypassed_by or visit.gps_forced_start or visit.gps_forced_end %}
@@ -1204,55 +1242,10 @@ function toggleExceptionReason() {
 // Client-side conditional questions visibility evaluation
 function handleQuestionChange(questionId) {
     evaluateConditionalQuestions();
-    evaluateRequiredQuestions();
 }
 
 function evaluateRequiredQuestions() {
-    const completeBtn = document.getElementById('complete-visit-btn');
-    if (!completeBtn) return;
-
-    const blocks = document.querySelectorAll('.question-block');
-    const unanswered = [];
-
-    blocks.forEach(block => {
-        if (block.classList.contains('hidden') || block.offsetParent === null) {
-            return;
-        }
-        const isReq = block.getAttribute('data-required') === '1';
-        if (!isReq) return;
-
-        const qId = block.getAttribute('data-question-id');
-        const qTitle = block.getAttribute('data-question-title') || `سؤال #${qId}`;
-        const inputs = block.querySelectorAll(`[name="question_${qId}"]`);
-
-        let hasAnswer = false;
-        inputs.forEach(input => {
-            if (input.type === 'radio' || input.type === 'checkbox') {
-                if (input.checked && input.value) hasAnswer = true;
-            } else if (input.tagName === 'SELECT') {
-                if (input.value && input.value.trim() !== '') hasAnswer = true;
-            } else {
-                if (input.value && input.value.trim() !== '') hasAnswer = true;
-            }
-        });
-
-        if (!hasAnswer) {
-            unanswered.push(qTitle);
-            block.classList.add('border-amber-400', 'bg-amber-50/20');
-        } else {
-            block.classList.remove('border-amber-400', 'bg-amber-50/20');
-        }
-    });
-
-    if (unanswered.length > 0) {
-        completeBtn.disabled = true;
-        completeBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        completeBtn.title = `يجب الإجابة على (${unanswered.length}) سؤال إلزامي قبل الإنهاء`;
-    } else {
-        completeBtn.disabled = false;
-        completeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        completeBtn.title = '';
-    }
+    // Removed client-side unanswered notice/disabling; server-side validation enforces required fields.
 }
 
 function evaluateConditionalQuestions() {
