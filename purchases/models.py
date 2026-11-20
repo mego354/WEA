@@ -396,25 +396,11 @@ class PurchaseReturnOrder(models.Model):
 
     @property
     def payment_status_display_ar(self):
-        mapping = {
-            'credit': 'آجل',
-            'cash': 'نقدي',
-            'partial': 'جزئي',
-            'paid': 'مدفوع بالكامل',
-            'overdue': 'متأخر',
-        }
-        return mapping.get(self.payment_status, self.get_payment_status_display())
+        return self.status_display_ar
 
     @property
     def payment_status_badge_class(self):
-        mapping = {
-            'paid': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            'cash': 'bg-teal-50 text-teal-700 border-teal-200',
-            'partial': 'bg-amber-50 text-amber-700 border-amber-200',
-            'overdue': 'bg-rose-50 text-rose-700 border-rose-200',
-            'credit': 'bg-slate-100 text-slate-700 border-slate-300',
-        }
-        return mapping.get(self.payment_status, 'bg-slate-100 text-slate-700 border-slate-300')
+        return self.status_badge_class
 
 
 class PurchaseReturnOrderItem(models.Model):

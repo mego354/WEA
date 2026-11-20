@@ -70,11 +70,12 @@ async function openAttachmentsModal(modelKey, objectId, titleText) {
     listEl.innerHTML = '<div class="py-6 text-center text-slate-400">جاري تحميل المرفقات...</div>';
     modal.classList.remove('hidden');
 
+    const _esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
     try {
         const res = await fetch(`/attachments/${modelKey}/${objectId}/list/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const data = await res.json();
         if (!res.ok) {
-            listEl.innerHTML = `<div class="py-4 text-center text-rose-600 font-bold">${data.error || 'تعذر تحميل المرفقات'}</div>`;
+            listEl.innerHTML = `<div class="py-4 text-center text-rose-600 font-bold">${_esc(data.error || 'تعذر تحميل المرفقات')}</div>`;
             return;
         }
         if (uploadWrap && uploadForm) {
@@ -83,14 +84,23 @@ async function openAttachmentsModal(modelKey, objectId, titleText) {
                 uploadForm.action = data.upload_url;
                 uploadForm.onsubmit = async function(ev) {
                     ev.preventDefault();
-                    const fd = new FormData(uploadForm);
-                    const upRes = await fetch(data.upload_url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                    const upJson = await upRes.json();
-                    if (upJson.success) {
-                        uploadForm.reset();
-                        openAttachmentsModal(modelKey, objectId, titleText);
-                    } else {
-                        alert(upJson.error || 'فشل رفع المرفق');
+                    const submitBtn = uploadForm.querySelector('button[type="submit"]');
+                    if (submitBtn) submitBtn.disabled = true;
+                    try {
+                        const fd = new FormData(uploadForm);
+                        const upRes = await fetch(data.upload_url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                        let upJson = {};
+                        try { upJson = await upRes.json(); } catch (_) {}
+                        if (upRes.ok && upJson.success) {
+                            uploadForm.reset();
+                            openAttachmentsModal(modelKey, objectId, titleText);
+                        } else {
+                            alert(upJson.error || 'فشل رفع المرفق');
+                        }
+                    } catch (_) {
+                        alert('حدث خطأ في الاتصال بالخادم أثناء رفع المرفق.');
+                    } finally {
+                        if (submitBtn) submitBtn.disabled = false;
                     }
                 };
             } else {
@@ -101,21 +111,53 @@ async function openAttachmentsModal(modelKey, objectId, titleText) {
             listEl.innerHTML = '<div class="py-6 text-center text-slate-400">لا توجد مرفقات لهذا السجل.</div>';
             return;
         }
-        listEl.innerHTML = data.attachments.map(a => `
-            <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+        listEl.innerHTML = '';
+        data.attachments.forEach(a => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200';
+            row.innerHTML = `
                 <div class="min-w-0">
-                    <div class="font-bold text-slate-900 truncate">${a.filename}</div>
-                    <div class="text-[10px] text-slate-500 font-mono">${a.size} • ${a.created_at} • ${a.uploaded_by}</div>
+                    <div class="font-bold text-slate-900 truncate">${_esc(a.filename)}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">${_esc(a.size)} • ${_esc(a.created_at)} • ${_esc(a.uploaded_by)}</div>
                 </div>
-                <div class="flex items-center gap-1 shrink-0">
-                    ${a.is_image
-                        ? `<button type="button" onclick="openAttachmentImagePreview('${a.view_url}', '${a.filename.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white" title="معاينة"><span class="material-symbols-outlined text-base">visibility</span></button>`
-                        : `<a href="${a.view_url}" target="_blank" class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white" title="فتح"><span class="material-symbols-outlined text-base">open_in_new</span></a>`}
-                    <a href="${a.download_url}" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-white" title="تحميل"><span class="material-symbols-outlined text-base">download</span></a>
-                    ${data.can_delete ? `<button type="button" onclick="showConfirmDeleteModal({ action: '${a.delete_url}', title: 'حذف المرفق', itemName: '${a.filename.replace(/'/g, "\\'")}' })" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50" title="حذف"><span class="material-symbols-outlined text-base">delete</span></button>` : ''}
-                </div>
-            </div>
-        `).join('');
+                <div class="flex items-center gap-1 shrink-0 js-att-actions"></div>
+            `;
+            const actions = row.querySelector('.js-att-actions');
+            if (a.is_image) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white';
+                btn.title = 'معاينة';
+                btn.innerHTML = '<span class="material-symbols-outlined text-base">visibility</span>';
+                btn.addEventListener('click', () => openAttachmentImagePreview(a.view_url, a.filename));
+                actions.appendChild(btn);
+            } else {
+                const link = document.createElement('a');
+                link.href = a.view_url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.className = 'p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-white';
+                link.title = 'فتح';
+                link.innerHTML = '<span class="material-symbols-outlined text-base">open_in_new</span>';
+                actions.appendChild(link);
+            }
+            const dl = document.createElement('a');
+            dl.href = a.download_url;
+            dl.className = 'p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-white';
+            dl.title = 'تحميل';
+            dl.innerHTML = '<span class="material-symbols-outlined text-base">download</span>';
+            actions.appendChild(dl);
+            if (data.can_delete) {
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50';
+                delBtn.title = 'حذف';
+                delBtn.innerHTML = '<span class="material-symbols-outlined text-base">delete</span>';
+                delBtn.addEventListener('click', () => showConfirmDeleteModal({ action: a.delete_url, title: 'حذف المرفق', itemName: a.filename }));
+                actions.appendChild(delBtn);
+            }
+            listEl.appendChild(row);
+        });
     } catch (e) {
         listEl.innerHTML = '<div class="py-4 text-center text-rose-600 font-bold">حدث خطأ في الاتصال بالخادم.</div>';
     }

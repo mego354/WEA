@@ -54,9 +54,26 @@ def login_view(request):
         return redirect('home')
 
     if request.method == 'POST':
+        from django.core.cache import cache
+        from django.utils.http import url_has_allowed_host_and_scheme
+
         login_input = request.POST.get('email', '').strip()
         password = request.POST.get('password', '')
-        
+
+        client_ip = AuditLogService.get_client_ip(request) or 'unknown'
+        throttle_key = f"login_fail:{client_ip}:{login_input.lower()}"
+        fail_count = cache.get(throttle_key, 0)
+        if fail_count >= 10:
+            AuditLogService.log(
+                action_type='LOGIN_FAILED',
+                module='auth',
+                description=f"حظر مؤقت لتكرار محاولات الدخول الفاشلة: {login_input}",
+                status='FAILURE',
+                request=request
+            )
+            messages.error(request, "تم تجاوز الحد المسموح لمحاولات تسجيل الدخول. يرجى المحاولة بعد 5 دقائق.")
+            return render(request, 'accounts/login.html', status=429)
+
         # 1. Try direct authenticate by username or exact email
         user = authenticate(request, username=login_input, password=password)
         if not user:
@@ -73,7 +90,7 @@ def login_view(request):
 
             user_obj = User.objects.filter(
                 Q(email__in=variants) | Q(username__in=variants)
-            ).first()
+            ).order_by('id').first()
 
             if user_obj:
                 user = authenticate(request, username=user_obj.username, password=password)
@@ -81,18 +98,19 @@ def login_view(request):
         if user:
             if not user.is_active:
                 AuditLogService.log(
-                    action_type='AUTH_FAILED',
-                    module='accounts',
+                    action_type='LOGIN_FAILED',
+                    module='auth',
                     description=f"محاولة تسجيل دخول لحساب معطل: {login_input}",
                     status='FAILURE',
                     request=request
                 )
                 messages.error(request, "هذا الحساب معطل حالياً. يرجى التواصل مع إدارة النظام.")
                 return render(request, 'accounts/login.html')
+            cache.delete(throttle_key)
             login(request, user)
             AuditLogService.log(
-                action_type='AUTH_LOGIN',
-                module='accounts',
+                action_type='LOGIN',
+                module='auth',
                 actor=user,
                 target_user=user,
                 description=f"تسجيل دخول ناجح للمستخدم: {user.name or user.username} ({user.email})",
@@ -100,12 +118,17 @@ def login_view(request):
                 request=request
             )
             messages.success(request, f"مرحباً بك مجدداً {user.name or user.username}")
-            next_url = request.GET.get('next') or request.POST.get('next') or 'home'
-            return redirect(next_url)
+            raw_next = request.GET.get('next') or request.POST.get('next') or ''
+            if raw_next and url_has_allowed_host_and_scheme(
+                raw_next, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(raw_next)
+            return redirect('home')
         else:
+            cache.set(throttle_key, fail_count + 1, timeout=300)
             AuditLogService.log(
-                action_type='AUTH_FAILED',
-                module='accounts',
+                action_type='LOGIN_FAILED',
+                module='auth',
                 description=f"محاولة تسجيل دخول فاشلة بالبريد/المعرف: {login_input}",
                 status='FAILURE',
                 request=request
@@ -118,8 +141,8 @@ def login_view(request):
 def logout_view(request):
     if request.user.is_authenticated:
         AuditLogService.log(
-            action_type='AUTH_LOGOUT',
-            module='accounts',
+            action_type='LOGOUT',
+            module='auth',
             actor=request.user,
             target_user=request.user,
             description=f"تسجيل خروج للمستخدم: {request.user.name or request.user.username} ({request.user.email})",
@@ -377,7 +400,7 @@ def user_create(request):
         elif role.is_super and not getattr(request.user, 'is_super_admin', False):
             errors.append("عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin). هذا الإجراء مقصور على مدراء النظام الأعلى.")
         elif not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
-            if role.name.lower() in ['superadmin', 'manager']:
+            if role.name.lower() not in ['rep', 'medical_rep']:
                 errors.append("مدير المنطقة يمكنه فقط إنشاء حسابات للمندوبين التابعين لمنطقته.")
 
         is_valid_areas, err_msg_areas, cleaned_area_ids = validate_assigned_areas_for_user(request.user, area_ids)
@@ -547,6 +570,7 @@ def user_edit(request, pk):
         }
 
         old_role = target_user.role
+        prev_is_active = target_user.is_active
         target_user.name = name
         target_user.email = email
         target_user.username = email
@@ -559,10 +583,15 @@ def user_edit(request, pk):
             if not new_role:
                 messages.error(request, "الدور الوظيفي المحدد غير مدعوم في النظام (يجب أن يكون أحد الأدوار الخمسة المعتمدة).")
                 return render(request, 'accounts/user_edit.html', _get_user_edit_context())
-            # Privilege escalation check: non-superadmin cannot assign SuperAdmin role
-            if new_role.is_super and not getattr(request.user, 'is_super_admin', False):
-                messages.error(request, "عذراً، لا يمكنك تعيين دور مدير النظام الأعلى (SuperAdmin).")
-                return render(request, 'accounts/user_edit.html', _get_user_edit_context())
+            actor_is_super = getattr(request.user, 'is_super_admin', False) or request.user.is_superuser
+            # Privilege escalation guard: non-superadmin cannot assign SuperAdmin/Manager/Accountant or change own role
+            if not actor_is_super:
+                if target_user.pk == request.user.pk and new_role.pk != target_user.role_id:
+                    messages.error(request, "عذراً، لا يمكنك تعديل دورك الوظيفي بنفسك.")
+                    return render(request, 'accounts/user_edit.html', _get_user_edit_context())
+                if new_role.is_super or new_role.name.lower() not in ['rep', 'medical_rep']:
+                    messages.error(request, "عذراً، لا تمتلك الصلاحية لتعيين هذا الدور الوظيفي.")
+                    return render(request, 'accounts/user_edit.html', _get_user_edit_context())
             target_user.role = new_role
         else:
             if not target_user.is_superuser:
@@ -570,6 +599,9 @@ def user_edit(request, pk):
 
         target_user.save()
         target_user.clear_perm_cache()
+        if prev_is_active and not target_user.is_active:
+            from accounts.services import revoke_user_sessions
+            revoke_user_sessions(target_user.pk)
 
         # Update assigned areas with strict backend validation
         area_ids = request.POST.getlist('assigned_areas')
@@ -698,10 +730,15 @@ def user_toggle_status(request, pk):
     if not can_user_access_object(request.user, target_user, 'deactivate'):
         return render_forbidden_response(request, 'users:users/edit', 'عذراً، لا تمتلك الصلاحية لتعديل حالة هذا المستخدم.')
 
+    if target_user.is_super_admin and not (getattr(request.user, 'is_super_admin', False) or request.user.is_superuser):
+        return render_forbidden_response(request, 'users:users/edit', 'عذراً، لا تمتلك الصلاحية لتعديل حالة مدير النظام الأعلى.')
+
     if target_user.is_active:
-        if target_user.is_superuser:
-            active_superusers = User.objects.filter(is_superuser=True, is_active=True).exclude(pk=target_user.pk).count()
-            if active_superusers == 0:
+        if target_user.is_superuser or target_user.is_super_admin:
+            active_supers = User.objects.filter(is_active=True).filter(
+                Q(is_superuser=True) | Q(role__is_super=True, role__is_active=True)
+            ).exclude(pk=target_user.pk).distinct().count()
+            if active_supers == 0:
                 messages.error(request, "لا يمكن تعطيل حساب مدير النظام الأعلى الوحيد في النظام!")
                 return redirect('users_list')
 
@@ -709,6 +746,9 @@ def user_toggle_status(request, pk):
     target_user.is_active = not target_user.is_active
     target_user.save()
     target_user.clear_perm_cache()
+    if prev_status and not target_user.is_active:
+        from accounts.services import revoke_user_sessions
+        revoke_user_sessions(target_user.pk)
 
     status_str = "تفعيل" if target_user.is_active else "تعطيل"
 
@@ -1275,6 +1315,13 @@ def role_duplicate(request, pk):
 
     clone.tags.set(original.tags.all())
     clone.permissions.set(original.permissions.all())
+    for scope_row in original.module_scopes.all():
+        RoleModuleScope.objects.create(
+            role=clone,
+            module=scope_row.module,
+            view_scope=scope_row.view_scope,
+            manage_scope=scope_row.manage_scope,
+        )
 
     SecurityAuditLog.objects.create(
         actor=request.user,
@@ -1296,7 +1343,7 @@ def role_delete(request, pk):
     Delete custom role (safeguarded against deleting system roles or roles with assigned users).
     """
     role = get_object_or_404(Role, pk=pk)
-    if role.is_system or role.name == 'SuperAdmin':
+    if role.is_system or role.is_super or role.name.lower() == 'superadmin':
         messages.error(request, "لا يمكن حذف الأدوار النظامية الأساسية.")
         return redirect('roles_list')
 

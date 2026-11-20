@@ -12,7 +12,7 @@ class AgreementForm(forms.ModelForm):
             'customer': forms.Select(attrs={
                 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500',
                 'data-smart-select': 'true',
-                'data-search-url': '/sales/api/search/customers/',
+                'data-search-url': '/contacts/api/search/',
                 'data-search-placeholder': 'ابحث باسم العميل أو الكود أو المنطقة...',
             }),
             'title': forms.TextInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500', 'placeholder': 'عنوان الاتفاقية'}),

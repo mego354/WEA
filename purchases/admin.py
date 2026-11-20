@@ -69,7 +69,15 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
 
     @admin.action(description="اعتماد أوامر الشراء المحددة")
     def approve_selected_orders(self, request, queryset):
-        queryset.update(status='approved', approved_by=request.user, approved_at=timezone.now())
+        from purchases.services import PurchaseOrderService
+        approved = 0
+        for order in queryset.filter(status='pending'):
+            try:
+                PurchaseOrderService.approve_order(order, request.user)
+                approved += 1
+            except Exception:
+                continue
+        self.message_user(request, f"تم اعتماد {approved} أمر شراء بنجاح.")
 
     @admin.action(description="تعليق أوامر الشراء المحددة (Hold)")
     def mark_as_hold(self, request, queryset):

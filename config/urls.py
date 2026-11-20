@@ -82,15 +82,22 @@ urlpatterns = [
     path('api/v1/visits/contacts/list', contacts_views.customers_search_api, name='visits_contacts_list_reference_api'),
 ]
 
-# Media files serving (Product images, thumbnails, attachments)
+# Media files serving (Public product thumbnails & branding only; private attachments MUST go through erp_attachment_view)
 from django.conf import settings
-from django.conf.urls.static import static
+from django.http import HttpResponseForbidden
 from django.views.static import serve
 from django.urls import re_path
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+def _serve_public_media(request, path):
+    normalized = (path or '').lstrip('/').replace('\\', '/')
+    if normalized.startswith('attachments/') or '/attachments/' in normalized or '..' in normalized.split('/'):
+        return HttpResponseForbidden("Private attachments require authenticated access.")
+    return serve(request, path, document_root=settings.MEDIA_ROOT)
+
+
 urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    re_path(r'^media/(?P<path>.*)$', _serve_public_media),
 ]
 
 

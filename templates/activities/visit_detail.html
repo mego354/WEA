@@ -1,5 +1,5 @@
 {% extends 'layouts/base.html' %}
-{% load humanize static %}
+{% load humanize static erp_tags %}
 
 {% block title %}زيارة #{{ visit.serial_num }}{% endblock %}
 
@@ -423,66 +423,7 @@
 
                             <!-- Question Answer Inputs by Type -->
                             <div class="pt-1">
-                                {% if q.question_type == 'boolean' %}
-                                    <!-- Yes / No -->
-                                    <div class="flex items-center gap-4">
-                                        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-teal-50/50 transition-colors">
-                                            <input type="radio" name="question_{{ q.id }}" value="Yes" class="question-input text-[#27bebe] focus:ring-[#27bebe]"
-                                                   onchange="handleQuestionChange({{ q.id }})"
-                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
-                                            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
-                                        </label>
-                                        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-rose-50/50 transition-colors">
-                                            <input type="radio" name="question_{{ q.id }}" value="No" class="question-input text-rose-500 focus:ring-rose-500"
-                                                   onchange="handleQuestionChange({{ q.id }})"
-                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
-                                            <span class="text-xs font-bold text-slate-700">لا (No)</span>
-                                        </label>
-                                    </div>
-
-                                {% elif q.question_type == 'single_choice' %}
-
-                                    <select name="question_{{ q.id }}" class="question-input w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
-                                            onchange="handleQuestionChange({{ q.id }})">
-                                        <option value="">-- اختر الإجابة --</option>
-                                        {% for opt in q.options %}
-                                        <option value="{{ opt.value }}"
-                                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt.value %}selected{% endif %}{% endfor %}>
-                                            {{ opt.text_ar }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-
-                                {% elif q.question_type == 'multiple_choice' %}
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                                        {% for opt in q.options %}
-                                        <label class="inline-flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs">
-                                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value }}" class="question-input text-[#27bebe] rounded focus:ring-[#27bebe]"
-                                                   onchange="handleQuestionChange({{ q.id }})"
-                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt.value in resp.raw_answer %}checked{% endif %}{% endfor %}>
-                                            <span class="text-slate-700 font-medium">{{ opt.text_ar }}</span>
-                                        </label>
-                                        {% endfor %}
-                                    </div>
-
-                                {% elif q.question_type == 'rating' %}
-                                    <div class="flex items-center gap-2">
-                                        {% for rate in "12345" %}
-                                        <label class="inline-flex flex-col items-center justify-center w-10 h-10 bg-white border border-slate-200 rounded-xl hover:border-[#27bebe] cursor-pointer">
-                                            <input type="radio" name="question_{{ q.id }}" value="{{ rate }}" class="question-input text-[#27bebe] focus:ring-[#27bebe]"
-                                                   onchange="handleQuestionChange({{ q.id }})"
-                                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == rate %}checked{% endif %}{% endfor %}>
-                                            <span class="text-xs font-bold text-slate-700 mt-0.5">{{ rate }}</span>
-                                        </label>
-                                        {% endfor %}
-                                    </div>
-
-                                {% else %}
-                                    <!-- text / default -->
-                                    <textarea name="question_{{ q.id }}" rows="2" placeholder="اكتب الإجابة هنا..."
-                                              class="question-input w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
-                                              oninput="handleQuestionChange({{ q.id }})">{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}</textarea>
-                                {% endif %}
+                                {% include 'activities/_questionnaire_field.html' with q=q mode='active' questionnaire_responses=questionnaire_responses product_choices=question_product_choices|get_item:q.id selected_product_ids=question_selected_product_ids|get_item:q.id suggested_product_ids=suggested_product_ids %}
                             </div>
                         </div>
                         {% endfor %}
@@ -490,10 +431,11 @@
                 </div>
                 {% endif %}
 
-                <!-- PRODUCT DETAILING (المنتجات المشروحة) - STRICTLY REQUIREMENT 8 -->
-                {% if supports_detailing %}
-                <div class="bg-white border border-teal-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-                    <div class="flex items-center justify-between border-b border-teal-100 pb-3">
+                <!-- PRODUCT DETAILING (المنتجات المشروحة) - Legacy fallback when template has no suggested_products question -->
+                {% if supports_detailing and not has_suggested_products_question %}
+                <div class="bg-white border border-teal-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4" data-sp-widget>
+                    <input type="hidden" name="detailed_products_submitted" value="1">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-teal-100 pb-3">
                         <div class="flex items-center gap-2">
                             <span class="material-symbols-outlined text-[#27bebe]">medication</span>
                             <div>
@@ -501,20 +443,33 @@
                                 <p class="text-[11px] text-teal-700">حدد المنتجات التي تم شرحها للعميل خلال هذه الزيارة</p>
                             </div>
                         </div>
-                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
-                            خاص بهذا القالب
-                        </span>
+                        <div class="flex items-center gap-2">
+                            <span data-sp-count class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
+                                {{ selected_detailed_product_ids|length }} محدد
+                            </span>
+                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                خاص بهذا القالب
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
+                    <div class="relative">
+                        <span class="material-symbols-outlined text-slate-400 text-base absolute right-2.5 top-2 pointer-events-none">search</span>
+                        <input type="search" placeholder="ابحث عن منتج بالاسم أو الكود..." oninput="filterQuestionnaireProducts(this)"
+                               class="w-full pr-8 pl-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] min-h-[38px]">
+                    </div>
+
+                    <div data-sp-grid class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
                         {% for p in products %}
-                        <label class="flex items-center justify-between gap-2.5 p-2.5 {% if p.id in suggested_product_ids %}bg-amber-50/70 border-amber-300 ring-1 ring-amber-200/50{% else %}bg-slate-50 border-slate-200{% endif %} hover:bg-teal-50/60 hover:border-teal-300 rounded-xl cursor-pointer transition-colors text-xs min-h-[44px]">
-                            <div class="flex items-center gap-2.5 truncate">
-                                <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
-                                       {% if p in visit.detailed_products.all %}checked{% endif %}>
-                                <div class="truncate">
+                        <label data-sp-card data-product-search="{{ p.name|lower }} {{ p.sku_code|default:''|lower }}"
+                               class="flex items-center justify-between gap-2.5 p-2.5 {% if p.id in suggested_product_ids %}bg-amber-50/70 border-amber-300 ring-1 ring-amber-200/50{% else %}bg-slate-50 border-slate-200{% endif %} hover:bg-teal-50/60 hover:border-teal-300 rounded-xl cursor-pointer transition-colors text-xs min-h-[44px] min-w-0">
+                            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                                <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe] shrink-0"
+                                       onchange="updateProductQuestionCount(this)"
+                                       {% if p.id in selected_detailed_product_ids %}checked{% endif %}>
+                                <div class="min-w-0 flex-1">
                                     <span class="font-bold text-slate-800 block truncate">{{ p.name }}</span>
-                                    {% if p.sku_code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.sku_code }}</span>{% elif p.code %}<span class="text-[10px] text-slate-400 font-mono">{{ p.code }}</span>{% endif %}
+                                    {% if p.sku_code %}<span class="text-[10px] text-slate-400 font-mono block truncate">{{ p.sku_code }}</span>{% endif %}
                                 </div>
                             </div>
                             {% if p.id in suggested_product_ids %}
@@ -683,15 +638,32 @@
                 <div class="space-y-3">
                     {% if questionnaire_responses %}
                         {% for resp in questionnaire_responses %}
-                        <div class="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 text-xs space-y-1">
-                            <div class="flex items-center justify-between">
+                        <div class="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                            <div class="flex items-center justify-between gap-2">
                                 <span class="font-bold text-slate-800 block">{{ resp.text_ar }}</span>
-                                <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">{{ resp.stage }}</span>
+                                <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">{{ resp.stage }}</span>
                             </div>
                             <div class="pt-1">
-                                <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold {% if resp.answer == 'Yes' or resp.answer == 'نعم' %}bg-emerald-100 text-emerald-800 border border-emerald-300{% elif resp.answer == 'No' or resp.answer == 'لا' %}bg-rose-100 text-rose-800 border border-rose-300{% else %}bg-white text-slate-700 border border-slate-200{% endif %}">
+                                {% if resp.is_product_list %}
+                                    {% if resp.is_empty %}
+                                    <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                        {{ resp.answer }}
+                                    </span>
+                                    {% else %}
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {% for prod in resp.selected_products %}
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 text-[#1a8b8b] border border-teal-200 text-xs font-bold">
+                                            <span class="material-symbols-outlined text-sm">check_circle</span>
+                                            <span>{{ prod.name }}</span>
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                {% else %}
+                                <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold {% if resp.answer == 'Yes' or resp.answer == 'نعم' or resp.answer == 'زيارة ناجحة' %}bg-emerald-100 text-emerald-800 border border-emerald-300{% elif resp.answer == 'No' or resp.answer == 'لا' or resp.answer == 'زيارة غير ناجحة' %}bg-rose-100 text-rose-800 border border-rose-300{% else %}bg-white text-slate-700 border border-slate-200{% endif %}">
                                     {{ resp.answer }}
                                 </span>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -707,8 +679,10 @@
             </div>
             {% endif %}
 
-            <!-- Detailed Products Card (المنتجات المشروحة) -->
+            <!-- Detailed Products Card (المنتجات المشروحة) - shown when not already represented in questionnaire responses -->
             {% if visit.detailed_products.exists %}
+            {% if visit.status != 'finished' or not supports_detailing %}
+            {% if not has_suggested_products_question %}
             <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
                 <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe]">medication</span>
@@ -723,6 +697,8 @@
                     {% endfor %}
                 </div>
             </div>
+            {% endif %}
+            {% endif %}
             {% endif %}
 
             <!-- General Feedback -->
@@ -1016,6 +992,23 @@
                     <span class="text-slate-400 block">تاريخ الإنشاء</span>
                     <span class="font-mono text-slate-700">{{ visit.created_at|date:"d/m/Y - H:i" }}</span>
                 </div>
+                {% if visit.edited_by_creator or visit.last_edited_by %}
+                <div class="pt-1 border-t border-slate-100 space-y-1.5">
+                    {% if visit.edited_by_creator %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                        <span class="material-symbols-outlined text-xs">edit_note</span>
+                        <span>معدّلة بواسطة المنشئ</span>
+                    </span>
+                    {% endif %}
+                    {% if visit.last_edited_by %}
+                    <div>
+                        <span class="text-slate-400 block">آخر تعديل بواسطة</span>
+                        <span class="font-bold text-slate-700">{{ visit.last_edited_by.get_full_name|default:visit.last_edited_by.username }}</span>
+                        {% if visit.last_edited_at %}<span class="text-[11px] font-mono text-slate-400 block">{{ visit.last_edited_at|date:"d/m/Y - H:i" }}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% if visit.approved_by %}
                 <div>
                     <span class="text-slate-400 block">{% if visit.approval_status == 'disapproved' %}تم الرفض بواسطة{% else %}تم الاعتماد بواسطة{% endif %}</span>
@@ -1273,6 +1266,47 @@ function evaluateConditionalQuestions() {
     });
 }
 
+function filterQuestionnaireProducts(inputEl) {
+    if (!inputEl) return;
+    const widget = inputEl.closest('[data-sp-widget]');
+    if (!widget) return;
+    const query = (inputEl.value || '').trim().toLowerCase();
+    widget.querySelectorAll('[data-sp-card]').forEach(card => {
+        const hay = (card.getAttribute('data-product-search') || card.textContent || '').toLowerCase();
+        card.classList.toggle('hidden', Boolean(query) && !hay.includes(query));
+    });
+}
+
+function updateProductQuestionCount(chk) {
+    if (!chk) return;
+    const widget = chk.closest('[data-sp-widget]');
+    if (!widget) return;
+    const badge = widget.querySelector('[data-sp-count]');
+    if (!badge) return;
+    const count = widget.querySelectorAll('input[type="checkbox"]:checked').length;
+    badge.textContent = `${count} محدد`;
+}
+
+function evaluateModalConditionalQuestions() {
+    const modal = document.getElementById('edit-answers-modal');
+    if (!modal) return;
+    modal.querySelectorAll('.modal-question-block[data-conditional="1"]').forEach(block => {
+        const parentId = block.getAttribute('data-parent-id');
+        const triggerVal = (block.getAttribute('data-trigger-val') || '').trim().toLowerCase();
+        if (!parentId) return;
+        const parentInputs = modal.querySelectorAll(`[name="question_${parentId}"]`);
+        let parentAnswer = '';
+        parentInputs.forEach(input => {
+            if (input.type === 'radio' || input.type === 'checkbox') {
+                if (input.checked) parentAnswer = input.value;
+            } else {
+                parentAnswer = input.value;
+            }
+        });
+        block.classList.toggle('hidden', parentAnswer.trim().toLowerCase() !== triggerVal);
+    });
+}
+
 function openDisapproveModal() {
     const m = document.getElementById('disapprove-modal');
     if (m) m.classList.remove('hidden');
@@ -1284,7 +1318,10 @@ function closeDisapproveModal() {
 
 function openEditAnswersModal() {
     const m = document.getElementById('edit-answers-modal');
-    if (m) m.classList.remove('hidden');
+    if (m) {
+        m.classList.remove('hidden');
+        evaluateModalConditionalQuestions();
+    }
 }
 function closeEditAnswersModal() {
     const m = document.getElementById('edit-answers-modal');
@@ -1508,63 +1545,57 @@ document.addEventListener('DOMContentLoaded', function() {
             {% csrf_token %}
             <div class="space-y-3.5">
                 {% for q in all_questions %}
-                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                    <div class="flex items-center justify-between">
+                <div class="modal-question-block p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
+                     data-conditional="{{ q.is_conditional|yesno:'1,0' }}"
+                     data-parent-id="{{ q.conditional_parent_id|default:'' }}"
+                     data-trigger-val="{{ q.conditional_trigger_value|default:'' }}">
+                    <div class="flex items-center justify-between gap-2">
                         <label class="block text-xs font-bold text-slate-800">
                             {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500">*</span>{% endif %}
                         </label>
-                        <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">{{ q.get_stage_display }}</span>
+                        <span class="text-[10px] font-semibold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">{{ q.get_stage_display }}</span>
                     </div>
-
-                    {% if q.question_type == 'boolean' or q.question_type == 'yes_no' %}
-                    <div class="flex items-center gap-4 pt-1">
-                        <label class="inline-flex items-center gap-2 cursor-pointer px-3 py-1.5 bg-white border border-slate-200 rounded-lg">
-                            <input type="radio" name="question_{{ q.id }}" value="Yes" class="text-[#27bebe] focus:ring-[#27bebe]"
-                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
-                            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
-                        </label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer px-3 py-1.5 bg-white border border-slate-200 rounded-lg">
-                            <input type="radio" name="question_{{ q.id }}" value="No" class="text-rose-500 focus:ring-rose-500"
-                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
-                            <span class="text-xs font-bold text-slate-700">لا (No)</span>
-                        </label>
-                    </div>
-                    {% elif q.question_type == 'single_choice' %}
-                    <select name="question_{{ q.id }}" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-[#27bebe]">
-                        <option value="">-- اختر الإجابة --</option>
-                        {% for opt in q.options %}
-                        <option value="{{ opt.value|default:opt.text_ar }}"
-                            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt.value %}selected{% endif %}{% endfor %}>
-                            {{ opt.text_ar|default:opt.value }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    {% elif q.question_type == 'multiple_choice' %}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        {% for opt in q.options %}
-                        <label class="inline-flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer text-xs">
-                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]"
-                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt.value in resp.raw_answer %}checked{% endif %}{% endfor %}>
-                            <span class="text-slate-700 font-medium">{{ opt.text_ar|default:opt.value }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    {% elif q.question_type == 'rating' %}
-                    <div class="flex items-center gap-2 pt-1">
-                        {% for rate in "12345" %}
-                        <label class="inline-flex flex-col items-center justify-center w-9 h-9 bg-white border border-slate-200 rounded-lg cursor-pointer">
-                            <input type="radio" name="question_{{ q.id }}" value="{{ rate }}" class="text-[#27bebe] focus:ring-[#27bebe]"
-                                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == rate %}checked{% endif %}{% endfor %}>
-                            <span class="text-xs font-bold text-slate-700">{{ rate }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <textarea name="question_{{ q.id }}" rows="2" placeholder="اكتب الإجابة هنا..."
-                              class="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe]">{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}</textarea>
-                    {% endif %}
+                    {% include 'activities/_questionnaire_field.html' with q=q mode='modal' questionnaire_responses=questionnaire_responses product_choices=question_product_choices|get_item:q.id selected_product_ids=question_selected_product_ids|get_item:q.id suggested_product_ids=suggested_product_ids %}
                 </div>
                 {% endfor %}
+
+                {% if supports_detailing and not has_suggested_products_question %}
+                <div class="p-3.5 rounded-xl bg-teal-50/40 border border-teal-200 space-y-2.5" data-sp-widget>
+                    <input type="hidden" name="detailed_products_present" value="1">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <label class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm text-[#27bebe]">medication</span>
+                            <span>المنتجات المشروحة (Product Detailing)</span>
+                        </label>
+                        <span data-sp-count class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
+                            {{ selected_detailed_product_ids|length }} محدد
+                        </span>
+                    </div>
+                    <div class="relative">
+                        <span class="material-symbols-outlined text-slate-400 text-base absolute right-2.5 top-2 pointer-events-none">search</span>
+                        <input type="search" placeholder="ابحث عن منتج..." oninput="filterQuestionnaireProducts(this)"
+                               class="w-full pr-8 pl-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:border-[#27bebe] min-h-[36px]">
+                    </div>
+                    <div data-sp-grid class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-0.5">
+                        {% for p in products %}
+                        <label data-sp-card data-product-search="{{ p.name|lower }} {{ p.sku_code|default:''|lower }}"
+                               class="flex items-center justify-between gap-2 p-2 {% if p.id in suggested_product_ids %}bg-amber-50/70 border-amber-300{% else %}bg-white border-slate-200{% endif %} hover:border-teal-300 border rounded-xl cursor-pointer text-xs min-h-[40px] min-w-0">
+                            <div class="flex items-center gap-2 min-w-0 flex-1">
+                                <input type="checkbox" name="detailed_products" value="{{ p.id }}" class="text-[#27bebe] rounded focus:ring-[#27bebe] shrink-0"
+                                       onchange="updateProductQuestionCount(this)"
+                                       {% if p.id in selected_detailed_product_ids %}checked{% endif %}>
+                                <span class="font-bold text-slate-800 truncate">{{ p.name }}</span>
+                            </div>
+                            {% if p.id in suggested_product_ids %}
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">مقترح</span>
+                            {% endif %}
+                        </label>
+                        {% empty %}
+                        <p class="text-xs text-slate-400 col-span-full py-3 text-center">لا توجد منتجات متاحة.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
 
             <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1675,30 +1706,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <label class="block text-xs font-bold text-slate-800">
                         {{ q.text_ar }} {% if q.is_required %}<span class="text-rose-500 font-bold">*</span>{% endif %}
                     </label>
-
-                    {% if q.question_type == 'single_choice' %}
-                    <div class="flex flex-wrap gap-2 pt-1">
-                        {% for opt in q.options %}
-                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
-                            <input type="radio" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" {% if q.is_required %}required{% endif %} class="text-[#27bebe] focus:ring-[#27bebe]">
-                            <span>{{ opt.text_ar }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    {% elif q.question_type == 'multiple_choice' %}
-                    <div class="flex flex-wrap gap-2 pt-1">
-                        {% for opt in q.options %}
-                        <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-teal-50/50 cursor-pointer text-xs font-medium text-slate-700">
-                            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-[#27bebe] rounded focus:ring-[#27bebe]">
-                            <span>{{ opt.text_ar }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    {% elif q.question_type == 'textarea' %}
-                    <textarea name="question_{{ q.id }}" rows="2" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white"></textarea>
-                    {% else %}
-                    <input type="text" name="question_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] bg-white">
-                    {% endif %}
+                    {% include 'activities/_questionnaire_field.html' with q=q mode='modal' questionnaire_responses=questionnaire_responses product_choices=question_product_choices|get_item:q.id selected_product_ids=question_selected_product_ids|get_item:q.id suggested_product_ids=suggested_product_ids %}
                 </div>
                 {% endfor %}
             </div>

@@ -433,10 +433,6 @@ def get_visible_assignees_queryset(user, module: str = 'activities'):
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
 
-    role = getattr(user, 'role', None)
-    if role and getattr(role, 'is_super', False):
-        return UserModel.objects.filter(is_active=True).order_by('first_name', 'username')
-
     from accounts.scope_service import ScopeResolutionService
     scope = ScopeResolutionService.get_user_scope(user, module, 'view')
     if scope == 'all':
@@ -471,13 +467,11 @@ def can_user_access_object(user, obj, action: str = 'view') -> bool:
 
 def can_user_perform_stock_in(user, warehouse=None) -> bool:
     """Checks if user has permission to create a Stock In memo for the given warehouse."""
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and getattr(role, 'is_super', False):
-        return True
 
     from master_data.models import CompanyProfile
     profile = CompanyProfile.get_settings()
@@ -497,13 +491,11 @@ def can_user_perform_stock_in(user, warehouse=None) -> bool:
 
 def can_user_perform_stock_out(user, warehouse=None) -> bool:
     """Checks if user has permission to create a Stock Out memo from the given warehouse."""
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and getattr(role, 'is_super', False):
-        return True
 
     from master_data.models import CompanyProfile
     profile = CompanyProfile.get_settings()
@@ -523,13 +515,11 @@ def can_user_perform_stock_out(user, warehouse=None) -> bool:
 
 def can_user_perform_transfer(user, source_warehouse=None, dest_warehouse=None) -> bool:
     """Checks if user has permission to request/execute warehouse transfers."""
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if getattr(user, 'is_super_admin', False) or user.is_superuser:
         return True
     role = getattr(user, 'role', None)
-    if role and getattr(role, 'is_super', False):
-        return True
     if is_accountant(user):
         return True
 
@@ -543,6 +533,16 @@ def can_user_perform_transfer(user, source_warehouse=None, dest_warehouse=None) 
     else:
         if not (has_perm_or_admin(user, ['inventory:transfers/create', 'inventory:transfers/manage', 'inventory:transfers/approve']) or is_representative(user)):
             return False
+
+    if source_warehouse:
+        if getattr(source_warehouse, 'is_main', False) or can_user_access_object(user, source_warehouse, 'view'):
+            pass
+        else:
+            from accounts.scope_service import ScopeResolutionService
+            user_main_ids = set(ScopeResolutionService.get_user_main_areas(user).values_list('id', flat=True))
+            src_main = ScopeResolutionService.get_main_area(getattr(source_warehouse, 'area', None))
+            if not (src_main and src_main.id in user_main_ids):
+                return False
 
     if dest_warehouse:
         if dest_warehouse.assigned_user_id == user.id:

@@ -86,6 +86,7 @@
             </div>
         </div>
 
+        {% if can_view_stock %}
         <!-- Total Stock -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
@@ -97,6 +98,7 @@
                 <span class="text-[10px] sm:text-xs text-emerald-600 font-semibold block leading-tight mt-0.5">إجمالي الرصيد بالمستودعات</span>
             </div>
         </div>
+        {% endif %}
     </div>
 
     <!-- Packaging, Volume Discounts & Price Lists Details -->
@@ -192,6 +194,7 @@
         </div>
     </div>
 
+    {% if can_view_stock %}
     <!-- Stock by Warehouse Table -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden p-6 space-y-4">
         <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -230,6 +233,7 @@
             </table>
         </div>
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}

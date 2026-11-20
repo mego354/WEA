@@ -132,15 +132,35 @@ def product_create(request):
             category = ProductCategory.objects.create(name='WEA', code='WEA')
 
         thumbnail = request.FILES.get('thumbnail')
+        if thumbnail:
+            from django.core.exceptions import ValidationError
+            from master_data.media_service import validate_uploaded_file
+            try:
+                validate_uploaded_file(thumbnail, images_only=True)
+            except ValidationError as e:
+                msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+                messages.error(request, msg)
+                return redirect('product_create')
+
+        try:
+            retail_dec = Decimal(retail_price)
+            cost_dec = Decimal(default_purchase_cost)
+            tax_dec = Decimal(tax_percentage)
+            if retail_dec < 0 or cost_dec < 0 or tax_dec < 0 or tax_dec > 100:
+                messages.error(request, "الأسعار والتكاليف يجب أن تكون موجبة والضريبة بين 0% و 100%.")
+                return redirect('product_create')
+        except Exception:
+            messages.error(request, "يرجى إدخال قيم رقمية صحيحة للسعر والتكلفة والضريبة.")
+            return redirect('product_create')
 
         product = Product.objects.create(
             name=name,
             sku_code=sku_code,
             category=category,
             barcode=barcode,
-            retail_price=Decimal(retail_price),
-            default_purchase_cost=Decimal(default_purchase_cost),
-            tax_percentage=Decimal(tax_percentage),
+            retail_price=retail_dec,
+            default_purchase_cost=cost_dec,
+            tax_percentage=tax_dec,
             unit=unit,
             description=description,
             sellable=sellable,
@@ -149,6 +169,16 @@ def product_create(request):
             packing_cartons=packing_cartons,
             thumbnail=thumbnail,
             created_by=request.user
+        )
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='PRODUCT_CREATED',
+            module='catalog',
+            actor=request.user,
+            record_id=product.id,
+            record_name=product.name,
+            description=f"إنشاء صنف جديد: {product.name} ({product.sku_code})",
+            request=request,
         )
 
         # Volume discount tiers
@@ -234,8 +264,14 @@ def product_edit(request, pk):
             from master_data.media_service import clear_model_file
             clear_model_file(product, 'thumbnail')
         elif request.FILES.get('thumbnail'):
+            from django.core.exceptions import ValidationError
             from master_data.media_service import replace_model_file
-            replace_model_file(product, 'thumbnail', request.FILES['thumbnail'])
+            try:
+                replace_model_file(product, 'thumbnail', request.FILES['thumbnail'])
+            except ValidationError as e:
+                msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+                messages.error(request, msg)
+                return redirect('product_edit', pk=product.pk)
 
         product.save()
 
@@ -287,18 +323,24 @@ def product_detail(request, pk):
         Product.objects.select_related('category', 'created_by').prefetch_related('volume_discounts', 'price_lists'),
         pk=pk
     )
-    from accounts.permissions import get_scoped_queryset
-    stocks = get_scoped_queryset(
-        InventoryStock.objects.filter(product=product).select_related('warehouse'),
-        request.user,
-        'inventorystock'
-    )
-    total_stock = sum((s.qty_on_hand for s in stocks), Decimal('0.00'))
+    from accounts.permissions import get_scoped_queryset, has_perm_or_admin
+    can_view_stock = has_perm_or_admin(request.user, 'inventory:stocks/view')
+    if can_view_stock:
+        stocks = get_scoped_queryset(
+            InventoryStock.objects.filter(product=product).select_related('warehouse'),
+            request.user,
+            'inventorystock'
+        )
+        total_stock = sum((s.qty_on_hand for s in stocks), Decimal('0.00'))
+    else:
+        stocks = InventoryStock.objects.none()
+        total_stock = Decimal('0.00')
 
     context = {
         'product': product,
         'stocks': stocks,
         'total_stock': total_stock,
+        'can_view_stock': can_view_stock,
         'volume_discounts': product.volume_discounts.all(),
         'price_lists': product.price_lists.all(),
     }
@@ -612,12 +654,27 @@ def categories_list(request):
         active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     if request.method == 'POST':
+        if not has_perm_or_admin(request.user, ['catalog:categories/create', 'catalog:categories/edit']):
+            return render_forbidden_response(request, "ليس لديك صلاحية إنشاء تصنيفات منتجات.")
         name = request.POST.get('name', '').strip()
         code = request.POST.get('code', '').strip()
         description = request.POST.get('description', '').strip()
         if name and code:
-            ProductCategory.objects.create(name=name, code=code, description=description)
-            messages.success(request, f"تم إنشاء التصنيف '{name}' بنجاح.")
+            if ProductCategory.objects.filter(Q(name=name) | Q(code=code)).exists():
+                messages.error(request, "يوجد تصنيف بنفس الاسم أو الكود بالفعل.")
+            else:
+                cat = ProductCategory.objects.create(name=name, code=code, description=description)
+                from accounts.services import AuditLogService
+                AuditLogService.log(
+                    action_type='CATEGORY_CREATED',
+                    module='catalog',
+                    actor=request.user,
+                    record_id=cat.id,
+                    record_name=cat.name,
+                    description=f"إنشاء تصنيف منتج: {cat.name} ({cat.code})",
+                    request=request,
+                )
+                messages.success(request, f"تم إنشاء التصنيف '{name}' بنجاح.")
         else:
             messages.error(request, "يرجى إدخال اسم التصنيف والكود.")
         return redirect('categories_list')

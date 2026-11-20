@@ -1,5 +1,5 @@
 <!-- GLOBAL UNIFIED DELETE / ACTION CONFIRMATION MODAL (Matching Catalog Categories Popup Standard) -->
-<div id="global-confirm-delete-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[100] p-4 transition-all duration-200">
+<div id="global-confirm-delete-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[120] p-4 transition-all duration-200">
     <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden p-6 text-center text-xs animate-in fade-in zoom-in duration-150">
         <!-- Warning / Action Icon -->
         <div id="global-delete-icon-wrapper" class="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3">
@@ -72,10 +72,16 @@ function showConfirmDeleteModal({
 
     const descEl = document.getElementById('global-delete-desc');
     if (descEl) {
+        descEl.textContent = '';
         if (message) {
-            descEl.innerHTML = message;
+            descEl.textContent = String(message);
         } else {
-            descEl.innerHTML = `هل أنت متأكد من رغبتك في حذف <span class="font-bold text-slate-800">${itemName ? `"${itemName}"` : 'هذا العنصر'}</span>؟ لا يمكن التراجع عن هذا الإجراء.`;
+            descEl.appendChild(document.createTextNode('هل أنت متأكد من رغبتك في حذف '));
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'font-bold text-slate-800';
+            nameSpan.textContent = itemName ? `"${itemName}"` : 'هذا العنصر';
+            descEl.appendChild(nameSpan);
+            descEl.appendChild(document.createTextNode('؟ لا يمكن التراجع عن هذا الإجراء.'));
         }
     }
 

@@ -67,5 +67,7 @@ urlpatterns = [
     path('api/geocoding/search/', views.geocoding_search_api, name='geocoding_search_api'),
     path('api/geocoding/reverse/', views.geocoding_reverse_api, name='geocoding_reverse_api'),
     path('api/list-suggestions/', list_search_api.list_suggestions_api, name='list_suggestions_api'),
+    path('api/dashboard/search-areas/', views.dashboard_search_areas_api, name='dashboard_search_areas_api'),
+    path('api/dashboard/search-bricks/', views.dashboard_search_bricks_api, name='dashboard_search_bricks_api'),
 ]
 

@@ -33,11 +33,17 @@ class TreasuryService:
 
         # Concurrency safety: Lock the vault record
         vault_locked = Vault.objects.select_for_update().get(id=vault.id)
+        if not vault_locked.is_active:
+            raise ValidationError(f"الخزنة ({vault_locked.name}) معطلة حالياً ولا يمكن الصرف منها.")
         if vault_locked.current_balance < amount:
             raise ValidationError(f"رصيد الخزنة ({vault_locked.name}: {vault_locked.current_balance:,.2f} ج.م) غير كافٍ لسداد {amount:,.2f} ج.م.")
 
-        # If linked to a purchase order, validate
+        # If linked to a purchase order, lock and validate
         if purchase_order:
+            from purchases.models import PurchaseOrder
+            purchase_order = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
+            if purchase_order.status == 'cancelled':
+                raise ValidationError("لا يمكن تسجيل سداد لأمر شراء ملغى.")
             if purchase_order.supplier_id != supplier.id:
                 raise ValidationError("أمر الشراء المحدد لا ينتمي إلى هذا المورد.")
             if amount > purchase_order.outstanding_balance:
@@ -46,6 +52,7 @@ class TreasuryService:
                 )
 
         account = VendorAccount.get_or_create_for_supplier(supplier)
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
         p_date = payment_date or timezone.now().date()
 
         # 1. Deduct Vault Balance
@@ -195,12 +202,14 @@ class TreasuryService:
         if source_vault.id == destination_vault.id:
             raise ValidationError("لا يمكن التحويل إلى نفس الخزنة.")
 
-        # Deadlock prevention: lock in ascending ID order
+        # Deadlock prevention: lock in ascending ID order (evaluate queryset to acquire row locks!)
         v_ids = sorted([source_vault.id, destination_vault.id])
-        Vault.objects.select_for_update().filter(id__in=v_ids)
-
-        src_locked = Vault.objects.get(id=source_vault.id)
-        dst_locked = Vault.objects.get(id=destination_vault.id)
+        locked_map = {
+            v.id: v
+            for v in Vault.objects.select_for_update().filter(id__in=v_ids).order_by('id')
+        }
+        src_locked = locked_map[source_vault.id]
+        dst_locked = locked_map[destination_vault.id]
 
         if not src_locked.is_active:
             raise ValidationError(f"الخزنة المصدر ({src_locked.name}) معطلة حالياً.")
@@ -285,6 +294,11 @@ class TreasuryService:
 
         if tx.reference_type == 'reversal':
             raise ValidationError("لا يمكن عكس حركة تسوية / عكس سابقة.")
+
+        if tx.reference_type in ('vault_transfer_out', 'vault_transfer_in', 'vendor_payment', 'customer_collection'):
+            raise ValidationError(
+                "لا يمكن عكس حركة خزينة مرتبطة بعملية أخرى (تحويل بين خزن / سداد مورد / تحصيل عميل) بشكل منفرد حفاظاً على توازن القيد المزدوج."
+            )
 
         vault_locked = Vault.objects.select_for_update().get(id=tx.vault_id)
 
@@ -724,6 +738,7 @@ class VendorPaymentRequestService:
         if req.status not in ['pending', 'approved']:
             raise ValidationError(f"لا يمكن إلغاء طلب سداد بحالة '{req.status_display_ar}'.")
 
+        prev_status = req.status
         req.status = 'cancelled'
         req.rejection_reason = reason or "تم الإلغاء"
         req.save(update_fields=['status', 'rejection_reason', 'updated_at'])
@@ -731,11 +746,22 @@ class VendorPaymentRequestService:
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
             record_type='payment_request',
-            record_id=req.id,
             payment_request=req,
             action='cancelled',
             actor=user,
-            notes=reason or "إلغاء طلب السداد"
+            status_before=prev_status,
+            status_after='cancelled',
+            reason=reason or "إلغاء طلب السداد"
+        )
+        AuditLogService.log(
+            action_type='VENDOR_PAYMENT_REQUEST_CANCELLED',
+            module='treasury',
+            actor=user,
+            record_id=req.id,
+            record_name=req.request_number,
+            description=f"إلغاء طلب سداد المورد {req.request_number}: {req.rejection_reason}",
+            previous_values={'status': prev_status},
+            new_values={'status': 'cancelled', 'reason': req.rejection_reason},
         )
         return req
 

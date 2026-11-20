@@ -36,7 +36,10 @@ from .services import (
     can_submit_answers, can_end_visit, end_visit,
     build_visit_timeline, can_delete_unended_visit, delete_unended_visit,
     can_edit_visit_answers, update_visit_questionnaire_answers,
-    build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields
+    build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields,
+    get_question_product_choices, parse_suggested_products_submission,
+    preload_visit_qa_product_map, format_answer_for_display,
+    can_edit_agreement, can_delete_agreement,
 )
 from master_data.date_filter_utils import resolve_date_range
 from master_data.search_utils import filter_by_arabic_search
@@ -215,7 +218,7 @@ def agreements_list(request):
     customer_id = str(customer_id_int) if customer_id_int else ''
     if customer_id_int:
         qs = qs.filter(customer_id=customer_id_int)
-        c_obj = Contact.objects.filter(id=customer_id_int).first()
+        c_obj = get_scoped_queryset(Contact.objects.all(), request.user, 'contact').filter(id=customer_id_int).first()
         active_filters.append({'label': 'العميل', 'value': c_obj.name if c_obj else customer_id, 'param': 'customer'})
 
     # Assignee Filter (created_by, multi-select, strictly scoped)
@@ -360,7 +363,7 @@ def agreements_list(request):
     users = get_visible_assignees_queryset(request.user, 'activities').order_by('first_name', 'username')
     governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'activities')
     bricks = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', 'activities')
-    customers = get_scoped_queryset(Contact.objects.filter(status='customer'), request.user, 'contact').order_by('name')[:150]
+    customers = get_scoped_queryset(Contact.objects.filter(is_customer=True).exclude(status='inactive'), request.user, 'contact').order_by('name')[:150]
 
     user_scope = ScopeResolutionService.get_user_scope(request.user, 'activities')
     can_filter_creator = (
@@ -382,16 +385,8 @@ def agreements_list(request):
     }
 
     for a in page_obj.object_list:
-        a.user_can_edit = bool(
-            a.status == 'new'
-            and has_perm_or_admin(request.user, 'activities:agreements/edit')
-            and can_user_access_object(request.user, a, 'edit')
-        )
-        a.user_can_delete = bool(
-            a.status == 'new'
-            and has_perm_or_admin(request.user, 'activities:agreements/delete')
-            and can_user_access_object(request.user, a, 'delete')
-        )
+        a.user_can_edit = can_edit_agreement(request.user, a)[0]
+        a.user_can_delete = can_delete_agreement(request.user, a)[0]
 
     type_options = [{'value': str(t.id), 'label': t.name} for t in agreement_types]
     selected_type_str = [str(x) for x in selected_types]
@@ -439,6 +434,7 @@ def agreements_list(request):
         'active_preset': active_preset,
         'active_filters': active_filters,
         'can_manage_approvals': can_manage_approvals(request.user, 'agreements'),
+        'can_view_agreement': has_perm_or_admin(request.user, 'activities:agreements/view'),
         'can_create_agreement': has_perm_or_admin(request.user, 'activities:agreements/create'),
         'can_export_agreements': has_perm_or_admin(request.user, 'activities:agreements/export'),
         'stats': agreements_stats,
@@ -476,8 +472,8 @@ def agreements_bulk_status(request):
         messages.warning(request, "لم يتم تحديد أي اتفاقيات لتحديث حالتها.")
         return redirect('agreements_list')
 
-    # Strictly scope target agreements
-    scoped_agreements = get_scoped_queryset(Agreement.objects.filter(pk__in=selected_ids), request.user, 'agreement')
+    # Strictly scope target agreements (manage scope for bulk mutation)
+    scoped_agreements = get_scoped_queryset(Agreement.objects.filter(pk__in=selected_ids), request.user, 'agreement', scope_type='manage')
 
     status_names = {
         'new': 'جديدة',
@@ -561,8 +557,8 @@ def agreement_detail(request, pk):
         return render_forbidden_response(request, "لا يمكنك عرض هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
 
     can_approve_this = can_manage_approvals(request.user, 'agreements') and can_user_access_object(request.user, agreement, 'approve')
-    can_edit = agreement.status in ('new', 'disapproved') and has_perm_or_admin(request.user, 'activities:agreements/edit') and can_user_access_object(request.user, agreement, 'edit')
-    can_delete = agreement.status in ('new', 'disapproved') and has_perm_or_admin(request.user, 'activities:agreements/delete') and can_user_access_object(request.user, agreement, 'delete')
+    can_edit = can_edit_agreement(request.user, agreement)[0]
+    can_delete = can_delete_agreement(request.user, agreement)[0]
     timeline_events = build_agreement_timeline(agreement)
 
     return render(request, 'activities/agreement_detail.html', {
@@ -588,7 +584,7 @@ def agreement_create(request):
             from master_data.models import LocationSettings
             loc_settings = LocationSettings.get_settings()
             if not loc_settings.require_manager_approval_for_agreements or has_perm_or_admin(request.user, 'activities:agreements/approve'):
-                agreement.status = 'approved'
+                agreement.status = 'done'
                 agreement.approved_by = request.user
                 agreement.approved_at = timezone.now()
             else:
@@ -639,12 +635,16 @@ def agreement_create(request):
 def agreement_edit(request, pk):
     """Edit agreement (allowed strictly if status is unapproved: new or disapproved)."""
     agreement = get_object_or_404(Agreement, pk=pk)
-    if not can_user_access_object(request.user, agreement, 'edit'):
+    if not can_user_access_object(request.user, agreement, 'view'):
         return render_forbidden_response(request, "لا يمكنك تعديل هذه الاتفاقية خارج نطاق اختصاصك أو منطقتك الجغرافية.")
 
-    if agreement.status == 'done' and not (request.user.is_superuser or is_manager_or_higher(request.user)):
-        messages.warning(request, "لا يمكن تعديل الاتفاقية بعد إنجازها.")
+    if agreement.status not in ('new', 'disapproved'):
+        messages.warning(request, "لا يمكن تعديل الاتفاقية بعد إنجازها. يرجى إعادة فتحها أولاً.")
         return redirect('agreement_detail', pk=agreement.pk)
+
+    allowed, reason = can_edit_agreement(request.user, agreement)
+    if not allowed:
+        return render_forbidden_response(request, reason)
 
     before_snap = _agreement_snapshot(agreement)
 
@@ -800,38 +800,63 @@ def agreement_action(request, pk, action):
 def agreement_delete(request, pk):
     """
     Delete an agreement strictly if in unapproved state (new or disapproved).
-    POST method required.
+    POST method required. Enforces scope & status rules, cleans up ERPAttachments,
+    and writes permanent SecurityAuditLog trail.
     """
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
     if request.method != 'POST':
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': 'طريقة طلب غير صالحة للحذف. يلزم استخدام POST.'}, status=405)
         messages.error(request, "طريقة طلب غير صالحة للحذف. يلزم استخدام POST.")
         return redirect('agreement_detail', pk=pk)
 
     agreement = get_object_or_404(Agreement, pk=pk)
-    if not can_user_access_object(request.user, agreement, 'delete'):
-        return render_forbidden_response(request, "لا يمكنك حذف هذه الاتفاقية.")
+    if not can_user_access_object(request.user, agreement, 'view'):
+        return render_forbidden_response(request, "لا يمكنك حذف هذه الاتفاقية خارج نطاق اختصاصك.")
 
-    if agreement.status == 'done' and not (request.user.is_superuser or is_manager_or_higher(request.user)):
-        messages.error(request, "لا يمكن حذف اتفاقية بعد إنجازها.")
+    if agreement.status not in ('new', 'disapproved'):
+        msg = "لا يمكن حذف اتفاقية بعد إنجازها أو اعتمادها."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
         return redirect('agreement_detail', pk=agreement.pk)
 
-    serial = agreement.serial_num
-    before_snap = _agreement_snapshot(agreement)
+    allowed, reason = can_delete_agreement(request.user, agreement)
+    if not allowed:
+        return render_forbidden_response(request, reason)
 
-    AuditLogService.log(
-        action='delete',
-        action_type='AGREEMENT_DELETED',
-        module='activities',
-        actor=request.user,
-        record_id=agreement.id,
-        record_name=f"اتفاقية #{serial}",
-        description=f"حذف الاتفاقية #{serial} (الحالة: {agreement.status})",
-        previous_values=before_snap,
-        status='SUCCESS',
-        request=request,
-    )
+    from django.contrib.contenttypes.models import ContentType
+    from master_data.models import ERPAttachment
+    from master_data.media_service import delete_attachment
 
-    agreement.delete()
-    messages.success(request, f"تم حذف الاتفاقية #{serial} بنجاح.")
+    with transaction.atomic():
+        agreement = Agreement.objects.select_for_update().select_related('customer', 'type').get(pk=agreement.pk)
+        serial = agreement.serial_num
+        before_snap = _agreement_snapshot(agreement)
+
+        ct_agr = ContentType.objects.get_for_model(Agreement)
+        for att in ERPAttachment.objects.filter(content_type=ct_agr, object_id=agreement.pk):
+            delete_attachment(att, request.user, request=request)
+
+        AuditLogService.log(
+            action='delete',
+            action_type='AGREEMENT_DELETED',
+            module='activities',
+            actor=request.user,
+            record_id=agreement.id,
+            record_name=f"اتفاقية #{serial}",
+            description=f"حذف الاتفاقية #{serial} (الحالة: {agreement.status})",
+            previous_values=before_snap,
+            status='SUCCESS',
+            request=request,
+        )
+
+        agreement.delete()
+
+    msg = f"تم حذف الاتفاقية #{serial} بنجاح."
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': msg, 'redirect_url': reverse('agreements_list')})
+    messages.success(request, msg)
     return redirect('agreements_list')
 
 
@@ -1382,7 +1407,7 @@ def visit_templates_api(request):
 
     account_type = request.GET.get('account_type', '').strip().lower()
 
-    qs = VisitTemplate.objects.filter(active=True).prefetch_related('questions', 'restricted_roles')
+    qs = VisitTemplate.objects.filter(active=True).prefetch_related('questions', 'restricted_roles', 'suggested_products')
 
     results = []
     for tmpl in qs:
@@ -1416,6 +1441,7 @@ def visit_templates_api(request):
                     'order': q.order
                 })
             effective_tol = loc_settings.get_effective_tolerance(tmpl)
+            pool_qs = tmpl.get_suggested_products_pool()
             results.append({
                 'id': tmpl.id,
                 'name': tmpl.name,
@@ -1424,6 +1450,10 @@ def visit_templates_api(request):
                 'allow_unplanned': tmpl.allow_unplanned,
                 'enable_product_detailing': tmpl.enable_product_detailing,
                 'supports_product_detailing': tmpl.is_product_detailing_supported(),
+                'suggested_products': [
+                    {'id': p.id, 'name': p.name, 'sku_code': p.sku_code}
+                    for p in pool_qs
+                ],
                 'restrict_account_types': tmpl.restrict_account_types or [],
                 'restricted_roles': [r.name for r in tmpl.restricted_roles.all()],
                 'has_special_location_settings': tmpl.has_special_location_settings,
@@ -2139,6 +2169,17 @@ def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
             qs = qs.filter(gps_forced_start=False, gps_forced_end=False)
             active_filters.append({'label': 'تجاوز المسافة', 'value': 'ضمن النطاق (لم يتم التجاوز)', 'param': 'distance_ignored'})
 
+    # Creator Edit Status filter
+    edited_by_creator = (request.GET.get('edited_by_creator') or '').strip().lower()
+    if edited_by_creator == 'yes':
+        qs = qs.filter(edited_by_creator=True)
+        active_filters.append({'label': 'تعديل المنشئ', 'value': 'تم تعديلها بواسطة المنشئ', 'param': 'edited_by_creator'})
+    elif edited_by_creator == 'no':
+        qs = qs.filter(edited_by_creator=False)
+        active_filters.append({'label': 'تعديل المنشئ', 'value': 'لم تُعدّل بواسطة المنشئ', 'param': 'edited_by_creator'})
+    else:
+        edited_by_creator = ''
+
     # Permission-gated GPS Integrity filter (ignored if user lacks permission)
     gps_integrity = ''
     if can_view_gps_suspicion:
@@ -2167,6 +2208,7 @@ def _apply_visits_list_filters(request, qs, can_view_gps_suspicion=False):
         'date_to': date_to,
         'active_preset': active_preset,
         'distance_ignored': distance_ignored,
+        'edited_by_creator': edited_by_creator,
         'gps_integrity': gps_integrity,
         'active_filters': active_filters,
     }
@@ -2178,8 +2220,8 @@ def visits_list(request):
     Visits list with table & cards views, complete filters, status indicators, and export.
     """
     qs = (
-        Visit.objects.select_related('contact', 'contact__area', 'contact__brick', 'template', 'owner', 'created_by')
-        .prefetch_related('samples__product', 'template__questions')
+        Visit.objects.select_related('contact', 'contact__area', 'contact__brick', 'template', 'owner', 'created_by', 'last_edited_by')
+        .prefetch_related('samples__product', 'template__questions', 'detailed_products')
         .all()
         .order_by('-serial_num')
     )
@@ -2196,6 +2238,7 @@ def visits_list(request):
     date_to = f_state['date_to']
     active_preset = f_state['active_preset']
     distance_ignored = f_state['distance_ignored']
+    edited_by_creator = f_state['edited_by_creator']
     gps_integrity = f_state['gps_integrity']
     active_filters = f_state['active_filters']
 
@@ -2204,6 +2247,7 @@ def visits_list(request):
 
     # Standardized bounded pagination
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+    preload_visit_qa_product_map(page_obj.object_list)
 
     user_can_manage = can_manage_approvals(request.user)
     from master_data.models import LocationSettings
@@ -2286,6 +2330,7 @@ def visits_list(request):
         'date_to': date_to,
         'active_preset': active_preset,
         'selected_distance_ignored': distance_ignored,
+        'selected_edited_by_creator': edited_by_creator,
         'can_view_gps_suspicion': can_view_gps_suspicion,
         'selected_gps_integrity': gps_integrity if can_view_gps_suspicion else '',
         'gps_integrity_choices': Visit.GPS_INTEGRITY_STATUS_CHOICES if can_view_gps_suspicion else [],
@@ -2303,8 +2348,10 @@ def visit_detail(request, pk):
     verifying GPS, saving draft progress, completing, cancelling, and manager approvals.
     """
     visit = get_object_or_404(
-        Visit.objects.select_related('contact', 'contact__area', 'template', 'owner', 'approved_by', 'created_by', 'bypassed_by')
-        .prefetch_related('samples__product', 'expenses', 'detailed_products'),
+        Visit.objects.select_related(
+            'contact', 'contact__area', 'template', 'owner',
+            'approved_by', 'created_by', 'bypassed_by', 'last_edited_by',
+        ).prefetch_related('samples__product', 'expenses', 'detailed_products', 'template__questions'),
         pk=pk
     )
 
@@ -2320,6 +2367,9 @@ def visit_detail(request, pk):
     if request.method == 'POST':
         if visit.status in ('finished', 'cancelled'):
             return render_forbidden_response(request, "لا يمكن تقديم الإجابات أو إنهاء الزيارة لأنها مكتملة أو ملغاة بالفعل.")
+
+        if visit.is_planned and visit.approval_status != 'approved':
+            return render_forbidden_response(request, "لا يمكن إنهاء زيارة مخططة غير معتمدة. يجب اعتماد الزيارة أولاً.")
 
         # Visit execution ownership check
         if visit.owner_id != request.user.id and not (request.user.is_superuser or getattr(request.user, 'is_super_admin', False)):
@@ -2345,7 +2395,7 @@ def visit_detail(request, pk):
                     val = val[0]
                 elif isinstance(val, list) and len(val) == 0:
                     val = ''
-                if q.question_type == 'multiple_choice':
+                if q.question_type in ('multiple_choice', 'suggested_products'):
                     val = request.POST.getlist(field_name)
                 if not val and str(q.id) in answers:
                     val = answers[str(q.id)]
@@ -2367,22 +2417,36 @@ def visit_detail(request, pk):
                     continue
 
                 field_name = f'question_{q.id}'
-                val = request.POST.get(field_name) or request.POST.getlist(field_name)
-                if isinstance(val, list) and len(val) == 1:
-                    val = val[0]
-                elif isinstance(val, list) and len(val) == 0:
-                    val = ''
-                if q.question_type == 'multiple_choice':
-                    val = request.POST.getlist(field_name)
-                if (val is None or val == '' or val == []) and q.stage == 'start_only' and str(q.id) in answers:
-                    val = answers[str(q.id)]
+                if q.question_type == 'suggested_products':
+                    eligible_qs, historical_ids, _ = get_question_product_choices(template, visit=visit, question=q)
+                    allowed_ids = set(eligible_qs.values_list('id', flat=True)) | historical_ids
+                    try:
+                        val = parse_suggested_products_submission(request.POST, field_name, allowed_ids, strict=True)
+                    except ValidationError as ve:
+                        err_msg = ve.message if hasattr(ve, 'message') else (ve.messages[0] if getattr(ve, 'messages', None) else str(ve))
+                        validation_errors.append(err_msg)
+                        val = []
+                    if not val and q.stage == 'start_only' and str(q.id) in answers:
+                        val = answers[str(q.id)]
+                else:
+                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                    if isinstance(val, list) and len(val) == 1:
+                        val = val[0]
+                    elif isinstance(val, list) and len(val) == 0:
+                        val = ''
+                    if q.question_type == 'multiple_choice':
+                        val = request.POST.getlist(field_name)
+                    if (val is None or val == '' or val == []) and q.stage == 'start_only' and str(q.id) in answers:
+                        val = answers[str(q.id)]
 
                 # Validate required questions strictly when completing
                 if action == 'complete' and q.is_required and (val is None or val == '' or val == []):
                     validation_errors.append(f"السؤال '{q.text_ar}' إلزامي لإتمام الزيارة.")
 
-                if val is not None and val != '':
+                if val is not None and val != '' and val != []:
                     answers[str(q.id)] = val
+                else:
+                    answers.pop(str(q.id), None)
 
         # Handle Location Verification
         lat = request.POST.get('latitude') or visit.latitude
@@ -2439,32 +2503,28 @@ def visit_detail(request, pk):
                         ans_q1 = answers.get(str(first_q.id))
                         if ans_q1:
                             ans_str = str(ans_q1).strip().lower()
-                            visit.is_successful = ('ناجح' in ans_str or 'successful' in ans_str)
-
-                if action != 'complete' and (lat or lng or force_bypass):
-                    try:
-                        verify_visit_location(
-                            visit, request.user, visit.contact,
-                            visit_lat=lat, visit_lng=lng, device_accuracy=acc,
-                            force_bypass=force_bypass,
-                            bypass_reason=bypass_reason, stage='end',
-                            request_distance_exception=request_distance_exception,
-                            strict_distance=False
-                        )
-                    except Exception:
-                        pass
+                            visit.is_successful = (('ناجح' in ans_str and 'غير' not in ans_str) or ('successful' in ans_str and 'unsuccessful' not in ans_str))
 
                 # Product Detailing (Requirement 8): Restricted to the three templates
                 if template and template.is_product_detailing_supported():
-                    detailed_product_ids = request.POST.getlist('detailed_products')
-                    if detailed_product_ids:
-                        eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
-                        historical_ids = set(visit.detailed_products.values_list('id', flat=True))
-                        allowed_ids = eligible_ids | historical_ids
-                        valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
-                        visit.detailed_products.set(valid_ids)
-                    elif 'detailed_products_submitted' in request.POST:
-                        visit.detailed_products.clear()
+                    if template.has_suggested_products_question():
+                        sp_union_ids = []
+                        for q in template.get_active_questions():
+                            if q.question_type == 'suggested_products':
+                                for pid in (answers.get(str(q.id)) or []):
+                                    if str(pid).isdigit() and int(pid) not in sp_union_ids:
+                                        sp_union_ids.append(int(pid))
+                        visit.detailed_products.set(sp_union_ids)
+                    else:
+                        detailed_product_ids = request.POST.getlist('detailed_products')
+                        if detailed_product_ids:
+                            eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                            historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+                            allowed_ids = eligible_ids | historical_ids
+                            valid_ids = [int(pid) for pid in detailed_product_ids if str(pid).isdigit() and int(pid) in allowed_ids]
+                            visit.detailed_products.set(valid_ids)
+                        elif 'detailed_products_submitted' in request.POST:
+                            visit.detailed_products.clear()
                 else:
                     visit.detailed_products.clear()
 
@@ -2575,6 +2635,11 @@ def visit_detail(request, pk):
     all_questions = []
     start_questions = []
     completion_questions = []
+    question_product_choices = {}
+    question_selected_product_ids = {}
+    matched_qids = set()
+    answers = visit.questionnaire_answers or {}
+
     if visit.template:
         active_qs = list(visit.template.get_active_questions())
         if visit.status == 'started':
@@ -2583,14 +2648,50 @@ def visit_detail(request, pk):
             all_questions = list(visit.template.questions.all().order_by('order', 'id'))
         start_questions = [q for q in active_qs if q.stage == 'start_only']
         completion_questions = [q for q in active_qs if q.stage in ['all', 'end_only']]
-        answers = visit.questionnaire_answers or {}
+
+        # Build product choices & batch-fetch product names for all suggested_products questions
+        sp_answer_pids = set()
         for q in all_questions:
-            ans = answers.get(str(q.id))
-            if ans is not None and ans != '':
-                if isinstance(ans, list):
-                    display_ans = ", ".join(str(x) for x in ans)
-                else:
-                    display_ans = str(ans)
+            if q.question_type == 'suggested_products':
+                eligible_qs, _, _ = get_question_product_choices(visit.template, visit=visit, question=q)
+                question_product_choices[q.id] = list(eligible_qs)
+                raw_ans = answers.get(str(q.id), [])
+                items = raw_ans if isinstance(raw_ans, (list, tuple)) else ([raw_ans] if raw_ans not in (None, '') else [])
+                sel_ids = [int(str(x).strip()) for x in items if str(x).strip().isdigit()]
+                question_selected_product_ids[q.id] = set(sel_ids)
+                sp_answer_pids.update(sel_ids)
+
+        qa_product_map = dict(Product.objects.filter(id__in=sp_answer_pids).values_list('id', 'name')) if sp_answer_pids else {}
+
+        for q in all_questions:
+            qid_str = str(q.id)
+            ans = answers.get(qid_str)
+            if q.question_type == 'suggested_products':
+                sel_set = []
+                items = ans if isinstance(ans, (list, tuple)) else ([ans] if ans not in (None, '') else [])
+                for item in items:
+                    if str(item).strip().isdigit():
+                        pid = int(str(item).strip())
+                        sel_set.append({'id': pid, 'name': qa_product_map.get(pid, f"منتج #{pid}")})
+                if sel_set or (visit.status == 'finished' and q.is_active):
+                    matched_qids.add(qid_str)
+                    display_ans = '، '.join(p['name'] for p in sel_set) if sel_set else 'لم يتم اختيار منتجات'
+                    questionnaire_responses.append({
+                        'question': q,
+                        'text_ar': q.text_ar,
+                        'text_en': q.text_en,
+                        'stage': q.get_stage_display(),
+                        'answer': display_ans,
+                        'raw_answer': ans or [],
+                        'question_type': q.question_type,
+                        'selected_products': sel_set,
+                        'is_product_list': True,
+                        'is_empty': not bool(sel_set),
+                        'is_meeting_question': False,
+                    })
+            elif ans is not None and ans != '' and ans != []:
+                matched_qids.add(qid_str)
+                display_ans = format_answer_for_display(q, ans, product_map=qa_product_map)
                 questionnaire_responses.append({
                     'question': q,
                     'text_ar': q.text_ar,
@@ -2598,8 +2699,48 @@ def visit_detail(request, pk):
                     'stage': q.get_stage_display(),
                     'answer': display_ans,
                     'raw_answer': ans,
-                    'is_meeting_question': ('meet' in q.text_ar.lower() or 'قابلت' in q.text_ar)
+                    'question_type': q.question_type,
+                    'is_product_list': False,
+                    'is_empty': False,
+                    'is_meeting_question': ('meet' in q.text_ar.lower() or 'قابلت' in q.text_ar),
                 })
+
+    # Preserve any deleted/legacy question answers so they are never silently dropped
+    for k, ans in answers.items():
+        if str(k) not in matched_qids and ans not in (None, '', []):
+            if isinstance(ans, list):
+                display_ans = "، ".join(Visit.translate_answer_value(x) for x in ans if x not in (None, ''))
+            else:
+                display_ans = Visit.translate_answer_value(ans)
+            questionnaire_responses.append({
+                'question': None,
+                'text_ar': f"سؤال #{k}",
+                'text_en': f"Question #{k}",
+                'stage': 'أرشيف',
+                'answer': display_ans,
+                'raw_answer': ans,
+                'question_type': '',
+                'is_product_list': False,
+                'is_empty': False,
+                'is_meeting_question': False,
+            })
+
+    has_suggested_products_question = template.has_suggested_products_question() if template else False
+    det_prods_list = list(visit.detailed_products.all())
+    if visit.status == 'finished' and supports_detailing and not has_suggested_products_question:
+        questionnaire_responses.append({
+            'question': None,
+            'text_ar': 'المنتجات المشروحة (Product Detailing)',
+            'text_en': 'Detailed Products',
+            'stage': 'نهاية الزيارة',
+            'answer': '، '.join(p.name for p in det_prods_list) if det_prods_list else 'لم يتم اختيار منتجات',
+            'selected_products': [{'id': p.id, 'name': p.name} for p in det_prods_list],
+            'raw_answer': [p.id for p in det_prods_list],
+            'question_type': 'detailed_products',
+            'is_product_list': True,
+            'is_empty': not bool(det_prods_list),
+            'is_meeting_question': False,
+        })
 
     # Configurable Product Suggestions: collect from template & global settings
     suggested_product_ids = set()
@@ -2608,11 +2749,14 @@ def visit_detail(request, pk):
     if location_settings.enable_product_suggestions:
         suggested_product_ids.update(location_settings.get_eligible_suggested_products().values_list('id', flat=True))
 
-    # Eligible products (sellable & active) + any historically detailed products
+    # Eligible products (sellable & active) + any historically detailed products (suggested first)
     eligible_products = Product.get_eligible_for_visits()
-    historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+    historical_ids = {p.id for p in det_prods_list}
     all_product_ids = set(eligible_products.values_list('id', flat=True)) | historical_ids
-    products = Product.objects.filter(id__in=all_product_ids).order_by('name')
+    products = sorted(
+        Product.objects.filter(id__in=all_product_ids).order_by('name'),
+        key=lambda p: (0 if p.id in suggested_product_ids else 1, p.name),
+    )
 
     can_approve = can_manage_approvals(request.user) and can_user_access_object(request.user, visit, 'approve')
     can_resubmit = (visit.approval_status in ('disapproved', 'rejected')) and (
@@ -2634,6 +2778,10 @@ def visit_detail(request, pk):
         'all_questions': all_questions,
         'start_questions': start_questions,
         'completion_questions': completion_questions,
+        'question_product_choices': question_product_choices,
+        'question_selected_product_ids': question_selected_product_ids,
+        'selected_detailed_product_ids': historical_ids,
+        'has_suggested_products_question': has_suggested_products_question,
         'products': products,
         'suggested_product_ids': suggested_product_ids,
         'supports_detailing': supports_detailing,
@@ -2722,9 +2870,12 @@ def visit_create(request):
             planned_item = PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'contact__area', 'template').get(pk=planned_item_id)
             is_owner = (planned_item.plan_day.assignee == request.user)
             can_override = (
-                request.user.is_superuser or
-                getattr(request.user, 'is_super_admin', False) or
-                has_perm_or_admin(request.user, 'activities:planned/manage')
+                (
+                    request.user.is_superuser
+                    or getattr(request.user, 'is_super_admin', False)
+                    or has_perm_or_admin(request.user, 'activities:planned/manage')
+                )
+                and can_user_access_object(request.user, planned_item, 'manage')
             )
             if not (is_owner or can_override):
                 messages.error(request, "غير مصرح لك بتسجيل أو تنفيذ خطة زيارة تابعة لمندوب آخر.")
@@ -2839,6 +2990,23 @@ def visit_create(request):
 
                         visit.save()
 
+                        # Persist optional suggested_products answers if submitted at creation
+                        if template:
+                            sp_answers = dict(visit.questionnaire_answers or {})
+                            sp_changed = False
+                            for q in template.get_active_questions().filter(question_type='suggested_products'):
+                                fname = f'question_{q.id}'
+                                if fname in request.POST:
+                                    eligible_qs, _, _ = get_question_product_choices(template, question=q)
+                                    allowed_ids = set(eligible_qs.values_list('id', flat=True))
+                                    parsed_sp = parse_suggested_products_submission(request.POST, fname, allowed_ids, strict=False)
+                                    if parsed_sp:
+                                        sp_answers[str(q.id)] = parsed_sp
+                                        sp_changed = True
+                            if sp_changed:
+                                visit.questionnaire_answers = sp_answers
+                                visit.save(update_fields=['questionnaire_answers'])
+
                         # Handle product detailing if submitted
                         if template and template.is_product_detailing_supported():
                             detailed_ids = request.POST.getlist('detailed_products')
@@ -2846,6 +3014,14 @@ def visit_create(request):
                                 eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
                                 valid_ids = [int(pid) for pid in detailed_ids if str(pid).isdigit() and int(pid) in eligible_ids]
                                 visit.detailed_products.set(valid_ids)
+                            elif template.has_suggested_products_question() and visit.questionnaire_answers:
+                                sp_union = []
+                                for q in template.get_active_questions().filter(question_type='suggested_products'):
+                                    for pid in (visit.questionnaire_answers.get(str(q.id)) or []):
+                                        if str(pid).isdigit() and int(pid) not in sp_union:
+                                            sp_union.append(int(pid))
+                                if sp_union:
+                                    visit.detailed_products.set(sp_union)
 
                         # Associate or create planned item if visit is planned
                         if planned_item:
@@ -2903,6 +3079,7 @@ def visit_create(request):
                                 'date': str(visit.date),
                                 'owner_id': owner.id,
                                 'template_id': template.id if template else None,
+                                'doubled': visit.doubled,
                                 'distance': float(visit.distance) if visit.distance is not None else None,
                                 'allowed_distance': visit.allowed_distance,
                                 'verification_status': visit.verification_status,
@@ -3022,20 +3199,22 @@ def visit_edit(request, pk):
     if not can_user_access_object(request.user, visit, 'edit'):
         return render_forbidden_response(request, "غير مصرح لك بتعديل بيانات هذه الزيارة.")
 
-    # Strict restriction: Ended visits CANNOT have their metadata edited
-    if visit.status == 'finished' or visit.ended_at is not None:
-        messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد اكتمالها.")
+    # Strict restriction: Ended or Cancelled visits CANNOT have their metadata edited
+    if visit.status in ('finished', 'cancelled') or visit.ended_at is not None:
+        messages.error(request, "لا يمكن تعديل موعد أو قالب الزيارة بعد اكتمالها أو إلغائها.")
         return redirect('visit_detail', pk=visit.pk)
 
     if request.method == 'POST':
         prev_approval_status = visit.approval_status
         prev_date = visit.date
         prev_template = visit.template
+        prev_doubled = visit.doubled
         prev_time = visit.time
         prev_values = {
             'template_id': visit.template_id,
             'template_name': visit.template.display_name_ar if visit.template else '',
             'date': str(visit.date),
+            'doubled': visit.doubled,
             'time': str(visit.time) if visit.time else '',
             'approval_status': visit.approval_status,
         }
@@ -3043,13 +3222,13 @@ def visit_edit(request, pk):
         form = VisitForm(request.POST, request.FILES, instance=visit, user=request.user)
         if form.is_valid():
             with transaction.atomic():
-                # REQUIREMENT D: Before start and end, editing must be restricted to date, template, and time
                 cleaned_date = form.cleaned_data.get('date')
                 cleaned_template = form.cleaned_data.get('template')
+                cleaned_doubled = bool(form.cleaned_data.get('doubled', False))
 
-                # Preserve other fields strictly
                 visit.date = cleaned_date
                 visit.template = cleaned_template
+                visit.doubled = cleaned_doubled
 
                 # Track changes
                 field_changes = []
@@ -3064,6 +3243,12 @@ def visit_edit(request, pk):
                         'field': 'قالب الزيارة',
                         'old': prev_template.display_name_ar if prev_template else 'بدون قالب',
                         'new': cleaned_template.display_name_ar if cleaned_template else 'بدون قالب',
+                    })
+                if cleaned_doubled != prev_doubled:
+                    field_changes.append({
+                        'field': 'زيارة مزدوجة',
+                        'old': 'نعم' if prev_doubled else 'لا',
+                        'new': 'نعم' if cleaned_doubled else 'لا',
                     })
 
                 changes_summary = " | ".join(
@@ -3097,13 +3282,20 @@ def visit_edit(request, pk):
                     approval_required = True
                     status_after = 'pending'
 
-                fields_to_save = ['date', 'template', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at']
+                fields_to_save = ['date', 'template', 'doubled', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at']
+                if field_changes:
+                    visit.last_edited_by = request.user
+                    visit.last_edited_at = timezone.now()
+                    if visit.created_by_id and request.user.id == visit.created_by_id:
+                        visit.edited_by_creator = True
+                    fields_to_save.extend(['edited_by_creator', 'last_edited_by', 'last_edited_at'])
                 visit.save(update_fields=fields_to_save)
 
                 new_values = {
                     'template_id': visit.template_id,
                     'template_name': visit.template.display_name_ar if visit.template else '',
                     'date': str(visit.date),
+                    'doubled': visit.doubled,
                     'time': str(visit.time) if visit.time else '',
                     'approval_status': visit.approval_status,
                     'waiting_for_reapproval': visit.waiting_for_reapproval,
@@ -3298,7 +3490,10 @@ def plan_action(request, pk, action):
     next_url = request.POST.get('next') or request.GET.get('next')
 
     def get_redirect():
-        if next_url and next_url.startswith('/'):
+        from django.utils.http import url_has_allowed_host_and_scheme
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
             return redirect(next_url)
         return redirect('planned_visits_list')
 
@@ -3410,7 +3605,10 @@ def visit_action(request, pk, action):
     next_url = request.POST.get('next') or request.GET.get('next')
 
     def get_redirect():
-        if next_url and next_url.startswith('/'):
+        from django.utils.http import url_has_allowed_host_and_scheme
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
             return redirect(next_url)
         return redirect('visit_detail', pk=visit.pk)
 
@@ -3446,13 +3644,16 @@ def visit_action(request, pk, action):
         if visit.template:
             for q in visit.template.get_active_questions().filter(stage='start_only'):
                 field_name = f'question_{q.id}'
-                val = request.POST.get(field_name) or request.POST.getlist(field_name)
-                if isinstance(val, list) and len(val) == 1:
-                    val = val[0]
-                elif isinstance(val, list) and len(val) == 0:
-                    val = ''
-                if q.question_type == 'multiple_choice':
+                if q.question_type == 'suggested_products':
                     val = request.POST.getlist(field_name)
+                else:
+                    val = request.POST.get(field_name) or request.POST.getlist(field_name)
+                    if isinstance(val, list) and len(val) == 1:
+                        val = val[0]
+                    elif isinstance(val, list) and len(val) == 0:
+                        val = ''
+                    if q.question_type == 'multiple_choice':
+                        val = request.POST.getlist(field_name)
                 if val:
                     checkin_answers[str(q.id)] = val
 
@@ -3694,8 +3895,8 @@ def visits_export(request):
     from master_data.excel_utils import export_to_excel_response
 
     qs = (
-        Visit.objects.select_related('contact', 'template', 'owner')
-        .prefetch_related('samples__product', 'template__questions')
+        Visit.objects.select_related('contact', 'template', 'owner', 'last_edited_by')
+        .prefetch_related('samples__product', 'template__questions', 'detailed_products')
         .all()
         .order_by('-serial_num')
     )
@@ -3703,6 +3904,8 @@ def visits_export(request):
 
     can_view_gps_suspicion = has_perm_or_admin(request.user, 'activities:visits/view_gps_suspicion')
     qs, _ = _apply_visits_list_filters(request, qs, can_view_gps_suspicion=can_view_gps_suspicion)
+    export_visits = list(qs)
+    preload_visit_qa_product_map(export_visits)
 
     columns = [
         {'header': 'رقم الزيارة', 'key': lambda v: f"#{v.serial_num}", 'width': 14, 'align': 'center'},
@@ -3713,7 +3916,8 @@ def visits_export(request):
         {'header': 'القالب', 'key': lambda v: v.template.display_name_ar if v.template else '', 'width': 22, 'align': 'right'},
         {'header': 'الحالة', 'key': lambda v: v.status_display_ar, 'width': 14, 'align': 'center'},
         {'header': 'حالة الاعتماد', 'key': lambda v: v.approval_display_ar, 'width': 14, 'align': 'center'},
-        {'header': 'إجابات الاستبيان', 'key': lambda v: ' | '.join(f"{qa['question_text']}: {qa['answer']}" for qa in v.get_qa_display_list()) or 'لم يتم تسجيل إجابات بعد', 'width': 45, 'align': 'right'},
+        {'header': 'تم التعديل بواسطة المنشئ', 'key': lambda v: 'نعم' if v.edited_by_creator else 'لا', 'width': 18, 'align': 'center'},
+        {'header': 'إجابات الاستبيان', 'key': lambda v: ' | '.join(f"{qa['question_text']}: {qa['answer']}" for qa in v.qa_display_list) or 'لم يتم تسجيل إجابات بعد', 'width': 45, 'align': 'right'},
         {'header': 'مزدوجة', 'key': lambda v: 'نعم' if v.doubled else 'لا', 'width': 10, 'align': 'center'},
         {'header': 'المدة (ثواني)', 'key': 'duration', 'width': 14, 'align': 'center'},
         {'header': 'العينات الموزعة', 'key': lambda v: ', '.join(f"{s.product.name} ({s.quantity})" for s in v.samples.all()), 'width': 30, 'align': 'right'},
@@ -3722,7 +3926,7 @@ def visits_export(request):
         columns.append({'header': 'نزاهة الموقع (GBS)', 'key': lambda v: v.gps_integrity_status_display_ar, 'width': 18, 'align': 'center'})
         columns.append({'header': 'إشارات الاشتباه', 'key': lambda v: v.gps_suspicion_reason or '—', 'width': 35, 'align': 'right'})
     return export_to_excel_response(
-        qs,
+        export_visits,
         columns,
         filename=f"visits_{timezone.now().strftime('%Y%m%d_%H%M')}",
         sheet_title="سجل الزيارات",
@@ -3846,9 +4050,10 @@ def visit_template_edit(request, pk):
 @require_permission('settings:visitsTemplates/manage')
 def visit_template_preview(request, pk):
     """Interactive questionnaire preview simulating representative mobile/tablet device screen."""
-    template = get_object_or_404(VisitTemplate.objects.prefetch_related('questions'), pk=pk)
+    template = get_object_or_404(VisitTemplate.objects.prefetch_related('questions', 'suggested_products'), pk=pk)
     questions = template.get_active_questions()
-    products = Product.objects.filter(is_active=True)[:10]
+    suggested_products_pool = list(template.get_suggested_products_pool())
+    products = suggested_products_pool[:10] if suggested_products_pool else list(Product.get_eligible_for_visits()[:10])
 
     start_questions = [q for q in questions if q.stage == 'start_only']
     completion_questions = [q for q in questions if q.stage in ['all', 'end_only']]
@@ -3859,6 +4064,8 @@ def visit_template_preview(request, pk):
         'start_questions': start_questions,
         'completion_questions': completion_questions,
         'products': products,
+        'suggested_products_pool': suggested_products_pool,
+        'has_suggested_products_question': any(q.question_type == 'suggested_products' for q in questions),
         'title': f'معاينة استبيان: {template.display_name_ar}'
     })
 
@@ -3927,6 +4134,10 @@ def template_question_add(request, template_pk):
         text_ar = request.POST.get('text_ar', '').strip()
         text_en = request.POST.get('text_en', '').strip()
         question_type = request.POST.get('question_type', 'single_choice')
+        valid_q_types = dict(VisitTemplateQuestion.QUESTION_TYPES)
+        if question_type not in valid_q_types:
+            messages.error(request, "نوع السؤال المحدد غير صالح.")
+            return redirect('visit_template_edit', pk=template_pk)
         stage = 'end_only'
         is_required = request.POST.get('is_required') in ['true', '1', 'on']
         is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
@@ -3937,7 +4148,7 @@ def template_question_add(request, template_pk):
             messages.error(request, "يرجى كتابة نص السؤال بالعربية.")
             return redirect('visit_template_edit', pk=template_pk)
 
-        # Build options list from POST
+        # Build options list from POST (not used for suggested_products)
         options = []
         if question_type in ['single_choice', 'multiple_choice']:
             raw_options = request.POST.get('options_json')
@@ -3996,6 +4207,10 @@ def template_question_edit(request, question_pk):
         text_ar = request.POST.get('text_ar', '').strip()
         text_en = request.POST.get('text_en', '').strip()
         question_type = request.POST.get('question_type', question.question_type)
+        valid_q_types = dict(VisitTemplateQuestion.QUESTION_TYPES)
+        if question_type not in valid_q_types:
+            messages.error(request, "نوع السؤال المحدد غير صالح.")
+            return redirect('visit_template_edit', pk=template_pk)
         stage = 'end_only'
         is_required = request.POST.get('is_required') in ['true', '1', 'on']
         is_conditional = request.POST.get('is_conditional') in ['true', '1', 'on']
@@ -4013,7 +4228,9 @@ def template_question_edit(request, question_pk):
         question.conditional_trigger_value = conditional_trigger_value
 
         # Build options list from POST
-        if question_type in ['single_choice', 'multiple_choice']:
+        if question_type == 'suggested_products':
+            question.options = []
+        elif question_type in ['single_choice', 'multiple_choice']:
             raw_options = request.POST.get('options_json')
             if raw_options:
                 try:
@@ -4104,7 +4321,7 @@ def agenda_view(request):
     """
     from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
     can_view_others = is_super or is_mgr
 
     available_reps = get_visible_assignees_queryset(request.user, module='activities')
@@ -4436,7 +4653,7 @@ def agenda_todo_add(request):
     if target_user_id:
         from accounts.scope_service import ScopeResolutionService
         is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-        is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
+        is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
         if is_super or is_mgr:
             managed_reps = get_user_managed_representatives(request.user)
             rep = managed_reps.filter(pk=target_user_id).first()
@@ -4459,7 +4676,7 @@ def agenda_todo_toggle(request, pk):
     todo = get_object_or_404(AgendaTodo, pk=pk)
     from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
     if todo.user != request.user and not is_super:
         if is_mgr:
             managed_reps = get_user_managed_representatives(request.user)
@@ -4484,7 +4701,7 @@ def agenda_todo_delete(request, pk):
     todo = get_object_or_404(AgendaTodo, pk=pk)
     from accounts.scope_service import ScopeResolutionService
     is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'view') in ['area', 'all']
+    is_mgr = ScopeResolutionService.get_user_scope(request.user, 'activities', 'manage') in ['area', 'all']
     if todo.user != request.user and not is_super:
         if is_mgr:
             managed_reps = get_user_managed_representatives(request.user)

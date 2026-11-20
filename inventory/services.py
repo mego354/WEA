@@ -277,6 +277,7 @@ class ProductTransferService:
     @classmethod
     @transaction.atomic
     def approve_request(cls, transfer_request, user, approved_quantities=None, notes=''):
+        transfer_request = ProductTransferRequest.objects.select_for_update().get(pk=transfer_request.pk)
         is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
         can_approve = is_super or is_accountant(user) or has_perm_or_admin(user, 'inventory:transfers/approve')
 
@@ -289,7 +290,10 @@ class ProductTransferService:
         if transfer_request.status != 'pending':
             raise ValidationError(f"لا يمكن اعتماد الطلب في حالته الحالية: {transfer_request.get_status_display()}.")
 
-        for item in transfer_request.items.select_related('product'):
+        items_list = list(transfer_request.items.select_related('product'))
+        qty_by_prod = {}
+        item_appr_map = {}
+        for item in items_list:
             if approved_quantities and item.id in approved_quantities:
                 qty_appr = parse_positive_integer_quantity(
                     approved_quantities[item.id],
@@ -300,23 +304,26 @@ class ProductTransferService:
                     item.requested_quantity,
                     item_label=item.product.name
                 )
-
             if qty_appr > item.requested_quantity:
                 raise ValidationError(f"الكمية المعتمدة للصنف '{item.product.name}' ({qty_appr}) لا يمكن أن تتجاوز الكمية المطلوبة ({item.requested_quantity}).")
+            qty_by_prod[item.product_id] = qty_by_prod.get(item.product_id, Decimal('0.00')) + qty_appr
+            item_appr_map[item.id] = qty_appr
 
-            stock = InventoryStock.objects.filter(
+        for prod_id, total_appr in sorted(qty_by_prod.items()):
+            stock = InventoryStock.objects.select_for_update().filter(
                 warehouse=transfer_request.source_warehouse,
-                product=item.product
+                product_id=prod_id
             ).first()
             qty_avail = stock.qty_available if stock else Decimal('0.00')
-
-            if qty_avail < qty_appr:
+            if qty_avail < total_appr:
+                prod_name = next((i.product.name for i in items_list if i.product_id == prod_id), str(prod_id))
                 raise ValidationError(
-                    f"الرصيد المتاح حالياً من الصنف '{item.product.name}' في المخزن المحول منه ({qty_avail}) "
-                    f"غير كافٍ لاعتماد كمية {qty_appr}."
+                    f"الرصيد المتاح حالياً من الصنف '{prod_name}' في المخزن المحول منه ({qty_avail}) "
+                    f"غير كافٍ لاعتماد كمية {total_appr}."
                 )
 
-            item.approved_quantity = qty_appr
+        for item in items_list:
+            item.approved_quantity = item_appr_map[item.id]
             item.save(update_fields=['approved_quantity'])
 
         transfer_request.status = 'approved'
@@ -327,6 +334,7 @@ class ProductTransferService:
 
         AuditLogService.log(
             user=user,
+            module='inventory',
             action='TRANSFER_REQUEST_APPROVED',
             resource_type='ProductTransferRequest',
             resource_id=str(transfer_request.id),
@@ -339,11 +347,15 @@ class ProductTransferService:
     @classmethod
     @transaction.atomic
     def reject_request(cls, transfer_request, user, reason=''):
+        transfer_request = ProductTransferRequest.objects.select_for_update().get(pk=transfer_request.pk)
         is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
         can_reject = is_super or is_accountant(user) or has_perm_or_admin(user, 'inventory:transfers/approve')
 
         if not can_reject:
             raise ValidationError("صلاحية رفض طلبات التحويل المخزني مقصورة على مدراء النظام الأعلى (SuperAdmin) والمحاسبين المعتمدين.")
+
+        if transfer_request.requesting_user_id == user.id and not is_super:
+            raise ValidationError("لا يمكن لمقدم الطلب رفض طلبه الخاص.")
 
         if transfer_request.status not in ['pending', 'approved']:
             raise ValidationError(f"لا يمكن رفض الطلب في حالته الحالية: {transfer_request.get_status_display()}.")
@@ -360,6 +372,7 @@ class ProductTransferService:
 
         AuditLogService.log(
             user=user,
+            module='inventory',
             action='TRANSFER_REQUEST_REJECTED',
             resource_type='ProductTransferRequest',
             resource_id=str(transfer_request.id),
@@ -372,6 +385,7 @@ class ProductTransferService:
     @classmethod
     @transaction.atomic
     def cancel_request(cls, transfer_request, user, reason=''):
+        transfer_request = ProductTransferRequest.objects.select_for_update().get(pk=transfer_request.pk)
         is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
         is_requester = (transfer_request.requesting_user_id == user.id)
 
@@ -388,6 +402,7 @@ class ProductTransferService:
 
         AuditLogService.log(
             user=user,
+            module='inventory',
             action='TRANSFER_REQUEST_CANCELLED',
             resource_type='ProductTransferRequest',
             resource_id=str(transfer_request.id),
@@ -400,8 +415,13 @@ class ProductTransferService:
     @classmethod
     @transaction.atomic
     def execute_transfer(cls, transfer_request, user):
+        transfer_request = ProductTransferRequest.objects.select_for_update().get(pk=transfer_request.pk)
         is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
-        can_execute = is_super or is_accountant(user) or has_perm_or_admin(user, 'inventory:transfers/approve')
+        can_execute = (
+            is_super
+            or is_accountant(user)
+            or has_perm_or_admin(user, ['inventory:transfers/execute', 'inventory:transfers/approve'])
+        )
 
         if not can_execute:
             raise ValidationError("صلاحية تنفيذ التحويل المخزني مقصورة على مدراء النظام الأعلى (SuperAdmin) والمحاسبين المعتمدين.")
@@ -734,13 +754,19 @@ class WarehouseService:
     @classmethod
     @transaction.atomic
     def delete_warehouse(cls, warehouse: Warehouse, user, request=None):
-        # 1. Check stock with quantity > 0
+        # 1. Check stock with quantity > 0 or reserved > 0
         if InventoryStock.objects.filter(warehouse=warehouse, qty_on_hand__gt=0).exists():
             raise ValidationError("لا يمكن حذف المخزن لوجود أرصدة مخزنية حالية به. يرجى تصفية أو نقل المخزون أولاً.")
+        if InventoryStock.objects.filter(warehouse=warehouse, qty_reserved__gt=0).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود كميات محجوزة حالية به. يرجى تحرير الحجوزات أولاً.")
 
-        # 2. Check inventory memos
+        # 2. Check inventory memos and return orders
         if InventoryMemo.objects.filter(warehouse=warehouse).exists():
             raise ValidationError("لا يمكن حذف المخزن لوجود أذونات مخزنية مسجلة عليه.")
+        from sales.models import SalesReturnOrder
+        from purchases.models import PurchaseReturnOrder
+        if SalesReturnOrder.objects.filter(target_warehouse=warehouse).exists() or PurchaseReturnOrder.objects.filter(warehouse=warehouse).exists():
+            raise ValidationError("لا يمكن حذف المخزن لوجود أوامر مرتجعات مرتبطة به.")
 
         # 3. Check transfer requests
         if ProductTransferRequest.objects.filter(Q(source_warehouse=warehouse) | Q(destination_warehouse=warehouse)).exists():

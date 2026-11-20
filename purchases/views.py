@@ -523,19 +523,24 @@ def purchase_order_update_status_ajax(request, pk):
                     PurchaseOrderService.approve_order(order, request.user)
                 elif new_status == 'picked' and order.status in ['pending', 'approved']:
                     if order.status == 'pending':
+                        if not has_perm_or_admin(request.user, 'purchases:orders/approve'):
+                            return render_forbidden_response(request, "ليس لديك صلاحية اعتماد أمر الشراء.", perm_codename='purchases:orders/approve')
                         PurchaseOrderService.approve_order(order, request.user)
                     PurchaseOrderService.stock_order(order, request.user)
                 elif new_status == 'settled' and order.status != 'settled':
                     if order.status in ['pending', 'approved']:
                         if order.status == 'pending':
+                            if not has_perm_or_admin(request.user, 'purchases:orders/approve'):
+                                return render_forbidden_response(request, "ليس لديك صلاحية اعتماد أمر الشراء.", perm_codename='purchases:orders/approve')
                             PurchaseOrderService.approve_order(order, request.user)
+                        if not has_perm_or_admin(request.user, 'purchases:orders/stock'):
+                            return render_forbidden_response(request, "ليس لديك صلاحية استلام المخزون.", perm_codename='purchases:orders/stock')
                         PurchaseOrderService.stock_order(order, request.user)
                     PurchaseOrderService.invoice_order(order, request.user)
                 elif new_status == 'cancelled':
                     PurchaseOrderService.cancel_order(order, request.user)
                 else:
-                    order.status = new_status
-                    order.save(update_fields=['status'])
+                    raise ValidationError(f"لا يمكن الانتقال من الحالة الحالية ({order.status_label_ar}) إلى ({new_status}) بشكل مباشر.")
 
                 messages.success(request, f"تم تغيير حالة أمر الشراء إلى {order.status_label_ar}.")
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -1323,7 +1328,9 @@ def purchases_orders_search_api(request):
     if for_return:
         qs = qs.filter(status__in=['picked', 'settled'])
     elif unsettled:
-        qs = qs.filter(status__in=['approved', 'received'])
+        qs = qs.filter(status__in=['approved', 'picked', 'received'])
+
+    qs = PurchaseOrder.with_payment_totals(qs)
 
     if q:
         qs = filter_by_arabic_search(

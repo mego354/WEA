@@ -34,7 +34,7 @@ def sanitize_excel_cell(val):
         return val
     
     val_str = str(val)
-    if val_str and val_str.startswith(FORMULA_PREFIXES):
+    if val_str and val_str.lstrip(' ').startswith(FORMULA_PREFIXES):
         return "'" + val_str
     return val_str
 

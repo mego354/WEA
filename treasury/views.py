@@ -506,9 +506,10 @@ def vaults_list(request):
         for b_chip in selected_bricks_chips:
             active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
+    assignees = get_visible_assignees_queryset(request.user, 'treasury')
     if assigned_user_id:
         qs = qs.filter(assigned_user_id=assigned_user_id)
-        u_obj = User.objects.filter(id=assigned_user_id).first()
+        u_obj = assignees.filter(id=assigned_user_id).first()
         active_filters.append({'label': 'المسؤول', 'value': u_obj.get_full_name() or u_obj.username if u_obj else assigned_user_id, 'param': 'assigned_user'})
 
     if balance_min:
@@ -549,8 +550,7 @@ def vaults_list(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
-    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
-    assignees = get_visible_assignees_queryset(request.user, 'treasury')
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'treasury')
 
     vault_type_options = [{'value': 'cash', 'label': 'خزينة نقدية (Cash Safe)'}, {'value': 'bank', 'label': 'حساب بنكي (Bank Account)'}]
     selected_vault_type_items = [o for o in vault_type_options if o['value'] in selected_vault_types]
@@ -665,8 +665,8 @@ def vault_detail(request, pk):
 
     tx_qs = VaultTransaction.objects.filter(vault=vault).select_related('created_by', 'reversal_transaction').order_by('-created_at')
 
-    total_inflows = tx_qs.filter(transaction_type='inflow', is_reversed=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-    total_outflows = tx_qs.filter(transaction_type='outflow', is_reversed=False).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    total_inflows = tx_qs.filter(transaction_type='inflow').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    total_outflows = tx_qs.filter(transaction_type='outflow').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     tx_count = tx_qs.count()
 
     stats = {
@@ -878,7 +878,7 @@ def vault_transaction_reverse(request, pk):
         return JsonResponse({'error': 'MethodNotAllowed', 'detail': 'يجب استخدام طلب POST.'}, status=405)
 
     tx = get_object_or_404(VaultTransaction, pk=pk)
-    if not can_user_access_object(request.user, tx.vault, 'view'):
+    if not can_user_access_object(request.user, tx.vault, 'withdraw'):
         return render_forbidden_response(request, "لا يمكنك إجراء عكس لحركة خزنة خارج نطاق صلاحياتك.")
 
     reason = request.POST.get('reason', '').strip() or 'عكس حركة خاطئة من قبل الإدارة'
@@ -922,7 +922,7 @@ def vault_create(request):
         except Exception as e:
             messages.error(request, f"خطأ أثناء إنشاء الخزنة: {e}")
 
-    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'treasury')
     assignees = get_visible_assignees_queryset(request.user, 'treasury')
     return render(request, 'treasury/vault_form.html', {
         'is_create': True,
@@ -959,7 +959,7 @@ def vault_edit(request, pk):
         except Exception as e:
             messages.error(request, f"خطأ أثناء تحديث الخزنة: {e}")
 
-    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates')
+    areas = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'treasury')
     assignees = get_visible_assignees_queryset(request.user, 'treasury')
     return render(request, 'treasury/vault_form.html', {
         'is_create': False,
@@ -1173,6 +1173,8 @@ def vendor_payment_request_action(request, pk, action):
         elif action == 'execute':
             if not has_perm_or_admin(request.user, ['treasury:payment_requests/execute', 'treasury:payments/create']):
                 return render_forbidden_response(request, "ليس لديك صلاحية تنفيذ وصرف طلبات سداد الموردين.")
+            if not can_user_access_object(request.user, req_obj, 'execute'):
+                return render_forbidden_response(request, "غير مصرح لك بتنفيذ طلب صرف خارج نطاقك.")
 
             vault_id = request.POST.get('vault') or getattr(req_obj.preferred_vault, 'id', None)
             if not vault_id:
@@ -1198,7 +1200,11 @@ def vendor_payment_request_action(request, pk, action):
             messages.success(request, f"تم صرف طلب السداد بنجاح وتوليد سند الصرف #{payment.serial_num}.")
 
         elif action == 'cancel':
-            can_cancel = (has_perm_or_admin(request.user, 'treasury:payment_requests/delete') or req_obj.created_by_id == request.user.id)
+            is_creator = (req_obj.created_by_id == request.user.id)
+            can_cancel = is_creator or (
+                has_perm_or_admin(request.user, 'treasury:payment_requests/delete')
+                and can_user_access_object(request.user, req_obj, 'delete')
+            )
             if not can_cancel:
                 return render_forbidden_response(request, "غير مصرح لك بإلغاء هذا الطلب.")
             reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', 'إلغاء يدوي')
@@ -1213,7 +1219,7 @@ def vendor_payment_request_action(request, pk, action):
     return redirect('vendor_payment_request_detail', pk=pk)
 
 
-@require_permission(['treasury:payment_requests/export', 'treasury:payments/requests'])
+@require_permission('treasury:payment_requests/export')
 def vendor_payment_requests_export(request):
     from master_data.date_filter_utils import resolve_date_range
 

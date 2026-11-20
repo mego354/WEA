@@ -4,23 +4,23 @@ This document details the test suite structure, execution workflows, standards, 
 
 ---
 
-## 1. Consolidated Test Architecture
+## 1. Test Suite Layout
 
-The test suite is structured following a strict rule: **exactly one primary test file per Django app**:
+The test suite spans all 10 Django apps (`*/tests.py`, `activities/tests_phase2.py`, and `reports/tests/`):
 
 ```text
 ERP/
-├── accounts/tests.py        # 105 tests (RBAC, Scopes, Audit, Provisioning, Scoped Querysets, List Stats)
-├── activities/tests.py      # 133 tests (Visits, Bulk Direct Creation, Area/Brick Multiselect, Reapproval, GPS, Agreements)
-├── catalog/tests.py         #  17 tests (Products, Categories, Discounts, Packaging, Filtered Stats)
-├── contacts/tests.py        #  28 tests (Contacts, Edit Prepopulation, GPS Persistence, Multiselect APIs, Stats)
-├── inventory/tests.py       #  15 tests (Warehouses, Stock, Lots, Transfers, Memos, Filtered Stats)
-├── master_data/tests.py     #  56 tests (Areas, Dashboard Stats, Settings, Pagination, Filters)
-├── purchases/tests.py       #  20 tests (Purchase Orders, Receiving, Supplier Payments, Filtered Stats)
-├── sales/tests.py           #  13 tests (Sales Orders, Collections, Rep Scoping, Filtered Stats)
-└── treasury/tests.py        #  21 tests (Vaults, Cash Transactions, Deposit/Withdraw Auth, Filtered Stats)
----------------------------------------------------------------------------------
-Total: 9 Consolidated Test Files, 408 Total Behavioral Tests (Passing)
+├── accounts/tests.py          # RBAC, Scopes, Security Hardening, Audit, Provisioning, Safe Deletion
+├── activities/tests.py        # Visits, Bulk Planning, Reapproval, GPS, Agreements, Templates
+├── activities/tests_phase2.py # Phase 2 Visits, Templates & Arabic QA Display
+├── catalog/tests.py           # Products, Categories, Discounts, Packaging, Filtered Stats
+├── contacts/tests.py          # Contacts, Edit Prepopulation, GPS Persistence, Multiselect APIs
+├── inventory/tests.py         # Warehouses, Stock, Lots, Transfers, Memos, Filtered Stats
+├── master_data/tests.py       # Areas, Dashboard Stats, Settings, Pagination, Filters, PDF/R2
+├── purchases/tests.py         # Purchase Orders, Returns, Receiving, Supplier Payments
+├── reports/tests/             # Calculations, Performance Dashboards, Permissions/Scope, 8 Reports
+├── sales/tests.py             # Sales Orders, Returns, Collections, Rep Scoping
+└── treasury/tests.py          # Vaults, Transfers, Reversals, Payment Requests, Auth Security
 ```
 
 ---

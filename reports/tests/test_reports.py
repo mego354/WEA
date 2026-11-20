@@ -287,3 +287,15 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
         res_export = self.client.get(reverse('report_item_sales_by_customer_export'))
         self.assertEqual(res_export.status_code, 200)
         self.assertEqual(res_export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def test_report_delivery_stock_warehouse_filter_does_not_crash(self):
+        """AUD-017: Filtering delivery stock report by warehouse_id uses source_warehouse_id (no FieldError)."""
+        from inventory.models import Warehouse
+        wh = Warehouse.objects.first()
+        wh_id = wh.id if wh else 1
+        url = f"{reverse('report_delivery_stock')}?warehouse_id={wh_id}"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+
+        exp = self.client.get(f"{reverse('report_delivery_stock_export')}?warehouse_id={wh_id}")
+        self.assertEqual(exp.status_code, 200)

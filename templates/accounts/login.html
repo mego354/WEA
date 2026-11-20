@@ -78,7 +78,7 @@
                     <div class="relative">
                         <input type="password" id="password" name="password" required
                                class="w-full pr-10 pl-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all text-slate-900 min-h-[46px]"
-                               placeholder="Enter your Password">
+                               placeholder="أدخل كلمة المرور">
                         <span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 text-lg">lock</span>
                         <button type="button" onclick="togglePasswordVisibility()" class="absolute left-2 top-2 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 focus:outline-none" aria-label="إظهار كلمة المرور">
                             <span id="eye-icon" class="material-symbols-outlined text-lg">visibility</span>
@@ -86,13 +86,12 @@
                     </div>
                 </div>
 
-                <!-- Remember & Forgot -->
+                <!-- Remember -->
                 <div class="flex items-center justify-between text-xs pt-1">
                     <label class="flex items-center gap-2 cursor-pointer text-slate-600 min-h-[36px]">
-                        <input type="checkbox" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-300">
+                        <input type="checkbox" name="remember_me" value="1" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-300">
                         <span>تذكرني على هذا الجهاز</span>
                     </label>
-                    <a href="#" class="text-brand-600 hover:underline font-medium min-h-[36px] flex items-center">نسيت كلمة المرور؟</a>
                 </div>
 
                 <!-- Submit Button -->

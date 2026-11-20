@@ -539,22 +539,10 @@ class DashboardRolePermissionsAndMobileNavTests(TestCase):
     def setUp(self):
         self.client = Client()
 
-        self.super_role, _ = Role.objects.get_or_create(
-            name='SuperAdmin',
-            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_active': True}
-        )
-        self.mgr_role, _ = Role.objects.get_or_create(
-            name='AreaManager',
-            defaults={'display_name': 'مدير منطقة', 'is_area_manager': True, 'is_active': True}
-        )
-        self.rep_role, _ = Role.objects.get_or_create(
-            name='SalesRep',
-            defaults={'display_name': 'مندوب مبيعات', 'is_rep': True, 'is_active': True}
-        )
-        self.acct_role, _ = Role.objects.get_or_create(
-            name='Accountant',
-            defaults={'display_name': 'محاسب مالي', 'is_active': True}
-        )
+        self.super_role = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        self.mgr_role = Role.objects.get(name=Role.ROLE_MANAGER)
+        self.rep_role = Role.objects.get(name=Role.ROLE_REP)
+        self.acct_role = Role.objects.get(name=Role.ROLE_ACCOUNTANT)
 
         self.cairo_main = Area.objects.create(name='القاهرة (رئيسية)', code='CAI-MAIN')
         self.cairo_sub = Area.objects.create(name='المعادي', code='CAI-MAA', parent=self.cairo_main)
@@ -714,7 +702,7 @@ class DashboardRolePermissionsAndMobileNavTests(TestCase):
 
         context = response.context
         self.assertTrue(context['is_super'])
-        self.assertEqual(len(context['kpi_cards']), 14)
+        self.assertEqual(len(context['kpi_cards']), 18)
 
         charts_data = json.loads(context['charts_json'])
         self.assertIn('collections_by_area', charts_data)
@@ -759,8 +747,8 @@ class DashboardRolePermissionsAndMobileNavTests(TestCase):
         self.assertFalse(context['is_mgr'])
 
         card_ids = [c['id'] for c in context['kpi_cards']]
-        self.assertIn('rep_vault_stats', card_ids)
-        self.assertIn('rep_stock_stats', card_ids)
+        self.assertIn('net_sales_stats', card_ids)
+        self.assertIn('collections_collected_stats', card_ids)
         self.assertIn('visits_created_lead_stats', card_ids)
 
         charts_data = json.loads(context['charts_json'])
@@ -1461,4 +1449,124 @@ class StandardizedFilteringUtilitiesTests(TestCase):
         self.assertEqual(resp_prt.status_code, 200)
         self.assertContains(resp_prt, 'عميل القاهرة')
         self.assertNotContains(resp_prt, 'عميل الجيزة')
+
+    def test_dashboard_permission_gating_and_scoped_area_brick_apis(self):
+        """Phase 2 (#7): Dashboard hides unauthorized module data from backend/charts_json and scopes geo APIs."""
+        from accounts.models import Role, Permission
+        from django.core.management import call_command
+        import json as _json
+
+        call_command('setup_permissions')
+        cairo = Area.objects.create(name='القاهرة لوحة', code='DSH-CAI', area_type='governorate')
+        giza = Area.objects.create(name='الجيزة لوحة', code='DSH-GIZ', area_type='governorate')
+        brick_c = Area.objects.create(name='مدينة نصر لوحة', code='DSH-NSR', area_type='subarea', parent=cairo)
+        brick_g = Area.objects.create(name='الدقي لوحة', code='DSH-DQ', area_type='subarea', parent=giza)
+
+        # Custom role with visits permission ONLY (no sales, no purchases)
+        vis_only_role = Role.objects.create(name='visits_only_dash', display_name='Visits Only', is_active=True)
+        mod_act = Permission.objects.get(codename='module:activities')
+        vis_perm = Permission.objects.filter(codename__in=['activities:visits/list', 'activities:visits/view']).first()
+        self.assertIsNotNone(vis_perm)
+        vis_only_role.permissions.add(mod_act, vis_perm)
+        u = User.objects.create_user(
+            username='vis_only@wea.com', email='vis_only@wea.com', password='Password123!',
+            role=vis_only_role, is_active=True
+        )
+        u.assigned_areas.add(brick_c)
+
+        self.client.force_login(u)
+        res = self.client.get(reverse('home'))
+        self.assertEqual(res.status_code, 200)
+        charts = _json.loads(res.context['charts_json'])
+        self.assertIn('visits_by_area', charts)
+        self.assertNotIn('orders_created_by_area', charts)
+        self.assertNotIn('collections_by_area', charts)
+        self.assertFalse(res.context['can_view_sales'])
+        self.assertFalse(res.context['can_view_purchases'])
+
+        # Scoped geo search APIs must NOT expose Giza to Cairo-brick user
+        area_res = self.client.get(reverse('dashboard_search_areas_api'))
+        self.assertEqual(area_res.status_code, 200)
+        area_ids = [r['id'] for r in area_res.json()['results']]
+        self.assertIn(cairo.id, area_ids)
+        self.assertNotIn(giza.id, area_ids)
+
+        brick_res = self.client.get(reverse('dashboard_search_bricks_api'))
+        self.assertEqual(brick_res.status_code, 200)
+        brick_ids = [r['id'] for r in brick_res.json()['results']]
+        self.assertIn(brick_c.id, brick_ids)
+        self.assertNotIn(brick_g.id, brick_ids)
+
+
+class SidebarActiveNavigationTests(TestCase):
+    """Verify deterministic resolve_active_nav & single-active sidebar expansion across aliases and nested routes."""
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+        self.superadmin = User.objects.create_superuser(
+            username='nav_sa@wea.com', email='nav_sa@wea.com', password='Password123!'
+        )
+        self.cairo = Area.objects.create(name='القاهرة nav', code='NAV-CAI', area_type='governorate')
+        self.brick = Area.objects.create(name='نصر nav', code='NAV-NSR', area_type='subarea', parent=self.cairo)
+        self.customer = Contact.objects.create(
+            name='عميل nav', is_customer=True, account_type='Pharmacy',
+            area=self.cairo, brick=self.brick, status='active'
+        )
+
+    def test_resolve_active_nav_routes_and_rendered_sidebar_isolation(self):
+        from django.urls import resolve
+        from master_data.templatetags.erp_tags import resolve_active_nav
+
+        visit = Visit.objects.create(
+            contact=self.customer, owner=self.superadmin, created_by=self.superadmin,
+            date=timezone.localdate()
+        )
+        rf = RequestFactory()
+
+        cases = [
+            ('/visits/', 'submenu-activities', 'visits'),
+            (f'/visits/{visit.pk}/', 'submenu-activities', 'visits'),
+            ('/planned-visits/', 'submenu-activities', 'planned_visits'),
+            ('/agreements/', 'submenu-activities', 'agreements'),
+            ('/settings/agreements/', 'submenu-settings', 'agreements_settings'),
+            ('/settings/visits/templates/', 'submenu-settings', 'visit_templates'),
+            ('/reports/agreements-roi/', 'submenu-reports', 'report_agreements_roi'),
+            ('/accounting/customers/', 'submenu-sales', 'accounting_customers'),
+            ('/accounting/vendors/', 'submenu-purchases', 'accounting_vendors'),
+        ]
+
+        for path, exp_section, exp_item in cases:
+            req = rf.get(path)
+            req.resolver_match = resolve(path)
+            resolved = resolve_active_nav({'request': req})
+            self.assertEqual(resolved['section'], exp_section, f"Wrong section for {path}")
+            self.assertEqual(resolved['item'], exp_item, f"Wrong item for {path}")
+
+        # Verify actual rendered HTML on colliding routes keeps ONLY the exact parent submenu open
+        self.client.force_login(self.superadmin)
+        for path, exp_section, exp_item in [
+            ('/visits/', 'submenu-activities', 'visits'),
+            ('/settings/visits/templates/', 'submenu-settings', 'visit_templates'),
+            ('/agreements/', 'submenu-activities', 'agreements'),
+            ('/settings/agreements/', 'submenu-settings', 'agreements_settings'),
+            ('/reports/agreements-roi/', 'submenu-reports', 'report_agreements_roi'),
+        ]:
+            res = self.client.get(path)
+            self.assertEqual(res.status_code, 200, f"GET {path} returned {res.status_code}")
+            html = res.content.decode('utf-8')
+            sidebar_html = html[html.index('<aside id="sidebar"'):html.index('</aside>')]
+            self.assertIn(f'data-erp-nav-item="{exp_item}" data-erp-active-link="1"', sidebar_html, f"Active link missing on {path}")
+            self.assertEqual(sidebar_html.count('data-erp-active-link="1"'), 1, f"Multiple active links on {path}")
+            # Confirm other submenus have 'hidden' while exp_section does not
+            for sub in ('submenu-catalog', 'submenu-activities', 'submenu-sales', 'submenu-purchases', 'submenu-inventory', 'submenu-treasury', 'submenu-performance', 'submenu-reports', 'submenu-settings'):
+                marker = f'id="{sub}" class="'
+                idx = sidebar_html.find(marker)
+                self.assertNotEqual(idx, -1, f"Missing {sub} on {path}")
+                cls_fragment = sidebar_html[idx:idx + 120]
+                if sub == exp_section:
+                    self.assertNotIn('hidden"', cls_fragment, f"Expected {sub} to be open on {path}")
+                else:
+                    self.assertIn('hidden"', cls_fragment, f"Expected {sub} to be collapsed on {path}")
+
 

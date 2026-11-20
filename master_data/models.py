@@ -20,6 +20,19 @@ class Area(models.Model):
         verbose_name_plural = "المناطق الجغرافية"
         ordering = ['code']
 
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.parent_id:
+            if self.pk and self.parent_id == self.pk:
+                raise ValidationError({'parent': "لا يمكن تعيين المنطقة كأب لنفسها."})
+            visited = {self.pk} if self.pk else set()
+            curr = self.parent
+            while curr is not None:
+                if curr.pk in visited:
+                    raise ValidationError({'parent': "تم اكتشاف حلقة دائرية في تسلسل المناطق الجغرافية."})
+                visited.add(curr.pk)
+                curr = curr.parent
+
     def __str__(self):
         if self.parent:
             return f"{self.name} ({self.parent.name})"
@@ -187,8 +200,6 @@ class LocationSettings(models.Model):
         if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
             return True
         role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return True
         from accounts.permissions import has_perm_or_admin
         if has_perm_or_admin(user, 'activities:visits/bypass_gps'):
             return True
@@ -210,9 +221,6 @@ class LocationSettings(models.Model):
         if not user or not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', True):
             return False
         if getattr(user, 'is_superuser', False) or getattr(user, 'is_super_admin', False):
-            return True
-        role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
             return True
         from accounts.permissions import has_perm_or_admin
         return (

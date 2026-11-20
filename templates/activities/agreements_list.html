@@ -231,16 +231,18 @@
                         <td data-col="actions" class="py-3 px-4 text-center" onclick="event.stopPropagation()">
                             <div data-row-menu-host class="inline-flex items-center justify-center">
                                 <button type="button" data-row-menu-trigger onclick="openRowActionMenu(this, event)" aria-haspopup="true" aria-expanded="false"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
+                                        class="inline-flex items-center justify-center min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
                                     <span class="material-symbols-outlined text-lg">more_vert</span>
                                 </button>
                                 <template class="row-menu-items">
-                                    <a href="{% url 'agreement_detail' a.pk %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                    {% if can_view_agreement %}
+                                    <a href="{% url 'agreement_detail' a.pk %}" class="w-full text-right px-3.5 py-2.5 sm:py-2 hover:bg-slate-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
                                         <span>عرض التفاصيل</span>
                                     </a>
+                                    {% endif %}
                                     {% if a.user_can_edit %}
-                                    <a href="{% url 'agreement_edit' a.pk %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                    <a href="{% url 'agreement_edit' a.pk %}" class="w-full text-right px-3.5 py-2.5 sm:py-2 hover:bg-slate-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-slate-500">edit</span>
                                         <span>تعديل الاتفاقية</span>
                                     </a>
@@ -248,7 +250,7 @@
                                     {% if a.user_can_delete %}
                                     <div class="h-px bg-slate-100 my-1"></div>
                                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agreement_delete' a.pk %}', title: 'حذف الاتفاقية', itemName: '#{{ a.serial_num }} ({{ a.title|escapejs }})' })"
-                                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                            class="w-full text-right px-3.5 py-2.5 sm:py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base">delete</span>
                                         <span>حذف الاتفاقية</span>
                                     </button>
@@ -351,8 +353,6 @@
                     </a>
                 </div>
             </form>
-        </div>
-    </div>
 </div>
 
 <!-- Create Agreement Modal -->
@@ -411,6 +411,8 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
 </div>
 
 <script>

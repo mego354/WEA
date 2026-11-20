@@ -50,7 +50,9 @@ class SalesOrderService:
         if shipping < Decimal('0.00'):
             raise ValidationError("مصاريف الشحن / التوصيل يجب أن تكون قيمة موجبة أو صفر.")
 
-        # Pre-validate line items values and stock availability
+        # Pre-validate line items values and aggregated stock availability (prevents duplicate-line oversell)
+        qty_by_product = {}
+        prod_map = {}
         for item in items_data:
             product = item['product']
             qty = parse_positive_integer_quantity(item.get('quantity'), item_label=product.name)
@@ -62,17 +64,22 @@ class SalesOrderService:
             if disc < Decimal('0.00') or disc > Decimal('100.00'):
                 raise ValidationError(f"نسبة الخصم للصنف '{product.name}' يجب أن تكون بين 0% و 100%.")
 
-            # Mandatory atomic stock validation (Requirement B4)
-            if validate_stock:
+            qty_by_product[product.id] = qty_by_product.get(product.id, Decimal('0.00')) + qty
+            prod_map[product.id] = product
+
+        if validate_stock:
+            for prod_id in sorted(qty_by_product.keys()):
+                product = prod_map[prod_id]
+                total_qty = qty_by_product[prod_id]
                 stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                     warehouse=source_warehouse,
                     product=product,
                     defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': product.default_purchase_cost}
                 )
                 qty_avail = stock.qty_available
-                if qty_avail < qty:
+                if qty_avail < total_qty:
                     raise ValidationError(
-                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.0f}) غير كافٍ للكمية المطلوبة ({qty:,.0f})."
+                        f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.0f}) غير كافٍ للكمية المطلوبة ({total_qty:,.0f})."
                     )
 
         order = SalesOrder(
@@ -271,6 +278,11 @@ class SalesOrderService:
         order.custom_discount_percentage = custom_disc_pct
         order.shipping_fees = shipping
         order.notes = notes
+        order.save(update_fields=[
+            'customer', 'source_warehouse', 'order_date', 'delivery_date',
+            'due_date', 'delivery_address', 'custom_discount_percentage',
+            'shipping_fees', 'notes', 'updated_at'
+        ])
 
         # Replace line items
         order.items.all().delete()
@@ -280,13 +292,15 @@ class SalesOrderService:
             qty = Decimal(str(item['quantity']))
             price = Decimal(str(item['unit_price']))
             disc = Decimal(str(item.get('discount_percentage', 0)))
+            tax_pct = Decimal(str(item.get('tax_percentage', 0)))
 
             SalesOrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
                 unit_price=price,
-                discount_percentage=disc
+                discount_percentage=disc,
+                tax_percentage=tax_pct,
             )
 
         order.recalculate_totals()
@@ -755,11 +769,20 @@ class SalesOrderService:
         4. Deletes outward inventory memo and order line items.
         5. Logs deletion to SecurityAuditLog.
         """
+        import re
+        order = SalesOrder.objects.select_for_update().get(pk=order.pk)
+
         if order.collections.exists() or (hasattr(order, 'collections_applied') and order.collections_applied.exists()):
             raise ValidationError("لا يمكن حذف أمر بيع مرتبط بمتحصلات مالية مسجلة. يرجى إلغاء أو حذف سندات التحصيل أولاً.")
 
-        # 1. Restore stock
-        if order.source_warehouse:
+        if order.return_orders.exclude(status='cancelled').exists():
+            raise ValidationError("لا يمكن حذف أمر البيع لوجود مرتجعات مبيعات مسجلة عليه. يرجى حذف أو إلغاء المرتجعات أولاً.")
+
+        was_stocked = bool(order.memo_id) or order.status in ('delivered', 'invoiced')
+        was_invoiced = order.status == 'invoiced'
+
+        # 1. Restore stock ONLY if stock was actually deducted
+        if was_stocked and order.source_warehouse:
             for item in order.items.select_related('product'):
                 stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                     warehouse=order.source_warehouse,
@@ -769,17 +792,22 @@ class SalesOrderService:
                 stock.qty_on_hand += item.quantity
                 stock.save(update_fields=['qty_on_hand', 'updated_at'])
 
-        # 2. Revert Customer Account balance
-        account = CustomerAccount.get_or_create_for_customer(order.customer)
-        account.current_balance = max(Decimal('0.00'), account.current_balance - order.grand_total)
-        account.save(update_fields=['current_balance', 'updated_at'])
+        # 2. Revert Customer Account balance ONLY if invoiced (exact token match avoids SO-1 vs SO-10 collisions)
+        if was_invoiced:
+            account = CustomerAccount.get_or_create_for_customer(order.customer)
+            account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+            account.current_balance -= order.grand_total
+            account.save(update_fields=['current_balance', 'updated_at'])
 
-        # Delete customer transactions linked to this order
-        CustomerTransaction.objects.filter(
-            account=account,
-            reason='sales',
-            description__contains=order.order_number
-        ).delete()
+            token_pat = re.compile(r'(^|[^\dA-Za-z])' + re.escape(order.order_number) + r'($|[^\dA-Za-z])')
+            candidate_txs = CustomerTransaction.objects.filter(
+                account=account,
+                reason='sales',
+                description__contains=order.order_number
+            )
+            matched_ids = [t.id for t in candidate_txs if token_pat.search(t.description or '')]
+            if matched_ids:
+                CustomerTransaction.objects.filter(id__in=matched_ids).delete()
 
         # 3. Delete outward InventoryMemo if exists
         memo = order.memo
@@ -1040,9 +1068,10 @@ class SalesReturnOrderService:
         return_order.settled_at = timezone.now()
         return_order.save(update_fields=['memo', 'status', 'stocked_at', 'settled_at'])
 
-        # Immediate financial execution: Post credit note to CustomerAccount (Requirement B2)
+        # Immediate financial execution: Post credit note to CustomerAccount (allow negative balance = customer credit)
         account = CustomerAccount.get_or_create_for_customer(return_order.customer)
-        new_balance = max(Decimal('0.00'), account.current_balance - return_order.grand_total)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        new_balance = account.current_balance - return_order.grand_total
         CustomerTransaction.objects.create(
             account=account,
             transaction_type='credit',
@@ -1098,28 +1127,50 @@ class SalesReturnOrderService:
         4. Deletes inward memo and return order.
         5. Logs deletion to SecurityAuditLog.
         """
-        if return_order.target_warehouse:
-            for item in return_order.items.select_related('product'):
-                if item.condition == 'resalable':
-                    stock, _ = InventoryStock.objects.select_for_update().get_or_create(
-                        warehouse=return_order.target_warehouse,
-                        product=item.product,
-                        defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
+        import re
+        return_order = SalesReturnOrder.objects.select_for_update().get(pk=return_order.pk)
+        was_stocked = bool(return_order.memo_id) or return_order.status in ('delivered', 'settled')
+        was_settled = return_order.status == 'settled'
+
+        if was_stocked and return_order.target_warehouse:
+            resalable_items = [i for i in return_order.items.select_related('product') if i.condition == 'resalable']
+            qty_by_prod = {}
+            prod_names = {}
+            for item in resalable_items:
+                qty_by_prod[item.product_id] = qty_by_prod.get(item.product_id, Decimal('0.00')) + item.quantity
+                prod_names[item.product_id] = item.product.name
+            for prod_id, needed_qty in sorted(qty_by_prod.items()):
+                stock = InventoryStock.objects.select_for_update().filter(
+                    warehouse=return_order.target_warehouse,
+                    product_id=prod_id,
+                ).first()
+                if not stock or stock.qty_available < needed_qty:
+                    raise ValidationError(
+                        f"لا يمكن حذف مرتجع المبيعات لأن رصيد الصنف '{prod_names[prod_id]}' المتاح في المخزن أقل من الكمية المرتجعة."
                     )
-                    if stock.qty_on_hand < item.quantity:
-                        raise ValidationError(f"لا يمكن حذف مرتجع المبيعات لأن رصيد الصنف '{item.product.name}' في المخزن أقل من الكمية المرتجعة.")
-                    stock.qty_on_hand -= item.quantity
-                    stock.save(update_fields=['qty_on_hand', 'updated_at'])
+            for item in resalable_items:
+                stock = InventoryStock.objects.select_for_update().get(
+                    warehouse=return_order.target_warehouse,
+                    product=item.product,
+                )
+                stock.qty_on_hand -= item.quantity
+                stock.save(update_fields=['qty_on_hand', 'updated_at'])
 
-        account = CustomerAccount.get_or_create_for_customer(return_order.customer)
-        account.current_balance += return_order.grand_total
-        account.save(update_fields=['current_balance', 'updated_at'])
+        if was_settled:
+            account = CustomerAccount.get_or_create_for_customer(return_order.customer)
+            account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+            account.current_balance += return_order.grand_total
+            account.save(update_fields=['current_balance', 'updated_at'])
 
-        CustomerTransaction.objects.filter(
-            account=account,
-            reason='sales_return',
-            description__contains=return_order.order_number
-        ).delete()
+            token_pat = re.compile(r'(^|[^\dA-Za-z])' + re.escape(return_order.order_number) + r'($|[^\dA-Za-z])')
+            candidate_txs = CustomerTransaction.objects.filter(
+                account=account,
+                reason='sales_return',
+                description__contains=return_order.order_number
+            )
+            matched_ids = [t.id for t in candidate_txs if token_pat.search(t.description or '')]
+            if matched_ids:
+                CustomerTransaction.objects.filter(id__in=matched_ids).delete()
 
         memo = return_order.memo
         if memo:
@@ -1396,7 +1447,7 @@ class SalesReturnOrderService:
 
     @classmethod
     @transaction.atomic
-    def cancel_return_order(cls, return_order, user):
+    def cancel_return_order(cls, return_order, user, reason=''):
         """Cancels a pending or approved return order before warehouse receiving."""
         from activities.models import ApprovalAuditLog
         from accounts.services import AuditLogService

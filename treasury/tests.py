@@ -1058,5 +1058,31 @@ class VaultCrudAndScopingTests(TestCase):
         self.assertNotContains(res_bal, self.vault_cairo.name)
         self.assertNotContains(res_bal, self.vault_rep_nasr.name)
 
+    def test_reverse_linked_transfer_blocked_for_double_entry_integrity(self):
+        """AUD-010: Linked vault transfer transactions cannot be half-reversed independently."""
+        from treasury.services import transfer_funds, reverse_vault_transaction
+        from django.core.exceptions import ValidationError
+        out_tx, in_tx = transfer_funds(
+            source_vault=self.vault_cairo,
+            destination_vault=self.vault_rep_nasr,
+            amount=Decimal('100.00'),
+            user=self.superadmin,
+            description='تحويل اختبار'
+        )
+        with self.assertRaises(ValidationError):
+            reverse_vault_transaction(tx=out_tx, user=self.superadmin, reason='اختبار')
+
+    def test_payment_request_cancel_does_not_crash_audit_log(self):
+        """AUD-018: VendorPaymentRequestService.cancel_request creates valid ApprovalAuditLog without TypeError."""
+        from contacts.models import Contact
+        from treasury.models import VendorPaymentRequest
+        from treasury.services import VendorPaymentRequestService
+        supplier = Contact.objects.create(name='مورد إلغاء', is_supplier=True, area=self.cairo)
+        req = VendorPaymentRequest.objects.create(
+            supplier=supplier, amount=Decimal('500.00'), status='pending', created_by=self.superadmin
+        )
+        cancelled = VendorPaymentRequestService.cancel_request(req, self.superadmin, reason='إلغاء اختباري')
+        self.assertEqual(cancelled.status, 'cancelled')
+
 
 

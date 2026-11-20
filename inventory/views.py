@@ -566,7 +566,9 @@ def inventory_memos_export(request):
 
 @login_required
 def inventory_memo_create(request):
-    memo_type = request.GET.get('memo_type', 'inward')
+    memo_type = (
+        request.POST.get('memo_type') if request.method == 'POST' else None
+    ) or request.GET.get('memo_type', 'inward')
     if memo_type not in ['inward', 'outward']:
         memo_type = 'inward'
 
@@ -822,9 +824,9 @@ def product_transfer_create(request):
     dest_warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse')
     dest_main_area = user_rep_wh.main_area if user_rep_wh else None
 
-    # Available source warehouses (scoped without artificial area locks for authorized users)
+    # Available source warehouses (reps may request from Main or non-rep regional hubs in their main area, never peer rep custody warehouses)
     if user_rep_wh:
-        all_active_whs = Warehouse.objects.filter(is_active=True).select_related('area', 'assigned_user')
+        all_active_whs = Warehouse.objects.filter(is_active=True, is_rep_warehouse=False).select_related('area', 'assigned_user')
         source_warehouses = [
             w for w in all_active_whs
             if w.id != user_rep_wh.id and (

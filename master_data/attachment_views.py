@@ -215,7 +215,10 @@ def erp_attachment_upload(request, model_key, object_id):
             return JsonResponse({'success': False, 'error': msg}, status=400)
         messages.error(request, msg)
 
+    from django.utils.http import url_has_allowed_host_and_scheme
     next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or '/'
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        next_url = '/'
     return redirect(next_url)
 
 
@@ -269,13 +272,22 @@ def _serve_protected_attachment(request, attachment_id, *, as_download=False):
 
     if getattr(settings, 'R2_ENABLED', False) and not as_download:
         # Redirect to short-lived presigned URL only after full RBAC + DataScope validation
-        signed_url = default_storage.url(key)
+        if hasattr(default_storage, 'url'):
+            try:
+                signed_url = default_storage.url(key, force_presigned=True)
+            except TypeError:
+                signed_url = default_storage.url(key)
+        else:
+            signed_url = default_storage.url(key)
         return HttpResponseRedirect(signed_url)
 
+    from urllib.parse import quote
     f = default_storage.open(key, 'rb')
     resp = FileResponse(f, content_type=att.mime_type or 'application/octet-stream')
     disp = 'attachment' if as_download else 'inline'
-    resp['Content-Disposition'] = f'{disp}; filename="{att.original_filename}"'
+    safe_name = (att.original_filename or 'attachment').replace('"', '').replace('\r', '').replace('\n', '')
+    resp['Content-Disposition'] = f'{disp}; filename="{safe_name}"; filename*=UTF-8\'\'{quote(safe_name)}'
+    resp['X-Content-Type-Options'] = 'nosniff'
     return resp
 
 
@@ -304,5 +316,8 @@ def erp_attachment_delete(request, attachment_id):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': True})
     messages.success(request, "تم حذف المرفق بنجاح.")
+    from django.utils.http import url_has_allowed_host_and_scheme
     next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or '/'
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        next_url = '/'
     return redirect(next_url)

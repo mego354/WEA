@@ -161,9 +161,10 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Restrictions**:
   - Visit must be ended (`visit.status == 'finished'` and `visit.ended_at is not None`). Editing answers on unended visits is strictly forbidden.
   - User must be the visit owner/creator (`visit.owner_id == request.user.id or visit.created_by_id == request.user.id`) or SuperAdmin.
-- **Re-approval Behavior**:
-  - Setting answers triggers immediate re-approval: sets `approval_status = 'pending'`, `waiting_for_reapproval = True`, and resets `approved_by` and `approved_at` to `None`.
-  - Records diff in `ApprovalAuditLog(action='answers_updated', approval_required=True, changes={...})` and `SecurityAuditLog(action='VISIT_ANSWERS_UPDATED')`.
+- **Re-approval Behavior & Creator Edit Tracking**:
+  - Supports `question_<id>` answers across all question types including `suggested_products` (with `<question>_present=1` marker for clearing multiselects) and legacy `detailed_products` (`detailed_products_present=1` when template has no `suggested_products` question).
+  - Validates submitted product IDs against eligible sellable active products unioned with existing historical selections on that visit.
+  - Updating answers triggers immediate re-approval (`approval_status = 'pending'`, `waiting_for_reapproval = True`, clears `approved_by`/`approved_at`), updates `last_edited_by`/`last_edited_at` (and `edited_by_creator=True` when `visit.created_by_id == request.user.id`), and writes readable diffs to `ApprovalAuditLog(action='answers_updated')` and `SecurityAuditLog(action='VISIT_ANSWERS_UPDATED')`.
 - **Response Format**:
   - AJAX: `{ "success": true, "message": "تم تحديث إجابات الاستبيان بنجاح، والزيارة بانتظار إعادة الاعتماد" }`
   - Standard POST: Redirects to `/activities/visits/<pk>/` with success flash message.
@@ -187,16 +188,22 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 ### 3.7 Agreements CRUD & Lifecycle Endpoints
 - **List & Filters**: `GET /activities/agreements/`
   - Scoped via `get_scoped_queryset(Agreement.objects.all(), request.user, 'agreement')`.
-  - Filters: `customer`, `status` (`new`, `done`), `amount_min`, `amount_max`, `date_from`, `date_to`, `governorate`, `brick`.
+  - Filters: `customer`, `status` (`new`, `done`, `disapproved`), `amount_min`, `amount_max`, `date_from`, `date_to`, `governorate`, `brick`.
 - **Status Action**: `POST /activities/agreements/<pk>/action/<action>/`
   - Actions: `done` (mark agreement done/completed), `reopen` (reopen to `new`).
   - Permission: `@require_permission('activities:agreements/approve')` and `can_user_access_object(request.user, agreement, action)`.
   - Anti-self-approval: Creators cannot approve or complete their own agreements.
 - **Edit**: `GET|POST /activities/agreements/<pk>/edit/`
-  - Permission: `@require_permission('activities:agreements/create')` and `can_user_access_object(request.user, agreement, 'edit')`.
+  - Permission: `@require_permission('activities:agreements/edit')`, `can_user_access_object(request.user, agreement, 'view'/'edit')`, and `agreement.status in ('new', 'disapproved')`.
 - **Delete**: `POST /activities/agreements/<pk>/delete/`
-  - Permission: `@require_permission('activities:agreements/delete')` and `can_user_access_object(request.user, agreement, 'delete')`.
-  - Writes `AGREEMENT_DELETED` to `SecurityAuditLog`.
+  - Permission: `@require_permission('activities:agreements/delete')`, `can_user_access_object(request.user, agreement, 'view'/'delete')`, and `agreement.status in ('new', 'disapproved')`.
+  - Removes linked `ERPAttachment` rows atomically and writes `AGREEMENT_DELETED` to `SecurityAuditLog`. Returns `{ "success": true, "redirect_url": "/agreements/" }` for AJAX callers (or HTTP 400 JSON if status is finalized).
+
+### 3.8 Visits Templates API & Creator-Edit Filter
+- **Templates API (`visit_templates_api`)**: `GET /activities/api/templates/?contact_id=...`
+  - Includes active questions (with `'suggested_products'`) and `suggested_products: [{id, name, sku_code}]` pool resolved via `VisitTemplate.get_suggested_products_pool()`.
+- **Visits List & Export Creator-Edit Filter**: `GET /visits/` and `GET /visits/export/`
+  - Query parameter `edited_by_creator=yes|no` filters by `Visit.edited_by_creator` within `ScopeResolutionService` and combines cleanly with search, status, approval, date, area/brick, and pagination parameters.
 
 ---
 

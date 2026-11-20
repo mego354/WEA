@@ -37,18 +37,18 @@
 
                     <!-- Quick Preset Buttons -->
                     <div class="grid grid-cols-2 gap-1.5 text-xs">
-                        <button type="button" onclick="setPreset('2026-10-01', '2026-10-31')" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
-                            أكتوبر 2026 (المرجعي)
-                        </button>
-                        <button type="button" onclick="setPreset('all', 'all')" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=today{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
+                            اليوم
+                        </a>
+                        <a href="{% url 'home' %}?period=this_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
+                            هذا الشهر
+                        </a>
+                        <a href="{% url 'home' %}?period=last_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                            الشهر الماضي
+                        </a>
+                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
                             كل الوقت (All Time)
-                        </button>
-                        <button type="button" onclick="setPreset('2026-10-01', '2026-10-06')" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
-                            أول أسبوع أكتوبر
-                        </button>
-                        <button type="button" onclick="setPreset('2026-01-01', '2026-12-31')" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
-                            عام 2026
-                        </button>
+                        </a>
                     </div>
 
                     <div class="space-y-2 pt-2 border-t border-slate-100">
@@ -85,6 +85,8 @@
             <input type="hidden" name="start_date" value="{{ start_date_str }}">
             <input type="hidden" name="end_date" value="{{ end_date_str }}">
             <input type="hidden" name="period" value="{{ period }}">
+            {% for a in selected_areas %}<input type="hidden" name="main_area" value="{{ a.id }}">{% endfor %}
+            {% for b in selected_bricks %}<input type="hidden" name="brick" value="{{ b.id }}">{% endfor %}
             <div class="relative w-full sm:w-auto min-w-[260px]">
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
                     <span class="material-symbols-outlined text-lg">badge</span>
@@ -101,6 +103,31 @@
         </form>
         {% endif %}
     </div>
+
+    {% if can_filter_area_brick %}
+    <!-- Scoped Smart Area / Brick Multi-Select Filter Bar -->
+    <form method="GET" action="{% url 'home' %}" id="dashboardGeoFilterForm" class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4">
+        <input type="hidden" name="start_date" value="{{ start_date_str }}">
+        <input type="hidden" name="end_date" value="{{ end_date_str }}">
+        <input type="hidden" name="period" value="{{ period }}">
+        {% if selected_rep %}<input type="hidden" name="rep_id" value="{{ selected_rep.id }}">{% endif %}
+        <div class="flex flex-col lg:flex-row items-stretch lg:items-end gap-3">
+            <div class="flex-1 min-w-0">
+                {% include 'components/area_brick_multiselect.html' with component_id='dashboard_geo' area_field_name='main_area' brick_field_name='brick' areas_api_url='/api/dashboard/search-areas/' bricks_api_url='/api/dashboard/search-bricks/' selected_areas=selected_main_areas selected_bricks=selected_bricks %}
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button type="submit" class="px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
+                    تصفية النطاق
+                </button>
+                {% if selected_main_areas or selected_bricks %}
+                <a href="{% url 'home' %}?period={{ period }}&start_date={{ start_date_str }}&end_date={{ end_date_str }}{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors">
+                    مسح
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+    {% endif %}
 
     <!-- Active Representative Filter Banner (Managers / Superadmin) -->
     {% if selected_rep %}
@@ -220,8 +247,8 @@
 
     <!-- RECENT TRANSACTIONS: Purchases and Sales Activity -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-        <!-- Recent Purchases (Accountants & Managers & Superadmins) -->
-        {% if not is_rep or recent_purchases %}
+        <!-- Recent Purchases (Permission-Gated) -->
+        {% if can_view_purchases %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                 <div class="flex items-center gap-2">
@@ -278,7 +305,8 @@
         </div>
         {% endif %}
 
-        <!-- Recent Sales Orders -->
+        <!-- Recent Sales Orders (Permission-Gated) -->
+        {% if can_view_sales %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                 <div class="flex items-center gap-2">
@@ -333,6 +361,7 @@
                 </table>
             </div>
         </div>
+        {% endif %}
     </div>
 
 </div>
@@ -401,9 +430,10 @@
                 formatter: function (info) {
                     const value = info.value || 0;
                     const formatted = Number(value).toLocaleString('en-US', { maximumFractionDigits: 1 });
+                    const _esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
                     return `<div style="font-family: inherit; font-size: 12px; text-align: right; direction: rtl;">
-                        <b>${info.name}</b><br/>
-                        ${formatted} ${unitName}
+                        <b>${_esc(info.name)}</b><br/>
+                        ${_esc(formatted)} ${_esc(unitName)}
                     </div>`;
                 }
             },

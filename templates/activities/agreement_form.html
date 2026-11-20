@@ -154,28 +154,33 @@ function renderSearchResults(contacts) {
         return;
     }
 
-    resultsEl.innerHTML = contacts.map(c => `
-        <div onclick='selectCustomer(${JSON.stringify(c)})'
-             class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors">
+    const _esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
+    resultsEl.innerHTML = '';
+    contacts.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors';
+        item.innerHTML = `
             <div class="flex items-center gap-2.5">
                 <div class="w-8 h-8 rounded-full bg-teal-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                    ${c.initials || (c.name ? c.name.substring(0, 2) : 'CL')}
+                    ${_esc(c.initials || (c.name ? c.name.substring(0, 2) : 'CL'))}
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-900">${c.name}</span>
-                        <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.category || c.account_type || 'عميل'}</span>
+                        <span class="text-xs font-bold text-slate-900">${_esc(c.name)}</span>
+                        <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${_esc(c.category || c.account_type || 'عميل')}</span>
                     </div>
                     <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <span>${c.specialty || 'عام'}</span>
+                        <span>${_esc(c.specialty || 'عام')}</span>
                         <span>•</span>
-                        <span>${c.area_name || 'غير محدد'}</span>
+                        <span>${_esc(c.area_name || 'غير محدد')}</span>
                     </div>
                 </div>
             </div>
             <span class="material-symbols-outlined text-sm text-slate-400">chevron_left</span>
-        </div>
-    `).join('');
+        `;
+        item.addEventListener('click', () => selectCustomer(c));
+        resultsEl.appendChild(item);
+    });
 }
 
 function selectCustomer(c) {

@@ -710,21 +710,22 @@ def contact_create(request):
                             update_fields.append('area')
                         if update_fields:
                             contact.save(update_fields=update_fields)
-        elif area or brick or street or lat_val is not None:
-            sub_name = request.POST.get('sub_area', '')
-            street = request.POST.get('street_address', '')
-            ContactAddress.objects.create(
-                contact=contact,
-                title=request.POST.get('address_title', 'العنوان الرئيسي'),
-                area=area,
-                brick=brick,
-                sub_area=sub_name or (brick.name if brick else ''),
-                street_address=street,
-                latitude=lat_val,
-                longitude=lng_val,
-                is_main=True
-            )
-            main_addr_created = True
+        else:
+            street_top = request.POST.get('street_address', '').strip()
+            if area or brick or street_top or lat_val is not None:
+                sub_name = request.POST.get('sub_area', '')
+                ContactAddress.objects.create(
+                    contact=contact,
+                    title=request.POST.get('address_title', 'العنوان الرئيسي'),
+                    area=area,
+                    brick=brick,
+                    sub_area=sub_name or (brick.name if brick else ''),
+                    street_address=street_top,
+                    latitude=lat_val,
+                    longitude=lng_val,
+                    is_main=True
+                )
+                main_addr_created = True
 
         if not main_addr_created and (lat_val is not None or lng_val is not None):
             contact.set_location(lat_val, lng_val)
@@ -1498,7 +1499,16 @@ def contact_upload_attachment(request, pk):
         return render_forbidden_response(request, "لا يمكنك رفع ملفات لهذه الجهة.")
 
     if request.method == 'POST' and request.FILES.get('file'):
+        from django.core.exceptions import ValidationError
+        from master_data.media_service import validate_uploaded_file
         uploaded_file = request.FILES['file']
+        try:
+            validate_uploaded_file(uploaded_file)
+        except ValidationError as e:
+            msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+            messages.error(request, msg)
+            return redirect(f"{redirect('contact_detail', pk=pk).url}?tab=attachments")
+
         attachment = ContactAttachment.objects.create(
             contact=contact,
             file=uploaded_file,
@@ -1539,7 +1549,14 @@ def contact_add_address(request, pk):
         street = request.POST.get('street_address', '').strip()
         is_main = request.POST.get('is_main') == 'on'
 
-        area = Area.objects.filter(id=area_id).first() if area_id else None
+        area = None
+        if area_id and str(area_id).isdigit():
+            from accounts.scope_service import ScopeResolutionService
+            scope = ScopeResolutionService.get_user_scope(request.user, 'contacts', 'manage')
+            scoped_areas = ScopeResolutionService.get_user_managed_areas(request.user, scope)
+            area = scoped_areas.filter(id=int(area_id)).first()
+            if not area:
+                return render_forbidden_response(request, "المنطقة المحددة خارج نطاق صلاحياتك الجغرافية.")
         if area or street or title:
             if is_main:
                 contact.addresses.update(is_main=False)
@@ -1867,7 +1884,7 @@ def contacts_export(request):
         {'header': 'علاقة العمل', 'key': lambda c: c.relation_display, 'width': 16, 'align': 'center'},
         {'header': 'حالة العميل', 'key': lambda c: c.status_label, 'width': 14, 'align': 'center'},
         {'header': 'المنطقة', 'key': lambda c: c.area.name if c.area else '', 'width': 22, 'align': 'right'},
-        {'header': 'العنوان الرئيسي', 'key': lambda c: c.addresses.filter(is_main=True).first().street_address if c.addresses.filter(is_main=True).exists() else '', 'width': 35, 'align': 'right'},
+        {'header': 'العنوان الرئيسي', 'key': lambda c: c.main_address.street_address if c.main_address else '', 'width': 35, 'align': 'right'},
         {'header': 'الموبايل', 'key': lambda c: c.mobile or '', 'width': 18, 'align': 'center'},
         {'header': 'الهاتف', 'key': lambda c: c.phone or '', 'width': 18, 'align': 'center'},
         {'header': 'تصنيف العميل', 'key': lambda c: c.customer_category or '', 'width': 18, 'align': 'center'},

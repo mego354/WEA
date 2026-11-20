@@ -79,7 +79,15 @@ class SalesOrderAdmin(admin.ModelAdmin):
 
     @admin.action(description="اعتماد أوامر البيع المحددة")
     def approve_selected_orders(self, request, queryset):
-        queryset.update(status='approved', approved_by=request.user, approved_at=timezone.now())
+        from sales.services import SalesOrderService
+        approved = 0
+        for order in queryset.filter(status='pending'):
+            try:
+                SalesOrderService.approve_order(order, request.user)
+                approved += 1
+            except Exception:
+                continue
+        self.message_user(request, f"تم اعتماد {approved} أمر بيع بنجاح.")
 
 
 @admin.register(SalesOrderItem)

@@ -62,11 +62,17 @@ stateDiagram-v2
   - The visit outcome is collected as Question #1 (`نتيجة الزيارة`) in every `VisitTemplate`.
   - Answers are stored in `visit.questionnaire_answers` and rendered dynamically via `visit.outcome_display` and `visit.get_qa_display_list()`.
 - **Pre-Start / Pre-End Visit Editing (`visit_edit` / `POST /visits/<pk>/edit/`)**:
-  - Editing is restricted strictly to date and template.
+  - Editing is restricted strictly to date, template, and double-visit flag while unended (`status not in ('finished', 'cancelled')`).
   - All permitted edits trigger re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`).
+  - **Creator Edit Tracking**: Whenever the original visit creator (`visit.created_by_id == user.id`) applies an actual field change (or edits questionnaire answers post-end via `visit_update_answers`), `visit.edited_by_creator` is marked `True` along with `last_edited_by` and `last_edited_at`. Non-creator (e.g. manager) edits record `last_edited_by`/`last_edited_at` without setting `edited_by_creator=True`, and no-op submissions leave `edited_by_creator` untouched. Filterable on `visits/` and `visits/export/` via `?edited_by_creator=yes|no` within `ScopeResolutionService`.
+- **Suggested Products Questionnaire Question (`question_type='suggested_products'`)**:
+  - `VisitTemplateQuestion` supports `'suggested_products'` as a first-class question type managed in the Question Builder (`options` cleared to `[]`) and exposed across `visit_templates_api`, template preview, visit completion, visit dossier, `visits_list` (`Answers` modal via batch preloading `preload_visit_qa_product_map`), `visits_export`, and post-end Answer Editing.
+  - Product pool resolves dynamically via `VisitTemplate.get_suggested_products_pool()` (`template.get_eligible_suggested_products()`, else global `LocationSettings.get_eligible_suggested_products()`, else `Product.get_eligible_for_visits()`).
+  - Submissions store validated lists of product IDs in `visit.questionnaire_answers[str(q.id)]` and sync `visit.detailed_products` when detailing is supported. Server validation enforces `is_required`, rejects invalid/inactive/non-sellable product IDs, yet preserves previously stored historical products so historical edits can keep or remove prior selections without failing validation.
 - **Post-End Questionnaire Answer Editing (`visit_update_answers` / `POST /activities/visits/<pk>/update-answers/`)**:
-  - Allowed **only after the visit has finished** (`status == 'finished'`) by the visit owner/creator with `activities:visits/edit_answers`.
-  - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs in `ApprovalAuditLog`, and appears in the Complete Visit Timeline.
+  - Allowed **only after the visit has finished** (`status == 'finished'`) by the visit owner/creator (or SuperAdmin) with `activities:visits/edit_answers` or `activities:visits/edit`.
+  - Supports all question types including `suggested_products`, plus legacy `detailed_products` (`detailed_products_present=1`) on templates without a `suggested_products` question.
+  - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs (with readable product names) in `ApprovalAuditLog` and `SecurityAuditLog`, updates `edited_by_creator` / `last_edited_by` / `last_edited_at`, and appears in the Complete Visit Timeline.
 - **Agenda Start-Visit Execution**:
   - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying bypass/exception options, and answering check-in questions), rather than merely redirecting.
 - **Removal of Cancellation Actions & Strict Deletion Rules**:
@@ -245,9 +251,9 @@ stateDiagram-v2
 - **Status Transitions & Anti-Self-Approval**:
   - Marking an agreement as completed (`done`) or reopening it (`new`) requires `activities:agreements/approve` and manage scope.
   - Anti-self-approval rule strictly prohibits creators from changing the status of their own agreements (`can_user_access_object(user, agreement, 'approve')` / `can_user_access_object(user, agreement, 'done')`).
-- **Scoped Edit and Deletion**:
-  - Agreements can be edited (`/activities/agreements/<pk>/edit/`) or deleted (`/activities/agreements/<pk>/delete/`) by authorized users respecting data scope (`can_user_access_object(user, agreement, 'edit')` / `'delete'`).
-  - All operations write structured audit logs (`AGREEMENT_UPDATED`, `AGREEMENT_DELETED`).
+- **Scoped Edit and Deletion Status Rules**:
+  - Agreements may be edited (`/activities/agreements/<pk>/edit/`) or deleted (`/activities/agreements/<pk>/delete/`) **only while in unapproved state** (`status in ('new', 'disapproved')`) by users holding `activities:agreements/edit` or `activities:agreements/delete` within `ScopeResolutionService` (`can_edit_agreement` / `can_delete_agreement`).
+  - Deletion (`POST` only) removes linked `ERPAttachment` records atomically and writes permanent `AGREEMENT_DELETED` entries to `SecurityAuditLog`. List row actions use the `more_vert` popup menu (`row_action_menu.js`) and global confirmation modal (`confirm_delete_modal.html`).
 - **Clean Isolated Timeline**: `build_agreement_timeline` strictly isolates agreement events (`action_type__startswith='AGREEMENT_'`), eliminating any foreign visit or plan events.
 - **Advanced List Filtering**: Slide-out filter drawer matching visits UX with dynamic active filter chips, customer selector, status, governorate, brick, amount range (`amount_min` / `amount_max`), and date range.
 

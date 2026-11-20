@@ -132,7 +132,8 @@
                 قم بتفعيل الخيار لإضافة شرائح خصم بناءً على الكمية لهذا المنتج.
             </p>
             <div id="volume_discounts_container" class="{% if not product.has_volume_discounts %}hidden{% endif %} space-y-3 pt-2">
-                <table class="w-full text-right text-xs">
+                <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs min-w-[360px]">
                     <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                         <tr>
                             <th class="py-2 px-3">الحد الأدنى للكمية</th>
@@ -158,6 +159,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
                 <button type="button" onclick="addVolumeTier()" class="inline-flex items-center gap-1 px-3 py-1.5 border border-[#27bebe] text-[#27bebe] hover:bg-teal-50 text-xs font-bold rounded-lg transition-colors">
                     <span class="material-symbols-outlined text-sm">add</span>
                     <span>+ إضافة شريحة خصم</span>
@@ -177,8 +179,8 @@
                     <span>إضافة قائمة أسعار</span>
                 </button>
             </div>
-            <div id="price_lists_container" class="space-y-3">
-                <table class="w-full text-right text-xs">
+            <div id="price_lists_container" class="space-y-3 overflow-x-auto">
+                <table class="w-full text-right text-xs min-w-[360px]">
                     <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                         <tr>
                             <th class="py-2 px-3">اسم قائمة الأسعار</th>

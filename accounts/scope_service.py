@@ -47,6 +47,7 @@ class ScopeResolutionService:
         'vendoraccount': 'treasury',
         'stocklot': 'inventory',
         'productlot': 'inventory',
+        'inventorylot': 'inventory',
         'user': 'accounts',
         'area': 'contacts',
     }
@@ -65,8 +66,6 @@ class ScopeResolutionService:
             return 'all'
 
         role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return 'all'
 
         # Per-request cache on user instance
         cache_attr = '_module_scope_cache'
@@ -79,12 +78,13 @@ class ScopeResolutionService:
 
         scope = None
 
-        # 1. Custom User-Level Overrides (100% authoritative when enabled)
+        # 1. Custom User-Level Overrides (100% authoritative when enabled — fail closed to 'own' if unconfigured)
         if getattr(user, 'has_custom_permissions', False):
             from accounts.models import UserModuleScope
             ums = UserModuleScope.objects.filter(user=user, module=module).first()
-            if ums:
-                scope = getattr(ums, f"{scope_type}_scope", None)
+            scope = getattr(ums, f"{scope_type}_scope", None) if ums else 'own'
+            if not scope:
+                scope = 'own'
 
         # 2. Role-Level Configuration
         if not scope and role:
@@ -119,7 +119,11 @@ class ScopeResolutionService:
         if not area:
             return None
         curr = area
+        visited = set()
         while getattr(curr, 'parent_id', None):
+            if curr.pk in visited or len(visited) > 50:
+                break
+            visited.add(curr.pk)
             curr = curr.parent
         return curr
 
@@ -188,10 +192,6 @@ class ScopeResolutionService:
         if getattr(user, 'is_super_admin', False) or user.is_superuser:
             return Area.objects.all()
 
-        role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return Area.objects.all()
-
         if scope == 'all':
             return Area.objects.all()
 
@@ -231,10 +231,6 @@ class ScopeResolutionService:
             return UserModel.objects.none()
 
         if getattr(user, 'is_super_admin', False) or user.is_superuser:
-            return UserModel.objects.filter(is_active=True)
-
-        role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
             return UserModel.objects.filter(is_active=True)
 
         scope = cls.get_user_scope(user, module, 'view')
@@ -285,10 +281,6 @@ class ScopeResolutionService:
         if getattr(manager, 'is_super_admin', False) or manager.is_superuser:
             return True
 
-        role = getattr(manager, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return True
-
         mgr_main_area_ids = set(cls.get_user_main_areas(manager).values_list('id', flat=True))
         if not mgr_main_area_ids:
             return False
@@ -313,10 +305,6 @@ class ScopeResolutionService:
         if getattr(manager, 'is_super_admin', False) or manager.is_superuser:
             return True
 
-        role = getattr(manager, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return True
-
         root = cls.get_main_area(area)
         if not root:
             return False
@@ -335,10 +323,6 @@ class ScopeResolutionService:
             return queryset.none()
 
         if getattr(user, 'is_super_admin', False) or user.is_superuser:
-            return queryset
-
-        role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
             return queryset
 
         model = queryset.model
@@ -474,23 +458,13 @@ class ScopeResolutionService:
 
         # 3. Activities: Agreement
         elif m_name == 'agreement':
-            from accounts.permissions import is_representative
-            if scope == 'own' or is_representative(user):
-                qs = queryset.filter(created_by=user)
-                if user_bricks.exists():
-                    return qs.filter(
-                        Q(customer__brick__in=user_bricks) |
-                        Q(customer__area__in=user_bricks)
-                    ).distinct()
-                return qs.distinct()
+            if scope == 'own':
+                return queryset.filter(created_by=user).distinct()
             elif scope == 'brick':
                 if not user_bricks.exists():
                     return queryset.none()
                 return queryset.filter(
                     Q(created_by=user) |
-                    Q(customer__brick__in=user_bricks) |
-                    Q(customer__area__in=user_bricks)
-                ).filter(
                     Q(customer__brick__in=user_bricks) |
                     Q(customer__area__in=user_bricks)
                 ).distinct()
@@ -500,9 +474,6 @@ class ScopeResolutionService:
                 return queryset.filter(
                     Q(created_by__in=managed_subordinates) |
                     Q(created_by=user) |
-                    Q(customer__brick__in=managed_areas) |
-                    Q(customer__area__in=managed_areas)
-                ).filter(
                     Q(customer__brick__in=managed_areas) |
                     Q(customer__area__in=managed_areas)
                 ).distinct()
@@ -608,18 +579,13 @@ class ScopeResolutionService:
         # 7. Sales: CustomerAccount
         elif m_name == 'customeraccount':
             if scope == 'own':
-                qs = queryset.filter(
+                return queryset.filter(
                     Q(customer__created_by=user) |
                     Q(customer__assigned_team=user) |
                     Q(customer__sales_orders__created_by=user) |
+                    Q(customer__sales_return_orders__created_by=user) |
                     Q(customer__collections__created_by=user)
-                )
-                if user_bricks.exists():
-                    return qs.filter(
-                        Q(customer__brick__in=user_bricks) |
-                        Q(customer__area__in=user_bricks)
-                    ).distinct()
-                return qs.distinct()
+                ).distinct()
             elif scope == 'brick':
                 if not user_bricks.exists():
                     return queryset.none()
@@ -643,19 +609,7 @@ class ScopeResolutionService:
         # 7b. Sales: CustomerTransaction
         elif m_name == 'customertransaction':
             if scope == 'own':
-                qs = queryset.filter(
-                    Q(created_by=user) |
-                    Q(account__customer__created_by=user) |
-                    Q(account__customer__assigned_team=user) |
-                    Q(account__customer__sales_orders__created_by=user) |
-                    Q(account__customer__collections__created_by=user)
-                )
-                if user_bricks.exists():
-                    return qs.filter(
-                        Q(account__customer__brick__in=user_bricks) |
-                        Q(account__customer__area__in=user_bricks)
-                    ).distinct()
-                return qs.distinct()
+                return queryset.filter(created_by=user).distinct()
             elif scope == 'brick':
                 if not user_bricks.exists():
                     return queryset.none()
@@ -700,41 +654,17 @@ class ScopeResolutionService:
         # 9. Inventory: Warehouse
         elif m_name == 'warehouse':
             if scope == 'own':
-                if scope_type == 'view':
-                    return queryset.filter(
-                         Q(assigned_user=user) | Q(is_main=True)
-                    ).distinct()
-                return queryset.filter(
-                    Q(assigned_user=user)
-                ).distinct()
+                return queryset.filter(Q(assigned_user=user)).distinct()
             elif scope == 'brick':
-                if scope_type == 'view':
-                    return queryset.filter(
-                        Q(assigned_user=user) |
-                        Q(is_main=True) |
-                        Q(area__in=user_bricks)
-                    ).distinct()
+                if not user_bricks.exists():
+                    return queryset.filter(Q(assigned_user=user)).distinct()
                 return queryset.filter(
                     Q(assigned_user=user) |
                     Q(area__in=user_bricks)
                 ).distinct()
             elif scope == 'area':
                 if not managed_areas.exists():
-                    if scope_type == 'view':
-                        return queryset.filter(
-                            Q(assigned_user=user) | Q(is_main=True)
-                        ).distinct()
-                    return queryset.filter(
-                        Q(assigned_user=user)
-                    ).distinct()
-                if scope_type == 'view':
-                    return queryset.filter(
-                        Q(assigned_user=user) |
-                        Q(is_main=True) |
-                        Q(assigned_user__in=managed_subordinates) |
-                        Q(area__in=managed_areas) |
-                        Q(area__parent__in=managed_areas)
-                    ).distinct()
+                    return queryset.filter(Q(assigned_user=user)).distinct()
                 return queryset.filter(
                     Q(assigned_user=user) |
                     Q(assigned_user__in=managed_subordinates) |
@@ -753,6 +683,12 @@ class ScopeResolutionService:
             from inventory.models import Warehouse
             scoped_warehouses = cls.get_scoped_queryset(Warehouse.objects.all(), user, 'warehouse', scope_type)
             return queryset.filter(warehouse__in=scoped_warehouses)
+
+        # 11b. Inventory: InventoryLot
+        elif m_name == 'inventorylot':
+            from inventory.models import Warehouse
+            scoped_warehouses = cls.get_scoped_queryset(Warehouse.objects.all(), user, 'warehouse', scope_type)
+            return queryset.filter(stock__warehouse__in=scoped_warehouses)
 
         # 12. Inventory: ProductTransferRequest
         elif m_name == 'producttransferrequest':
@@ -877,9 +813,9 @@ class ScopeResolutionService:
         elif m_name == 'visittemplate':
             qs = queryset.filter(active=True)
             user_role = getattr(user, 'role', None)
-            if user_role:
+            if user_role and getattr(user_role, 'is_active', True):
                 return qs.filter(Q(restricted_roles__isnull=True) | Q(restricted_roles=user_role)).distinct()
-            return qs
+            return qs.filter(restricted_roles__isnull=True)
 
         # 19. Activities: VisitSampleItem & VisitExpense
         elif m_name in ['visitsampleitem', 'visitexpense']:
@@ -973,10 +909,6 @@ class ScopeResolutionService:
         if getattr(user, 'is_super_admin', False) or user.is_superuser:
             return True
 
-        role = getattr(user, 'role', None)
-        if role and getattr(role, 'is_super', False):
-            return True
-
         model_class = obj.__class__
         m_name = model_class.__name__.lower()
 
@@ -991,10 +923,8 @@ class ScopeResolutionService:
             if owner_id == user.id:
                 return False
 
-        # Determine scope type: 'manage' for mutations/approvals, 'view' for reading
-        scope_type = 'manage' if action in [
-            'edit', 'delete', 'approve', 'reject', 'disapprove', 'done', 'reopen', 'execute', 'manage', 'operate'
-        ] else 'view'
+        # Fail-closed scope type: 'view' strictly for read-only 'view', 'manage' for all mutations/operations
+        scope_type = 'view' if action == 'view' else 'manage'
 
         # Handle specific model rules:
         # 1. Warehouse: editing/deleting reserved for superadmin or inventory:warehouses/manage
@@ -1008,14 +938,13 @@ class ScopeResolutionService:
                 if not (has_perm_or_admin(user, 'inventory:warehouses/manage') or has_perm_or_admin(user, 'inventory:warehouses/delete')):
                     return False
             elif action == 'operate':
-                from accounts.permissions import has_perm_or_admin, is_accountant
-                if is_accountant(user) or has_perm_or_admin(user, 'inventory:memos/manage') or cls.get_user_scope(user, 'inventory', 'manage') == 'all':
+                from accounts.permissions import is_accountant
+                if is_accountant(user) or cls.get_user_scope(user, 'inventory', 'manage') == 'all':
                     return True
                 if obj.assigned_user_id == user.id:
                     return True
-                # Central warehouse allowed
                 if obj.is_main:
-                    return True
+                    return cls.get_user_scope(user, 'inventory', 'manage') in ('area', 'all')
                 if obj.assigned_user_id is not None and obj.assigned_user_id != user.id:
                     from accounts.permissions import is_manager_eligible_for_user
                     if not is_manager_eligible_for_user(user, obj.assigned_user):
@@ -1058,8 +987,11 @@ class ScopeResolutionService:
         # 3. ProductTransferRequest: rep cannot approve or execute transfer
         elif m_name == 'producttransferrequest':
             from accounts.permissions import has_perm_or_admin
-            if action in ['approve', 'reject', 'execute']:
+            if action in ['approve', 'reject']:
                 if not has_perm_or_admin(user, 'inventory:transfers/approve'):
+                    return False
+            elif action == 'execute':
+                if not (has_perm_or_admin(user, 'inventory:transfers/execute') or has_perm_or_admin(user, 'inventory:transfers/approve')):
                     return False
 
         # 4. Agreement editing/deleting when status is approved/done
@@ -1172,7 +1104,7 @@ class ScopeResolutionService:
         if cls.can_user_access_object(user, supplier, 'view'):
             return True
         if getattr(supplier, 'is_supplier', False) and supplier.area_id and getattr(supplier.area, 'is_company_area', False):
-            scope = cls.get_user_scope(user, 'contact', 'view')
+            scope = cls.get_user_scope(user, 'contacts', 'view')
             if scope == 'all':
                 return True
             if scope == 'area':

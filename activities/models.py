@@ -115,6 +115,29 @@ class VisitTemplate(models.Model):
         """Returns suggested products for this template filtered strictly to active sellable products."""
         return self.suggested_products.filter(is_active=True, sellable=True).order_by('name')
 
+    def get_suggested_products_pool(self):
+        """
+        Authoritative active, sellable product pool for `suggested_products` template questions:
+        1. Template-configured `suggested_products` (filtered to active & sellable) if non-empty.
+        2. Otherwise global `LocationSettings.get_eligible_suggested_products()` if enabled & non-empty.
+        3. Otherwise `Product.get_eligible_for_visits()` (all active, sellable products).
+        """
+        from catalog.models import Product
+        from master_data.models import LocationSettings
+
+        tmpl_qs = self.get_eligible_suggested_products()
+        if tmpl_qs.exists():
+            return tmpl_qs
+        loc_settings = LocationSettings.get_settings()
+        if getattr(loc_settings, 'enable_product_suggestions', False):
+            global_qs = loc_settings.get_eligible_suggested_products()
+            if global_qs.exists():
+                return global_qs
+        return Product.get_eligible_for_visits()
+
+    def has_suggested_products_question(self):
+        return any(q.question_type == 'suggested_products' for q in self.get_active_questions())
+
     class Meta:
         verbose_name = "قالب زيارة"
         verbose_name_plural = "قوالب الزيارات"
@@ -323,6 +346,7 @@ class VisitTemplateQuestion(models.Model):
     QUESTION_TYPES = [
         ('single_choice', 'اختيار واحد من متعدد'),
         ('multiple_choice', 'اختيار متعدد'),
+        ('suggested_products', 'المنتجات المقترحة (Suggested Products)'),
         ('text', 'نص قصير'),
         ('textarea', 'نص طويل'),
         ('number', 'رقم'),
@@ -561,6 +585,16 @@ class Visit(models.Model):
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_approved', verbose_name="معتمد بواسطة")
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ ووقت الاعتماد / الرفض")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits_created', verbose_name="أنشئ بواسطة")
+    edited_by_creator = models.BooleanField(default=False, db_index=True, verbose_name="تم التعديل بواسطة المنشئ")
+    last_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visits_last_edited',
+        verbose_name="آخر تعديل بواسطة",
+    )
+    last_edited_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ آخر تعديل")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -640,18 +674,36 @@ class Visit(models.Model):
             return 'زيارة ناجحة'
         return 'زيارة غير ناجحة' if self.status == 'finished' else '–'
 
-    def get_qa_display_list(self):
+    @staticmethod
+    def translate_answer_value(raw_v, q_lookup=None):
+        s = str(raw_v).strip()
+        s_low = s.lower()
+        if q_lookup and s_low in q_lookup:
+            return q_lookup[s_low]
+        global_label_map = {
+            'successful': 'زيارة ناجحة',
+            'unsuccessful': 'زيارة غير ناجحة',
+            'yes': 'نعم',
+            'no': 'لا',
+            'true': 'نعم',
+            'false': 'لا',
+        }
+        if s_low in global_label_map:
+            return global_label_map[s_low]
+        return s
+
+    def get_qa_display_list(self, product_map=None):
         """
-        Returns a list of dicts with {'question_text': str, 'answer': str, 'order': int}
-        mapping option keys ('successful', 'yes', etc.) to their Arabic labels using the
-        prefetched template.questions cache (zero N+1 queries when prefetched).
+        Returns a list of dicts with {'question_text': str, 'answer': str, 'order': int, 'question_type': str}
+        mapping option keys ('successful', 'yes', etc.) and `suggested_products` IDs to their Arabic labels
+        using the prefetched template.questions cache (zero N+1 when prefetched/preloaded).
         """
-        if not self.questionnaire_answers:
-            return []
         res = []
         q_map = {}
         opt_map = {}
         q_order_map = {}
+        q_type_map = {}
+        has_sp_question = False
         if self.template_id:
             # Iterate prefetched cache in Python without triggering extra .order_by() SQL
             questions = sorted(self.template.questions.all(), key=lambda x: (x.order, x.id))
@@ -659,6 +711,9 @@ class Visit(models.Model):
                 qid_str = str(q.id)
                 q_map[qid_str] = q.text_ar or q.text_en or f"سؤال #{q.order}"
                 q_order_map[qid_str] = q.order
+                q_type_map[qid_str] = q.question_type
+                if q.question_type == 'suggested_products' and q.is_active:
+                    has_sp_question = True
                 if isinstance(q.options, list):
                     lookup = {}
                     for opt in q.options:
@@ -669,40 +724,66 @@ class Visit(models.Model):
                                 lookup[val_k.lower()] = lbl
                     opt_map[qid_str] = lookup
 
-        global_label_map = {
-            'successful': 'زيارة ناجحة',
-            'unsuccessful': 'زيارة غير ناجحة',
-            'yes': 'نعم',
-            'no': 'لا',
-            'true': 'نعم',
-            'false': 'لا',
-        }
+        answers = self.questionnaire_answers or {}
+        effective_pmap = product_map if product_map is not None else getattr(self, '_qa_product_map', None)
+        if effective_pmap is None:
+            effective_pmap = {}
 
-        def _translate_val(qid_str, raw_v):
-            s = str(raw_v).strip()
-            s_low = s.lower()
-            q_lookup = opt_map.get(qid_str, {})
-            if s_low in q_lookup:
-                return q_lookup[s_low]
-            if s_low in global_label_map:
-                return global_label_map[s_low]
-            return s
+        # Collect any missing product IDs for suggested_products questions in a single query
+        needed_pids = set()
+        for q_id, val in answers.items():
+            qid_str = str(q_id)
+            if q_type_map.get(qid_str) == 'suggested_products' and val not in (None, '', []):
+                items = val if isinstance(val, (list, tuple)) else [val]
+                for item in items:
+                    if str(item).isdigit():
+                        pid = int(item)
+                        if pid not in effective_pmap:
+                            needed_pids.add(pid)
+        if needed_pids:
+            from catalog.models import Product
+            fetched = dict(Product.objects.filter(id__in=needed_pids).values_list('id', 'name'))
+            effective_pmap = {**effective_pmap, **fetched}
 
-        for q_id, val in self.questionnaire_answers.items():
+        for q_id, val in answers.items():
             qid_str = str(q_id)
             q_text = q_map.get(qid_str, f"سؤال #{q_id}")
-            if isinstance(val, list):
-                val_str = '، '.join(_translate_val(qid_str, item) for item in val if item not in (None, ''))
+            q_type = q_type_map.get(qid_str, '')
+            q_lookup = opt_map.get(qid_str)
+            if q_type == 'suggested_products':
+                items = val if isinstance(val, (list, tuple)) else ([val] if val not in (None, '') else [])
+                prod_names = []
+                for item in items:
+                    if str(item).isdigit():
+                        pid = int(item)
+                        prod_names.append(effective_pmap.get(pid, f"منتج #{pid}"))
+                    elif item not in (None, ''):
+                        prod_names.append(str(item))
+                val_str = '، '.join(prod_names) if prod_names else '—'
+            elif isinstance(val, list):
+                cleaned = [self.translate_answer_value(item, q_lookup) for item in val if item not in (None, '')]
+                val_str = '، '.join(cleaned) if cleaned else '—'
             elif val is None or val == '':
                 val_str = '—'
             else:
-                val_str = _translate_val(qid_str, val)
+                val_str = self.translate_answer_value(val, q_lookup)
             res.append({
                 'question_text': q_text,
                 'answer': val_str,
                 'order': q_order_map.get(qid_str, 999),
+                'question_type': q_type,
             })
         res.sort(key=lambda item: item['order'])
+
+        if self.pk and not has_sp_question:
+            det_prods = list(self.detailed_products.all())
+            if det_prods:
+                res.append({
+                    'question_text': 'المنتجات المشروحة (Product Detailing)',
+                    'answer': '، '.join(p.name for p in det_prods),
+                    'order': 10000,
+                    'question_type': 'detailed_products',
+                })
         return res
 
     @property

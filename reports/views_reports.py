@@ -163,7 +163,11 @@ def report_trial_balance(request):
 @require_permission('reports:financial/export')
 def report_trial_balance_export(request):
     start_date, end_date, _, _, _ = parse_date_range(request.GET.get('period'), request.GET.get('start_date'), request.GET.get('end_date'))
-    data = get_trial_balance_report_data(request.user, start_date, end_date, request.GET)
+    tb_filters = {
+        'area_id': request.GET.get('area') or request.GET.get('area_id'),
+        'search': request.GET.get('search', ''),
+    }
+    data = get_trial_balance_report_data(request.user, start_date, end_date, tb_filters)
 
     headers = ["كود العميل", "اسم العميل", "التصنيف", "التخصص", "المنطقة", "الرصيد الافتتاحي (ج.م)", "إجمالي المدين / مبيعات (ج.م)", "إجمالي الدائن / تحصيلات (ج.م)", "رصيد الإقفال الحالي (ج.م)"]
     rows = [
@@ -181,7 +185,11 @@ def report_trial_balance_export(request):
 @require_permission('reports:financial/view')
 def report_trial_balance_print(request):
     start_date, end_date, _, _, _ = parse_date_range(request.GET.get('period'), request.GET.get('start_date'), request.GET.get('end_date'))
-    data = get_trial_balance_report_data(request.user, start_date, end_date, request.GET)
+    tb_filters = {
+        'area_id': request.GET.get('area') or request.GET.get('area_id'),
+        'search': request.GET.get('search', ''),
+    }
+    data = get_trial_balance_report_data(request.user, start_date, end_date, tb_filters)
     return render(request, 'reports/report_trial_balance_print.html', {'rows': data['rows'], 'summary': data['summary'], 'start_date': start_date, 'end_date': end_date})
 
 
@@ -257,7 +265,11 @@ def report_customer_360(request):
 @require_permission('reports:sales/export')
 def report_customer_360_export(request):
     start_date, end_date, _, _, _ = parse_date_range(request.GET.get('period'), request.GET.get('start_date'), request.GET.get('end_date'))
-    data = get_customer_360_report_data(request.user, start_date, end_date, request.GET)
+    c360_filters = {
+        'area_id': request.GET.get('area') or request.GET.get('area_id'),
+        'search': request.GET.get('search', ''),
+    }
+    data = get_customer_360_report_data(request.user, start_date, end_date, c360_filters)
 
     headers = [
         "كود العميل", "الاسم", "نوع الحساب", "التصنيف", "التخصص", "المحافظة", "المربع",

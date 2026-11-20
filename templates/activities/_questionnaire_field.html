@@ -1,0 +1,156 @@
+{% comment %}
+Reusable questionnaire field renderer used across:
+- Active visit completion form (mode='active')
+- Finished visit Edit Answers modal (mode='modal')
+- Template preview screen (mode='preview')
+Supports: boolean, yes_no, single_choice, multiple_choice, rating, number, date, text, textarea, suggested_products.
+{% endcomment %}
+{% if mode == 'preview' %}
+    {% with field_prefix='preview_ans_' %}
+    {% if q.question_type == 'single_choice' %}
+    <div class="flex flex-wrap gap-2 pt-1">
+        {% for opt in q.options %}
+        <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+            <input type="radio" name="{{ field_prefix }}{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" onchange="onPreviewAnswerChanged('{{ q.id }}', this.value)" class="text-teal-600 focus:ring-teal-500">
+            <span>{{ opt.text_ar }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% elif q.question_type == 'multiple_choice' %}
+    <div class="flex flex-wrap gap-2 pt-1">
+        {% for opt in q.options %}
+        <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
+            <input type="checkbox" name="{{ field_prefix }}{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-teal-600 focus:ring-teal-500 rounded">
+            <span>{{ opt.text_ar }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% elif q.question_type == 'suggested_products' %}
+    <div class="space-y-2 pt-1" data-sp-widget>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+            {% for prod in product_choices %}
+            <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-teal-400 cursor-pointer text-xs font-bold text-slate-800 transition-colors min-h-[44px]">
+                <input type="checkbox" name="{{ field_prefix }}{{ q.id }}" value="{{ prod.id }}" class="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 shrink-0">
+                <span class="truncate">{{ prod.name }}</span>
+            </label>
+            {% empty %}
+            <p class="text-xs text-slate-400 col-span-full py-3 text-center">لا توجد منتجات مقترحة متاحة حالياً للمعاينة.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif q.question_type == 'textarea' %}
+    <textarea rows="3" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500 bg-white"></textarea>
+    {% else %}
+    <input type="text" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 bg-white">
+    {% endif %}
+    {% endwith %}
+{% else %}
+    {% if q.question_type == 'boolean' or q.question_type == 'yes_no' %}
+    <div class="flex flex-wrap items-center gap-3 pt-1">
+        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-teal-50/50 transition-colors min-h-[40px]">
+            <input type="radio" name="question_{{ q.id }}" value="Yes" class="{% if mode == 'active' %}question-input {% endif %}text-[#27bebe] focus:ring-[#27bebe]"
+                   onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
+                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
+            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-rose-50/50 transition-colors min-h-[40px]">
+            <input type="radio" name="question_{{ q.id }}" value="No" class="{% if mode == 'active' %}question-input {% endif %}text-rose-500 focus:ring-rose-500"
+                   onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
+                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
+            <span class="text-xs font-bold text-slate-700">لا (No)</span>
+        </label>
+    </div>
+    {% elif q.question_type == 'single_choice' %}
+    <select name="question_{{ q.id }}" class="{% if mode == 'active' %}question-input {% endif %}w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+            onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}">
+        <option value="">-- اختر الإجابة --</option>
+        {% for opt in q.options %}
+        <option value="{{ opt.value|default:opt.text_ar }}"
+            {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == opt.value %}selected{% endif %}{% endfor %}>
+            {{ opt.text_ar|default:opt.value }}
+        </option>
+        {% endfor %}
+    </select>
+    {% elif q.question_type == 'multiple_choice' %}
+    <input type="hidden" name="question_{{ q.id }}_present" value="1">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+        {% for opt in q.options %}
+        <label class="inline-flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer text-xs min-h-[42px]">
+            <input type="checkbox" name="question_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="{% if mode == 'active' %}question-input {% endif %}text-[#27bebe] rounded focus:ring-[#27bebe]"
+                   onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
+                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and opt.value in resp.raw_answer %}checked{% endif %}{% endfor %}>
+            <span class="text-slate-700 font-medium">{{ opt.text_ar|default:opt.value }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% elif q.question_type == 'suggested_products' %}
+    <input type="hidden" name="question_{{ q.id }}_present" value="1">
+    <div class="space-y-2.5 pt-1" data-sp-widget>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div class="relative flex-1 min-w-0">
+                <span class="material-symbols-outlined text-slate-400 text-base absolute right-2.5 top-2 pointer-events-none">search</span>
+                <input type="search" placeholder="ابحث عن منتج بالاسم أو الكود..." oninput="filterQuestionnaireProducts(this)"
+                       class="w-full pr-8 pl-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] min-h-[38px]">
+            </div>
+            <span data-sp-count class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200 shrink-0 self-start sm:self-center">
+                {% if selected_product_ids %}{{ selected_product_ids|length }}{% else %}0{% endif %} محدد
+            </span>
+        </div>
+        <div data-sp-grid class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+            {% for p in product_choices %}
+            <label data-sp-card data-product-search="{{ p.name|lower }} {{ p.sku_code|default:''|lower }}"
+                   class="flex items-center justify-between gap-2 p-2.5 {% if p.id in suggested_product_ids %}bg-amber-50/70 border-amber-300{% else %}bg-white border-slate-200{% endif %} hover:bg-teal-50/60 hover:border-teal-300 border rounded-xl cursor-pointer transition-colors text-xs min-h-[44px] min-w-0">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <input type="checkbox" name="question_{{ q.id }}" value="{{ p.id }}"
+                           class="{% if mode == 'active' %}question-input {% endif %}text-[#27bebe] rounded focus:ring-[#27bebe] shrink-0"
+                           onchange="updateProductQuestionCount(this);{% if mode == 'active' %} handleQuestionChange({{ q.id }});{% else %} evaluateModalConditionalQuestions();{% endif %}"
+                           {% if selected_product_ids and p.id in selected_product_ids %}checked{% endif %}>
+                    <div class="min-w-0 flex-1">
+                        <span class="font-bold text-slate-800 block truncate">{{ p.name }}</span>
+                        {% if p.sku_code %}<span class="text-[10px] text-slate-400 font-mono block truncate">{{ p.sku_code }}</span>{% endif %}
+                    </div>
+                </div>
+                {% if p.id in suggested_product_ids %}
+                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0 inline-flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-[12px]">star</span>
+                    <span>مقترح</span>
+                </span>
+                {% endif %}
+            </label>
+            {% empty %}
+            <p class="text-xs text-slate-400 col-span-full py-3 text-center">لا توجد منتجات متاحة لهذا السؤال.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif q.question_type == 'rating' %}
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+        {% for rate in "12345" %}
+        <label class="inline-flex flex-col items-center justify-center w-10 h-10 bg-white border border-slate-200 rounded-xl hover:border-[#27bebe] cursor-pointer">
+            <input type="radio" name="question_{{ q.id }}" value="{{ rate }}" class="{% if mode == 'active' %}question-input {% endif %}text-[#27bebe] focus:ring-[#27bebe]"
+                   onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
+                   {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == rate %}checked{% endif %}{% endfor %}>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">{{ rate }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% elif q.question_type == 'number' %}
+    <input type="number" step="any" name="question_{{ q.id }}" placeholder="أدخل رقماً..."
+           value="{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}"
+           class="{% if mode == 'active' %}question-input {% endif %}w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+           oninput="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}">
+    {% elif q.question_type == 'date' %}
+    <input type="date" name="question_{{ q.id }}"
+           value="{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}"
+           class="{% if mode == 'active' %}question-input {% endif %}w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+           onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}">
+    {% elif q.question_type == 'text' %}
+    <input type="text" name="question_{{ q.id }}" placeholder="اكتب الإجابة هنا..."
+           value="{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}"
+           class="{% if mode == 'active' %}question-input {% endif %}w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+           oninput="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}">
+    {% else %}
+    <textarea name="question_{{ q.id }}" rows="2" placeholder="اكتب الإجابة هنا..."
+              class="{% if mode == 'active' %}question-input {% endif %}w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-medium text-slate-800 placeholder-slate-400 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
+              oninput="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}">{% for resp in questionnaire_responses %}{% if resp.question.id == q.id %}{{ resp.raw_answer }}{% endif %}{% endfor %}</textarea>
+    {% endif %}
+{% endif %}

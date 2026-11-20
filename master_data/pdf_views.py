@@ -142,7 +142,12 @@ def _resolve_statement_dates(request):
 @require_permission("sales:statements/pdf")
 def customer_statement_pdf(request, pk):
     contact = get_object_or_404(Contact.objects.select_related("area"), pk=pk)
-    if not can_user_access_object(request.user, contact):
+    from sales.models import CustomerAccount
+    acct = getattr(contact, "customer_account", None) or CustomerAccount.objects.filter(customer=contact).first()
+    if acct is not None:
+        if not can_user_access_object(request.user, acct, "view"):
+            raise PermissionDenied("ليس لديك صلاحية للوصول إلى كشف حساب هذا العميل.")
+    elif not can_user_access_object(request.user, contact):
         raise PermissionDenied("ليس لديك صلاحية للوصول إلى كشف حساب هذا العميل.")
     start_date, end_date = _resolve_statement_dates(request)
     category = (request.GET.get("category") or "all").strip()

@@ -35,8 +35,9 @@ Django project package: `config`. Custom user: `accounts.User`. UI language: Ara
 | `inventory` | Warehouses, stock, lots, memos, inter-warehouse transfer requests |
 | `purchases` | Purchase orders/returns, stock receive, vendor invoice settlement |
 | `treasury` | Vaults, deposits/withdrawals/transfers, vendor payments and ledgers |
-| `sales` | Sales orders, collections, customer accounts/transactions |
-| `activities` | Visits, planned visits, agreements, visit templates, agenda, approval hub |
+| `sales` | Sales orders, sales returns, collections, customer accounts/transactions |
+| `activities` | Visits, planned visits, visit plans, agreements, visit templates, agenda, approval hub, GPS integrity |
+| `reports` | Performance analytics dashboards and 8 standalone financial/operational Excel & print reports |
 
 Business mutations for sales, purchases, treasury, and stock transfers belong in `*/services.py` with `@transaction.atomic`. HTTP views authenticate, authorize, validate input, call services, and render templates. Shared UI: `templates/layouts/base.html` (Tailwind CDN, Cairo, Material Symbols, Leaflet). Full map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

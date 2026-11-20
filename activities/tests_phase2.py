@@ -558,3 +558,624 @@ class Phase2ComprehensiveVerificationTests(TestCase):
             'order_date': timezone.now().date().strftime('%Y-%m-%d'),
         })
         self.assertEqual(res_po.status_code, 403)
+
+
+class Phase2QuestionnaireDoubleVisitAndCleanupTests(TestCase):
+    """Regression tests for Phase 2 #3 (Questionnaire & Detailing), #4 (Double Visit), and #5 (Cleanup Command)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+    def setUp(self):
+        self.cairo = Area.objects.create(name='القاهرة ق', code='PH2-CAI', area_type='governorate')
+        self.brick = Area.objects.create(name='المعادي ق', code='PH2-MAD', area_type='subarea', parent=self.cairo)
+        self.rep_role = Role.objects.get(name='rep')
+        self.superadmin = User.objects.create_superuser(username='sa_ph2@wea.com', email='sa_ph2@wea.com', password='Password123!')
+        self.rep = User.objects.create_user(
+            username='rep_ph2@wea.com', email='rep_ph2@wea.com', password='Password123!',
+            role=self.rep_role, is_active=True
+        )
+        self.rep.assigned_areas.add(self.brick)
+        self.contact = Contact.objects.create(name='د. اختبار', is_customer=True, area=self.cairo, brick=self.brick, status='active')
+        self.tpl = VisitTemplate.objects.create(name='Single visit (DR)', display_name_ar='زيارة طبيب فردية', active=True)
+        self.q1 = VisitTemplateQuestion.objects.create(
+            template=self.tpl, text_ar='نتيجة الزيارة', question_type='single_choice',
+            options=[{'value': 'successful', 'text_ar': 'زيارة ناجحة'}, {'value': 'unsuccessful', 'text_ar': 'زيارة غير ناجحة'}],
+            order=1, is_active=True
+        )
+        self.q_mc = VisitTemplateQuestion.objects.create(
+            template=self.tpl, text_ar='اهتمامات', question_type='multiple_choice',
+            options=[{'value': 'opt_a', 'text_ar': 'خيار أ'}, {'value': 'opt_b', 'text_ar': 'خيار ب'}],
+            order=2, is_required=False, is_active=True
+        )
+
+    def test_qa_display_includes_detailed_products_and_translates_answers(self):
+        from catalog.models import ProductCategory, Product
+        cat = ProductCategory.objects.create(name='فئة زيارة', code='CAT-VIS')
+        prod = Product.objects.create(name='منتج مشروح 1', sku_code='SKU-DET-1', category=cat)
+        visit = Visit.objects.create(
+            contact=self.contact, template=self.tpl, owner=self.rep, created_by=self.rep,
+            date=timezone.now().date(), status='finished', approval_status='approved',
+            questionnaire_answers={str(self.q1.id): 'successful', str(self.q_mc.id): ['opt_a'], '9999': 'legacy_note'}
+        )
+        visit.detailed_products.add(prod)
+
+        qa_list = visit.get_qa_display_list()
+        texts = {item['question_text']: item['answer'] for item in qa_list}
+        self.assertEqual(texts['نتيجة الزيارة'], 'زيارة ناجحة')
+        self.assertEqual(texts['اهتمامات'], 'خيار أ')
+        self.assertEqual(texts['المنتجات المشروحة (Product Detailing)'], 'منتج مشروح 1')
+
+        self.client.force_login(self.superadmin)
+        res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'زيارة ناجحة')
+        self.assertContains(res, 'legacy_note')
+
+    def test_double_visit_create_and_edit_persistence(self):
+        self.client.force_login(self.superadmin)
+        today_str = timezone.now().date().strftime('%Y-%m-%d')
+        res_create_get = self.client.get(reverse('visit_create'))
+        self.assertContains(res_create_get, 'name="doubled"')
+
+        res_create = self.client.post(reverse('visit_create'), {
+            'contact': self.contact.id,
+            'template': self.tpl.id,
+            'date': today_str,
+            'owner': self.rep.id,
+            'doubled': 'on',
+            'bypass_location': '1',
+            'bypass_reason': 'اختبار',
+        })
+        self.assertEqual(res_create.status_code, 302)
+        visit = Visit.objects.latest('id')
+        self.assertTrue(visit.doubled)
+
+        # Edit to toggle doubled off
+        res_edit = self.client.post(reverse('visit_edit', args=[visit.pk]), {
+            'contact': self.contact.id,
+            'template': self.tpl.id,
+            'date': today_str,
+        })
+        self.assertEqual(res_edit.status_code, 302)
+        visit.refresh_from_db()
+        self.assertFalse(visit.doubled)
+
+    def test_cleanup_command_dry_run_vs_execute(self):
+        from django.core.management import call_command
+        from activities.models import Agreement, AgreementType
+        agr_type = AgreementType.objects.create(name='نوع تدقيق')
+        agr_keep = Agreement.objects.create(title='Keep', type=agr_type, customer=self.contact, amount=Decimal('100.00'), date=timezone.now().date(), created_by=self.superadmin)
+        agr_del = Agreement.objects.create(title='test', type=agr_type, customer=self.contact, amount=Decimal('200.00'), date=timezone.now().date(), created_by=self.superadmin)
+
+        call_command('cleanup_test_activities', agreement_ids=[agr_del.id])
+        self.assertTrue(Agreement.objects.filter(pk=agr_del.id).exists())
+
+        call_command('cleanup_test_activities', agreement_ids=[agr_del.id], execute=True)
+        self.assertFalse(Agreement.objects.filter(pk=agr_del.id).exists())
+        self.assertTrue(Agreement.objects.filter(pk=agr_keep.id).exists())
+
+
+class Phase3VisitsAgreementsAndNavTests(TestCase):
+    """
+    Comprehensive verification tests for:
+    - Suggested Products question type lifecycle, validation & historical preservation
+    - Visit creator-edit tracking, list/export filtering & data scope
+    - Agreements list/detail/edit/delete permissions, status rules, attachment cleanup & audit
+    - Cleanup command dry-run reporting
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.core.management import call_command
+        call_command('setup_permissions')
+
+    def setUp(self):
+        from catalog.models import ProductCategory
+        from activities.models import Agreement, AgreementType
+
+        self.client = Client()
+        loc = LocationSettings.get_settings()
+        loc.verify_visits = False
+        loc.verify_end_visit_distance = False
+        loc.allow_visit_deletion_before_end = True
+        loc.enable_product_suggestions = True
+        loc.save()
+
+        self.rep_role = Role.objects.get(name=Role.ROLE_REP)
+        self.manager_role = Role.objects.get(name=Role.ROLE_MANAGER)
+
+        self.cairo = Area.objects.create(name='القاهرة 3', code='PH3-CAI', area_type='governorate')
+        self.giza = Area.objects.create(name='الجيزة 3', code='PH3-GIZ', area_type='governorate')
+        self.nasr = Area.objects.create(name='مدينة نصر 3', code='PH3-NSR', area_type='subarea', parent=self.cairo)
+        self.maadi = Area.objects.create(name='المعادي 3', code='PH3-MAD', area_type='subarea', parent=self.cairo)
+        self.dokki = Area.objects.create(name='الدقي 3', code='PH3-DOK', area_type='subarea', parent=self.giza)
+
+        self.superadmin = User.objects.create_superuser(
+            username='sa_ph3@wea.com', email='sa_ph3@wea.com', password='Password123!'
+        )
+        self.rep_cairo = User.objects.create_user(
+            username='rep_nasr_ph3@wea.com', email='rep_nasr_ph3@wea.com', password='Password123!',
+            role=self.rep_role, is_active=True
+        )
+        self.rep_cairo.assigned_areas.add(self.nasr)
+
+        self.peer_rep = User.objects.create_user(
+            username='rep_maadi_ph3@wea.com', email='rep_maadi_ph3@wea.com', password='Password123!',
+            role=self.rep_role, is_active=True
+        )
+        self.peer_rep.assigned_areas.add(self.maadi)
+
+        self.mgr_cairo = User.objects.create_user(
+            username='mgr_cairo_ph3@wea.com', email='mgr_cairo_ph3@wea.com', password='Password123!',
+            role=self.manager_role, is_active=True
+        )
+        self.mgr_cairo.assigned_areas.add(self.cairo)
+
+        self.mgr_giza = User.objects.create_user(
+            username='mgr_giza_ph3@wea.com', email='mgr_giza_ph3@wea.com', password='Password123!',
+            role=self.manager_role, is_active=True
+        )
+        self.mgr_giza.assigned_areas.add(self.giza)
+
+        self.contact_nasr = Contact.objects.create(
+            name='صيدلية مدينة نصر 3', is_customer=True, account_type='Pharmacy',
+            area=self.cairo, brick=self.nasr, status='active'
+        )
+        self.contact_maadi = Contact.objects.create(
+            name='صيدلية المعادي 3', is_customer=True, account_type='Pharmacy',
+            area=self.cairo, brick=self.maadi, status='active'
+        )
+        self.contact_dokki = Contact.objects.create(
+            name='صيدلية الدقي 3', is_customer=True, account_type='Pharmacy',
+            area=self.giza, brick=self.dokki, status='active'
+        )
+
+        self.cat = ProductCategory.objects.create(name='أدوية 3', code='PH3-CAT')
+        self.prod_sugg = Product.objects.create(
+            name='جيرون المقترح', sku_code='PH3-P1', category=self.cat, is_active=True, sellable=True
+        )
+        self.prod_other = Product.objects.create(
+            name='ليجتونكس العادي', sku_code='PH3-P2', category=self.cat, is_active=True, sellable=True
+        )
+        self.prod_inactive = Product.objects.create(
+            name='منتج موقوف', sku_code='PH3-P3', category=self.cat, is_active=False, sellable=True
+        )
+        self.prod_nonsellable = Product.objects.create(
+            name='عينة غير قابلة للبيع', sku_code='PH3-P4', category=self.cat, is_active=True, sellable=False
+        )
+
+        # Template with suggested_products question type
+        self.tpl_sp = VisitTemplate.objects.create(
+            name='Single visit (Pharmacy)',
+            display_name_ar='زيارة صيدلية بالمقترحات',
+            enable_product_detailing=True,
+            active=True,
+        )
+        self.tpl_sp.suggested_products.add(self.prod_sugg, self.prod_inactive)
+        self.q_sp_outcome = VisitTemplateQuestion.objects.create(
+            template=self.tpl_sp,
+            text_ar='نتيجة الزيارة',
+            question_type='single_choice',
+            options=[{'value': 'successful', 'text_ar': 'زيارة ناجحة'}, {'value': 'unsuccessful', 'text_ar': 'زيارة غير ناجحة'}],
+            order=1, is_required=True, is_active=True,
+        )
+        self.q_sp = VisitTemplateQuestion.objects.create(
+            template=self.tpl_sp,
+            text_ar='المنتجات المقترحة',
+            question_type='suggested_products',
+            stage='end_only',
+            order=2, is_required=True, is_active=True,
+        )
+
+        # Legacy template without suggested_products question
+        self.tpl_legacy = VisitTemplate.objects.create(
+            name='Single visit (DR)',
+            display_name_ar='زيارة طبيب تقليدية',
+            enable_product_detailing=True,
+            active=True,
+        )
+        self.q_leg_outcome = VisitTemplateQuestion.objects.create(
+            template=self.tpl_legacy,
+            text_ar='نتيجة الزيارة',
+            question_type='single_choice',
+            options=[{'value': 'successful', 'text_ar': 'زيارة ناجحة'}],
+            order=1, is_required=True, is_active=True,
+        )
+
+        self.agr_type = AgreementType.objects.create(name='بونص مبيعات 3')
+        self.Agreement = Agreement
+
+    def test_suggested_products_question_builder_preview_and_api(self):
+        """Question builder saves/edits 'suggested_products', preview omits duplicate detailing, API includes pool."""
+        self.client.force_login(self.superadmin)
+        tpl = VisitTemplate.objects.create(
+            name='Group visit (Clinic / Medical Center)',
+            display_name_ar='قالب بناء اختباري',
+            enable_product_detailing=True,
+            active=True,
+        )
+        tpl.suggested_products.add(self.prod_sugg)
+
+        res_add = self.client.post(reverse('template_question_add', args=[tpl.pk]), {
+            'text_ar': 'اختر المنتجات المقترحة',
+            'question_type': 'suggested_products',
+            'is_required': 'on',
+            'options_json': '[{"text_ar": "stale"}]',
+        })
+        self.assertEqual(res_add.status_code, 302)
+        q = VisitTemplateQuestion.objects.filter(template=tpl).latest('id')
+        self.assertEqual(q.question_type, 'suggested_products')
+        self.assertEqual(q.options, [])
+        self.assertTrue(q.is_required)
+
+        res_edit = self.client.post(reverse('template_question_edit', args=[q.pk]), {
+            'text_ar': 'المنتجات المشروحة والمقترحة',
+            'question_type': 'suggested_products',
+            'options_json': '[{"text_ar": "should_clear"}]',
+        })
+        self.assertEqual(res_edit.status_code, 302)
+        q.refresh_from_db()
+        self.assertEqual(q.options, [])
+        self.assertFalse(q.is_required)
+
+        res_preview = self.client.get(reverse('visit_template_preview', args=[tpl.pk]))
+        self.assertEqual(res_preview.status_code, 200)
+        self.assertContains(res_preview, 'المنتجات المشروحة والمقترحة')
+        self.assertContains(res_preview, self.prod_sugg.name)
+        self.assertFalse(res_preview.context['has_suggested_products_question'] is False)
+        # Should render via questionnaire question, not duplicate legacy detailing block
+        self.assertNotContains(res_preview, 'المنتجات المشروحة المتاحة للاختيار (Detailing)')
+
+        res_api = self.client.get(reverse('visit_templates_api'))
+        self.assertEqual(res_api.status_code, 200)
+        payload = res_api.json()
+        tpl_row = next(r for r in payload['templates'] if r['id'] == tpl.id)
+        self.assertTrue(any(qq['question_type'] == 'suggested_products' for qq in tpl_row['questions']))
+        self.assertTrue(any(p['id'] == self.prod_sugg.id for p in tpl_row['suggested_products']))
+        self.assertFalse(any(p['id'] == self.prod_inactive.id for p in tpl_row['suggested_products']))
+
+    def test_suggested_products_visit_lifecycle_validation_and_historical_preservation(self):
+        """
+        Suggested Products participates identically in visit completion, validation,
+        visit detail dossier, visits list popup, Excel export, and post-end Edit Answers
+        while preserving historically selected inactive products.
+        """
+        from io import BytesIO
+        import openpyxl
+
+        visit = Visit.objects.create(
+            contact=self.contact_nasr, template=self.tpl_sp,
+            owner=self.rep_cairo, created_by=self.rep_cairo,
+            date=timezone.localdate(), status='started', approval_status='approved',
+            started_at=timezone.now(),
+        )
+        self.client.force_login(self.rep_cairo)
+
+        # 1. Required validation blocks empty suggested_products submission
+        res_empty = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            f'question_{self.q_sp_outcome.id}': 'successful',
+        })
+        self.assertEqual(res_empty.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        # 2. Rejects inactive / non-sellable product IDs
+        res_bad = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            f'question_{self.q_sp_outcome.id}': 'successful',
+            f'question_{self.q_sp.id}': [str(self.prod_inactive.id), str(self.prod_nonsellable.id)],
+        })
+        self.assertEqual(res_bad.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'started')
+
+        # 3. Valid completion saves suggested_products IDs & syncs detailed_products
+        res_ok = self.client.post(reverse('visit_detail', args=[visit.pk]), {
+            'action': 'complete',
+            f'question_{self.q_sp_outcome.id}': 'successful',
+            f'question_{self.q_sp.id}': [str(self.prod_sugg.id)],
+        })
+        self.assertEqual(res_ok.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, 'finished')
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_sp.id)), [self.prod_sugg.id])
+        self.assertEqual(list(visit.detailed_products.values_list('id', flat=True)), [self.prod_sugg.id])
+        self.assertFalse(visit.edited_by_creator)
+
+        # 4. Visits detail, visits list popup, and visits export render readable product names without N+1
+        res_detail = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(res_detail.status_code, 200)
+        self.assertContains(res_detail, self.prod_sugg.name)
+        # Single unified representation inside Questionnaire Responses (no duplicate detailing card)
+        self.assertContains(res_detail, 'إجابات استبيان الزيارة')
+
+        res_list = self.client.get(reverse('visits_list'))
+        self.assertEqual(res_list.status_code, 200)
+        self.assertContains(res_list, self.prod_sugg.name)
+
+        # Rep lacks visits/export permission; Manager exports .xlsx with readable suggested product name
+        self.assertEqual(self.client.get(reverse('visits_export')).status_code, 403)
+        self.client.force_login(self.mgr_cairo)
+        res_exp = self.client.get(reverse('visits_export'))
+        self.assertEqual(res_exp.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(res_exp.content))
+        sheet_text = ' '.join(
+            str(cell or '')
+            for row in wb.active.iter_rows(values_only=True)
+            for cell in row
+        )
+        self.assertIn(self.prod_sugg.name, sheet_text)
+        self.client.force_login(self.rep_cairo)
+
+        # 5. Historical preservation: mark prod_sugg inactive later, verify rep can still keep it in Edit Answers
+        #    while submitting a DIFFERENT inactive product (prod_inactive) is still rejected
+        self.prod_sugg.is_active = False
+        self.prod_sugg.save(update_fields=['is_active'])
+
+        res_new_inactive = self.client.post(reverse('visit_update_answers', args=[visit.pk]), {
+            f'question_{self.q_sp_outcome.id}': 'successful',
+            f'question_{self.q_sp.id}_present': '1',
+            f'question_{self.q_sp.id}': [str(self.prod_inactive.id)],
+        })
+        self.assertEqual(res_new_inactive.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.questionnaire_answers.get(str(self.q_sp.id)), [self.prod_sugg.id])
+
+        # Keeping historical inactive prod_sugg + adding newly selected active prod_other succeeds
+        res_edit_ok = self.client.post(reverse('visit_update_answers', args=[visit.pk]), {
+            f'question_{self.q_sp_outcome.id}': 'unsuccessful',
+            f'question_{self.q_sp.id}_present': '1',
+            f'question_{self.q_sp.id}': [str(self.prod_sugg.id), str(self.prod_other.id)],
+        })
+        self.assertEqual(res_edit_ok.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(set(visit.questionnaire_answers.get(str(self.q_sp.id))), {self.prod_sugg.id, self.prod_other.id})
+        self.assertEqual(set(visit.detailed_products.values_list('id', flat=True)), {self.prod_sugg.id, self.prod_other.id})
+        self.assertEqual(visit.approval_status, 'pending')
+        self.assertTrue(visit.waiting_for_reapproval)
+        self.assertTrue(visit.edited_by_creator)
+        self.assertEqual(visit.last_edited_by, self.rep_cairo)
+        self.assertIsNotNone(visit.last_edited_at)
+
+        audit_log = ApprovalAuditLog.objects.filter(visit=visit, action='answers_updated').latest('id')
+        changes_blob = str(audit_log.changes)
+        self.assertIn(self.prod_sugg.name, changes_blob)
+        self.assertIn(self.prod_other.name, changes_blob)
+
+    def test_legacy_detailed_products_editable_in_edit_answers_modal(self):
+        """Legacy detailing templates without a 'suggested_products' question still allow modal editing & clearing."""
+        visit = Visit.objects.create(
+            contact=self.contact_nasr, template=self.tpl_legacy,
+            owner=self.rep_cairo, created_by=self.rep_cairo,
+            date=timezone.localdate(), status='finished', approval_status='approved',
+            ended_at=timezone.now(),
+            questionnaire_answers={str(self.q_leg_outcome.id): 'successful'},
+        )
+        visit.detailed_products.add(self.prod_sugg)
+
+        self.client.force_login(self.rep_cairo)
+        res_get = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertContains(res_get, 'name="detailed_products_present"')
+        self.assertContains(res_get, self.prod_sugg.name)
+
+        # Update detailed_products via Edit Answers modal endpoint
+        res_upd = self.client.post(reverse('visit_update_answers', args=[visit.pk]), {
+            f'question_{self.q_leg_outcome.id}': 'successful',
+            'detailed_products_present': '1',
+            'detailed_products': [str(self.prod_other.id)],
+        })
+        self.assertEqual(res_upd.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(list(visit.detailed_products.values_list('id', flat=True)), [self.prod_other.id])
+        self.assertTrue(visit.edited_by_creator)
+
+    def test_creator_edit_tracking_filter_and_data_scope(self):
+        """
+        Creator edits mark edited_by_creator=True, non-creator/no-op edits keep it False,
+        and visits/?edited_by_creator=yes|no enforces ScopeResolutionService on list & export.
+        """
+        today = timezone.localdate()
+        tomorrow = today + datetime.timedelta(days=1)
+
+        v_creator_edited = Visit.objects.create(
+            contact=self.contact_nasr, template=self.tpl_legacy,
+            owner=self.rep_cairo, created_by=self.rep_cairo,
+            date=today, status='planned', approval_status='approved',
+        )
+        v_creator_untouched = Visit.objects.create(
+            contact=self.contact_nasr, template=self.tpl_legacy,
+            owner=self.rep_cairo, created_by=self.rep_cairo,
+            date=today, status='planned', approval_status='approved',
+        )
+        v_peer_edited = Visit.objects.create(
+            contact=self.contact_maadi, template=self.tpl_legacy,
+            owner=self.peer_rep, created_by=self.peer_rep,
+            date=today, status='planned', approval_status='approved',
+            edited_by_creator=True,
+        )
+        v_giza_edited = Visit.objects.create(
+            contact=self.contact_dokki, template=self.tpl_legacy,
+            owner=self.mgr_giza, created_by=self.mgr_giza,
+            date=today, status='planned', approval_status='approved',
+            edited_by_creator=True,
+        )
+
+        # No-op edit by creator does NOT set edited_by_creator=True
+        self.client.force_login(self.rep_cairo)
+        self.client.post(reverse('visit_edit', args=[v_creator_untouched.pk]), {
+            'contact': self.contact_nasr.id,
+            'template': self.tpl_legacy.id,
+            'date': today.strftime('%Y-%m-%d'),
+        })
+        v_creator_untouched.refresh_from_db()
+        self.assertFalse(v_creator_untouched.edited_by_creator)
+
+        # Actual date change by creator sets edited_by_creator=True
+        self.client.post(reverse('visit_edit', args=[v_creator_edited.pk]), {
+            'contact': self.contact_nasr.id,
+            'template': self.tpl_legacy.id,
+            'date': tomorrow.strftime('%Y-%m-%d'),
+        })
+        v_creator_edited.refresh_from_db()
+        self.assertTrue(v_creator_edited.edited_by_creator)
+        self.assertEqual(v_creator_edited.last_edited_by, self.rep_cairo)
+
+        # Manager editing v_creator_untouched sets last_edited_by, NOT edited_by_creator
+        self.client.force_login(self.mgr_cairo)
+        self.client.post(reverse('visit_edit', args=[v_creator_untouched.pk]), {
+            'contact': self.contact_nasr.id,
+            'template': self.tpl_legacy.id,
+            'date': tomorrow.strftime('%Y-%m-%d'),
+        })
+        v_creator_untouched.refresh_from_db()
+        self.assertFalse(v_creator_untouched.edited_by_creator)
+        self.assertEqual(v_creator_untouched.last_edited_by, self.mgr_cairo)
+
+        # Filter as Cairo Rep: sees only own matching edited visit, never peer or Giza
+        self.client.force_login(self.rep_cairo)
+        res_yes_rep = self.client.get(reverse('visits_list'), {'edited_by_creator': 'yes'})
+        yes_ids_rep = {v.id for v in res_yes_rep.context['visits']}
+        self.assertEqual(yes_ids_rep, {v_creator_edited.id})
+        self.assertNotIn(v_peer_edited.id, yes_ids_rep)
+        self.assertNotIn(v_giza_edited.id, yes_ids_rep)
+
+        res_no_rep = self.client.get(reverse('visits_list'), {'edited_by_creator': 'no'})
+        no_ids_rep = {v.id for v in res_no_rep.context['visits']}
+        self.assertEqual(no_ids_rep, {v_creator_untouched.id})
+
+        # Combine with status filter
+        res_combo = self.client.get(reverse('visits_list'), {'edited_by_creator': 'yes', 'status': 'finished'})
+        self.assertEqual(len(res_combo.context['visits']), 0)
+
+        # Filter as Cairo Manager: sees Cairo creator-edited (Nasr + Maadi), never Giza
+        self.client.force_login(self.mgr_cairo)
+        res_yes_mgr = self.client.get(reverse('visits_list'), {'edited_by_creator': 'yes'})
+        yes_ids_mgr = {v.id for v in res_yes_mgr.context['visits']}
+        self.assertIn(v_creator_edited.id, yes_ids_mgr)
+        self.assertIn(v_peer_edited.id, yes_ids_mgr)
+        self.assertNotIn(v_giza_edited.id, yes_ids_mgr)
+
+        # Export also respects edited_by_creator & scope
+        from io import BytesIO
+        import openpyxl
+        res_exp_yes = self.client.get(reverse('visits_export'), {'edited_by_creator': 'yes'})
+        self.assertEqual(res_exp_yes.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(res_exp_yes.content))
+        exp_text = ' '.join(str(c or '') for r in wb.active.iter_rows(values_only=True) for c in r)
+        self.assertIn(f"#{v_creator_edited.serial_num}", exp_text)
+        self.assertNotIn(f"#{v_creator_untouched.serial_num}", exp_text)
+        self.assertNotIn(f"#{v_giza_edited.serial_num}", exp_text)
+
+    def test_agreements_more_vert_status_scope_and_attachment_cleanup(self):
+        """Agreements enforce view/edit/delete permissions, status rules ('new'/'disapproved'), IDOR, attachments, and audits."""
+        from django.contrib.contenttypes.models import ContentType
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from master_data.models import ERPAttachment
+
+        today = timezone.localdate()
+        agr_new = self.Agreement.objects.create(
+            title='اتفاقية جديدة', type=self.agr_type, customer=self.contact_nasr,
+            amount=Decimal('500.00'), date=today, status='new', created_by=self.rep_cairo
+        )
+        agr_done = self.Agreement.objects.create(
+            title='اتفاقية منجزة', type=self.agr_type, customer=self.contact_nasr,
+            amount=Decimal('750.00'), date=today, status='done', created_by=self.rep_cairo, approved_by=self.mgr_cairo
+        )
+        ct_agr = ContentType.objects.get_for_model(self.Agreement)
+        att = ERPAttachment.objects.create(
+            content_type=ct_agr,
+            object_id=agr_new.id,
+            file=SimpleUploadedFile('agr_doc.pdf', b'%PDF-1.4 test', content_type='application/pdf'),
+            original_filename='agr_doc.pdf',
+            mime_type='application/pdf',
+            file_size_bytes=13,
+            uploaded_by=self.rep_cairo,
+        )
+
+        # Rep views list: Edit/Delete shown for 'new', hidden for 'done'; DOM balanced with row-menu-trigger
+        self.client.force_login(self.rep_cairo)
+        res_list = self.client.get(reverse('agreements_list'))
+        self.assertEqual(res_list.status_code, 200)
+        self.assertContains(res_list, 'row-menu-trigger')
+        self.assertContains(res_list, 'showConfirmDeleteModal')
+        self.assertContains(res_list, 'global-confirm-delete-modal')
+        self.assertContains(res_list, reverse('agreement_edit', args=[agr_new.id]))
+        self.assertContains(res_list, reverse('agreement_delete', args=[agr_new.id]))
+        self.assertNotContains(res_list, reverse('agreement_edit', args=[agr_done.id]))
+        self.assertNotContains(res_list, reverse('agreement_delete', args=[agr_done.id]))
+
+        # Giza manager cannot access or mutate Cairo agreement (IDOR -> 403)
+        self.client.force_login(self.mgr_giza)
+        self.assertEqual(self.client.get(reverse('agreement_detail', args=[agr_new.id])).status_code, 403)
+        self.assertEqual(self.client.post(reverse('agreement_edit', args=[agr_new.id]), {'title': 'Hack'}).status_code, 403)
+        self.assertEqual(self.client.post(reverse('agreement_delete', args=[agr_new.id])).status_code, 403)
+
+        # Creator edits 'new' agreement successfully -> writes AGREEMENT_UPDATED audit log
+        self.client.force_login(self.rep_cairo)
+        res_edit = self.client.post(reverse('agreement_edit', args=[agr_new.id]), {
+            'customer': self.contact_nasr.id,
+            'type': self.agr_type.id,
+            'title': 'اتفاقية محدثة',
+            'amount': '600.00',
+            'date': today.strftime('%Y-%m-%d'),
+            'description': 'تم التحديث',
+        })
+        self.assertEqual(res_edit.status_code, 302)
+        agr_new.refresh_from_db()
+        self.assertEqual(agr_new.title, 'اتفاقية محدثة')
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_UPDATED', record_id=str(agr_new.id)).exists())
+
+        # Cannot edit or delete 'done' agreement
+        res_done_edit = self.client.get(reverse('agreement_edit', args=[agr_done.id]))
+        self.assertEqual(res_done_edit.status_code, 302)
+        res_done_del_ajax = self.client.post(
+            reverse('agreement_delete', args=[agr_done.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_done_del_ajax.status_code, 400)
+        self.assertTrue(self.Agreement.objects.filter(pk=agr_done.id).exists())
+
+        # Delete 'new' agreement cleans up attachment and writes AGREEMENT_DELETED audit log
+        res_del = self.client.post(
+            reverse('agreement_delete', args=[agr_new.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.json()['success'])
+        self.assertFalse(self.Agreement.objects.filter(pk=agr_new.id).exists())
+        self.assertFalse(ERPAttachment.objects.filter(pk=att.pk).exists())
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_DELETED', record_id=str(agr_new.id)).exists())
+
+    def test_cleanup_command_dry_run_reports_related_counts_and_audit_note(self):
+        """Dry-run mode prints Samples/Expenses/CoachingEvaluations/VisitPlans/SecurityAuditLog note and deletes nothing."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        agr = self.Agreement.objects.create(
+            title='cleanup agr', type=self.agr_type, customer=self.contact_nasr,
+            amount=Decimal('100.00'), date=timezone.localdate(), created_by=self.superadmin
+        )
+        vis = Visit.objects.create(
+            contact=self.contact_nasr, template=self.tpl_legacy,
+            owner=self.rep_cairo, created_by=self.rep_cairo, date=timezone.localdate()
+        )
+        day = PlannedVisitDay.objects.create(assignee=self.rep_cairo, date=timezone.localdate())
+        PlannedVisitItem.objects.create(plan_day=day, contact=self.contact_nasr, visit=vis)
+
+        out = StringIO()
+        call_command('cleanup_test_activities', agreement_ids=[agr.id], visit_ids=[vis.id], planned_day_ids=[day.id], stdout=out)
+        text = out.getvalue()
+        self.assertIn('Agreements: 1', text)
+        self.assertIn('Visits: 1', text)
+        self.assertIn('Samples:', text)
+        self.assertIn('CoachingEvaluations:', text)
+        self.assertIn('SecurityAuditLog', text)
+        self.assertIn('DRY-RUN complete', text)
+        self.assertTrue(self.Agreement.objects.filter(pk=agr.id).exists())
+        self.assertTrue(Visit.objects.filter(pk=vis.id).exists())
+        self.assertTrue(PlannedVisitDay.objects.filter(pk=day.id).exists())
+

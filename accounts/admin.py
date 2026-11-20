@@ -281,7 +281,23 @@ class UserAdmin(BaseUserAdmin):
 
     @admin.action(description="تعطيل حسابات المستخدمين المحددة")
     def deactivate_users(self, request, queryset):
-        queryset.exclude(is_superuser=True).update(is_active=False)
+        from accounts.services import revoke_user_sessions, AuditLogService
+        targets = list(queryset.exclude(is_superuser=True).exclude(role__is_super=True, role__is_active=True))
+        for u in targets:
+            u.is_active = False
+            u.save(update_fields=['is_active'])
+            u.clear_perm_cache()
+            revoke_user_sessions(u.pk)
+            AuditLogService.log(
+                action_type='USER_STATUS_TOGGLED',
+                module='accounts',
+                actor=request.user,
+                target_user=u,
+                record_id=u.pk,
+                record_name=u.name or u.username,
+                description=f"تعطيل المستخدم {u.username} من لوحة الإدارة",
+                request=request,
+            )
 
 
 @admin.register(SecurityAuditLog)

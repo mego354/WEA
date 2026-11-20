@@ -62,7 +62,7 @@ Each module has two independently configurable scopes:
 | Module | SuperAdmin | Manager | Accountant | Representative |
 |---|---|---|---|---|
 | `contacts` | ALL / ALL | AREA / AREA | ALL / ALL | BRICK / BRICK |
-| `activities` | ALL / ALL | AREA / AREA | OWN / OWN | BRICK / OWN |
+| `activities` | ALL / ALL | AREA / AREA | OWN / OWN | OWN / OWN |
 | `sales` | ALL / ALL | AREA / AREA | ALL / ALL | OWN / OWN |
 | `purchases` | ALL / ALL | AREA / AREA | ALL / ALL | OWN / OWN |
 | `inventory` | ALL / ALL | AREA / AREA | ALL / ALL | OWN / OWN |

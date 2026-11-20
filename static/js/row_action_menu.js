@@ -5,6 +5,7 @@
 (function () {
     let activeMenu = null;
     let activeBtn = null;
+    let openedAt = 0;
 
     function closeMenu() {
         if (activeMenu) {
@@ -38,6 +39,7 @@
         portal.classList.remove('hidden');
         activeMenu = portal;
         activeBtn = btn;
+        openedAt = Date.now();
         btn.setAttribute('aria-expanded', 'true');
 
         // Position fixed relative to viewport, flipping up/right if near edge
@@ -61,13 +63,27 @@
         portal.style.left = left + 'px';
         portal.style.top = top + 'px';
 
-        // Focus first interactive item for keyboard navigation
+        // Focus first interactive item without causing viewport scroll
         const firstItem = portal.querySelector('a, button');
-        if (firstItem) firstItem.focus();
+        if (firstItem && firstItem.focus) {
+            try {
+                firstItem.focus({ preventScroll: true });
+            } catch (_) {
+                firstItem.focus();
+            }
+        }
     };
 
     document.addEventListener('click', function (e) {
-        if (activeMenu && !e.target.closest('#globalRowActionMenu') && !e.target.closest('[data-row-menu-trigger]')) {
+        if (!activeMenu) return;
+        const insideMenu = e.target.closest('#globalRowActionMenu');
+        if (insideMenu) {
+            if (e.target.closest('a, button')) {
+                setTimeout(closeMenu, 0);
+            }
+            return;
+        }
+        if (!e.target.closest('[data-row-menu-trigger]')) {
             closeMenu();
         }
     });
@@ -92,7 +108,12 @@
         }
     });
 
-    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('scroll', function (e) {
+        if (!activeMenu) return;
+        if (Date.now() - openedAt < 150) return;
+        if (e && e.target && e.target.closest && e.target.closest('#globalRowActionMenu')) return;
+        closeMenu();
+    }, true);
     window.addEventListener('resize', closeMenu);
 
     window.toggleDetailActionMenu = function (btn) {

@@ -446,13 +446,16 @@ def sales_order_edit(request, pk):
                 selected_id=warehouse_id,
                 limit=100,
             )
+            from accounts.services import is_representative, get_representative_warehouse
+            is_rep_ctx = is_representative(request.user)
+            user_rep_wh_ctx = get_representative_warehouse(request.user) if is_rep_ctx else None
             products = Product.objects.filter(is_active=True, sellable=True)
             ctx = {
                 'order': order,
                 'customers': customers,
                 'warehouses': warehouses,
-                'user_rep_wh': user_rep_wh,
-                'is_rep': is_rep,
+                'user_rep_wh': user_rep_wh_ctx,
+                'is_rep': is_rep_ctx,
                 'products': products,
                 'form_data': {
                     'customer': customer_id,
@@ -615,7 +618,7 @@ def sales_order_action(request, pk, action):
                 if is_ajax:
                     return JsonResponse({'success': False, 'message': msg}, status=400)
                 messages.error(request, msg)
-                return redirect(request.META.get('HTTP_REFERER', f'/sales/{order.pk}/'))
+                return redirect('sales_order_detail', pk=order.pk)
 
             SalesOrderService.reject_order(order, request.user, reason=reason)
             msg = f"تم رفض أمر البيع {order.order_number}."
@@ -650,13 +653,17 @@ def sales_order_action(request, pk, action):
             return JsonResponse({'success': False, 'message': err_msg}, status=400)
         messages.error(request, err_msg)
 
-    return redirect(request.META.get('HTTP_REFERER', f'/sales/{order.pk}/'))
+    from django.utils.http import url_has_allowed_host_and_scheme
+    referer = request.META.get('HTTP_REFERER', '')
+    if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(referer)
+    return redirect('sales_order_detail', pk=order.pk)
 
 
 @require_permission('sales:orders/manage_payment_status')
 def sales_order_update_payment_status(request, pk):
     order = get_object_or_404(SalesOrder, pk=pk)
-    if not can_user_access_object(request.user, order, 'view'):
+    if not can_user_access_object(request.user, order, 'edit'):
         return render_forbidden_response(request, "لا يمكنك الوصول لهذا الطلب خارج نطاق صلاحيتك.")
 
     if request.method == 'POST':
@@ -1162,9 +1169,14 @@ def customer_transactions_list(request):
     parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
-    qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'account__customer__area', 'account__customer__brick', 'created_by').order_by('-serial')
+    qs = get_scoped_queryset(
+        CustomerTransaction.objects.select_related(
+            'account', 'account__customer', 'account__customer__area', 'account__customer__brick', 'created_by'
+        ).order_by('-serial'),
+        request.user,
+        'customertransaction',
+    )
     scoped_contacts = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
-    qs = qs.filter(account__customer__in=scoped_contacts)
 
     active_filters = []
 
@@ -1255,9 +1267,11 @@ def customer_transactions_export(request):
     date_to = request.GET.get('date_to')
     search = request.GET.get('search', '').strip()
 
-    qs = CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial')
-    scoped_contacts = get_scoped_queryset(Contact.objects.all(), request.user, 'contact')
-    qs = qs.filter(account__customer__in=scoped_contacts)
+    qs = get_scoped_queryset(
+        CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial'),
+        request.user,
+        'customertransaction',
+    )
 
     if customer_id:
         qs = qs.filter(account__customer_id=customer_id)
@@ -1792,18 +1806,25 @@ def sales_return_order_action(request, pk, action):
         elif action == 'deliver':
             if not has_perm_or_admin(request.user, 'inventory:transfers/approve'):
                 return render_forbidden_response(request, "ليس لديك صلاحية استلام بضاعة المرتجع بالمخزن.", perm_codename='inventory:transfers/approve')
+            if not can_user_access_object(request.user, return_order, 'operate'):
+                return render_forbidden_response(request, "غير مصرح لك باستلام مرتجع خارج نطاقك.")
             SalesReturnOrderService.deliver_return_order(return_order, request.user)
             messages.success(request, f"تم استلام بضاعة المرتجع بالمخزن وتوليد إذن الإضافة المخزني بنجاح.")
 
         elif action == 'settle':
-            role_name = getattr(request.user.role, 'name', '') if hasattr(request.user, 'role') and request.user.role else ''
-            if not (has_perm_or_admin(request.user, 'sales:orders/manage') or role_name in ['superadmin', 'accountant']):
+            if not has_perm_or_admin(request.user, ['sales:orders/manage', 'sales:returns/approve']):
                 return render_forbidden_response(request, "ليس لديك صلاحية ترحيل إشعار دائن المرتجع بالحسابات.", perm_codename='sales:orders/manage')
+            if not can_user_access_object(request.user, return_order, 'manage'):
+                return render_forbidden_response(request, "غير مصرح لك بترحيل مرتجع خارج نطاقك.")
             SalesReturnOrderService.settle_return_order(return_order, request.user)
             messages.success(request, f"تم ترحيل إشعار الدائن للحسابات وتخفيض مديونية العميل {return_order.customer.name} بنجاح.")
 
         elif action == 'cancel':
-            can_cancel = (has_perm_or_admin(request.user, 'sales:returns/delete') or return_order.created_by_id == request.user.id)
+            is_creator = (return_order.created_by_id == request.user.id)
+            can_cancel = is_creator or (
+                has_perm_or_admin(request.user, 'sales:returns/delete')
+                and can_user_access_object(request.user, return_order, 'delete')
+            )
             if not can_cancel:
                 return render_forbidden_response(request, "ليس لديك صلاحية إلغاء هذا المرتجع.", perm_codename='sales:returns/delete')
             reason = request.POST.get('rejection_reason', '') or request.POST.get('reason', 'إلغاء يدوي')

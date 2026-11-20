@@ -7,8 +7,9 @@ def company_context(request):
         profile = CompanyProfile.get_settings()
     except Exception:
         profile = None
+    is_auth = bool(getattr(getattr(request, 'user', None), 'is_authenticated', False))
     return {
         'company': profile,
-        'google_maps_api_key': getattr(settings, 'GOOGLE_MAPS_API_KEY', ''),
+        'google_maps_api_key': getattr(settings, 'GOOGLE_MAPS_API_KEY', '') if is_auth else '',
     }
 

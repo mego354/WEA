@@ -306,16 +306,23 @@
 
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white erp-loading-lock">
+<body class="bg-slate-50 min-h-screen flex text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
 
-    <!-- Centralized Global Viewport Loading Overlay & Top Progress Bar (Requirement A) -->
+    <!-- Centralized Global Viewport Loading Overlay & Top Progress Bar (Non-blocking on initial paint) -->
     <div id="global-top-progress" class="loading"></div>
-    <div id="global-page-loader" class="active" role="status" aria-live="polite" aria-busy="true">
+    <div id="global-page-loader" role="status" aria-live="polite" aria-busy="false">
         <div class="erp-loader-card">
             <div class="erp-loader-ring" aria-hidden="true"></div>
             <p id="global-loader-text" class="erp-loader-label">جاري التحميل...</p>
         </div>
     </div>
+    <script>
+        window.erpEscapeHtml = function(val) {
+            return String(val ?? '').replace(/[&<>"']/g, function(ch) {
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+            });
+        };
+    </script>
 
     <!-- SIDEBAR BACKDROP OVERLAY -->
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden transition-opacity duration-300 lg:hidden"></div>
@@ -339,23 +346,24 @@
         </div>
 
         <!-- Navigation Links -->
-        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+        {% resolve_active_nav as active_nav %}
+        <div id="sidebar-nav-scroll" class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
             <!-- Home -->
-            <a href="{% url 'home' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
-                <span class="material-symbols-outlined text-xl {% if request.resolver_match.url_name == 'home' %}text-brand-600 material-symbols-fill{% endif %}">home</span>
+            <a href="{% url 'home' %}" data-erp-nav-item="home" {% if active_nav.item == 'home' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if active_nav.item == 'home' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <span class="material-symbols-outlined text-xl {% if active_nav.item == 'home' %}text-brand-600 material-symbols-fill{% endif %}">home</span>
                 <span>الرئيسية</span>
             </a>
 
             <!-- Agenda (جدول الاعمال) -->
-            <a href="{% url 'agenda' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'agenda' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
-                <span class="material-symbols-outlined text-xl {% if 'agenda' in request.path %}text-brand-600 material-symbols-fill{% endif %}">view_agenda</span>
+            <a href="{% url 'agenda' %}" data-erp-nav-item="agenda" {% if active_nav.item == 'agenda' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if active_nav.item == 'agenda' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <span class="material-symbols-outlined text-xl {% if active_nav.item == 'agenda' %}text-brand-600 material-symbols-fill{% endif %}">view_agenda</span>
                 <span>جدول الاعمال</span>
             </a>
 
             <!-- Contacts -->
             {% if request.user|can_access_module:'contacts' and request.user|has_permission:'contacts:contacts/list' %}
-            <a href="{% url 'contacts_list' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if 'contacts' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
-                <span class="material-symbols-outlined text-xl {% if 'contacts' in request.path %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
+            <a href="{% url 'contacts_list' %}" data-erp-nav-item="contacts" {% if active_nav.item == 'contacts' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors {% if active_nav.item == 'contacts' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} min-h-[44px]">
+                <span class="material-symbols-outlined text-xl {% if active_nav.item == 'contacts' %}text-brand-600 material-symbols-fill{% endif %}">contacts</span>
                 <span>جهات الاتصال</span>
             </a>
             {% endif %}
@@ -365,23 +373,23 @@
             <!-- Products (المنتجات) -->
             {% if request.user|can_access_module:'catalog' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'catalog' in request.path or 'products' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-catalog')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-catalog' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 material-symbols-fill{% endif %}">store</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-catalog' %}text-brand-600 material-symbols-fill{% endif %}">store</span>
                         <span>المنتجات</span>
                     </div>
-                    <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-catalog" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-catalog' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if 'catalog' in request.path or 'products' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-catalog" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-catalog' %}hidden{% endif %}">
                     {% if request.user|has_permission:'catalog:products/list' %}
-                    <a href="{% url 'products_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">store</span>
+                    <a href="{% url 'products_list' %}" data-erp-nav-item="products" {% if active_nav.item == 'products' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'products' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'products' %}text-[#27bebe] material-symbols-fill{% endif %}">store</span>
                         <span>المنتجات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'catalog:categories/list' %}
-                    <a href="{% url 'categories_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">category</span>
+                    <a href="{% url 'categories_list' %}" data-erp-nav-item="categories" {% if active_nav.item == 'categories' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'categories' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'categories' %}text-[#27bebe] material-symbols-fill{% endif %}">category</span>
                         <span>التصنيفات</span>
                     </a>
                     {% endif %}
@@ -392,29 +400,29 @@
             <!-- Activities (الأنشطة) -->
             {% if request.user|can_access_module:'activities' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-activities')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-activities')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-activities' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}text-brand-600 material-symbols-fill{% endif %}">timeline</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-activities' %}text-brand-600 material-symbols-fill{% endif %}">timeline</span>
                         <span>الأنشطة</span>
                     </div>
-                    <span id="arrow-activities" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-activities" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-activities' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-activities" class="pr-9 pl-2 space-y-1 {% if 'activities' in request.path or 'visits' in request.path or 'planned-visits' in request.path or 'agreements' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-activities" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-activities' %}hidden{% endif %}">
                     {% if request.user|has_permission:'activities:planned/list' %}
-                    <a href="{% url 'planned_visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'planned-visits' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">calendar_today</span>
+                    <a href="{% url 'planned_visits_list' %}" data-erp-nav-item="planned_visits" {% if active_nav.item == 'planned_visits' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'planned_visits' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'planned_visits' %}text-[#27bebe] material-symbols-fill{% endif %}">calendar_today</span>
                         <span>خطة الزيارات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'activities:visits/list' %}
-                    <a href="{% url 'visits_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'visits' in request.path and 'planned' not in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">room</span>
+                    <a href="{% url 'visits_list' %}" data-erp-nav-item="visits" {% if active_nav.item == 'visits' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'visits' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'visits' %}text-[#27bebe] material-symbols-fill{% endif %}">room</span>
                         <span>الزيارات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'activities:agreements/list' %}
-                    <a href="{% url 'agreements_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'agreements' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">handshake</span>
+                    <a href="{% url 'agreements_list' %}" data-erp-nav-item="agreements" {% if active_nav.item == 'agreements' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'agreements' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'agreements' %}text-[#27bebe] material-symbols-fill{% endif %}">handshake</span>
                         <span>الاتفاقيات</span>
                     </a>
                     {% endif %}
@@ -425,41 +433,41 @@
             <!-- Sales (المبيعات) - Placed directly under Purchases with exact 5 items -->
             {% if request.user|can_access_module:'sales' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'sales' in request.path and not 'settings' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-sales')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-sales' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'sales' in request.path and not 'settings' in request.path %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-sales' %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
                         <span>المبيعات</span>
                     </div>
-                    <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-sales" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-sales' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if 'sales' in request.path and not 'settings' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-sales" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-sales' %}hidden{% endif %}">
                     {% if request.user|has_permission:'sales:orders/list' %}
-                    <a href="{% url 'sales_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">shopping_bag</span>
+                    <a href="{% url 'sales_orders_list' %}" data-erp-nav-item="sales_orders" {% if active_nav.item == 'sales_orders' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'sales_orders' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'sales_orders' %}text-[#27bebe] material-symbols-fill{% endif %}">shopping_bag</span>
                         <span>أوامر البيع</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'sales:returns/list' %}
-                    <a href="{% url 'sales_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">assignment_return</span>
+                    <a href="{% url 'sales_return_orders_list' %}" data-erp-nav-item="sales_returns" {% if active_nav.item == 'sales_returns' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'sales_returns' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'sales_returns' %}text-[#27bebe] material-symbols-fill{% endif %}">assignment_return</span>
                         <span>المرتجعات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'sales:collections/list' %}
-                    <a href="{% url 'collections_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">payments</span>
+                    <a href="{% url 'collections_list' %}" data-erp-nav-item="collections" {% if active_nav.item == 'collections' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'collections' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'collections' %}text-[#27bebe] material-symbols-fill{% endif %}">payments</span>
                         <span>التحصيلات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'sales:customers/accounting' %}
-                    <a href="{% url 'accounting_customers_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">account_circle</span>
+                    <a href="{% url 'accounting_customers_list' %}" data-erp-nav-item="accounting_customers" {% if active_nav.item == 'accounting_customers' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'accounting_customers' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'accounting_customers' %}text-[#27bebe] material-symbols-fill{% endif %}">account_circle</span>
                         <span>حسابات العملاء</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'sales:customers/transactions' %}
-                    <a href="{% url 'customer_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <a href="{% url 'customer_transactions_list' %}" data-erp-nav-item="customer_transactions" {% if active_nav.item == 'customer_transactions' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'customer_transactions' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'customer_transactions' %}text-[#27bebe] material-symbols-fill{% endif %}">receipt_long</span>
                         <span>عمليات العملاء</span>
                     </a>
                     {% endif %}
@@ -470,47 +478,47 @@
             <!-- Purchases (المشتريات) -->
             {% if request.user|can_access_module:'purchases' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-purchases' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-purchases' %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
                         <span>المشتريات</span>
                     </div>
-                    <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-purchases' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if 'purchase' in request.path or 'vendor' in request.path or 'accounting' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-purchases" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-purchases' %}hidden{% endif %}">
                     {% if request.user|has_permission:'purchases:orders/list' %}
-                    <a href="{% url 'purchase_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">shopping_cart</span>
+                    <a href="{% url 'purchase_orders_list' %}" data-erp-nav-item="purchase_orders" {% if active_nav.item == 'purchase_orders' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'purchase_orders' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50 font-medium{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'purchase_orders' %}text-[#27bebe] material-symbols-fill{% endif %}">shopping_cart</span>
                         <span>الطلبات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'purchases:returns/list' %}
-                    <a href="{% url 'purchase_return_orders_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">refresh</span>
+                    <a href="{% url 'purchase_return_orders_list' %}" data-erp-nav-item="purchase_returns" {% if active_nav.item == 'purchase_returns' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'purchase_returns' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'purchase_returns' %}text-[#27bebe] material-symbols-fill{% endif %}">refresh</span>
                         <span>المرتجعات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:payments/list' %}
-                    <a href="{% url 'vendor_payments_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">receipt</span>
+                    <a href="{% url 'vendor_payments_list' %}" data-erp-nav-item="vendor_payments" {% if active_nav.item == 'vendor_payments' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vendor_payments' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'vendor_payments' %}text-[#27bebe] material-symbols-fill{% endif %}">receipt</span>
                         <span>المدفوعات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:payments/requests' %}
-                    <a href="{% url 'vendor_payment_requests_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">request_quote</span>
+                    <a href="{% url 'vendor_payment_requests_list' %}" data-erp-nav-item="vendor_payment_requests" {% if active_nav.item == 'vendor_payment_requests' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vendor_payment_requests' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'vendor_payment_requests' %}text-[#27bebe] material-symbols-fill{% endif %}">request_quote</span>
                         <span>طلبات الدفع</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:vendors/accounting' %}
-                    <a href="{% url 'accounting_vendors_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">attach_money</span>
+                    <a href="{% url 'accounting_vendors_list' %}" data-erp-nav-item="accounting_vendors" {% if active_nav.item == 'accounting_vendors' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'accounting_vendors' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'accounting_vendors' %}text-[#27bebe] material-symbols-fill{% endif %}">attach_money</span>
                         <span>حسابات الموردين</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:vendors/transactions' %}
-                    <a href="{% url 'vendor_transactions_list' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">
-                        <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <a href="{% url 'vendor_transactions_list' %}" data-erp-nav-item="vendor_transactions" {% if active_nav.item == 'vendor_transactions' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vendor_transactions' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'vendor_transactions' %}text-[#27bebe] material-symbols-fill{% endif %}">receipt_long</span>
                         <span>عمليات الموردين</span>
                     </a>
                     {% endif %}
@@ -522,22 +530,22 @@
             <!-- Warehouses & Inventory -->
             {% if request.user|can_access_module:'inventory' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-inventory')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-inventory' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl">warehouse</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-inventory' %}text-brand-600 material-symbols-fill{% endif %}">warehouse</span>
                         <span>المخازن</span>
                     </div>
-                    <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-inventory" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-inventory' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if 'inventory' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-inventory' %}hidden{% endif %}">
                     {% if request.user|has_permission:'inventory:stocks/view' %}
-                    <a href="{% url 'inventory_stock_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أرصدة المخزون والتشغيلات</a>
+                    <a href="{% url 'inventory_stock_list' %}" data-erp-nav-item="inventory_stock" {% if active_nav.item == 'inventory_stock' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_stock' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">أرصدة المخزون والتشغيلات</a>
                     {% endif %}
                     {% if request.user|has_permission:'inventory:warehouses/manage' %}
-                    <a href="{% url 'warehouses_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">المخازن</a>
+                    <a href="{% url 'warehouses_list' %}" data-erp-nav-item="warehouses" {% if active_nav.item == 'warehouses' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'warehouses' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">المخازن</a>
                     {% endif %}
                     {% if request.user|has_permission:'inventory:memos/manage' %}
-                    <a href="{% url 'inventory_memos_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">أذونات المخزن (إضافة وصرف)</a>
+                    <a href="{% url 'inventory_memos_list' %}" data-erp-nav-item="inventory_memos" {% if active_nav.item == 'inventory_memos' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_memos' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">أذونات المخزن (إضافة وصرف)</a>
                     {% endif %}
                 </div>
             </div>
@@ -546,19 +554,19 @@
             <!-- Treasury / Vaults -->
             {% if request.user|can_access_module:'treasury' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-treasury')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-treasury' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-treasury' %}text-brand-600 material-symbols-fill{% endif %}">account_balance_wallet</span>
                         <span>الخزن</span>
                     </div>
-                    <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-treasury" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-treasury' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if 'vault' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-treasury' %}hidden{% endif %}">
                     {% if request.user|has_permission:'treasury:vaults/view' %}
-                    <a href="{% url 'vaults_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">الخزن النقدية والحسابات</a>
+                    <a href="{% url 'vaults_list' %}" data-erp-nav-item="vaults" {% if active_nav.item == 'vaults' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vaults' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">الخزن النقدية والحسابات</a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:transactions/list' %}
-                    <a href="{% url 'vault_transactions_list' %}" class="block px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px]">حركات النقدية</a>
+                    <a href="{% url 'vault_transactions_list' %}" data-erp-nav-item="vault_transactions" {% if active_nav.item == 'vault_transactions' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vault_transactions' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">حركات النقدية</a>
                     {% endif %}
                 </div>
             </div>
@@ -567,35 +575,35 @@
             <!-- Performance (الأداء الميداني) -->
             {% if request.user|can_access_module:'performance' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-performance')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'performance' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-performance')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-performance' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'performance' in request.path %}text-brand-600 material-symbols-fill{% endif %}">speed</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-performance' %}text-brand-600 material-symbols-fill{% endif %}">speed</span>
                         <span>الأداء الميداني</span>
                     </div>
-                    <span id="arrow-performance" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-performance" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-performance' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-performance" class="pr-9 pl-2 space-y-1 {% if 'performance' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-performance" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-performance' %}hidden{% endif %}">
                     {% if request.user|has_permission:'performance:overview/view' %}
-                    <a href="{% url 'performance_overview' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/overview' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">dashboard</span>
+                    <a href="{% url 'performance_overview' %}" data-erp-nav-item="performance_overview" {% if active_nav.item == 'performance_overview' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'performance_overview' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'performance_overview' %}text-[#27bebe] material-symbols-fill{% endif %}">dashboard</span>
                         <span>نظرة عامة</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'performance:analysis/view' %}
-                    <a href="{% url 'performance_analysis' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/analysis' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">insights</span>
+                    <a href="{% url 'performance_analysis' %}" data-erp-nav-item="performance_analysis" {% if active_nav.item == 'performance_analysis' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'performance_analysis' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'performance_analysis' %}text-[#27bebe] material-symbols-fill{% endif %}">insights</span>
                         <span>تحليلي</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'performance:daily/view' %}
-                    <a href="{% url 'performance_daily' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/daily' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">today</span>
+                    <a href="{% url 'performance_daily' %}" data-erp-nav-item="performance_daily" {% if active_nav.item == 'performance_daily' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'performance_daily' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'performance_daily' %}text-[#27bebe] material-symbols-fill{% endif %}">today</span>
                         <span>يومي</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'performance:detailed/view' %}
-                    <a href="{% url 'performance_detailed' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'performance/detailed' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">grid_on</span>
+                    <a href="{% url 'performance_detailed' %}" data-erp-nav-item="performance_detailed" {% if active_nav.item == 'performance_detailed' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'performance_detailed' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'performance_detailed' %}text-[#27bebe] material-symbols-fill{% endif %}">grid_on</span>
                         <span>مفصل</span>
                     </a>
                     {% endif %}
@@ -606,57 +614,57 @@
             <!-- Reports (التقارير) -->
             {% if request.user|can_access_module:'reports' %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-reports')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if 'reports' in request.path %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-reports')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-reports' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if 'reports' in request.path %}text-brand-600 material-symbols-fill{% endif %}">bar_chart</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-reports' %}text-brand-600 material-symbols-fill{% endif %}">bar_chart</span>
                         <span>التقارير</span>
                     </div>
-                    <span id="arrow-reports" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-reports" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-reports' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-reports" class="pr-9 pl-2 space-y-1 {% if 'reports' in request.path %}{% else %}hidden{% endif %}">
+                <div id="submenu-reports" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-reports' %}hidden{% endif %}">
                     {% if request.user|has_permission:'reports:hub/view' %}
-                    <a href="{% url 'reports_hub' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if request.resolver_match.url_name == 'reports_hub' %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">apps</span>
+                    <a href="{% url 'reports_hub' %}" data-erp-nav-item="reports_hub" {% if active_nav.item == 'reports_hub' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'reports_hub' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'reports_hub' %}text-[#27bebe] material-symbols-fill{% endif %}">apps</span>
                         <span>بوابة التقارير</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:financial/view' %}
-                    <a href="{% url 'report_ar_aging' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/ar-aging' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">pending_actions</span>
+                    <a href="{% url 'report_ar_aging' %}" data-erp-nav-item="report_ar_aging" {% if active_nav.item == 'report_ar_aging' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_ar_aging' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_ar_aging' %}text-[#27bebe] material-symbols-fill{% endif %}">pending_actions</span>
                         <span>أعمار الديون</span>
                     </a>
-                    <a href="{% url 'report_trial_balance' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/trial-balance' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">account_balance</span>
+                    <a href="{% url 'report_trial_balance' %}" data-erp-nav-item="report_trial_balance" {% if active_nav.item == 'report_trial_balance' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_trial_balance' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_trial_balance' %}text-[#27bebe] material-symbols-fill{% endif %}">account_balance</span>
                         <span>ميزان المراجعة للعملاء</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:sales/view' %}
-                    <a href="{% url 'report_net_sales' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/net-sales' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">query_stats</span>
+                    <a href="{% url 'report_net_sales' %}" data-erp-nav-item="report_net_sales" {% if active_nav.item == 'report_net_sales' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_net_sales' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_net_sales' %}text-[#27bebe] material-symbols-fill{% endif %}">query_stats</span>
                         <span>صافي المبيعات والربحية</span>
                     </a>
-                    <a href="{% url 'report_customer_360' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/customer-360' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">person_search</span>
+                    <a href="{% url 'report_customer_360' %}" data-erp-nav-item="report_customer_360" {% if active_nav.item == 'report_customer_360' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_customer_360' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_customer_360' %}text-[#27bebe] material-symbols-fill{% endif %}">person_search</span>
                         <span>ملخص العملاء 360</span>
                     </a>
-                    <a href="{% url 'report_item_sales_by_customer' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/item-sales-by-customer' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">table_chart</span>
+                    <a href="{% url 'report_item_sales_by_customer' %}" data-erp-nav-item="report_item_sales_by_customer" {% if active_nav.item == 'report_item_sales_by_customer' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_item_sales_by_customer' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_item_sales_by_customer' %}text-[#27bebe] material-symbols-fill{% endif %}">table_chart</span>
                         <span>مبيعات الأصناف حسب العملاء</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:inventory/view' %}
-                    <a href="{% url 'report_delivery_stock' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/delivery-stock' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">inventory_2</span>
+                    <a href="{% url 'report_delivery_stock' %}" data-erp-nav-item="report_delivery_stock" {% if active_nav.item == 'report_delivery_stock' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_delivery_stock' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_delivery_stock' %}text-[#27bebe] material-symbols-fill{% endif %}">inventory_2</span>
                         <span>توفر المخزون والتسليمات</span>
                     </a>
-                    <a href="{% url 'report_item_purchases' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/item-purchases' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">shopping_cart_checkout</span>
+                    <a href="{% url 'report_item_purchases' %}" data-erp-nav-item="report_item_purchases" {% if active_nav.item == 'report_item_purchases' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_item_purchases' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_item_purchases' %}text-[#27bebe] material-symbols-fill{% endif %}">shopping_cart_checkout</span>
                         <span>مشتريات الأصناف والموردين</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'reports:activities/view' %}
-                    <a href="{% url 'report_agreements_roi' %}" class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-slate-600 hover:text-brand-600 hover:bg-slate-50 min-h-[38px] {% if 'reports/agreements-roi' in request.path %}text-brand-600 font-bold bg-brand-50/50{% endif %}">
-                        <span class="material-symbols-outlined text-base">handshake</span>
+                    <a href="{% url 'report_agreements_roi' %}" data-erp-nav-item="report_agreements_roi" {% if active_nav.item == 'report_agreements_roi' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'report_agreements_roi' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'report_agreements_roi' %}text-[#27bebe] material-symbols-fill{% endif %}">handshake</span>
                         <span>تحقيق الاتفاقيات وعائد الاستثمار</span>
                     </a>
                     {% endif %}
@@ -667,79 +675,79 @@
             <!-- Settings -->
             {% if request.user|can_access_module:'settings' or request.user|is_super_admin %}
             <div class="space-y-1 pt-1">
-                <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors min-h-[44px]">
+                <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-settings' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl">settings</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-settings' %}text-brand-600 material-symbols-fill{% endif %}">settings</span>
                         <span>الإعدادات والنظام</span>
                     </div>
-                    <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform">expand_more</span>
+                    <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-settings' %}rotate-180{% endif %}">expand_more</span>
                 </button>
-                <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if 'settings' in request.path or 'users' in request.path or 'roles' in request.path %}block{% else %}hidden{% endif %}">
+                <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if active_nav.section == 'submenu-settings' %}block{% else %}hidden{% endif %}">
                     {% if request.user|is_super_admin %}
-                    <a href="{% url 'users_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'users' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">group</span>
+                    <a href="{% url 'users_list' %}" data-erp-nav-item="users" {% if active_nav.item == 'users' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'users' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'users' %}text-[#27bebe] material-symbols-fill{% endif %}">group</span>
                         <span>المستخدمون</span>
                     </a>
-                    <a href="{% url 'roles_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'roles' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">shield_person</span>
+                    <a href="{% url 'roles_list' %}" data-erp-nav-item="roles" {% if active_nav.item == 'roles' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'roles' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'roles' %}text-[#27bebe] material-symbols-fill{% endif %}">shield_person</span>
                         <span>الأدوار والصلاحيات</span>
                     </a>
-                    <a href="{% url 'audit_logs_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'audit-logs' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">history</span>
+                    <a href="{% url 'audit_logs_list' %}" data-erp-nav-item="audit_logs" {% if active_nav.item == 'audit_logs' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'audit_logs' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'audit_logs' %}text-[#27bebe] material-symbols-fill{% endif %}">history</span>
                         <span>سجل التدقيق الأمني</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:visitsTemplates/manage' %}
-                    <a href="{% url 'visit_templates_list' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'visits/templates' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">assignment</span>
+                    <a href="{% url 'visit_templates_list' %}" data-erp-nav-item="visit_templates" {% if active_nav.item == 'visit_templates' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'visit_templates' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'visit_templates' %}text-[#27bebe] material-symbols-fill{% endif %}">assignment</span>
                         <span>قوالب الزيارات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:branding/edit' %}
-                    <a href="{% url 'branding_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'branding' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">domain</span>
+                    <a href="{% url 'branding_settings' %}" data-erp-nav-item="branding_settings" {% if active_nav.item == 'branding_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'branding_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'branding_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">domain</span>
                         <span>بيانات الشركة والفاتورة</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:storage/manage' %}
-                    <a href="{% url 'r2_storage_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if '/settings/storage' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">cloud_upload</span>
+                    <a href="{% url 'r2_storage_settings' %}" data-erp-nav-item="r2_storage_settings" {% if active_nav.item == 'r2_storage_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'r2_storage_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'r2_storage_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">cloud_upload</span>
                         <span>التخزين السحابي وحاسبة R2</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:location/manage' %}
-                    <a href="{% url 'location_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'location' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">gps_fixed</span>
+                    <a href="{% url 'location_settings' %}" data-erp-nav-item="location_settings" {% if active_nav.item == 'location_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'location_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'location_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">gps_fixed</span>
                         <span>إعدادات الموقع</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:areas/manage' %}
-                    <a href="{% url 'areas_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'areas' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">map</span>
+                    <a href="{% url 'areas_settings' %}" data-erp-nav-item="areas_settings" {% if active_nav.item == 'areas_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'areas_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'areas_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">map</span>
                         <span>المناطق</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:agreements/manage' %}
-                    <a href="{% url 'agreements_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'agreements' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">handshake</span>
+                    <a href="{% url 'agreements_settings' %}" data-erp-nav-item="agreements_settings" {% if active_nav.item == 'agreements_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'agreements_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'agreements_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">handshake</span>
                         <span>انواع الاتفاقيات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:sales/manage' %}
-                    <a href="{% url 'sales_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'sales' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">point_of_sale</span>
+                    <a href="{% url 'sales_settings' %}" data-erp-nav-item="sales_settings" {% if active_nav.item == 'sales_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'sales_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'sales_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">point_of_sale</span>
                         <span>إعدادات المبيعات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:purchase/manage' %}
-                    <a href="{% url 'purchase_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'purchase' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">shopping_basket</span>
+                    <a href="{% url 'purchase_settings' %}" data-erp-nav-item="purchase_settings" {% if active_nav.item == 'purchase_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'purchase_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'purchase_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">shopping_basket</span>
                         <span>إعدادات المشتريات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:inventory/manage' %}
-                    <a href="{% url 'inventory_settings' %}" class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if 'inventory' in request.path and 'settings' in request.path %}text-[#27bebe] font-bold bg-teal-50/60{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
-                        <span class="material-symbols-outlined text-base">inventory</span>
+                    <a href="{% url 'inventory_settings' %}" data-erp-nav-item="inventory_settings" {% if active_nav.item == 'inventory_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'inventory_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'inventory_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">inventory</span>
                         <span>إعدادات المخازن</span>
                     </a>
                     {% endif %}
@@ -795,12 +803,6 @@
                     <span class="material-symbols-outlined text-xl transition-transform duration-300">refresh</span>
                 </button>
 
-                <!-- Notifications -->
-                <button class="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-                    <span class="material-symbols-outlined text-xl">notifications</span>
-                    <span class="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">105</span>
-                </button>
-
                 <!-- Language indicator -->
                 <span class="hidden sm:inline-block px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-lg">عربي (EGP)</span>
 
@@ -827,37 +829,43 @@
         </main>
     </div>
 
-    <!-- MOBILE BOTTOM NAVIGATION BAR (<1024px) -->
+    <!-- MOBILE BOTTOM NAVIGATION BAR (<1024px) — Aligned with UI_UX_GUIDE.md -->
     <nav class="lg:hidden fixed bottom-0 inset-x-0 w-full max-w-full overflow-hidden bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 h-16 px-1 sm:px-2 flex items-center justify-around shadow-lg">
         <!-- Home -->
-        <a href="{% url 'home' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if request.resolver_match.url_name == 'home' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
-            <span class="material-symbols-outlined text-2xl {% if request.resolver_match.url_name == 'home' %}material-symbols-fill{% endif %}">home</span>
+        <a href="{% url 'home' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if active_nav.item == 'home' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if active_nav.item == 'home' %}material-symbols-fill{% endif %}">home</span>
             <span class="text-[10px] mt-0.5">الرئيسية</span>
         </a>
 
+        <!-- Visits -->
+        {% if request.user|can_access_module:'activities' and request.user|has_permission:'activities:visits/list' %}
+        <a href="{% url 'visits_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if active_nav.section == 'submenu-activities' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if active_nav.section == 'submenu-activities' %}material-symbols-fill{% endif %}">location_on</span>
+            <span class="text-[10px] mt-0.5">الزيارات</span>
+        </a>
+        {% endif %}
+
+        <!-- Sales Orders -->
+        {% if request.user|can_access_module:'sales' and request.user|has_permission:'sales:orders/list' %}
+        <a href="{% url 'sales_orders_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if active_nav.section == 'submenu-sales' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if active_nav.section == 'submenu-sales' %}material-symbols-fill{% endif %}">receipt_long</span>
+            <span class="text-[10px] mt-0.5">الطلبات</span>
+        </a>
+        {% endif %}
+
         <!-- Contacts -->
         {% if request.user|can_access_module:'contacts' and request.user|has_permission:'contacts:contacts/list' %}
-        <a href="{% url 'contacts_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'contacts' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
-            <span class="material-symbols-outlined text-2xl {% if 'contacts' in request.path %}material-symbols-fill{% endif %}">contacts</span>
-            <span class="text-[10px] mt-0.5">جهات الاتصال</span>
+        <a href="{% url 'contacts_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if active_nav.item == 'contacts' %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
+            <span class="material-symbols-outlined text-2xl {% if active_nav.item == 'contacts' %}material-symbols-fill{% endif %}">contacts</span>
+            <span class="text-[10px] mt-0.5">العملاء</span>
         </a>
         {% endif %}
 
-        <!-- Catalog -->
-        {% if request.user|can_access_module:'catalog' and request.user|has_permission:'catalog:products/list' %}
-        <a href="{% url 'products_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'catalog' in request.path or 'products' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
-            <span class="material-symbols-outlined text-2xl {% if 'catalog' in request.path or 'products' in request.path %}material-symbols-fill{% endif %}">store</span>
-            <span class="text-[10px] mt-0.5">المنتجات</span>
-        </a>
-        {% endif %}
-
-        <!-- Purchases -->
-        {% if request.user|can_access_module:'purchases' and request.user|has_permission:'purchases:orders/list' %}
-        <a href="{% url 'purchase_orders_list' %}" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] transition-colors {% if 'purchase' in request.path %}text-brand-600 font-bold{% else %}text-slate-500 hover:text-slate-900{% endif %}">
-            <span class="material-symbols-outlined text-2xl {% if 'purchase' in request.path %}material-symbols-fill{% endif %}">shopping_cart</span>
-            <span class="text-[10px] mt-0.5">المشتريات</span>
-        </a>
-        {% endif %}
+        <!-- Menu / Profile -->
+        <button type="button" onclick="toggleSidebar()" class="flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] text-slate-500 hover:text-slate-900 transition-colors">
+            <span class="material-symbols-outlined text-2xl">menu</span>
+            <span class="text-[10px] mt-0.5">القائمة</span>
+        </button>
     </nav>
 
     <!-- GLOBAL BOTTOM-LEFT FLOATING ACTION BUTTON (FAB) (Matching Reference ERP) -->
@@ -932,6 +940,20 @@
             window.location.reload();
         }
 
+        function scrollSidebarActiveToCenter(behavior = 'auto') {
+            const sidebar = document.getElementById('sidebar');
+            if (!sidebar) return;
+            const navContainer = document.getElementById('sidebar-nav-scroll') || sidebar.querySelector('.overflow-y-auto');
+            const activeLink = sidebar.querySelector('a[data-erp-active-link="1"]');
+            if (!navContainer || !activeLink || navContainer.clientHeight === 0) return;
+            const cRect = navContainer.getBoundingClientRect();
+            const aRect = activeLink.getBoundingClientRect();
+            const offsetTop = aRect.top - cRect.top + navContainer.scrollTop;
+            const maxScroll = Math.max(0, navContainer.scrollHeight - navContainer.clientHeight);
+            const targetTop = Math.min(maxScroll, Math.max(0, offsetTop - (navContainer.clientHeight / 2) + (aRect.height / 2)));
+            navContainer.scrollTo({ top: targetTop, behavior });
+        }
+
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
@@ -940,31 +962,14 @@
                 sidebar.classList.remove('translate-x-full');
                 overlay.classList.remove('hidden');
                 document.body.classList.add('overflow-hidden', 'lg:overflow-auto');
+                initSidebarActiveState();
+                setTimeout(() => scrollSidebarActiveToCenter('auto'), 60);
+                setTimeout(() => scrollSidebarActiveToCenter('smooth'), 310);
             } else {
                 sidebar.classList.add('translate-x-full');
                 overlay.classList.add('hidden');
                 document.body.classList.remove('overflow-hidden', 'lg:overflow-auto');
             }
-        }
-
-        function getStoredExpandedSubmenus() {
-            try {
-                return JSON.parse(localStorage.getItem('wea_sidebar_expanded') || '[]');
-            } catch (e) {
-                return [];
-            }
-        }
-
-        function saveExpandedSubmenu(menuId, isOpen) {
-            try {
-                let list = getStoredExpandedSubmenus();
-                if (isOpen) {
-                    if (!list.includes(menuId)) list.push(menuId);
-                } else {
-                    list = list.filter(id => id !== menuId);
-                }
-                localStorage.setItem('wea_sidebar_expanded', JSON.stringify(list));
-            } catch (e) {}
         }
 
         function toggleSubmenu(id, userTriggered = true) {
@@ -976,13 +981,26 @@
             const arrow = document.getElementById(arrowId);
 
             if (isCurrentlyHidden) {
+                // Accordion behavior: collapse sibling top-level submenus when opening a new one
+                if (userTriggered) {
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar) {
+                        sidebar.querySelectorAll('[id^="submenu-"]').forEach(other => {
+                            if (other.id !== id && !other.contains(menu) && !menu.contains(other)) {
+                                other.classList.add('hidden');
+                                other.classList.remove('block');
+                                const otherArrow = document.getElementById(other.id.replace('submenu-', 'arrow-'));
+                                if (otherArrow) otherArrow.classList.remove('rotate-180');
+                            }
+                        });
+                    }
+                }
                 menu.classList.remove('hidden');
                 if (arrow) arrow.classList.add('rotate-180');
-                if (userTriggered) saveExpandedSubmenu(id, true);
             } else {
                 menu.classList.add('hidden');
+                menu.classList.remove('block');
                 if (arrow) arrow.classList.remove('rotate-180');
-                if (userTriggered) saveExpandedSubmenu(id, false);
             }
         }
 
@@ -990,76 +1008,94 @@
             const currentPath = window.location.pathname;
             const sidebar = document.getElementById('sidebar');
             if (!sidebar) return;
+            const navContainer = document.getElementById('sidebar-nav-scroll') || sidebar.querySelector('.overflow-y-auto') || sidebar;
 
-            // 1. Restore user expanded accordions from localStorage
-            const savedExpanded = getStoredExpandedSubmenus();
-            savedExpanded.forEach(menuId => {
-                const menu = document.getElementById(menuId);
-                if (menu) {
-                    menu.classList.remove('hidden');
-                    const arrow = document.getElementById(menuId.replace('submenu-', 'arrow-'));
-                    if (arrow) arrow.classList.add('rotate-180');
+            // 1. Always collapse all submenus and reset section header highlights first
+            try { localStorage.removeItem('wea_sidebar_expanded'); } catch (e) {}
+            navContainer.querySelectorAll('[id^="submenu-"]').forEach(menu => {
+                menu.classList.add('hidden');
+                menu.classList.remove('block');
+                const arrow = document.getElementById(menu.id.replace('submenu-', 'arrow-'));
+                if (arrow) arrow.classList.remove('rotate-180');
+                const btn = menu.previousElementSibling;
+                if (btn && btn.tagName === 'BUTTON') {
+                    btn.classList.remove('bg-brand-50', 'text-brand-700', 'bg-teal-50/60', 'text-teal-900', 'font-bold');
+                    btn.classList.add('text-slate-600');
+                    const pIcon = btn.querySelector('.material-symbols-outlined');
+                    if (pIcon && !pIcon.id) pIcon.classList.remove('text-brand-600', 'text-[#27bebe]', 'material-symbols-fill');
                 }
             });
 
-            // 2. Find matching link inside sidebar
-            const allLinks = Array.from(sidebar.querySelectorAll('a[href]'));
-            let matchedLink = null;
-            let maxMatchLen = 0;
+            // 2. Prefer server-resolved canonical nav marker; fallback to longest path match only if absent
+            let matchedLink = navContainer.querySelector('a[data-erp-active-link="1"]');
+            if (!matchedLink) {
+                const allLinks = Array.from(navContainer.querySelectorAll('a[href]'));
+                let maxMatchLen = 0;
 
-            allLinks.forEach(link => {
-                const href = link.getAttribute('href');
-                if (!href || href === '#' || href.startsWith('javascript:')) return;
-                try {
-                    const url = new URL(href, window.location.origin);
-                    const linkPath = url.pathname;
-                    
-                    if (currentPath === linkPath) {
-                        if (linkPath.length >= maxMatchLen) {
-                            matchedLink = link;
-                            maxMatchLen = linkPath.length;
+                allLinks.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (!href || href === '#' || href.startsWith('javascript:')) return;
+                    try {
+                        const url = new URL(href, window.location.origin);
+                        const linkPath = url.pathname;
+                        if (currentPath === linkPath) {
+                            if (linkPath.length >= maxMatchLen) {
+                                matchedLink = link;
+                                maxMatchLen = linkPath.length;
+                            }
+                        } else if (linkPath !== '/' && currentPath.startsWith(linkPath.endsWith('/') ? linkPath : linkPath + '/')) {
+                            if (linkPath.length > maxMatchLen) {
+                                matchedLink = link;
+                                maxMatchLen = linkPath.length;
+                            }
                         }
-                    } else if (linkPath !== '/' && currentPath.startsWith(linkPath)) {
-                        if (linkPath.length > maxMatchLen) {
-                            matchedLink = link;
-                            maxMatchLen = linkPath.length;
-                        }
-                    }
-                } catch (e) {}
-            });
+                    } catch (e) {}
+                });
+            }
 
-            // 3. Highlight matched link and expand its parent accordion
+            // 3. Highlight matched link and recursively expand ALL ancestor submenus
             if (matchedLink) {
+                const isTopLevel = matchedLink.parentElement === navContainer;
+                matchedLink.setAttribute('data-erp-active-link', '1');
                 matchedLink.classList.remove('text-slate-600', 'hover:bg-slate-50', 'hover:text-slate-900');
-                matchedLink.classList.add('bg-teal-50', 'text-[#27bebe]', 'font-bold', 'border-r-2', 'border-[#27bebe]');
+                if (isTopLevel) {
+                    matchedLink.classList.add('bg-brand-50', 'text-brand-700', 'font-bold');
+                } else {
+                    matchedLink.classList.add('bg-teal-50', 'text-[#27bebe]', 'font-bold', 'border-r-2', 'border-[#27bebe]');
+                }
                 const icon = matchedLink.querySelector('.material-symbols-outlined');
-                if (icon) icon.classList.add('text-[#27bebe]', 'material-symbols-fill');
+                if (icon) icon.classList.add(isTopLevel ? 'text-brand-600' : 'text-[#27bebe]', 'material-symbols-fill');
 
-                // Check if inside a submenu
-                const parentSubmenu = matchedLink.closest('[id^="submenu-"]');
-                if (parentSubmenu) {
-                    parentSubmenu.classList.remove('hidden');
-                    const subId = parentSubmenu.id;
-                    const arrow = document.getElementById(subId.replace('submenu-', 'arrow-'));
-                    if (arrow) arrow.classList.add('rotate-180');
-                    const parentBtn = parentSubmenu.previousElementSibling;
-                    if (parentBtn && parentBtn.tagName === 'BUTTON') {
-                        parentBtn.classList.remove('text-slate-600');
-                        parentBtn.classList.add('bg-teal-50/60', 'text-teal-900', 'font-bold');
-                        const pIcon = parentBtn.querySelector('.material-symbols-outlined');
-                        if (pIcon && !pIcon.id) pIcon.classList.add('text-[#27bebe]', 'material-symbols-fill');
+                let cursor = matchedLink.parentElement;
+                while (cursor && cursor !== navContainer) {
+                    if (cursor.id && cursor.id.startsWith('submenu-')) {
+                        cursor.classList.remove('hidden');
+                        const arrow = document.getElementById(cursor.id.replace('submenu-', 'arrow-'));
+                        if (arrow) arrow.classList.add('rotate-180');
+                        const parentBtn = cursor.previousElementSibling;
+                        if (parentBtn && parentBtn.tagName === 'BUTTON') {
+                            parentBtn.classList.remove('text-slate-600');
+                            parentBtn.classList.add('bg-brand-50', 'text-brand-700', 'font-bold');
+                            const pIcon = parentBtn.querySelector('.material-symbols-outlined');
+                            if (pIcon && !pIcon.id) pIcon.classList.add('text-brand-600', 'material-symbols-fill');
+                        }
                     }
+                    cursor = cursor.parentElement;
                 }
 
-                // Auto-scroll active link smoothly into view in the sidebar
-                setTimeout(() => {
-                    matchedLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }, 150);
+                // Center active link inside visible sidebar scroll container
+                requestAnimationFrame(() => scrollSidebarActiveToCenter('auto'));
+                if (document.fonts && document.fonts.ready) {
+                    document.fonts.ready.then(() => scrollSidebarActiveToCenter('auto')).catch(() => {});
+                }
             }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             initSidebarActiveState();
+        });
+        window.addEventListener('load', () => {
+            scrollSidebarActiveToCenter('auto');
         });
 
         function openQuickAddBottomSheet() {
@@ -1305,11 +1341,21 @@
             // Standard full-page form submissions (bubble phase respects AJAX e.preventDefault())
             document.addEventListener('submit', function(e) {
                 const form = e.target;
-                if (e.defaultPrevented || !form || form.hasAttribute('data-no-loader')) return;
+                if (e.defaultPrevented || !form) return;
                 if (form.target && form.target !== '_self') return;
                 const action = form.getAttribute('action') || '';
                 if (/(\/export\/|[?&]export=)/i.test(action)) return;
-                window.ERPLoader.beginNavigation('جاري حفظ البيانات...');
+                if ((form.method || '').toUpperCase() === 'POST') {
+                    form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function(btn) {
+                        if (!btn.disabled) {
+                            btn.dataset.erpAutoDisabled = '1';
+                            btn.disabled = true;
+                        }
+                    });
+                }
+                if (!form.hasAttribute('data-no-loader')) {
+                    window.ERPLoader.beginNavigation('جاري حفظ البيانات...');
+                }
             });
         })();
     </script>

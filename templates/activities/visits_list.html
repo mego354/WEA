@@ -20,18 +20,18 @@
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
             <!-- View Toggle: Table / Cards -->
             <div class="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
-                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}"
+                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}"
                    class="p-2 {% if view_mode == 'table' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض جدولي">
                     <span class="material-symbols-outlined text-base">table_chart</span>
                 </a>
-                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}"
+                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}"
                    class="p-2 {% if view_mode == 'cards' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض بطاقات">
                     <span class="material-symbols-outlined text-base">view_agenda</span>
                 </a>
             </div>
 
             <!-- Export to Excel -->
-            <a href="{% url 'visits_export' %}?search={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&plan_type={{ selected_plan_type|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}{% if can_view_gps_suspicion and selected_gps_integrity %}&gps_integrity={{ selected_gps_integrity }}{% endif %}"
+            <a href="{% url 'visits_export' %}?search={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&plan_type={{ selected_plan_type|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}{% if can_view_gps_suspicion and selected_gps_integrity %}&gps_integrity={{ selected_gps_integrity }}{% endif %}"
                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
                title="تصدير البيانات">
                 <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
@@ -126,6 +126,7 @@
                 {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
                 {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
                 {% if selected_distance_ignored %}<input type="hidden" name="distance_ignored" value="{{ selected_distance_ignored }}">{% endif %}
+                {% if selected_edited_by_creator %}<input type="hidden" name="edited_by_creator" value="{{ selected_edited_by_creator }}">{% endif %}
                 {% if can_view_gps_suspicion and selected_gps_integrity %}<input type="hidden" name="gps_integrity" value="{{ selected_gps_integrity }}">{% endif %}
 
                 <div class="relative flex-1 w-full sm:w-auto">
@@ -200,6 +201,9 @@
                                 {% if v.gps_forced_end %}
                                 <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند إنهاء الزيارة">wrong_location</span>
                                 {% endif %}
+                                {% if v.edited_by_creator %}
+                                <span class="material-symbols-outlined text-xs text-sky-600" title="تم تعديل الزيارة بواسطة المنشئ">edit_note</span>
+                                {% endif %}
                             </div>
                         </td>
                         <td data-col="type" class="py-3 px-4 text-center">
@@ -246,7 +250,7 @@
                             </span>
                         </td>
                         <td data-col="questionnaire_answers" class="py-3 px-4 max-w-[240px]">
-                            {% with qa_list=v.get_qa_display_list %}
+                            {% with qa_list=v.qa_display_list %}
                             {% if qa_list %}
                             <div class="flex flex-col gap-1">
                                 {% with first_qa=qa_list.0 %}
@@ -319,7 +323,7 @@
                                         <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
                                         <span>عرض التفاصيل</span>
                                     </a>
-                                    {% if v.questionnaire_answers %}
+                                    {% if v.qa_display_list %}
                                     <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-[#27bebe]">quiz</span>
                                         <span>عرض إجابات الاستبيان</span>
@@ -383,6 +387,9 @@
                     {% endif %}
                     {% if v.gps_forced_end %}
                     <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند إنهاء الزيارة">wrong_location</span>
+                    {% endif %}
+                    {% if v.edited_by_creator %}
+                    <span class="material-symbols-outlined text-xs text-sky-600" title="تم تعديل الزيارة بواسطة المنشئ">edit_note</span>
                     {% endif %}
                 </div>
                 <div class="flex items-center gap-1.5">
@@ -457,7 +464,7 @@
                         <span>رفض</span>
                     </button>
                     {% endif %}
-                    {% if v.questionnaire_answers %}
+                    {% if v.qa_display_list %}
                     <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="p-1 rounded-md text-slate-400 hover:text-teal-600 hover:bg-slate-100 inline-flex items-center" title="عرض إجابات الاستبيان">
                         <span class="material-symbols-outlined text-lg">quiz</span>
                     </button>
@@ -486,18 +493,26 @@
 
     <!-- Shared Questionnaire Answers Data Containers (Table & Cards) -->
     {% for v in visits %}
-    {% if v.questionnaire_answers %}
+    {% with qa_list=v.qa_display_list %}
+    {% if qa_list %}
     <div id="visit-answers-data-{{ v.pk }}" class="hidden" data-serial="#{{ v.serial_num }}" data-contact="{{ v.contact.name|escape }}" data-template="{{ v.template.display_name_ar|default:v.template.name|default:'-' }}">
-        {% for qa in v.get_qa_display_list %}
+        {% for qa in qa_list %}
         <div class="py-2.5 border-b border-slate-100 last:border-0 text-xs text-right">
             <span class="font-bold text-slate-700 block">{{ qa.question_text }}</span>
+            {% if qa.is_product_list and qa.selected_products %}
+            <div class="flex flex-wrap gap-1.5 mt-1.5 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+                {% for prod in qa.selected_products %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-[#1a8b8b] border border-teal-200 text-[11px] font-bold">{{ prod.name }}</span>
+                {% endfor %}
+            </div>
+            {% else %}
             <span class="text-slate-900 font-medium block mt-1 bg-slate-50 p-2 rounded-lg border border-slate-200/60">{{ qa.answer }}</span>
+            {% endif %}
         </div>
-        {% empty %}
-        <p class="text-xs text-slate-400 py-2">لا توجد إجابات مسجلة.</p>
         {% endfor %}
     </div>
     {% endif %}
+    {% endwith %}
     {% endfor %}
 
     <!-- Pagination Bar -->
@@ -570,6 +585,15 @@
                     </select>
                 </div>
                 {% endif %}
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">حالة التعديل بواسطة المنشئ</label>
+                    <select name="edited_by_creator" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                        <option value="">الكل</option>
+                        <option value="yes" {% if selected_edited_by_creator == 'yes' %}selected{% endif %}>تم تعديلها بواسطة المنشئ</option>
+                        <option value="no" {% if selected_edited_by_creator == 'no' %}selected{% endif %}>لم تُعدّل بواسطة المنشئ</option>
+                    </select>
+                </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">الفترة الزمنية</label>

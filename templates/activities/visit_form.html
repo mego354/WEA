@@ -276,43 +276,14 @@
 
             {% endif %}
 
-            {% if visit %}
-            <!-- EDIT MODE FIELDS (Only shown when editing an existing visit) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center pt-2 border-t border-slate-100">
-                <div class="flex items-center gap-2">
-                    {{ form.is_successful }}
-                    <label for="{{ form.is_successful.id_for_label }}" class="text-xs font-bold text-slate-700 cursor-pointer">زيارة ناجحة</label>
-                </div>
-                <div class="flex items-center gap-2">
+            <!-- Double Visit Toggle (Consistent across Create & Edit) -->
+            <div class="pt-2 border-t border-slate-100">
+                <label for="{{ form.doubled.id_for_label }}" class="inline-flex items-center gap-2.5 cursor-pointer select-none px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-teal-300 transition-colors">
                     {{ form.doubled }}
-                    <label for="{{ form.doubled.id_for_label }}" class="text-xs font-bold text-slate-700 cursor-pointer">زيارة مزدوجة (Double)</label>
-                </div>
+                    <span class="text-xs font-bold text-slate-800">زيارة مزدوجة (Double Visit)</span>
+                </label>
+                {% if form.doubled.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.doubled.errors.0 }}</p>{% endif %}
             </div>
-
-            {% if visit.template and visit.template.is_product_detailing_supported %}
-            <div class="space-y-3 pt-4 border-t border-slate-100">
-                <input type="hidden" name="detailed_products_submitted" value="1">
-                <h3 class="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-base text-[#27bebe]">medication</span>
-                    <span>المنتجات المشروحة (Product Detailing)</span>
-                </h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200">
-                    {% for prod in products %}
-                    <label class="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100 cursor-pointer hover:border-teal-200 text-xs">
-                        <input type="checkbox" name="detailed_products" value="{{ prod.id }}" {% if prod.id in saved_detailed_products %}checked{% endif %} class="rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]">
-                        <span class="font-bold text-slate-800">{{ prod.name }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">الملاحظات والتعليقات</label>
-                {{ form.feedback }}
-                {% if form.feedback.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.feedback.errors.0 }}</p>{% endif %}
-            </div>
-            {% endif %}
 
             <!-- SUBMISSION BUTTONS -->
             <div class="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100">
@@ -817,30 +788,35 @@
             return;
         }
 
-        resultsEl.innerHTML = contacts.map(c => `
-            <div onclick="selectCustomer(${JSON.stringify(c).replace(/"/g, '&quot;')})"
-                 class="typeahead-item flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors">
+        const _esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
+        resultsEl.innerHTML = '';
+        contacts.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'typeahead-item flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors';
+            item.innerHTML = `
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-full bg-teal-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                        ${c.initials || (c.name ? c.name.substring(0, 2) : 'CL')}
+                        ${_esc(c.initials || (c.name ? c.name.substring(0, 2) : 'CL'))}
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-bold text-slate-900">${c.name}</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${c.account_type || c.customer_category || 'عميل'}</span>
+                            <span class="text-xs font-bold text-slate-900">${_esc(c.name)}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${_esc(c.account_type || c.customer_category || 'عميل')}</span>
                         </div>
                         <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                            <span>${c.specialty || 'عام'}</span>
+                            <span>${_esc(c.specialty || 'عام')}</span>
                             <span>•</span>
-                            <span>${c.area_name || c.area || 'غير محدد'}</span>
+                            <span>${_esc(c.area_name || c.area || 'غير محدد')}</span>
                         </div>
                     </div>
                 </div>
                 <div class="text-left">
                     ${c.has_saved_location ? '<span class="material-symbols-outlined text-sm text-emerald-600" title="موقع محفوظ">pin_drop</span>' : '<span class="material-symbols-outlined text-sm text-slate-300" title="لا يوجد موقع مسجل">location_off</span>'}
                 </div>
-            </div>
-        `).join('');
+            `;
+            item.addEventListener('click', () => selectCustomer(c));
+            resultsEl.appendChild(item);
+        });
     }
 
     async function onCustomerSelected(contactId) {

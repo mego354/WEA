@@ -43,13 +43,18 @@ def parse_date_range(period=None, start_date_str=None, end_date_str=None):
         start_date = today.replace(month=1, day=1)
         end_date = today
         prior_start = start_date.replace(year=start_date.year - 1)
-        prior_end = end_date.replace(year=end_date.year - 1)
+        try:
+            prior_end = end_date.replace(year=end_date.year - 1)
+        except ValueError:
+            prior_end = end_date.replace(year=end_date.year - 1, day=28)
         period_label = 'العام الحالي'
         
     elif period == 'custom' and start_date_str and end_date_str:
         try:
             start_date = datetime.date.fromisoformat(start_date_str)
             end_date = datetime.date.fromisoformat(end_date_str)
+            if start_date > end_date:
+                start_date, end_date = end_date, start_date
             days = (end_date - start_date).days
             prior_end = start_date - datetime.timedelta(days=1)
             prior_start = prior_end - datetime.timedelta(days=max(1, days))
@@ -120,7 +125,7 @@ def get_performance_overview_data(user, start_date, end_date, prior_start, prior
     # Base scoped querysets
     visits_qs = get_scoped_queryset(Visit.objects.all(), user)
     contacts_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), user)
-    orders_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user)
+    orders_qs = get_scoped_queryset(SalesOrder.objects.exclude(status__in=['cancelled', 'rejected']), user)
     collections_qs = get_scoped_queryset(Collection.objects.all(), user)
     expenses_qs = get_scoped_queryset(VisitExpense.objects.all(), user)
     coaching_qs = get_scoped_queryset(CoachingEvaluation.objects.all(), user)
@@ -488,7 +493,7 @@ def get_performance_analysis_data(user, start_date, end_date, filters=None):
 
         sales_val = SalesOrder.objects.filter(
             created_by=rep, order_date__gte=start_date, order_date__lte=end_date
-        ).exclude(status='cancelled').aggregate(t=Sum('grand_total'))['t'] or Decimal('0.00')
+        ).exclude(status__in=['cancelled', 'rejected']).aggregate(t=Sum('grand_total'))['t'] or Decimal('0.00')
 
         col_val = Collection.objects.filter(
             created_by=rep, collection_date__gte=start_date, collection_date__lte=end_date
@@ -566,7 +571,7 @@ def get_performance_daily_data(user, target_date, filters=None):
     yesterday = target_date - datetime.timedelta(days=1)
 
     visits_qs = get_scoped_queryset(Visit.objects.all(), user)
-    orders_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user)
+    orders_qs = get_scoped_queryset(SalesOrder.objects.exclude(status__in=['cancelled', 'rejected']), user)
     collections_qs = get_scoped_queryset(Collection.objects.all(), user)
     expenses_qs = get_scoped_queryset(VisitExpense.objects.all(), user)
     calls_qs = get_scoped_queryset(CustomerCall.objects.all(), user)
@@ -767,7 +772,7 @@ def get_performance_detailed_matrix(user, start_date, end_date, filters=None):
         samples_cnt = VisitSampleItem.objects.filter(visit__in=v_qs).aggregate(t=Sum('quantity'))['t'] or 0
 
         # Commercial
-        sales_qs = SalesOrder.objects.filter(created_by=rep, order_date__gte=start_date, order_date__lte=end_date).exclude(status='cancelled')
+        sales_qs = SalesOrder.objects.filter(created_by=rep, order_date__gte=start_date, order_date__lte=end_date).exclude(status__in=['cancelled', 'rejected'])
         sales_cnt = sales_qs.count()
         sales_gross = sales_qs.aggregate(t=Sum('subtotal'))['t'] or Decimal('0.00')
         sales_net = sales_qs.aggregate(t=Sum('grand_total'))['t'] or Decimal('0.00')
@@ -865,7 +870,7 @@ def get_ar_aging_report_data(user, filters=None):
     # Total credit sales in last 90 days for DSO (strictly scoped)
     ninety_days_ago = today - datetime.timedelta(days=90)
     dso_orders = get_scoped_queryset(
-        SalesOrder.objects.filter(order_date__gte=ninety_days_ago).exclude(status='cancelled'),
+        SalesOrder.objects.filter(order_date__gte=ninety_days_ago).exclude(status__in=['cancelled', 'rejected']),
         user,
     )
     if area_id:
@@ -1143,15 +1148,20 @@ def get_customer_360_report_data(user, start_date, end_date, filters=None):
     collections_map = {}
 
     if contact_ids:
-        for r in Visit.objects.filter(
-            contact_id__in=contact_ids, date__gte=start_date, date__lte=end_date
+        scoped_visits = get_scoped_queryset(Visit.objects.filter(contact_id__in=contact_ids), user, 'visit')
+        scoped_orders = get_scoped_queryset(SalesOrder.objects.filter(customer_id__in=contact_ids), user, 'salesorder')
+        scoped_returns = get_scoped_queryset(SalesReturnOrder.objects.filter(customer_id__in=contact_ids), user, 'salesreturnorder')
+        scoped_collections = get_scoped_queryset(Collection.objects.filter(customer_id__in=contact_ids), user, 'collection')
+
+        for r in scoped_visits.filter(
+            date__gte=start_date, date__lte=end_date
         ).values('contact_id').annotate(cnt=Count('id')):
             visits_map[r['contact_id']] = r['cnt']
-        for r in Visit.objects.filter(contact_id__in=contact_ids).values('contact_id').annotate(last_d=Max('date')):
+        for r in scoped_visits.values('contact_id').annotate(last_d=Max('date')):
             last_visit_map[r['contact_id']] = r['last_d']
-        for r in SalesOrder.objects.filter(
-            customer_id__in=contact_ids, order_date__gte=start_date, order_date__lte=end_date
-        ).exclude(status='cancelled').values('customer_id').annotate(
+        for r in scoped_orders.filter(
+            order_date__gte=start_date, order_date__lte=end_date
+        ).exclude(status__in=['cancelled', 'rejected']).values('customer_id').annotate(
             cnt=Count('id'),
             gross=Sum('subtotal'),
             i_disc=Sum('items_discount_total'),
@@ -1159,12 +1169,12 @@ def get_customer_360_report_data(user, start_date, end_date, filters=None):
             net=Sum('grand_total'),
         ):
             orders_map[r['customer_id']] = r
-        for r in SalesReturnOrder.objects.filter(
-            customer_id__in=contact_ids, order_date__gte=start_date, order_date__lte=end_date, status__in=['delivered', 'settled']
+        for r in scoped_returns.filter(
+            order_date__gte=start_date, order_date__lte=end_date, status__in=['delivered', 'settled']
         ).values('customer_id').annotate(ret=Sum('grand_total')):
             returns_map[r['customer_id']] = r['ret'] or Decimal('0.00')
-        for r in Collection.objects.filter(
-            customer_id__in=contact_ids, collection_date__gte=start_date, collection_date__lte=end_date
+        for r in scoped_collections.filter(
+            collection_date__gte=start_date, collection_date__lte=end_date
         ).values('customer_id').annotate(col=Sum('amount')):
             collections_map[r['customer_id']] = r['col'] or Decimal('0.00')
 
@@ -1248,8 +1258,8 @@ def get_delivery_stock_availability_report_data(user, filters=None):
         user,
         'salesorderitem'
     )
-    if warehouse_id:
-        open_qs = open_qs.filter(order__warehouse_id=warehouse_id)
+    if warehouse_id and str(warehouse_id).isdigit():
+        open_qs = open_qs.filter(order__source_warehouse_id=int(warehouse_id))
 
     # Separate unreserved demand (pending, manager_approval) from preparing (already in qty_reserved)
     open_items = list(
@@ -1579,9 +1589,11 @@ def export_to_excel_response(filename, sheet_title, headers, rows, summary_row=N
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    from master_data.excel_utils import sanitize_excel_cell
     for r in rows:
         cleaned = [
-            v.strftime("%Y-%m-%d") if isinstance(v, (datetime.date, datetime.datetime)) else v
+            v.strftime("%Y-%m-%d") if isinstance(v, (datetime.date, datetime.datetime))
+            else (sanitize_excel_cell(v) if isinstance(v, str) else v)
             for v in r
         ]
         ws.append(cleaned)

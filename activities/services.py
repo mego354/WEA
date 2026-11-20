@@ -227,6 +227,212 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         return visit
 
 
+def get_question_product_choices(template, visit=None, question=None):
+    """
+    Returns (combined_products_qs, historical_ids_set, suggested_ids_set) for a
+    `suggested_products` template question or legacy `detailed_products` picker.
+    Always includes eligible active+sellable products plus any historically saved
+    IDs on the visit so historical non-sellable/inactive products remain intact.
+    """
+    from django.db.models import Case, When, Value, IntegerField
+    from catalog.models import Product
+
+    eligible_qs = template.get_suggested_products_pool() if template else Product.get_eligible_for_visits()
+    eligible_ids = set(eligible_qs.values_list('id', flat=True))
+
+    suggested_ids = set()
+    if template:
+        suggested_ids.update(template.get_eligible_suggested_products().values_list('id', flat=True))
+    loc_settings = LocationSettings.get_settings()
+    if getattr(loc_settings, 'enable_product_suggestions', False):
+        suggested_ids.update(loc_settings.get_eligible_suggested_products().values_list('id', flat=True))
+
+    historical_ids = set()
+    if visit and getattr(visit, 'pk', None):
+        if question is not None:
+            raw_ans = (visit.questionnaire_answers or {}).get(str(question.id))
+            items = raw_ans if isinstance(raw_ans, (list, tuple)) else ([raw_ans] if raw_ans not in (None, '') else [])
+            for item in items:
+                s = str(item).strip()
+                if s.isdigit():
+                    historical_ids.add(int(s))
+        else:
+            historical_ids = set(visit.detailed_products.values_list('id', flat=True))
+
+    allowed_ids = eligible_ids | historical_ids
+    if not allowed_ids:
+        return Product.objects.none(), historical_ids, suggested_ids
+
+    combined_qs = Product.objects.filter(id__in=allowed_ids)
+    if suggested_ids:
+        combined_qs = combined_qs.annotate(
+            _is_suggested=Case(
+                When(id__in=suggested_ids, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        ).order_by('_is_suggested', 'name')
+    else:
+        combined_qs = combined_qs.order_by('name')
+    return combined_qs, historical_ids, suggested_ids
+
+
+def parse_suggested_products_submission(post_data, field_name, allowed_ids, strict=True):
+    """
+    Parses and validates product IDs submitted for a `suggested_products` question
+    or `detailed_products` field against `allowed_ids`.
+    When strict=True, raises ValidationError on any invalid or unauthorized product ID.
+    """
+    if hasattr(post_data, 'getlist'):
+        raw_vals = post_data.getlist(field_name)
+    else:
+        raw_v = post_data.get(field_name)
+        if raw_v is None:
+            raw_vals = []
+        elif isinstance(raw_v, (list, tuple)):
+            raw_vals = list(raw_v)
+        else:
+            raw_vals = [raw_v]
+
+    tokens = []
+    for v in raw_vals:
+        if isinstance(v, (list, tuple)):
+            tokens.extend(v)
+        elif isinstance(v, str) and ',' in v:
+            tokens.extend(part for part in v.split(','))
+        else:
+            tokens.append(v)
+
+    selected_ids = []
+    seen = set()
+    for tok in tokens:
+        s = str(tok).strip()
+        if not s:
+            continue
+        if not s.isdigit() or int(s) <= 0:
+            if strict:
+                raise ValidationError("تم اختيار منتج غير صالح أو غير مصرح به لهذا القالب.")
+            continue
+        pid = int(s)
+        if pid not in allowed_ids:
+            if strict:
+                raise ValidationError("تم اختيار منتج غير صالح أو غير مصرح به لهذا القالب.")
+            continue
+        if pid not in seen:
+            seen.add(pid)
+            selected_ids.append(pid)
+    return selected_ids
+
+
+def preload_visit_qa_product_map(visits):
+    """
+    Batch-loads all Product names referenced in `suggested_products` questionnaire
+    answers across `visits` in a single ORM query and caches `_qa_product_map` &
+    `qa_display_list` on each Visit instance (eliminating N+1 queries in lists/exports).
+    """
+    from catalog.models import Product
+
+    visit_list = list(visits)
+    needed_pids = set()
+    for v in visit_list:
+        answers = getattr(v, 'questionnaire_answers', None) or {}
+        if not answers or not getattr(v, 'template_id', None):
+            continue
+        sp_qids = {str(q.id) for q in v.template.questions.all() if q.question_type == 'suggested_products'}
+        for qid_str in sp_qids:
+            val = answers.get(qid_str)
+            if val in (None, '', []):
+                continue
+            items = val if isinstance(val, (list, tuple)) else [val]
+            for item in items:
+                s = str(item).strip()
+                if s.isdigit():
+                    needed_pids.add(int(s))
+
+    prod_map = {}
+    if needed_pids:
+        prod_map = dict(Product.objects.filter(id__in=needed_pids).values_list('id', 'name'))
+
+    for v in visit_list:
+        v._qa_product_map = prod_map
+        v.qa_display_list = v.get_qa_display_list(product_map=prod_map)
+    return prod_map
+
+
+def format_answer_for_display(question, raw_val, product_map=None):
+    """
+    Unified formatter converting raw answer values (scalar, multi-choice, or
+    suggested_products IDs) into human-readable Arabic display text.
+    Returns '' for empty values so callers can apply context-appropriate placeholders.
+    """
+    from activities.models import Visit
+
+    if raw_val is None or raw_val == '' or raw_val == []:
+        return ''
+
+    q_type = getattr(question, 'question_type', '') if question else ''
+    if q_type == 'suggested_products':
+        items = raw_val if isinstance(raw_val, (list, tuple)) else [raw_val]
+        pmap = dict(product_map) if product_map else {}
+        missing = [int(str(x).strip()) for x in items if str(x).strip().isdigit() and int(str(x).strip()) not in pmap]
+        if missing:
+            from catalog.models import Product
+            pmap.update(dict(Product.objects.filter(id__in=missing).values_list('id', 'name')))
+        names = []
+        for item in items:
+            s = str(item).strip()
+            if s.isdigit():
+                pid = int(s)
+                names.append(pmap.get(pid, f"منتج #{pid}"))
+            elif item not in (None, ''):
+                names.append(str(item))
+        return '، '.join(names)
+
+    q_lookup = {}
+    opts = getattr(question, 'options', None) if question else None
+    if isinstance(opts, list):
+        for opt in opts:
+            if isinstance(opt, dict):
+                vk = str(opt.get('value', '')).strip()
+                if vk:
+                    q_lookup[vk.lower()] = opt.get('text_ar') or opt.get('text_en') or vk
+
+    if isinstance(raw_val, (list, tuple)):
+        cleaned = [Visit.translate_answer_value(x, q_lookup) for x in raw_val if x not in (None, '')]
+        return '، '.join(cleaned)
+    return Visit.translate_answer_value(raw_val, q_lookup)
+
+
+def can_edit_agreement(user, agreement):
+    """Checks permission, data scope, and editable business status ('new' or 'disapproved')."""
+    from accounts.permissions import has_perm_or_admin, can_user_access_object
+
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False, "يجب تسجيل الدخول لتعديل الاتفاقية."
+    if not has_perm_or_admin(user, 'activities:agreements/edit'):
+        return False, "عذراً، لا تملك صلاحية تعديل الاتفاقيات."
+    if agreement.status not in ('new', 'disapproved'):
+        return False, "لا يمكن تعديل الاتفاقية بعد إنجازها أو اعتمادها."
+    if not can_user_access_object(user, agreement, 'edit'):
+        return False, "غير مصرح لك بتعديل هذه الاتفاقية خارج نطاق صلاحياتك."
+    return True, ""
+
+
+def can_delete_agreement(user, agreement):
+    """Checks permission, data scope, and deletable business status ('new' or 'disapproved')."""
+    from accounts.permissions import has_perm_or_admin, can_user_access_object
+
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False, "يجب تسجيل الدخول لحذف الاتفاقية."
+    if not has_perm_or_admin(user, 'activities:agreements/delete'):
+        return False, "عذراً، لا تملك صلاحية حذف الاتفاقيات."
+    if agreement.status not in ('new', 'disapproved'):
+        return False, "لا يمكن حذف الاتفاقية بعد إنجازها أو اعتمادها."
+    if not can_user_access_object(user, agreement, 'delete'):
+        return False, "غير مصرح لك بحذف هذه الاتفاقية خارج نطاق صلاحياتك."
+    return True, ""
+
+
 # =============================================================================
 # STANDARDIZED VISIT LIFECYCLE SERVICE FUNCTIONS (STATE MACHINE)
 # =============================================================================
@@ -291,6 +497,19 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
                     saved_answers[str(k)] = v
 
         if visit.template:
+            sp_start_qs = {
+                q.id: q for q in visit.template.get_active_questions().filter(stage='start_only', question_type='suggested_products')
+            }
+            for qid, q_obj in sp_start_qs.items():
+                if str(qid) in saved_answers:
+                    eligible_qs, hist_ids, _ = get_question_product_choices(visit.template, visit=visit, question=q_obj)
+                    allowed_ids = set(eligible_qs.values_list('id', flat=True)) | hist_ids
+                    saved_answers[str(qid)] = parse_suggested_products_submission(
+                        {str(qid): saved_answers[str(qid)]}, str(qid), allowed_ids, strict=True
+                    )
+                    if not saved_answers[str(qid)]:
+                        saved_answers.pop(str(qid), None)
+
             start_questions = visit.template.get_active_questions().filter(stage='start_only')
             for q in start_questions:
                 # Conditional check if applicable
@@ -468,10 +687,23 @@ def end_visit(visit, user, request=None, answers=None, detailed_product_ids=None
             raise ValidationError(err)
 
         if answers is not None:
-            visit.questionnaire_answers = answers
+            normalized_answers = dict(answers)
+            if visit.template:
+                for q in visit.template.get_active_questions():
+                    if q.question_type == 'suggested_products' and str(q.id) in normalized_answers:
+                        eligible_qs, hist_ids, _ = get_question_product_choices(visit.template, visit=visit, question=q)
+                        allowed_ids = set(eligible_qs.values_list('id', flat=True)) | hist_ids
+                        parsed = parse_suggested_products_submission(
+                            {str(q.id): normalized_answers[str(q.id)]}, str(q.id), allowed_ids, strict=True
+                        )
+                        if parsed:
+                            normalized_answers[str(q.id)] = parsed
+                        else:
+                            normalized_answers.pop(str(q.id), None)
+            visit.questionnaire_answers = normalized_answers
 
         # Derive is_successful from Question #1 in questionnaire answers
-        effective_answers = answers if answers is not None else (visit.questionnaire_answers or {})
+        effective_answers = visit.questionnaire_answers or {}
         if visit.template:
             q1 = visit.template.questions.filter(order=1).first()
             if q1 and str(q1.id) in effective_answers:
@@ -487,7 +719,17 @@ def end_visit(visit, user, request=None, answers=None, detailed_product_ids=None
 
         # Product detailing
         if visit.template and visit.template.is_product_detailing_supported():
-            if detailed_product_ids is not None:
+            if visit.template.has_suggested_products_question():
+                sp_union_ids = []
+                for q in visit.template.get_active_questions():
+                    if q.question_type == 'suggested_products':
+                        q_vals = (visit.questionnaire_answers or {}).get(str(q.id), [])
+                        if isinstance(q_vals, (list, tuple)):
+                            for pid in q_vals:
+                                if str(pid).isdigit() and int(pid) not in sp_union_ids:
+                                    sp_union_ids.append(int(pid))
+                visit.detailed_products.set(sp_union_ids)
+            elif detailed_product_ids is not None:
                 eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
                 historical_ids = set(visit.detailed_products.values_list('id', flat=True))
                 allowed_ids = eligible_ids | historical_ids
@@ -804,18 +1046,36 @@ def build_visit_timeline(visit):
             prev_ans = prev_dict.get('questionnaire_answers')
             new_ans = new_dict.get('questionnaire_answers')
             if isinstance(prev_ans, dict) and isinstance(new_ans, dict) and prev_ans != new_ans:
-                q_map = {}
+                q_obj_map = {}
+                sp_pids = set()
                 if visit.template:
                     for q in visit.template.questions.all():
-                        q_map[str(q.id)] = q.text_ar
+                        q_obj_map[str(q.id)] = q
                 all_q_keys = list(dict.fromkeys(list(prev_ans.keys()) + list(new_ans.keys())))
+                for qk in all_q_keys:
+                    q_obj = q_obj_map.get(str(qk))
+                    if q_obj and q_obj.question_type == 'suggested_products':
+                        for raw_side in (prev_ans.get(qk), new_ans.get(qk)):
+                            if raw_side not in (None, '', []):
+                                for item in (raw_side if isinstance(raw_side, (list, tuple)) else [raw_side]):
+                                    if str(item).isdigit():
+                                        sp_pids.add(int(item))
+                tl_pmap = {}
+                if sp_pids:
+                    from catalog.models import Product
+                    tl_pmap = dict(Product.objects.filter(id__in=sp_pids).values_list('id', 'name'))
                 for qk in all_q_keys:
                     old_v = prev_ans.get(qk)
                     new_v = new_ans.get(qk)
                     if old_v != new_v:
-                        q_label = q_map.get(str(qk), f"سؤال #{qk}")
-                        old_str = "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
-                        new_str = "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                        q_obj = q_obj_map.get(str(qk))
+                        q_label = q_obj.text_ar if q_obj else f"سؤال #{qk}"
+                        old_str = (format_answer_for_display(q_obj, old_v, product_map=tl_pmap) or '-') if q_obj else (
+                            "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
+                        )
+                        new_str = (format_answer_for_display(q_obj, new_v, product_map=tl_pmap) or '-') if q_obj else (
+                            "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                        )
                         changes.append({'field': q_label, 'old': old_str, 'new': new_str})
 
             # Also check answer_changes if explicitly stored
@@ -974,15 +1234,19 @@ def can_edit_visit_answers(visit, user):
 
 def update_visit_questionnaire_answers(visit, user, post_data, request=None):
     """
-    Independently updates only a visit's questionnaire answers (`visit.questionnaire_answers`):
+    Independently updates only a visit's questionnaire answers (`visit.questionnaire_answers`
+    and legacy `detailed_products` when no `suggested_products` question exists on the template):
     - Restricted to ended visits and authorized users.
     - Never modifies VisitTemplate or its questions, and never affects other visits.
-    - REQUIREMENT C & D: Every update triggers approval again (`approval_status='pending'`, `waiting_for_reapproval=True`).
-    - Records before/after answer diffs in `ApprovalAuditLog` (`answers_updated`) with structured changes and `SecurityAuditLog`.
+    - Validates `suggested_products` & `detailed_products` selections against authorized product pools.
+    - Triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`).
+    - Records before/after answer diffs in `ApprovalAuditLog` (`answers_updated`) and `SecurityAuditLog`,
+      and updates creator-edit tracking (`edited_by_creator`, `last_edited_by`, `last_edited_at`).
     """
     from django.db import transaction
     from activities.models import Visit, ApprovalAuditLog
     from accounts.services import AuditLogService
+    from catalog.models import Product
 
     with transaction.atomic():
         visit = Visit.objects.select_for_update().select_related('template', 'contact', 'owner').get(pk=visit.pk)
@@ -1000,9 +1264,10 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
         # First pass: collect parent answers for conditional visibility
         for q in questions:
             field_name = f'question_{q.id}'
-            val = post_data.get(field_name)
-            if hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
+            if hasattr(post_data, 'getlist') and q.question_type in ('multiple_choice', 'suggested_products'):
                 val = post_data.getlist(field_name)
+            else:
+                val = post_data.get(field_name)
             if val is not None and val != '' and val != []:
                 parent_answers[q.id] = val
 
@@ -1019,10 +1284,15 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
                 continue
 
             field_name = f'question_{q.id}'
-            if field_name not in post_data:
+            present_marker = f'{field_name}_present'
+            if field_name not in post_data and present_marker not in post_data:
                 continue
 
-            if hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
+            if q.question_type == 'suggested_products':
+                eligible_qs, historical_ids, _ = get_question_product_choices(template, visit=visit, question=q)
+                allowed_ids = set(eligible_qs.values_list('id', flat=True)) | historical_ids
+                val = parse_suggested_products_submission(post_data, field_name, allowed_ids, strict=True)
+            elif hasattr(post_data, 'getlist') and q.question_type == 'multiple_choice':
                 val = [v for v in post_data.getlist(field_name) if str(v).strip()]
             else:
                 val = post_data.get(field_name)
@@ -1040,34 +1310,102 @@ def update_visit_questionnaire_answers(visit, user, post_data, request=None):
             else:
                 new_answers.pop(str(q.id), None)
 
-        # Compute detailed per-question changes
-        q_map = {str(q.id): q.text_ar for q in questions}
+        # Preload product names for readable diff logging
+        all_sp_pids = set()
+        q_obj_map = {str(q.id): q for q in questions}
+        for q in questions:
+            if q.question_type == 'suggested_products':
+                for ans_src in (old_answers, new_answers):
+                    raw_v = ans_src.get(str(q.id))
+                    if raw_v not in (None, '', []):
+                        for item in (raw_v if isinstance(raw_v, (list, tuple)) else [raw_v]):
+                            if str(item).isdigit():
+                                all_sp_pids.add(int(item))
+
+        has_sp_question = any(q.question_type == 'suggested_products' for q in questions)
+        det_changed = False
+        new_det_ids = None
+        old_det_ids = list(visit.detailed_products.order_by('id').values_list('id', flat=True))
+        all_sp_pids.update(old_det_ids)
+
+        if template.is_product_detailing_supported() and not has_sp_question and (
+            'detailed_products' in post_data or 'detailed_products_present' in post_data
+        ):
+            eligible_det_qs, hist_det_ids, _ = get_question_product_choices(template, visit=visit, question=None)
+            allowed_det_ids = set(eligible_det_qs.values_list('id', flat=True)) | hist_det_ids
+            new_det_ids = parse_suggested_products_submission(post_data, 'detailed_products', allowed_det_ids, strict=True)
+            all_sp_pids.update(new_det_ids)
+            if old_det_ids != new_det_ids:
+                det_changed = True
+        elif template.is_product_detailing_supported() and has_sp_question:
+            synced_ids = []
+            for q in questions:
+                if q.question_type == 'suggested_products':
+                    for pid in (new_answers.get(str(q.id)) or []):
+                        if str(pid).isdigit() and int(pid) not in synced_ids:
+                            synced_ids.append(int(pid))
+            new_det_ids = synced_ids
+
+        all_pmap = dict(Product.objects.filter(id__in=all_sp_pids).values_list('id', 'name')) if all_sp_pids else {}
+
+        # Compute detailed per-question changes using human-readable labels & product names
         answer_changes = []
         all_keys = list(dict.fromkeys(list(old_answers.keys()) + list(new_answers.keys())))
         for qk in all_keys:
             old_v = old_answers.get(qk)
             new_v = new_answers.get(qk)
             if old_v != new_v:
-                old_str = "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
-                new_str = "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                q_obj = q_obj_map.get(str(qk))
+                old_str = (format_answer_for_display(q_obj, old_v, product_map=all_pmap) or '-') if q_obj else (
+                    "، ".join(str(x) for x in old_v) if isinstance(old_v, list) else (str(old_v) if old_v not in (None, '') else '-')
+                )
+                new_str = (format_answer_for_display(q_obj, new_v, product_map=all_pmap) or '-') if q_obj else (
+                    "، ".join(str(x) for x in new_v) if isinstance(new_v, list) else (str(new_v) if new_v not in (None, '') else '-')
+                )
                 answer_changes.append({
                     'question_id': str(qk),
-                    'field': q_map.get(str(qk), f"سؤال #{qk}"),
+                    'field': q_obj.text_ar if q_obj else f"سؤال #{qk}",
                     'old': old_str,
                     'new': new_str,
                 })
 
+        if det_changed and new_det_ids is not None:
+            answer_changes.append({
+                'question_id': 'detailed_products',
+                'field': 'المنتجات المشروحة (Product Detailing)',
+                'old': '، '.join(all_pmap.get(pid, f"منتج #{pid}") for pid in old_det_ids) or '-',
+                'new': '، '.join(all_pmap.get(pid, f"منتج #{pid}") for pid in new_det_ids) or '-',
+            })
+
         if not answer_changes:
             return visit, []
 
+        if new_det_ids is not None:
+            visit.detailed_products.set(new_det_ids)
+
         prev_approval_status = visit.approval_status
+        # Sync visit.is_successful if Question 1 (outcome) changed
+        first_q = questions[0] if questions else None
+        if first_q and str(first_q.id) in new_answers:
+            q1_val = str(new_answers[str(first_q.id)]).strip().lower()
+            visit.is_successful = (q1_val == 'successful' or ('ناجح' in q1_val and 'غير' not in q1_val))
+
+        now = timezone.now()
         # REQUIREMENT C & D: Editing questionnaire answers triggers re-approval
         visit.questionnaire_answers = new_answers
         visit.approval_status = 'pending'
         visit.waiting_for_reapproval = True
         visit.approved_by = None
         visit.approved_at = None
-        visit.save(update_fields=['questionnaire_answers', 'approval_status', 'waiting_for_reapproval', 'approved_by', 'approved_at', 'updated_at'])
+        visit.last_edited_by = user
+        visit.last_edited_at = now
+        if visit.created_by_id and user.id == visit.created_by_id:
+            visit.edited_by_creator = True
+        visit.save(update_fields=[
+            'questionnaire_answers', 'is_successful', 'approval_status',
+            'waiting_for_reapproval', 'approved_by', 'approved_at',
+            'edited_by_creator', 'last_edited_by', 'last_edited_at', 'updated_at',
+        ])
 
         changes_summary = " | ".join(
             f"{c['field']}: ({c['old']}) ➔ ({c['new']})" for c in answer_changes

@@ -1128,9 +1128,9 @@ class ConfigurableAuthorizationScopeTests(TestCase):
     # =========================================================================
 
     def test_warehouse_scoping(self):
-        """Representative sees assigned warehouse + main; Manager sees warehouses in their territory."""
+        """Representative sees only assigned warehouse (no main leak); Manager sees warehouses in their territory."""
         rep_whs = get_scoped_queryset(Warehouse.objects.all(), self.rep_nasr, 'warehouse', 'view')
-        self.assertIn(self.wh_main, rep_whs)
+        self.assertNotIn(self.wh_main, rep_whs)
         self.assertIn(self.wh_nasr, rep_whs)
         self.assertNotIn(self.wh_dokki, rep_whs)
 
@@ -3186,3 +3186,163 @@ class Phase2SafeUserDeletionAndExportsTests(TestCase):
         audit_exp = self.client.get(reverse('audit_logs_export'))
         self.assertEqual(audit_exp.status_code, 200)
         self.assertIn('spreadsheetml.sheet', audit_exp['Content-Type'])
+
+
+class AuditSecurityHardeningRegressionTests(TestCase):
+    """Regression tests for critical security & scope audit fixes (AUD-002..AUD-008, AUD-025, AUD-047)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.core.management import call_command
+        from master_data.models import Area
+        call_command('setup_permissions')
+        cls.cairo = Area.objects.create(code='AUD-CAI', name='القاهرة تدقيق', area_type='governorate')
+        cls.giza = Area.objects.create(code='AUD-GIZ', name='الجيزة تدقيق', area_type='governorate')
+        cls.mgr_role = Role.objects.get(name='manager')
+        cls.acc_role = Role.objects.get(name='accountant')
+        cls.rep_role = Role.objects.get(name='rep')
+        cls.inactive_super_role = Role.objects.create(
+            name='legacy_super_inactive', display_name='Legacy Super', is_super=True, is_active=False
+        )
+
+        cls.manager = User.objects.create_user(
+            username='aud_mgr@wea.com', email='aud_mgr@wea.com', password='Password123!',
+            name='مدير تدقيق', role=cls.mgr_role, is_active=True
+        )
+        cls.manager.assigned_areas.add(cls.cairo)
+
+        cls.rep = User.objects.create_user(
+            username='aud_rep@wea.com', email='aud_rep@wea.com', password='Password123!',
+            name='مندوب تدقيق', role=cls.rep_role, is_active=True
+        )
+        cls.rep.assigned_areas.add(cls.cairo)
+
+        cls.inactive_super_user = User.objects.create_user(
+            username='aud_inact_sup@wea.com', email='aud_inact_sup@wea.com', password='Password123!',
+            name='سوبر غير نشط', role=cls.inactive_super_role, is_active=True
+        )
+
+    def test_open_redirect_blocked_on_login(self):
+        res = self.client.post('/auth/login/?next=https://evil.example/phish', {
+            'email': 'aud_rep@wea.com', 'password': 'Password123!',
+        })
+        self.assertEqual(res.status_code, 302)
+        self.assertNotIn('evil.example', res['Location'])
+
+    def test_manager_cannot_escalate_role_to_accountant_or_self_promote(self):
+        self.client.force_login(self.manager)
+        # Attempt to create accountant
+        self.client.post('/users/create/', {
+            'name': 'محاسب غير مصرح', 'email': 'esc_acc@wea.com',
+            'password': 'Password123!', 'confirm_password': 'Password123!',
+            'role': str(self.acc_role.id), 'assigned_areas': [str(self.cairo.id)],
+        })
+        self.assertFalse(User.objects.filter(email='esc_acc@wea.com').exists())
+
+        # Attempt to promote subordinate rep to accountant via user_edit
+        self.client.post(f'/users/{self.rep.pk}/edit/', {
+            'name': self.rep.name, 'email': self.rep.email,
+            'role': str(self.acc_role.id), 'is_active': 'on',
+            'assigned_areas': [str(self.cairo.id)],
+        })
+        self.rep.refresh_from_db()
+        self.assertEqual(self.rep.role_id, self.rep_role.id)
+
+    def test_inactive_super_role_does_not_bypass_scope(self):
+        from accounts.scope_service import ScopeResolutionService
+        scope = ScopeResolutionService.get_user_scope(self.inactive_super_user, 'sales', 'view')
+        self.assertNotEqual(scope, 'all')
+
+    def test_can_user_access_object_fail_closed_for_reset_password_and_deactivate(self):
+        from accounts.scope_service import ScopeResolutionService
+        from accounts.models import UserModuleScope
+        self.rep.has_custom_permissions = True
+        self.rep.save(update_fields=['has_custom_permissions'])
+        UserModuleScope.objects.update_or_create(
+            user=self.rep, module='accounts', defaults={'view_scope': 'all', 'manage_scope': 'own'}
+        )
+        self.assertFalse(ScopeResolutionService.can_user_access_object(self.rep, self.manager, 'reset_password'))
+        self.assertFalse(ScopeResolutionService.can_user_access_object(self.rep, self.manager, 'deactivate'))
+
+    def test_private_media_attachments_blocked_directly(self):
+        res = self.client.get('/media/attachments/secret.pdf')
+        self.assertEqual(res.status_code, 403)
+
+    def test_area_cycle_rejected_by_clean(self):
+        from django.core.exceptions import ValidationError
+        self.cairo.parent = self.cairo
+        with self.assertRaises(ValidationError):
+            self.cairo.clean()
+
+    def test_own_scope_inventory_and_product_detail_hides_main_warehouse(self):
+        """Phase 2 (#2A/#2D): own-scope rep only sees own assigned warehouse, never is_main=True stock."""
+        from catalog.models import ProductCategory, Product
+        from inventory.models import Warehouse, InventoryStock
+        from accounts.scope_service import ScopeResolutionService
+
+        cat = ProductCategory.objects.create(name='فئة نطاق', code='CAT-SCP')
+        prod = Product.objects.create(name='دواء نطاق', sku_code='SKU-SCP-1', category=cat)
+        main_wh = Warehouse.objects.create(name='المخزن الرئيسي', code='WH-MAIN-SCP', is_main=True)
+        rep_wh = Warehouse.objects.create(name='مخزن المندوب', code='WH-REP-SCP', assigned_user=self.rep, is_rep_warehouse=True)
+        InventoryStock.objects.create(warehouse=main_wh, product=prod, qty_on_hand=Decimal('500.00'))
+        InventoryStock.objects.create(warehouse=rep_wh, product=prod, qty_on_hand=Decimal('12.00'))
+
+        scoped_whs_ids = list(ScopeResolutionService.get_scoped_queryset(Warehouse.objects.all(), self.rep, 'warehouse', 'view').values_list('id', flat=True))
+        self.assertIn(rep_wh.id, scoped_whs_ids)
+        self.assertNotIn(main_wh.id, scoped_whs_ids)
+        self.assertFalse(ScopeResolutionService.can_user_access_object(self.rep, main_wh, 'operate'))
+
+        self.client.force_login(self.rep)
+        res_no_perm = self.client.get(f'/catalog/{prod.pk}/')
+        self.assertEqual(res_no_perm.status_code, 200)
+        self.assertEqual(res_no_perm.context['total_stock'], Decimal('0.00'))
+
+        # Grant inventory:stocks/view via custom perms -> rep sees ONLY own warehouse (12.00), NOT Main Warehouse (500.00)
+        from accounts.models import Permission, UserModuleScope
+        mod_cat = Permission.objects.get(codename='module:catalog')
+        mod_inv = Permission.objects.get(codename='module:inventory')
+        stock_perm = Permission.objects.get(codename='inventory:stocks/view')
+        cat_perm = Permission.objects.get(codename='catalog:products/view')
+        self.rep.has_custom_permissions = True
+        self.rep.save(update_fields=['has_custom_permissions'])
+        self.rep.user_permissions.add(mod_cat, mod_inv, cat_perm, stock_perm)
+        UserModuleScope.objects.update_or_create(user=self.rep, module='inventory', defaults={'view_scope': 'own', 'manage_scope': 'own'})
+        self.rep.clear_perm_cache()
+        self.client.force_login(self.rep)
+        res = self.client.get(f'/catalog/{prod.pk}/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['total_stock'], Decimal('12.00'))
+
+    def test_own_scope_customer_transactions_isolated_from_brick_peers(self):
+        """Phase 2 (#2C): own-scope rep only sees own created_by CustomerTransaction, never peer rep's on shared brick customer."""
+        from contacts.models import Contact
+        from sales.models import CustomerAccount, CustomerTransaction
+        from accounts.scope_service import ScopeResolutionService
+
+        brick = Area.objects.create(code='AUD-BRK', name='مربع تدقيق', area_type='subarea', parent=self.cairo)
+        self.rep.assigned_areas.add(brick)
+        peer_rep = User.objects.create_user(
+            username='aud_peer@wea.com', email='aud_peer@wea.com', password='Password123!',
+            name='مندوب زميل', role=self.rep_role, is_active=True
+        )
+        peer_rep.assigned_areas.add(brick)
+        cust = Contact.objects.create(name='عميل مشترك', is_customer=True, area=self.cairo, brick=brick)
+        acc = CustomerAccount.get_or_create_for_customer(cust)
+        tx_own = CustomerTransaction.objects.create(
+            account=acc, transaction_type='debit', reason='sales', debit=Decimal('100.00'),
+            running_balance=Decimal('100.00'), description='فاتورة المندوب 1', created_by=self.rep
+        )
+        tx_peer = CustomerTransaction.objects.create(
+            account=acc, transaction_type='debit', reason='sales', debit=Decimal('250.00'),
+            running_balance=Decimal('350.00'), description='فاتورة الزميل', created_by=peer_rep
+        )
+
+        scoped_txs = ScopeResolutionService.get_scoped_queryset(CustomerTransaction.objects.all(), self.rep, 'customertransaction')
+        self.assertIn(tx_own, scoped_txs)
+        self.assertNotIn(tx_peer, scoped_txs)
+
+        self.client.force_login(self.rep)
+        res = self.client.get('/sales/customer-transactions/')
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'فاتورة المندوب 1')
+        self.assertNotContains(res, 'فاتورة الزميل')

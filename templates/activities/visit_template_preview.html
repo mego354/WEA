@@ -148,36 +148,14 @@
                             {% endif %}
                         </div>
 
-                        {% if q.question_type == 'single_choice' %}
-                        <div class="flex flex-wrap gap-2 pt-1">
-                            {% for opt in q.options %}
-                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
-                                <input type="radio" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" onchange="onPreviewAnswerChanged('{{ q.id }}', this.value)" class="text-teal-600 focus:ring-teal-500">
-                                <span>{{ opt.text_ar }}</span>
-                            </label>
-                            {% endfor %}
-                        </div>
-                        {% elif q.question_type == 'multiple_choice' %}
-                        <div class="flex flex-wrap gap-2 pt-1">
-                            {% for opt in q.options %}
-                            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-700">
-                                <input type="checkbox" name="preview_ans_{{ q.id }}" value="{{ opt.value|default:opt.text_ar }}" class="text-teal-600 focus:ring-teal-500 rounded">
-                                <span>{{ opt.text_ar }}</span>
-                            </label>
-                            {% endfor %}
-                        </div>
-                        {% elif q.question_type == 'textarea' %}
-                        <textarea rows="3" placeholder="اكتب الملاحظات والتفاصيل هنا..." class="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-500"></textarea>
-                        {% else %}
-                        <input type="text" placeholder="اكتب الإجابة هنا..." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500">
-                        {% endif %}
+                        {% include 'activities/_questionnaire_field.html' with q=q mode='preview' product_choices=suggested_products_pool %}
                     </div>
                     {% endfor %}
                 </div>
             </div>
 
-            <!-- Product Detailing Preview (if enabled) -->
-            {% if template.enable_product_detailing %}
+            <!-- Product Detailing Preview (if enabled and not already included as a questionnaire question) -->
+            {% if template.enable_product_detailing and not has_suggested_products_question %}
             <div class="space-y-3 p-4 rounded-2xl bg-teal-50/50 border border-teal-100">
                 <div class="flex items-center gap-2 text-teal-900 pb-2 border-b border-teal-100">
                     <span class="material-symbols-outlined text-lg">medication</span>

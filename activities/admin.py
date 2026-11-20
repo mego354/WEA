@@ -116,7 +116,7 @@ class PlannedVisitDayAdmin(admin.ModelAdmin):
     inlines = [PlannedVisitItemInline]
 
     def items_count(self, obj):
-        return obj.planned_items.count()
+        return obj.items.count()
     items_count.short_description = "عدد الزيارات المخططة"
 
     def status_badge(self, obj):
@@ -164,10 +164,10 @@ class VisitAdmin(admin.ModelAdmin):
         'serial_num', 'contact', 'owner', 'template', 'date', 'time',
         'status_badge', 'approval_badge', 'location_status_badge',
         'distance', 'allowed_distance', 'requires_approval_due_to_distance',
-        'waiting_for_reapproval', 'is_successful', 'doubled'
+        'waiting_for_reapproval', 'is_successful', 'doubled', 'edited_by_creator'
     )
     list_filter = (
-        'status', 'approval_status', 'is_planned', 'doubled',
+        'status', 'approval_status', 'is_planned', 'doubled', 'edited_by_creator',
         'is_successful', 'location_verified', 'requires_approval_due_to_distance',
         'waiting_for_reapproval', 'gps_integrity_status', 'template', 'date'
     )
@@ -179,6 +179,7 @@ class VisitAdmin(admin.ModelAdmin):
     filter_horizontal = ('detailed_products',)
     readonly_fields = (
         'created_at', 'updated_at', 'started_at', 'ended_at',
+        'edited_by_creator', 'last_edited_by', 'last_edited_at',
         'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot',
         'gps_integrity_status', 'gps_integrity_checked_at',
         'gps_suspicion_signals', 'gps_suspicion_reason',
@@ -237,9 +238,18 @@ class VisitAdmin(admin.ModelAdmin):
             'fields': (
                 ('started_at', 'ended_at', 'duration'),
                 ('created_by', 'created_at', 'updated_at'),
+                ('edited_by_creator', 'last_edited_by', 'last_edited_at'),
             )
         }),
     )
+
+    def save_model(self, request, obj, form, change):
+        if change and form.changed_data:
+            obj.last_edited_by = request.user
+            obj.last_edited_at = timezone.now()
+            if obj.created_by_id and request.user.id == obj.created_by_id:
+                obj.edited_by_creator = True
+        super().save_model(request, obj, form, change)
 
     def status_badge(self, obj):
         colors = {

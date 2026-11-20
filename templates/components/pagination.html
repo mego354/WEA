@@ -37,11 +37,11 @@
         <a href="{% url_replace page=1 %}"
            class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
            title="الصفحة الأولى" aria-label="الصفحة الأولى">
-            <span class="material-symbols-outlined text-base">first_page</span>
+            <span class="material-symbols-outlined text-base scale-x-[-1]">first_page</span>
         </a>
         {% else %}
         <span class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed">
-            <span class="material-symbols-outlined text-base">first_page</span>
+            <span class="material-symbols-outlined text-base scale-x-[-1]">first_page</span>
         </span>
         {% endif %}
 
@@ -107,11 +107,11 @@
         <a href="{% url_replace page=page_obj.paginator.num_pages %}"
            class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
            title="الصفحة الأخيرة" aria-label="الصفحة الأخيرة">
-            <span class="material-symbols-outlined text-base">last_page</span>
+            <span class="material-symbols-outlined text-base scale-x-[-1]">last_page</span>
         </a>
         {% else %}
         <span class="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed">
-            <span class="material-symbols-outlined text-base">last_page</span>
+            <span class="material-symbols-outlined text-base scale-x-[-1]">last_page</span>
         </span>
         {% endif %}
     </nav>

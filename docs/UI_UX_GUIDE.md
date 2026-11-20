@@ -49,11 +49,11 @@ This document outlines the user interface specifications, front-end architecture
 ```
 
 1. **Desktop**: Fixed right sidebar with collapsible sections, top breadcrumbs, and user menu.
-   - **Centralized Active Navigation**: Inspects `window.location.pathname`, identifies the matching item, applies active teal styling (`bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]`), auto-expands the parent accordion, rotates the chevron icon (`rotate-180`), highlights the parent category button, and smoothly auto-scrolls the active link into view.
-   - **Accordion State Persistence**: User-expanded/collapsed accordions are saved in `localStorage ('wea_sidebar_expanded')` and restored on subsequent page loads.
+   - **Deterministic Active Navigation (`resolve_active_nav` + `initSidebarActiveState`)**: Server-side URL resolution in `master_data/templatetags/erp_tags.py` (`resolve_active_nav` mapping URL names across aliases plus ordered longest-prefix fallback) stamps `data-erp-active-link="1"` strictly on the matching route inside `#sidebar-nav-scroll` (preventing substring collisions such as `/settings/agreements/` vs `/agreements/` or `/settings/visits/templates/` vs `/visits/`). Client-side `initSidebarActiveState()` collapses all unrelated sections, highlights the active item (`bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]`), expands ancestor submenus recursively (`rotate-180`), highlights parent category buttons, and centers the active link inside `#sidebar-nav-scroll` via `scrollSidebarActiveToCenter`.
+   - **Accordion Focus**: Opening a menu section collapses unrelated sibling sections so the sidebar stays compact and focused.
 2. **Mobile**:
-   - Slide-over drawer for secondary links and settings.
-   - Fixed bottom navigation bar for high-frequency actions (Home, Visits, Orders, Clients, Profile).
+   - Slide-over drawer for secondary links and settings (re-runs `initSidebarActiveState()` and auto-centers the active item in `#sidebar-nav-scroll` on open).
+   - Fixed bottom navigation bar for high-frequency actions (Home, Visits, Orders, Clients, Profile) aligned with `active_nav`.
    - Bottom-right Floating Action Button (FAB) triggering a bottom sheet for rapid creation (New Visit, New Order, New Client).
    - **Mobile Topbar Refresh Button**: Fixed in the header (`lg:hidden min-w-[44px] min-h-[44px]`) next to notifications for instant page reloading on mobile touch devices.
 
@@ -111,7 +111,9 @@ This document outlines the user interface specifications, front-end architecture
 
 
 - **Unified Viewport-Safe Row Action Menu (`static/js/row_action_menu.js`, `templates/components/row_action_menu.html`)**:
-  - Replaces inline multi-button clusters and native `confirm(...)` dialogs in list tables with a fixed-position (`z-[110]`) RTL `more_vert` dropdown portal so menus are never clipped inside `overflow-x-auto` tables.
+  - Replaces inline multi-button clusters and native `confirm(...)` dialogs in list tables with a fixed-position (`z-[110]`) RTL `more_vert` dropdown portal so menus are never clipped inside `overflow-x-auto` tables. Applies `preventScroll: true` focus, a 150ms post-open scroll grace guard so mobile/touch scroll jitter never dismisses freshly opened menus, and layers `#global-confirm-delete-modal` at `z-[120]` above the portal.
+- **Unified Questionnaire Renderer (`templates/activities/_questionnaire_field.html`)**:
+  - Shared mobile/desktop partial rendering all template question types—including searchable `suggested_products` widgets with count badges and `<question>_present` empty-submit markers—uniformly across template preview, active visit completion, and the finished-visit Edit Answers modal.
 - **Unified Detail Page Action Menu (`templates/components/detail_action_menu.html`)**:
   - Keeps primary workflow state-transition buttons visible in detail headers while grouping secondary actions (PDF export, print, edit, cancel, delete) inside a `more_vert` dropdown.
 - **Unified Transaction Attachments (`attachments_uploader.html`, `attachments_gallery.html`, `attachments_modal.html`)**:

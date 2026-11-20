@@ -71,18 +71,26 @@ def _ensure_arabic_fonts():
     return FONT_REGULAR, FONT_BOLD
 
 
-def ar(text):
+def _xml_escape(text):
+    from xml.sax.saxutils import escape as xml_escape
+    if text is None:
+        return ""
+    return xml_escape(str(text))
+
+
+def ar(text, escape_xml=True):
     """Reshape and apply BiDi algorithm for Arabic RTL rendering in ReportLab."""
     if text is None:
         return ""
     s = str(text)
     if not s.strip():
-        return s
+        return _xml_escape(s) if escape_xml else s
     # Only reshape if text contains Arabic characters
     if not any("\u0600" <= ch <= "\u06FF" or "\u0750" <= ch <= "\u077F" or "\uFB50" <= ch <= "\uFDFF" or "\uFE70" <= ch <= "\uFEFF" for ch in s):
-        return s
+        return _xml_escape(s) if escape_xml else s
     reshaped = arabic_reshaper.reshape(s)
-    return get_display(reshaped)
+    result = get_display(reshaped)
+    return _xml_escape(result) if escape_xml else result
 
 
 def fmt_money(val):
@@ -132,13 +140,13 @@ class NumberedCanvas(canvas.Canvas):
 
         self.setFont(reg_font, 8)
         self.setFillColor(SLATE_500)
-        page_label = ar(f"صفحة {self._pageNumber} من {page_count}")
+        page_label = ar(f"صفحة {self._pageNumber} من {page_count}", escape_xml=False)
         self.drawRightString(A4[0] - 14 * mm, 8.5 * mm, page_label)
 
         now_str = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
         meta = f"{now_str}"
         if self._footer_user:
-            meta = f"{ar('بواسطة: ' + self._footer_user)}  |  {now_str}"
+            meta = f"{ar('بواسطة: ' + self._footer_user, escape_xml=False)}  |  {now_str}"
         self.drawString(14 * mm, 8.5 * mm, meta)
         self.restoreState()
 
@@ -180,8 +188,8 @@ def _build_header(story, styles, doc_title, doc_number, doc_date_str, include_co
 
     left_lines = [
         Paragraph(ar(doc_title), styles["title"]),
-        Paragraph(f"<b>{ar('الرقم:')}</b> {doc_number}", styles["body"]),
-        Paragraph(f"<b>{ar('التاريخ:')}</b> {doc_date_str}", styles["body"]),
+        Paragraph(f"<b>{ar('الرقم:')}</b> {_xml_escape(doc_number)}", styles["body"]),
+        Paragraph(f"<b>{ar('التاريخ:')}</b> {_xml_escape(doc_date_str)}", styles["body"]),
     ]
     for k, v in (extra_meta or []):
         left_lines.append(Paragraph(f"<b>{ar(k)}:</b> {ar(v)}", styles["body"]))
@@ -377,7 +385,7 @@ def generate_order_pdf(doc_type, order, options=None, user=None):
                 Paragraph(f"<b>{ar('الاسم:')}</b> {ar(party.name)}", styles["body_bold"]),
             ],
             [
-                Paragraph(f"<b>{ar('الهاتف:')}</b> {party_phone}", styles["body"]),
+                Paragraph(f"<b>{ar('الهاتف:')}</b> {_xml_escape(party_phone)}", styles["body"]),
                 Paragraph(f"<b>{ar('العنوان:')}</b> {ar(party_addr)}", styles["body"]),
             ],
         ]
@@ -548,10 +556,13 @@ def generate_account_statement_pdf(
     footer_user = (user.get_full_name() or user.username) if user else ""
 
     if party_type == "customer":
+        from accounts.permissions import get_scoped_queryset
         from sales.models import CustomerTransaction, SalesOrder, SalesReturnOrder
 
         doc_title = "كشف حساب عميل"
         base_qs = CustomerTransaction.objects.filter(account__customer=contact)
+        if user is not None:
+            base_qs = get_scoped_queryset(base_qs, user, "customertransaction")
         before_agg = base_qs.filter(transaction_date__lt=start_date).aggregate(
             d=Sum("debit"), c=Sum("credit")
         )

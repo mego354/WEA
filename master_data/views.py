@@ -107,10 +107,13 @@ def _build_visits_sunburst(queryset):
     return result
 
 
-def _build_reps_sunburst(amount_field='current_balance', user=None):
-    qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0})
-    if user:
-        qs = get_scoped_queryset(qs, user, 'customeraccount')
+def _build_reps_sunburst(amount_field='current_balance', user=None, base_qs=None):
+    if base_qs is not None:
+        qs = base_qs.filter(**{f"{amount_field}__gt": 0})
+    else:
+        qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0})
+        if user:
+            qs = get_scoped_queryset(qs, user, 'customeraccount')
     qs = qs.values(
         'customer__area__name',
         'customer__area__parent__name'
@@ -139,29 +142,87 @@ def _build_reps_sunburst(amount_field='current_balance', user=None):
     return result
 
 
+def _get_dashboard_filter_module(user):
+    from accounts.permissions import has_perm_or_admin
+    if has_perm_or_admin(user, ['sales:orders/list', 'sales:orders/view', 'sales:collections/list']):
+        return 'sales'
+    if has_perm_or_admin(user, ['activities:visits/list', 'activities:visits/view']):
+        return 'activities'
+    if has_perm_or_admin(user, ['purchases:orders/list', 'purchases:orders/view']):
+        return 'purchases'
+    return 'contacts'
+
+
+@login_required
+def dashboard_search_areas_api(request):
+    from accounts.scope_service import ScopeResolutionService
+    from master_data.search_utils import filter_by_arabic_search
+    q = (request.GET.get('q') or '').strip()
+    mod = _get_dashboard_filter_module(request.user)
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', mod)
+    if q:
+        qs = filter_by_arabic_search(qs, ['name', 'name_en', 'code'], q)
+    results = [{'id': a.id, 'name': a.name, 'code': a.code or ''} for a in qs[:50]]
+    return JsonResponse({'results': results})
+
+
+@login_required
+def dashboard_search_bricks_api(request):
+    from accounts.scope_service import ScopeResolutionService
+    from master_data.filter_utils import parse_multi_int
+    from master_data.search_utils import filter_by_arabic_search
+    q = (request.GET.get('q') or '').strip()
+    mod = _get_dashboard_filter_module(request.user)
+    qs = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', mod)
+    main_area_ids = parse_multi_int(request.GET, 'main_area', 'area', 'area_id', 'governorate')
+    if main_area_ids:
+        qs = qs.filter(parent_id__in=main_area_ids)
+    if q:
+        qs = filter_by_arabic_search(qs, ['name', 'name_en', 'code', 'parent__name'], q)
+    results = [
+        {'id': b.id, 'name': b.name, 'parent_id': b.parent_id, 'parent_name': b.parent.name if b.parent else ''}
+        for b in qs.select_related('parent')[:60]
+    ]
+    return JsonResponse({'results': results})
+
+
 @login_required
 def home_view(request):
     """
-    Role-Based Executive Home Dashboard with Backend Permission Enforcement:
-    - Superadmin: System-wide metrics, sales, collections, inventory, visits, and all charts.
-    - Manager: Team-scoped metrics for representatives in their main area, plus ability to select an
-      eligible representative to view individual stats, with clear return-to-team option.
-    - Accountant: Financial statistics (sales, collections, customer/vendor balances, treasury/vaults).
-      Excludes field visits and visits chart.
-    - Representative: Individual operational metrics (own sales, collections, visits, warehouse inventory,
-      vault cash balance). Excludes cross-rep balance/debt comparison charts to protect peer privacy.
+    Unified Permission-Controlled & Data-Scope-Aware Home Dashboard:
+    - Single unified layout across roles; every KPI card, chart, and table is strictly
+      gated by backend module permissions and ScopeResolutionService.
+    - Supports scoped Smart Area/Brick multi-select filters, Date Range, and Rep selector.
     """
     user = request.user
     UserModel = get_user_model()
     from accounts.scope_service import ScopeResolutionService
+    from accounts.permissions import is_accountant, is_manager_or_higher, has_perm_or_admin
+    from master_data.filter_utils import (
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
 
-    from accounts.permissions import is_accountant, is_manager_or_higher
-    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser or (user.role and getattr(user.role, 'is_super', False))
+    is_super = getattr(user, 'is_super_admin', False) or user.is_superuser
     user_act_scope = ScopeResolutionService.get_user_scope(user, 'activities', 'view')
     user_sales_scope = ScopeResolutionService.get_user_scope(user, 'sales', 'view')
     is_acct = not is_super and is_accountant(user)
     is_mgr = not is_super and not is_acct and (is_manager_or_higher(user) or user_act_scope in ['area', 'all'] or user_sales_scope in ['area', 'all'])
     is_rep = not is_super and not is_mgr and not is_acct
+
+    # Strict backend module permissions
+    can_view_sales = has_perm_or_admin(user, ['sales:orders/list', 'sales:orders/view'])
+    can_view_sales_returns = has_perm_or_admin(user, ['sales:returns/list', 'sales:returns/view'])
+    can_view_collections = has_perm_or_admin(user, ['sales:collections/list', 'sales:collections/view'])
+    can_view_customer_acc = has_perm_or_admin(user, ['sales:customers/accounting', 'sales:customers/accounts'])
+    can_view_purchases = has_perm_or_admin(user, ['purchases:orders/list', 'purchases:orders/view'])
+    can_view_treasury_payments = has_perm_or_admin(user, ['treasury:payments/list'])
+    can_view_treasury_vaults = has_perm_or_admin(user, ['treasury:vaults/view'])
+    can_view_treasury_vendors = has_perm_or_admin(user, ['treasury:vendors/accounting'])
+    can_view_contacts = has_perm_or_admin(user, ['contacts:contacts/list', 'contacts:contacts/view'])
+    can_view_inventory = has_perm_or_admin(user, ['inventory:stocks/view', 'inventory:warehouses/view'])
+    can_view_activities = has_perm_or_admin(user, ['activities:visits/list', 'activities:visits/view'])
 
     # Manager / Superadmin representative selection
     eligible_reps = []
@@ -186,6 +247,19 @@ def home_view(request):
                     selected_rep = None
                     messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
 
+    # Scoped Smart Area / Brick multi-select filters
+    filter_mod = _get_dashboard_filter_module(user)
+    filter_scope = ScopeResolutionService.get_user_scope(user, filter_mod, 'view')
+    can_filter_area_brick = is_super or filter_scope in ('brick', 'area', 'all')
+    if can_filter_area_brick:
+        main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+            request, filter_mod,
+            area_params=('main_area', 'area_id', 'governorate'),
+            brick_params=('brick', 'subarea'),
+        )
+    else:
+        main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = [], [], [], []
+
     from master_data.date_filter_utils import resolve_date_range
     start_date, end_date, active_preset, start_date_str, end_date_str = resolve_date_range(
         request, default_preset='this_month'
@@ -199,25 +273,88 @@ def home_view(request):
     else:
         display_range = "كل الوقت"
 
-    # Querysets strictly filtered by authorized scope and selected rep (if any)
+    # Querysets strictly gated by BOTH module permissions and data scope
+    so_qs = (
+        get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user, 'salesorder')
+        if can_view_sales else SalesOrder.objects.none()
+    )
+    ro_qs = (
+        get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), user, 'salesreturnorder')
+        if can_view_sales_returns else SalesReturnOrder.objects.none()
+    )
+    col_qs = (
+        get_scoped_queryset(Collection.objects.all(), user, 'collection')
+        if can_view_collections else Collection.objects.none()
+    )
+    vis_qs = (
+        get_scoped_queryset(Visit.objects.all(), user, 'visit')
+        if can_view_activities else Visit.objects.none()
+    )
+    cont_qs = (
+        get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
+        if can_view_contacts else Contact.objects.none()
+    )
+    all_contacts_scoped = (
+        get_scoped_queryset(Contact.objects.all(), user, 'contact')
+        if can_view_contacts else Contact.objects.none()
+    )
+    cust_acc_qs = (
+        get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')
+        if can_view_customer_acc else CustomerAccount.objects.none()
+    )
+    po_qs = (
+        get_scoped_queryset(PurchaseOrder.objects.all(), user, 'purchaseorder')
+        if can_view_purchases else PurchaseOrder.objects.none()
+    )
+    vendor_payments_qs = (
+        get_scoped_queryset(VendorPayment.objects.all(), user, 'vendorpayment')
+        if can_view_treasury_payments else VendorPayment.objects.none()
+    )
+
     if selected_rep:
-        so_qs = SalesOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
-        ro_qs = SalesReturnOrder.objects.exclude(status='cancelled').filter(created_by=selected_rep)
-        col_qs = Collection.objects.filter(created_by=selected_rep)
-        vis_qs = Visit.objects.filter(Q(owner=selected_rep) | Q(created_by=selected_rep))
-        cont_qs = Contact.objects.filter(is_customer=True).filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep))
-        cust_acc_qs = CustomerAccount.objects.filter(customer__in=cont_qs)
-        po_qs = PurchaseOrder.objects.filter(created_by=selected_rep)
-        vendor_payments_qs = VendorPayment.objects.filter(created_by=selected_rep)
-    else:
-        so_qs = get_scoped_queryset(SalesOrder.objects.exclude(status='cancelled'), user, 'salesorder')
-        ro_qs = get_scoped_queryset(SalesReturnOrder.objects.exclude(status='cancelled'), user, 'salesreturnorder')
-        col_qs = get_scoped_queryset(Collection.objects.all(), user, 'collection')
-        vis_qs = get_scoped_queryset(Visit.objects.all(), user, 'visit') if has_perm_or_admin(user, 'activities:visits/list') else Visit.objects.none()
-        cont_qs = get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
-        cust_acc_qs = get_scoped_queryset(CustomerAccount.objects.all(), user, 'customeraccount')
-        po_qs = get_scoped_queryset(PurchaseOrder.objects.all(), user, 'purchaseorder')
-        vendor_payments_qs = get_scoped_queryset(VendorPayment.objects.all(), user, 'vendorpayment')
+        if can_view_sales:
+            so_qs = so_qs.filter(created_by=selected_rep)
+        if can_view_sales_returns:
+            ro_qs = ro_qs.filter(created_by=selected_rep)
+        if can_view_collections:
+            col_qs = col_qs.filter(created_by=selected_rep)
+        if can_view_activities:
+            vis_qs = vis_qs.filter(Q(owner=selected_rep) | Q(created_by=selected_rep))
+        if can_view_contacts:
+            cont_qs = cont_qs.filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep)).distinct()
+            all_contacts_scoped = all_contacts_scoped.filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep)).distinct()
+        if can_view_customer_acc:
+            cust_acc_qs = cust_acc_qs.filter(
+                Q(customer__created_by=selected_rep)
+                | Q(customer__assigned_team=selected_rep)
+                | Q(customer__sales_orders__created_by=selected_rep)
+            ).distinct()
+        if can_view_purchases:
+            po_qs = po_qs.filter(created_by=selected_rep)
+        if can_view_treasury_payments:
+            vendor_payments_qs = vendor_payments_qs.filter(created_by=selected_rep)
+
+    # Apply validated Area & Brick filters
+    if main_area_ids:
+        so_qs = so_qs.filter(build_contact_area_q(main_area_ids, prefix='customer'))
+        ro_qs = ro_qs.filter(build_contact_area_q(main_area_ids, prefix='customer'))
+        col_qs = col_qs.filter(build_contact_area_q(main_area_ids, prefix='customer'))
+        vis_qs = vis_qs.filter(build_contact_area_q(main_area_ids, prefix='contact'))
+        cont_qs = cont_qs.filter(build_contact_area_q(main_area_ids, prefix=''))
+        all_contacts_scoped = all_contacts_scoped.filter(build_contact_area_q(main_area_ids, prefix=''))
+        cust_acc_qs = cust_acc_qs.filter(build_contact_area_q(main_area_ids, prefix='customer'))
+        po_qs = po_qs.filter(build_contact_area_q(main_area_ids, prefix='supplier'))
+        vendor_payments_qs = vendor_payments_qs.filter(build_contact_area_q(main_area_ids, prefix='supplier'))
+    if brick_ids:
+        so_qs = so_qs.filter(build_contact_brick_q(brick_ids, prefix='customer'))
+        ro_qs = ro_qs.filter(build_contact_brick_q(brick_ids, prefix='customer'))
+        col_qs = col_qs.filter(build_contact_brick_q(brick_ids, prefix='customer'))
+        vis_qs = vis_qs.filter(build_contact_brick_q(brick_ids, prefix='contact'))
+        cont_qs = cont_qs.filter(build_contact_brick_q(brick_ids, prefix=''))
+        all_contacts_scoped = all_contacts_scoped.filter(build_contact_brick_q(brick_ids, prefix=''))
+        cust_acc_qs = cust_acc_qs.filter(build_contact_brick_q(brick_ids, prefix='customer'))
+        po_qs = po_qs.filter(build_contact_brick_q(brick_ids, prefix='supplier'))
+        vendor_payments_qs = vendor_payments_qs.filter(build_contact_brick_q(brick_ids, prefix='supplier'))
 
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
@@ -230,140 +367,144 @@ def home_view(request):
     else:
         po_period_qs = po_qs
 
-    so_created = so_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
-    so_deliv = so_qs.filter(status='delivered').aggregate(total=Sum('grand_total'), count=Count('id'))
-    so_proc = so_qs.filter(status__in=['pending', 'preparing', 'manager_approval', 'invoiced']).aggregate(total=Sum('grand_total'), count=Count('id'))
+    # Unified Permission-Driven KPI Cards
+    kpi_cards = []
 
-    ro_created = ro_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
-    ro_acc = ro_qs.filter(status__in=['settled', 'accepted']).aggregate(total=Sum('grand_total'), count=Count('id'))
-
-    net_sales = (so_deliv['total'] or Decimal('0.00')) - (ro_acc['total'] or Decimal('0.00'))
-    if net_sales < Decimal('0.00'):
-        net_sales = Decimal('0.00')
-
-    colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
-    cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
-
-    cust_acc = cust_acc_qs.aggregate(
-        total_balance=Sum('current_balance'),
-        accounts_count=Count('id', filter=Q(current_balance__gt=0)),
-        total_overdue=Sum('overdue_balance'),
-        avg_dso=Avg('credit_period_days')
-    )
-
-    new_customers_count = cont_qs.count()
-
-    # Purchase calculations
-    po_active = po_period_qs.exclude(status='cancelled')
-    po_created = po_active.aggregate(total=Sum('grand_total'), count=Count('id'))
-    po_settled = po_period_qs.filter(status='settled').aggregate(total=Sum('grand_total'), count=Count('id'))
-    vendor_paid_agg = vendor_payments_qs.aggregate(total=Sum('amount'), count=Count('id'))
-    total_vendor_paid = vendor_paid_agg['total'] or Decimal('0.00')
-    po_outstanding = sum((p.outstanding_balance for p in po_active), Decimal('0.00'))
-    po_overdue_count = sum(1 for p in po_active if p.is_overdue)
-
-    # Scoped Contact classification metrics
-    all_contacts_scoped = get_scoped_queryset(Contact.objects.all(), user, 'contact')
-    customers_count = all_contacts_scoped.filter(is_customer=True).count()
-    leads_count = all_contacts_scoped.filter(status='lead').count()
-    if leads_count == 0:
-        leads_count = customers_count
-
-    # Recent orders for dashboard table
-    recent_sales = so_qs.select_related('customer').order_by('-order_date', '-id')[:5]
-    recent_purchases = po_qs.select_related('supplier').order_by('-order_date', '-id')[:5]
-
-    # Build Role-Appropriate KPI Cards
-    if is_acct:
-        scoped_vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), user, 'vault')
-        vaults_total = scoped_vaults.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
-        scoped_vendors = get_scoped_queryset(VendorAccount.objects.all(), user, 'vendoraccount')
-        vendors_total = scoped_vendors.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
-        kpi_cards = [
+    if can_view_sales:
+        so_created = so_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_deliv = so_qs.filter(status='delivered').aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_proc = so_qs.filter(status__in=['pending', 'preparing', 'manager_approval', 'invoiced']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        kpi_cards.extend([
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
             {'id': 'pos_pipeline_stats', 'title': 'الطلبات تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
-            {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
-            {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
-            {'id': 'po_total_stats', 'title': 'إجمالي المشتريات', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"},
-            {'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"},
-            {'id': 'po_outstanding_stats', 'title': 'مستحقات أوامر الشراء', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'},
+        ])
+    else:
+        so_deliv = {'total': Decimal('0.00'), 'count': 0}
+
+    if can_view_sales_returns:
+        ro_created = ro_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+        ro_acc = ro_qs.filter(status__in=['settled', 'accepted']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        if is_rep:
+            kpi_cards.extend([
+                {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
+                {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
+            ])
+    else:
+        ro_acc = {'total': Decimal('0.00'), 'count': 0}
+
+    if can_view_sales:
+        net_sales = max(Decimal('0.00'), (so_deliv['total'] or Decimal('0.00')) - (ro_acc['total'] or Decimal('0.00')))
+        kpi_cards.append({'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''})
+
+    if can_view_collections:
+        colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
+        kpi_cards.append({'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"})
+        if is_rep:
+            cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
+            kpi_cards.append({'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"})
+
+    if can_view_purchases:
+        po_active = PurchaseOrder.with_payment_totals(po_period_qs.exclude(status='cancelled'))
+        po_created = po_active.aggregate(total=Sum('grand_total'), count=Count('id'))
+        po_active_list = list(po_active)
+        po_outstanding = sum((p.outstanding_balance for p in po_active_list), Decimal('0.00'))
+        po_overdue_count = sum(1 for p in po_active_list if p.is_overdue)
+        kpi_cards.append({'id': 'po_total_stats', 'title': 'إجمالي المشتريات', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"})
+        if can_view_treasury_payments:
+            vendor_paid_agg = vendor_payments_qs.aggregate(total=Sum('amount'), count=Count('id'))
+            total_vendor_paid = vendor_paid_agg['total'] or Decimal('0.00')
+            kpi_cards.append({'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"})
+        kpi_cards.append({'id': 'po_outstanding_stats', 'title': 'مستحقات أوامر الشراء', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'})
+
+    if can_view_contacts:
+        new_customers_count = cont_qs.count()
+        customers_count = all_contacts_scoped.filter(is_customer=True).count()
+        leads_count = all_contacts_scoped.filter(status='lead').count() or customers_count
+        kpi_cards.extend([
+            {'id': 'customers_count_stats', 'title': 'العملاء المعتمدين', 'amount': f"{customers_count}", 'subtitle': 'حساب نشط'},
+            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد بالفترة', 'amount': f"{new_customers_count}", 'subtitle': ''},
+        ])
+        if not is_rep:
+            kpi_cards.append({'id': 'leads_count_stats', 'title': 'العملاء المحتملين (Leads)', 'amount': f"{leads_count}", 'subtitle': 'قيد المتابعة'})
+
+    if can_view_customer_acc:
+        cust_acc = cust_acc_qs.aggregate(
+            total_balance=Sum('current_balance'),
+            accounts_count=Count('id', filter=Q(current_balance__gt=0)),
+            total_overdue=Sum('overdue_balance'),
+        )
+        kpi_cards.extend([
             {'id': 'acc_stats_balance', 'title': 'إجمالي رصيد العملاء', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
             {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
-            {'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{scoped_vaults.count()} خزنة وحساب"},
-            {'id': 'vendors_total_stats', 'title': 'إجمالي مستحقات الموردين', 'amount': _format_metric_amount(vendors_total), 'subtitle': f"{scoped_vendors.count()} مورد"},
-        ]
-    elif is_rep:
-        rep_vault = Vault.objects.filter(assigned_user=user).first()
-        rep_vault_bal = rep_vault.current_balance if rep_vault else Decimal('0.00')
-        rep_wh = Warehouse.objects.filter(assigned_user=user).first()
-        rep_stock_qty = InventoryStock.objects.filter(warehouse=rep_wh).aggregate(total=Sum('qty_on_hand'))['total'] or Decimal('0.00') if rep_wh else Decimal('0.00')
+        ])
 
+    if can_view_treasury_vaults:
+        scoped_vaults = get_scoped_queryset(Vault.objects.filter(is_active=True), user, 'vault')
+        if main_area_ids:
+            scoped_vaults = scoped_vaults.filter(Q(area_id__in=main_area_ids) | Q(area__parent_id__in=main_area_ids))
+        if brick_ids:
+            scoped_vaults = scoped_vaults.filter(area_id__in=brick_ids)
+        vaults_total = scoped_vaults.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        kpi_cards.append({'id': 'vaults_total_stats', 'title': 'إجمالي أرصدة الخزن', 'amount': _format_metric_amount(vaults_total), 'subtitle': f"{scoped_vaults.count()} خزنة وحساب"})
+
+    if can_view_treasury_vendors:
+        scoped_vendors = get_scoped_queryset(VendorAccount.objects.all(), user, 'vendoraccount')
+        if main_area_ids:
+            scoped_vendors = scoped_vendors.filter(build_contact_area_q(main_area_ids, prefix='supplier'))
+        if brick_ids:
+            scoped_vendors = scoped_vendors.filter(build_contact_brick_q(brick_ids, prefix='supplier'))
+        vendors_total = scoped_vendors.aggregate(total=Sum('current_balance'))['total'] or Decimal('0.00')
+        kpi_cards.append({'id': 'vendors_total_stats', 'title': 'إجمالي مستحقات الموردين', 'amount': _format_metric_amount(vendors_total), 'subtitle': f"{scoped_vendors.count()} مورد"})
+
+    if can_view_inventory:
+        scoped_whs = get_scoped_queryset(Warehouse.objects.filter(is_active=True), user, 'warehouse')
+        if selected_rep:
+            scoped_whs = scoped_whs.filter(assigned_user=selected_rep)
+        rep_stock_qty = InventoryStock.objects.filter(warehouse__in=scoped_whs).aggregate(total=Sum('qty_on_hand'))['total'] or Decimal('0.00')
+        kpi_cards.append({'id': 'rep_stock_stats', 'title': 'كمية المخزون المتاح', 'amount': f"{rep_stock_qty:,.0f} قطعة", 'subtitle': f"{scoped_whs.count()} مخزن"})
+
+    if can_view_activities:
         visits_lead_count = vis_qs.filter(contact__status='lead').count()
         visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
         if visits_lead_count == 0 and visits_cust_count == 0:
             visits_cust_count = vis_qs.count()
-
-        kpi_cards = [
-            {'id': 'pos_created_stats', 'title': 'طلباتي المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
-            {'id': 'pos_delivered_stats', 'title': 'طلباتي المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
-            {'id': 'pos_pipeline_stats', 'title': 'طلباتي تحت التشغيل', 'amount': _format_metric_amount(so_proc['total']), 'subtitle': f"{so_proc['count']} طلب"},
-            {'id': 'ros_created_stats', 'title': 'مرتجعاتي المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
-            {'id': 'ros_picked_stats', 'title': 'مرتجعاتي المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
-            {'id': 'net_sales_stats', 'title': 'صافي مبيعاتي', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
-            {'id': 'collections_collected_stats', 'title': 'تحصيلاتي المكتملة', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
-            {'id': 'collections_waiting_collection_stats', 'title': 'شيكاتي تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"},
-            {'id': 'rep_vault_stats', 'title': 'رصيد عهدتي النقدية', 'amount': _format_metric_amount(rep_vault_bal), 'subtitle': rep_vault.name if rep_vault else 'لا توجد خزنة معينة'},
-            {'id': 'rep_stock_stats', 'title': 'كمية المخزون بعهدتي', 'amount': f"{rep_stock_qty:,.0f} قطعة", 'subtitle': rep_wh.name if rep_wh else 'لا يوجد مخزن معين'},
+        kpi_cards.extend([
             {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
             {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
-        ]
-    else:
-        # Superadmin / Manager
-        visits_lead_count = vis_qs.filter(contact__status='lead').count()
-        visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
-        if visits_lead_count == 0 and visits_cust_count == 0:
-            visits_cust_count = vis_qs.count()
+        ])
 
-        kpi_cards = [
-            {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
-            {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
-            {'id': 'net_sales_stats', 'title': 'صافي المبيعات', 'amount': _format_metric_amount(net_sales), 'subtitle': ''},
-            {'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"},
-            {'id': 'po_total_stats', 'title': 'أوامر الشراء', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"},
-            {'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"},
-            {'id': 'po_outstanding_stats', 'title': 'مستحقات الشراء المتبقية', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'},
-            {'id': 'leads_count_stats', 'title': 'العملاء المحتملين (Leads)', 'amount': f"{leads_count}", 'subtitle': 'قيد المتابعة'},
-            {'id': 'customers_count_stats', 'title': 'العملاء المعتمدين', 'amount': f"{customers_count}", 'subtitle': 'حساب نشط'},
-            {'id': 'acc_stats_balance', 'title': 'إجمالي الرصيد', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
-            {'id': 'acc_stats_overdue', 'title': 'إجمالي المديونية المتأخرة', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
-            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد بالفترة', 'amount': f"{new_customers_count}", 'subtitle': ''},
-            {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
-            {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
-        ]
+    # Recent orders strictly gated by permission & annotated to avoid N+1
+    recent_sales = (
+        so_qs.select_related('customer').order_by('-order_date', '-id')[:5]
+        if can_view_sales else SalesOrder.objects.none()
+    )
+    recent_purchases = (
+        PurchaseOrder.with_payment_totals(po_qs.select_related('supplier').order_by('-order_date', '-id'))[:5]
+        if can_view_purchases else PurchaseOrder.objects.none()
+    )
 
-    # Build Role-Appropriate Charts
+    # Build Permission-Controlled Charts (zero data computed or serialized for hidden charts)
     charts_dict = {}
     available_chart_keys = []
 
-    charts_dict['collections_by_area'] = _build_area_sunburst(col_qs, amount_field='amount')
-    available_chart_keys.append('collections_by_area')
+    if can_view_collections:
+        charts_dict['collections_by_area'] = _build_area_sunburst(col_qs, amount_field='amount')
+        available_chart_keys.append('collections_by_area')
 
-    if not is_acct:
+    if can_view_activities:
         charts_dict['visits_by_area'] = _build_visits_sunburst(vis_qs)
         available_chart_keys.append('visits_by_area')
 
-    charts_dict['orders_created_by_area'] = _build_area_sunburst(so_qs, amount_field='grand_total')
-    available_chart_keys.append('orders_created_by_area')
+    if can_view_sales:
+        charts_dict['orders_created_by_area'] = _build_area_sunburst(so_qs, amount_field='grand_total')
+        available_chart_keys.append('orders_created_by_area')
+        charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
+        available_chart_keys.append('orders_delivered_by_area')
 
-    charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
-    available_chart_keys.append('orders_delivered_by_area')
-
-    if not is_rep:
-        reps_bal_chart = _build_reps_sunburst('current_balance', user=user if not is_super else None)
-        reps_ovd_chart = _build_reps_sunburst('overdue_balance', user=user if not is_super else None)
-        charts_dict['reps_balance'] = reps_bal_chart
-        charts_dict['reps_overdue'] = reps_ovd_chart
+    if can_view_customer_acc and not is_rep:
+        charts_dict['reps_balance'] = _build_reps_sunburst('current_balance', base_qs=cust_acc_qs)
+        charts_dict['reps_overdue'] = _build_reps_sunburst('overdue_balance', base_qs=cust_acc_qs)
         available_chart_keys.extend(['reps_balance', 'reps_overdue'])
 
     charts_json = json.dumps(charts_dict, ensure_ascii=False)
@@ -380,6 +521,14 @@ def home_view(request):
         'is_mgr': is_mgr,
         'is_acct': is_acct,
         'is_rep': is_rep,
+        'can_view_sales': can_view_sales,
+        'can_view_purchases': can_view_purchases,
+        'can_view_collections': can_view_collections,
+        'can_view_activities': can_view_activities,
+        'can_view_customer_acc': can_view_customer_acc,
+        'can_filter_area_brick': can_filter_area_brick,
+        'selected_main_areas': selected_main_areas_chips,
+        'selected_bricks': selected_bricks_chips,
         'eligible_reps': eligible_reps,
         'selected_rep': selected_rep,
         'recent_sales': recent_sales,
@@ -395,15 +544,20 @@ def home_view(request):
 @login_required
 @require_permission('settings:branding/edit')
 def branding_settings_view(request):
+    from django.core.exceptions import ValidationError
     profile = SettingsService.get_company_profile()
     if request.method == 'POST':
-        profile = SettingsService.update_company_profile(
-            user=request.user,
-            data=request.POST,
-            files=request.FILES,
-            request=request
-        )
-        messages.success(request, "تم حفظ إعدادات بيانات الشركة بنجاح.")
+        try:
+            profile = SettingsService.update_company_profile(
+                user=request.user,
+                data=request.POST,
+                files=request.FILES,
+                request=request
+            )
+            messages.success(request, "تم حفظ إعدادات بيانات الشركة بنجاح.")
+        except ValidationError as e:
+            msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+            messages.error(request, msg)
         return redirect('branding_settings')
 
     return render(request, 'settings/branding_settings.html', {'profile': profile})
@@ -1166,6 +1320,21 @@ def geocoding_reverse_api(request):
     lng = request.GET.get('lng') or request.GET.get('lon')
     if not lat or not lng:
         return JsonResponse({'error': 'Missing coordinates', 'display_name': ''}, status=400)
+    try:
+        lat_f = float(lat)
+        lng_f = float(lng)
+        if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
+            return JsonResponse({'error': 'Coordinates out of range', 'display_name': ''}, status=400)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Invalid coordinates', 'display_name': ''}, status=400)
+
+    from django.core.cache import cache
+    cache_key = f"rev_geo:{round(lat_f, 4)}:{round(lng_f, 4)}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+    lat = str(lat_f)
+    lng = str(lng_f)
 
     from django.conf import settings
     google_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', '').strip()

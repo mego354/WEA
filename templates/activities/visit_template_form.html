@@ -440,6 +440,7 @@
                     <select id="modal_question_type" name="question_type" onchange="onQuestionTypeChanged(this.value)" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
                         <option value="single_choice">اختيار واحد من متعدد (Single Choice)</option>
                         <option value="multiple_choice">اختيار متعدد (Multiple Choice)</option>
+                        <option value="suggested_products">المنتجات المقترحة (Suggested Products)</option>
                         <option value="text">نص قصير (Text)</option>
                         <option value="textarea">نص طويل (Textarea)</option>
                         <option value="number">رقم (Number)</option>
@@ -492,6 +493,12 @@
                 </div>
             </div>
 
+            <!-- Suggested Products Hint -->
+            <div id="suggestedProductsHint" class="hidden p-3 rounded-xl bg-teal-50/70 border border-teal-200 text-xs text-teal-900 flex items-center gap-2">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">inventory_2</span>
+                <span>يعرض هذا السؤال المنتجات المقترحة المحددة في إعدادات القالب (أو كافة المنتجات الصالحة للبيع إن لم تُحدد).</span>
+            </div>
+
             <!-- Choices Builder (for single_choice & multiple_choice) -->
             <div id="choicesBox" class="space-y-2 pt-2 border-t border-slate-100">
                 <div class="flex items-center justify-between">
@@ -534,6 +541,11 @@ function toggleAccordion(id) {
 
 function onQuestionTypeChanged(type) {
     const choicesBox = document.getElementById('choicesBox');
+    const spHint = document.getElementById('suggestedProductsHint');
+    if (spHint) {
+        if (type === 'suggested_products') spHint.classList.remove('hidden');
+        else spHint.classList.add('hidden');
+    }
     if (type === 'single_choice' || type === 'multiple_choice') {
         choicesBox.classList.remove('hidden');
         const container = document.getElementById('choicesList');

@@ -196,6 +196,7 @@
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' },
                     signal: areaAbortController.signal,
                 });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
                 const results = data.results || [];
                 areaCache.set(cacheKey, results);

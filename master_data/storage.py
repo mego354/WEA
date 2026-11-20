@@ -43,7 +43,11 @@ class CloudflareR2Storage(Storage):
         return self._client
 
     def _normalize_name(self, name):
-        return str(name or '').lstrip('/').replace('\\', '/')
+        cleaned = str(name or '').lstrip('/').replace('\\', '/')
+        parts = [p for p in cleaned.split('/') if p]
+        if any(p == '..' for p in parts):
+            raise ValueError("Invalid storage key containing path traversal segment.")
+        return '/'.join(parts)
 
     def _open(self, name, mode='rb'):
         key = self._normalize_name(name)
@@ -90,9 +94,9 @@ class CloudflareR2Storage(Storage):
         resp = self.client.head_object(Bucket=self.bucket_name, Key=key)
         return int(resp.get('ContentLength', 0))
 
-    def url(self, name, expires_in=300):
+    def url(self, name, expires_in=300, force_presigned=False):
         key = self._normalize_name(name)
-        if self.custom_domain:
+        if self.custom_domain and not force_presigned:
             base = self.custom_domain if self.custom_domain.startswith(('http://', 'https://')) else f'https://{self.custom_domain}'
             return urljoin(f'{base}/', key)
         return self.client.generate_presigned_url(

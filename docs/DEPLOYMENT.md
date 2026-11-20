@@ -19,10 +19,11 @@ The application reads configuration from environment variables with safe develop
 
 | Variable | Development Default | Production Requirement | Description |
 |---|---|---|---|
-| `DJANGO_SECRET_KEY` | Insecure fallback key | **Mandatory** random 50+ char secret | Cryptographic signing key. |
-| `DEBUG` | `True` | `False` | Disables debug stack traces in production. |
-| `ALLOWED_HOSTS` | `*` | Specific hostnames (e.g. `erp.weapharma.com`) | Host header validation. |
-| `GOOGLE_MAPS_API_KEY` | None (falls back to Nominatim) | Valid Google Maps API key | Geocoding and map tile services. |
+| `DJANGO_SECRET_KEY` | Insecure fallback key (dev only) | **Mandatory** random 50+ char secret (startup fails if default when `DEBUG=False`) | Cryptographic signing key. |
+| `DEBUG` | `True` | `False` | Disables debug stack traces and enables secure cookies/HSTS. |
+| `ALLOWED_HOSTS` | `*` (when `DEBUG=True`) | Comma-separated hostnames (e.g. `erp.weapharma.com`) | Host header validation. |
+| `CSRF_TRUSTED_ORIGINS` | None | Comma-separated origins (e.g. `https://erp.weapharma.com`) | Trusted origins for CSRF over HTTPS. |
+| `GOOGLE_MAPS_API_KEY` | None (falls back to Nominatim) | Valid Google Maps API key | Geocoding and map tile services (authenticated users only). |
 
 ---
 
@@ -47,15 +48,12 @@ python manage.py migrate
 python manage.py setup_permissions
 python manage.py migrate_to_canonical_roles
 python manage.py setup_egypt_areas
+python manage.py seed_activities
 
-# 6. Seed initial demonstration data (optional)
-python seed_initial_data.py
-python seed_test_users.py
-
-# 7. Collect static files
+# 6. Collect static files
 python manage.py collectstatic --noinput
 
-# 8. Start development server
+# 7. Start development server
 python manage.py runserver 0.0.0.0:8000
 ```
 

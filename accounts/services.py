@@ -246,22 +246,24 @@ class AuditLogService:
             cleaned_prev = redact_sensitive_data(previous_values) if previous_values else None
             cleaned_new = redact_sensitive_data(new_values) if new_values else None
 
-            log_entry = SecurityAuditLog.objects.create(
-                actor=actor_val,
-                module=module,
-                action_type=action_val,
-                record_id=str(record_id_val) if record_id_val is not None else '',
-                record_name=str(record_name_val) if record_name_val else '',
-                target_user=target_user,
-                target_role=target_role,
-                description=description_val or f"[{module}] {action_val} {record_name_val or record_id_val or ''}".strip(),
-                previous_values=cleaned_prev,
-                new_values=cleaned_new,
-                status=status,
-                reason=reason or '',
-                ip_address=ip_val,
-                user_agent=ua_val or '',
-            )
+            from django.db import transaction
+            with transaction.atomic():
+                log_entry = SecurityAuditLog.objects.create(
+                    actor=actor_val,
+                    module=module,
+                    action_type=action_val,
+                    record_id=str(record_id_val) if record_id_val is not None else '',
+                    record_name=str(record_name_val) if record_name_val else '',
+                    target_user=target_user,
+                    target_role=target_role,
+                    description=description_val or f"[{module}] {action_val} {record_name_val or record_id_val or ''}".strip(),
+                    previous_values=cleaned_prev,
+                    new_values=cleaned_new,
+                    status=status,
+                    reason=reason or '',
+                    ip_address=ip_val,
+                    user_agent=ua_val or '',
+                )
             return log_entry
         except Exception as e:
             logger.error(f"Failed to record audit log: {e}", exc_info=True)

@@ -3,11 +3,22 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-enterprise-erp-secret-key-wea-pharma-2026'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-enterprise-erp-secret-key-wea-pharma-2026')
 
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').strip().lower() in ('1', 'true', 'yes', 'on')
 
-ALLOWED_HOSTS = ['*']
+_allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '').strip()
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['*'] if DEBUG else ['localhost', '127.0.0.1']
+
+_csrf_trusted_env = os.getenv('CSRF_TRUSTED_ORIGINS', '').strip()
+if _csrf_trusted_env:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted_env.split(',') if o.strip()]
+
+if not DEBUG and SECRET_KEY.startswith('django-insecure-'):
+    raise RuntimeError("DJANGO_SECRET_KEY must be set to a secure value when DEBUG is False.")
 
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
@@ -127,6 +138,18 @@ LOGOUT_REDIRECT_URL = '/auth/login/'
 
 # Security & Referrer Policy (required so OpenStreetMap/tile providers receive Referer on desktop browsers)
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # Read by AJAX fetch() helpers when needed
+X_FRAME_OPTIONS = 'DENY'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True').strip().lower() in ('1', 'true', 'yes', 'on')
+    CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True').strip().lower() in ('1', 'true', 'yes', 'on')
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').strip().lower() in ('1', 'true', 'yes', 'on')
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Google Maps & Geolocation Integration
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
