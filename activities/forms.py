@@ -29,9 +29,21 @@ class AgreementForm(forms.ModelForm):
             from accounts.permissions import get_scoped_queryset
             base_qs = Contact.objects.filter(is_customer=True).exclude(status='inactive')
             scoped_qs = get_scoped_queryset(base_qs, user, 'contact')
-            if self.instance and self.instance.pk and self.instance.customer_id:
-                scoped_qs = Contact.objects.filter(Q(pk__in=scoped_qs.values_list('pk', flat=True)) | Q(pk=self.instance.customer_id))
-            self.fields['customer'].queryset = scoped_qs.order_by('name')
+            selected_cust_id = (
+                (self.data.get('customer') if self.data else None)
+                or self.initial.get('customer')
+                or (self.instance.customer_id if (self.instance and self.instance.pk) else None)
+            )
+            bounded_pks = list(scoped_qs.values_list('pk', flat=True)[:100])
+            if selected_cust_id:
+                try:
+                    target_pk = int(selected_cust_id)
+                except (ValueError, TypeError):
+                    target_pk = None
+                if target_pk and target_pk not in bounded_pks:
+                    if scoped_qs.filter(pk=target_pk).exists():
+                        bounded_pks.append(target_pk)
+            self.fields['customer'].queryset = Contact.objects.filter(pk__in=bounded_pks).select_related('area', 'brick').order_by('name')
         else:
             self.fields['customer'].queryset = Contact.objects.none()
 
@@ -70,6 +82,26 @@ class PlannedVisitItemForm(forms.ModelForm):
 from django.db.models import Q
 
 
+class CustomerSelectWidget(forms.Select):
+    """Custom select widget that enriches customer options with subtext and search metadata."""
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        opt = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, 'instance'):
+            c = value.instance
+            area_name = c.area.name if getattr(c, 'area', None) else ''
+            brick_name = c.brick.name if getattr(c, 'brick', None) else ''
+            geo = f"{area_name} - {brick_name}" if (area_name and brick_name and area_name != brick_name) else (brick_name or area_name)
+            parts = [f"#{c.serial_num}"] if getattr(c, 'serial_num', None) else []
+            if geo:
+                parts.append(geo)
+            acc = getattr(c, 'account_type', None) or getattr(c, 'customer_category', None)
+            if acc:
+                parts.append(str(acc))
+            opt['attrs']['data-subtext'] = " | ".join(parts)
+            opt['attrs']['data-search'] = f"{c.serial_num or ''} {c.code or ''} {c.mobile or ''} {geo} {c.specialty or ''}".strip()
+        return opt
+
+
 class CustomerModelChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         return obj.name
@@ -78,7 +110,7 @@ class CustomerModelChoiceField(forms.ModelChoiceField):
 class VisitForm(forms.ModelForm):
     contact = CustomerModelChoiceField(
         queryset=Contact.objects.none(),
-        widget=forms.Select(attrs={
+        widget=CustomerSelectWidget(attrs={
             'id': 'visit-contact-select',
             'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]',
             'data-smart-select': 'true',
@@ -97,7 +129,6 @@ class VisitForm(forms.ModelForm):
         model = Visit
         fields = ['contact', 'template', 'owner', 'date', 'is_successful', 'doubled', 'latitude', 'longitude', 'device_accuracy']
         widgets = {
-            'contact': forms.Select(attrs={'id': 'visit-contact-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'template': forms.Select(attrs={'id': 'visit-template-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'onchange': 'onTemplateSelected(this.value)'}),
             'owner': forms.Select(attrs={'id': 'visit-owner-select', 'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]'}),
             'date': forms.DateInput(attrs={'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]', 'type': 'date'}),
@@ -113,6 +144,13 @@ class VisitForm(forms.ModelForm):
         from django.contrib.auth import get_user_model
         UserModel = get_user_model()
 
+        # Determine currently targeted contact (from POST submission, initial data, or instance on edit)
+        selected_contact_id = (
+            (self.data.get('contact') if self.data else None)
+            or self.initial.get('contact')
+            or (self.instance.contact_id if (self.instance and self.instance.pk) else None)
+        )
+
         if user:
             from accounts.permissions import (
                 is_manager_or_higher,
@@ -124,10 +162,6 @@ class VisitForm(forms.ModelForm):
 
             # Strictly scope available contacts to user's permitted geographical scope (Superadmin -> all, Manager -> Main Area, Rep -> Brick)
             scoped_qs = get_visit_eligible_contacts_queryset(base_qs, user)
-            if self.instance and self.instance.pk and self.instance.contact_id:
-                scoped_ids = list(scoped_qs.values_list('pk', flat=True))
-                scoped_qs = Contact.objects.filter(pk__in=scoped_ids + [self.instance.contact_id])
-            self.fields['contact'].queryset = scoped_qs.order_by('name')
 
             self.fields['owner'].required = False
             if not is_manager:
@@ -146,8 +180,26 @@ class VisitForm(forms.ModelForm):
                 self.fields['owner'].initial = self.instance.owner if (self.instance and self.instance.pk and self.instance.owner_id) else user
         else:
             self.is_manager = False
-            self.fields['contact'].queryset = base_qs.order_by('name')
+            scoped_qs = base_qs
             self.fields['owner'].required = False
+
+        # Paginate/bound contact options to top 100 + selected contact to eliminate route lag (matching sales/create/)
+        bounded_pks = list(scoped_qs.values_list('pk', flat=True)[:100])
+        if selected_contact_id:
+            try:
+                target_pk = int(selected_contact_id)
+            except (ValueError, TypeError):
+                target_pk = None
+            if target_pk and target_pk not in bounded_pks:
+                # Strictly verify target_pk is within user's permitted scope
+                if scoped_qs.filter(pk=target_pk).exists():
+                    bounded_pks.append(target_pk)
+
+        self.fields['contact'].queryset = (
+            Contact.objects.filter(pk__in=bounded_pks)
+            .select_related('area', 'brick')
+            .order_by('name')
+        )
 
         # Scope templates to active templates eligible for user's role
         templates_qs = VisitTemplate.objects.filter(active=True).prefetch_related('restricted_roles')

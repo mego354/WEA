@@ -1949,6 +1949,68 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         # Database code preserved internally
         self.assertEqual(found_item['code'], self.pharmacy_contact.code)
 
+    def test_visit_form_contact_pagination_and_performance(self):
+        """
+        Verify that VisitForm contact field is paginated / bounded to 100 choices
+        instead of evaluating the full contact database, rendering in lightweight HTML,
+        and dynamically including selected contacts while enforcing geographical scoping.
+        """
+        # Create extra contacts to ensure count > 100
+        from django.db.models import Max
+        max_s = (Contact.objects.aggregate(m=Max('serial_num'))['m'] or 0) + 1000
+        extra_contacts = [
+            Contact(
+                name=f"Bulk Contact {i}",
+                code=f"BLK{i:03d}",
+                serial_num=max_s + i + 1,
+                is_customer=True,
+                status='active',
+                area=self.main_area,
+                brick=self.sub_area,
+                created_by=self.superuser
+            ) for i in range(120)
+        ]
+        Contact.objects.bulk_create(extra_contacts)
+
+        # 1. GET unbound form: queryset bounded to 100
+        from .forms import VisitForm
+        form = VisitForm(user=self.superuser)
+        self.assertLessEqual(form.fields['contact'].queryset.count(), 100)
+        html = str(form['contact'])
+        self.assertIn('data-smart-select="true"', html)
+        self.assertIn('data-search-url="/contacts/api/search/"', html)
+        self.assertIn('data-subtext=', html)
+
+        # 2. Last bulk contact beyond the first 100 is dynamically loaded when targeted
+        last_contact = Contact.objects.filter(code='BLK119').first()
+        self.assertIsNotNone(last_contact)
+
+        # When targeted via initial
+        form_initial = VisitForm(initial={'contact': last_contact.pk}, user=self.superuser)
+        self.assertTrue(form_initial.fields['contact'].queryset.filter(pk=last_contact.pk).exists())
+
+        # When submitted via POST
+        form_post = VisitForm(data={'contact': last_contact.pk}, user=self.superuser)
+        self.assertTrue(form_post.fields['contact'].queryset.filter(pk=last_contact.pk).exists())
+
+        # 3. Scope isolation: Rep in sub_area cannot submit a contact located in another unassigned brick
+        from master_data.models import Area
+        outside_area = Area.objects.create(name='القاهرة الكبرى', code='CAI_OUT')
+        outside_brick = Area.objects.create(name='مدينة نصر', code='NASR_OUT', parent=outside_area)
+        outside_contact = Contact.objects.create(
+            name="Outside Rep Brick Contact",
+            code="OUT001",
+            is_customer=True,
+            status='active',
+            area=outside_area,
+            brick=outside_brick,
+            created_by=self.superuser
+        )
+        form_rep = VisitForm(data={'contact': outside_contact.pk}, user=self.rep_user)
+        self.assertFalse(form_rep.fields['contact'].queryset.filter(pk=outside_contact.pk).exists())
+        self.assertFalse(form_rep.is_valid())
+        self.assertIn('contact', form_rep.errors)
+
 
 import datetime
 from master_data.models import Area
