@@ -44,6 +44,22 @@
 
     <div id="testPushResultBox" class="hidden rounded-2xl border p-3.5 text-xs font-bold"></div>
 
+    <!-- Compact Mobile Push Registration Status Strip (Visible on Mobile App / Diagnostics) -->
+    <div id="mobilePushStatusBar" class="hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-2 min-w-0">
+            <span class="material-symbols-outlined text-lg text-brand-600 shrink-0">smartphone</span>
+            <div class="min-w-0">
+                <span id="mobilePushStatusTitle" class="font-bold text-slate-800 block">حالة ربط إشعارات الهاتف</span>
+                <span id="mobilePushStatusDetail" class="text-[11px] text-slate-500 block truncate">جاري الفحص...</span>
+            </div>
+        </div>
+        <button type="button" onclick="syncMobilePushDevice()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-xl text-[11px] font-bold transition-colors min-h-[36px]">
+            <span class="material-symbols-outlined text-sm">sync</span>
+            <span>مزامنة الجهاز</span>
+        </button>
+    </div>
+
     <!-- Filters Bar -->
     <div class="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-wrap items-center gap-2">
         <a href="{% url 'notifications_inbox' %}?{% if filter_module %}module={{ filter_module }}{% endif %}{% if filter_severity %}{% if filter_module %}&{% endif %}severity={{ filter_severity }}{% endif %}"
@@ -180,5 +196,47 @@ function sendInboxTestPush() {
         if (btn) btn.disabled = false;
     });
 }
+function renderMobilePushStatus() {
+    const bar = document.getElementById('mobilePushStatusBar');
+    const detail = document.getElementById('mobilePushStatusDetail');
+    if (!bar || !detail) return;
+    if (!window.AndroidPush && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+        return;
+    }
+    bar.classList.remove('hidden');
+    let parts = [];
+    if (window.AndroidPush && typeof window.AndroidPush.getDiagnosticsJson === 'function') {
+        try {
+            const d = JSON.parse(window.AndroidPush.getDiagnosticsJson() || '{}');
+            parts.push('الإذن: ' + (d.permissionStatus || '-'));
+            parts.push('الرمز: ' + (d.hasToken ? (d.maskedToken || 'موجود') : 'غير متوفر'));
+            parts.push('الحالة: ' + (d.registrationStatus || '-'));
+            if (d.lastError) parts.push('خطأ: ' + d.lastError);
+        } catch (e) {}
+    } else if (window._erpNotifClient) {
+        const np = window._erpNotifClient.state.nativePush || {};
+        parts.push('الإذن: ' + (np.permissionStatus || '-'));
+        parts.push('التسجيل: ' + (np.registered ? 'مفعل' : 'غير مسجل'));
+        if (np.lastError) parts.push('خطأ: ' + np.lastError);
+    }
+    detail.textContent = parts.join(' | ') || 'تطبيق الهاتف متصل';
+}
+function syncMobilePushDevice() {
+    try {
+        if (window.AndroidPush) {
+            if (typeof window.AndroidPush.requestPermissions === 'function') window.AndroidPush.requestPermissions();
+            if (typeof window.AndroidPush.registerPush === 'function') window.AndroidPush.registerPush();
+            if (typeof window.AndroidPush.forceSyncToken === 'function') window.AndroidPush.forceSyncToken();
+        }
+        if (window._erpNotifClient && typeof window._erpNotifClient.initCapacitorNativePush === 'function') {
+            window._erpNotifClient.initCapacitorNativePush();
+        }
+    } catch (e) {}
+    setTimeout(renderMobilePushStatus, 1200);
+}
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(renderMobilePushStatus, 600);
+    setTimeout(renderMobilePushStatus, 2000);
+});
 </script>
 {% endblock %}
