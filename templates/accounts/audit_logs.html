@@ -98,11 +98,10 @@
         </form>
     </aside>
 
-    <!-- Logs Table / Mobile Cards -->
+    <!-- Logs Table (Unified Desktop & Mobile Table) -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <!-- Desktop Table (hidden on mobile < 768px) -->
-        <div class="hidden md:block overflow-x-auto">
-            <table id="audit_logs_table" data-col-table="audit_logs_table" class="w-full text-right border-collapse">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="audit_logs_table" data-col-table="audit_logs_table" class="min-w-[900px] w-full text-right border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] font-bold">
                         <th class="p-3.5" data-col="created_at" data-col-label="التاريخ والوقت" data-required="true">التاريخ والوقت</th>
@@ -209,75 +208,6 @@
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
-
-        <!-- Mobile Card View (< 768px) -->
-        <div class="block md:hidden divide-y divide-slate-100">
-            {% for log in logs %}
-            <div class="p-4 space-y-2.5">
-                <div class="flex items-start justify-between gap-2 text-xs">
-                    <div class="flex items-center gap-1.5 flex-wrap min-w-0">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            {{ log.get_module_display }}
-                        </span>
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold
-                            {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-50 text-emerald-700 border border-emerald-200
-                            {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-50 text-rose-700 border border-rose-200
-                            {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-50 text-blue-700 border border-blue-200
-                            {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-50 text-teal-700 border border-teal-200
-                            {% else %}bg-purple-50 text-purple-700 border border-purple-200{% endif %}">
-                            <span class="w-1 h-1 rounded-full
-                                {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-500
-                                {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-500
-                                {% elif 'UPDATE' in log.action_type|upper or 'EDIT' in log.action_type|upper or 'CHANGE' in log.action_type|upper %}bg-blue-500
-                                {% elif 'APPROVE' in log.action_type|upper or 'CONFIRM' in log.action_type|upper %}bg-teal-500
-                                {% else %}bg-purple-500{% endif %}"></span>
-                            <span>{{ log.get_action_type_display }}</span>
-                        </span>
-                    </div>
-                    <div class="inline-flex justify-center shrink-0" data-row-menu-host>
-                        <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
-                                onclick="openRowActionMenu(this, event)"
-                                class="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
-                                title="الإجراءات">
-                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
-                        </button>
-                        <template class="row-menu-items">
-                            <button type="button" onclick="openAuditModal('{% url 'audit_log_detail' log.id %}')"
-                                    class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-right">
-                                <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
-                                <span>عرض التفاصيل</span>
-                            </button>
-                        </template>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-between text-xs">
-                    <div>
-                        <span class="text-slate-400">المنفذ: </span>
-                        <span class="font-bold text-slate-800">{% if log.actor %}{{ log.actor.name|default:log.actor.username }}{% else %}النظام تلقائياً{% endif %}</span>
-                    </div>
-                    {% if log.status == 'SUCCESS' %}
-                    <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">ناجح</span>
-                    {% elif log.status == 'FAILURE' %}
-                    <span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">فشل</span>
-                    {% endif %}
-                </div>
-
-                <p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    {{ log.description }}
-                </p>
-
-                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
-                    <span>IP: {{ log.ip_address|default:"-" }}</span>
-                    <span>{{ log.created_at|date:"Y-m-d H:i" }}</span>
-                </div>
-            </div>
-            {% empty %}
-            <div class="p-8 text-center text-slate-400 text-xs">
-                لا توجد أحداث تدقيق مسجلة مطابقة لمعايير البحث.
-            </div>
-            {% endfor %}
         </div>
 
         <!-- Pagination -->

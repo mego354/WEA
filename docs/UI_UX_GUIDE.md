@@ -124,9 +124,8 @@ This document outlines the user interface specifications, front-end architecture
   - Placed inside the standardized Filter Drawer (or report filter bar) with a collapsible summary header (`data-drf-toggle`) and quick preset pills (`all_time`, `today`, `yesterday`, `last_7_days`, `last_30_days`, `this_month`, `last_month`, `quarter`, `this_year`/`year`, `custom`).
   - Vertical `من تاريخ` and `إلى تاريخ` date inputs (`data-drf-custom-box`) are revealed **only** when `فترة مخصصة` (`custom`) is selected, preventing horizontal overflow and unexpected form auto-submission inside drawers.
   - Transactional list pages default to `all_time`; Reports, Performance views, and `/home/` default to `this_month`.
-- **Responsive Mobile List Layouts & Action Parity (Option A)**:
-  - Below `768px` (`md`), operational list pages with mobile cards (`sales_orders_list`, `purchase_orders_list`, `visits_list`, `contacts_list`, `audit_logs`) hide the desktop table (`hidden md:block`) and display mobile cards (`block md:hidden`) with a viewport-safe `more_vert` (`openRowActionMenu`) action menu providing identical permission-gated actions to the desktop row.
-  - Dense accounting ledgers and financial/analytical reports preserve horizontal scrolling (`overflow-x-auto`), sticky first columns, and the interactive column visibility picker (`table_column_manager.js`, which dynamically syncs empty-row `colspan` and `<tfoot>` cells).
+- **Unified Responsive Tables Across Desktop & Mobile**:
+  - All list views that render tables (`sales`, `purchases`, `sales_returns`, `purchase_returns`, `visits`, `contacts` table mode, `audit_logs`, accounting ledgers, inventory, treasury, and financial/analytical reports) remain scrollable `overflow-x-auto` tables on mobile (`< 768px`) with the exact same columns, information, column visibility picker (`table_column_manager.js`), and viewport-safe `more_vert` (`openRowActionMenu`) actions — never swapping to truncated mobile-only card layouts or hiding columns via `hidden md:table-cell`.
 - **Global Non-Blocking RTL Toast Stack (`templates/components/toast_container.html`, `window.ERPToast`)**:
   - Replaces native blocking browser `alert(...)` calls with accessible RTL toast notifications (`ERPToast.error`, `ERPToast.warning`, `ERPToast.success`, `ERPToast.info`).
 - **Arabic Terminology & Currency Standardization**:

@@ -45,31 +45,33 @@
     <div id="testPushResultBox" class="hidden rounded-2xl border p-3.5 text-xs font-bold"></div>
 
     <!-- Filters Bar -->
-    <div class="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-wrap items-center gap-2">
-        <a href="{% url 'notifications_inbox' %}?{% if filter_module %}module={{ filter_module }}{% endif %}{% if filter_severity %}{% if filter_module %}&{% endif %}severity={{ filter_severity }}{% endif %}"
-           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'all' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
-            الكل
-        </a>
-        <a href="{% url 'notifications_inbox' %}?read=unread{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
-           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'unread' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
-            غير مقروء ({{ unread_count }})
-        </a>
-        <a href="{% url 'notifications_inbox' %}?read=read{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
-           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'read' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
-            مقروء
-        </a>
+    <div class="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'notifications_inbox' %}?{% if filter_module %}module={{ filter_module }}{% endif %}{% if filter_severity %}{% if filter_module %}&{% endif %}severity={{ filter_severity }}{% endif %}"
+               class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'all' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                الكل
+            </a>
+            <a href="{% url 'notifications_inbox' %}?read=unread{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
+               class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'unread' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                غير مقروء ({{ unread_count }})
+            </a>
+            <a href="{% url 'notifications_inbox' %}?read=read{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
+               class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'read' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                مقروء
+            </a>
+        </div>
 
-        <form method="GET" class="mr-auto flex flex-wrap items-center gap-2">
+        <form method="GET" class="w-full sm:w-auto sm:mr-auto grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             {% if filter_read != 'all' %}<input type="hidden" name="read" value="{{ filter_read }}">{% endif %}
             <select name="module" onchange="this.form.submit()"
-                    class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[36px]">
+                    class="w-full sm:w-auto px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[38px]">
                 <option value="">جميع الأقسام</option>
                 {% for mod_key, meta in modules_meta.items %}
                 <option value="{{ mod_key }}" {% if filter_module == mod_key %}selected{% endif %}>{{ meta.name_ar }}</option>
                 {% endfor %}
             </select>
             <select name="severity" onchange="this.form.submit()"
-                    class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[36px]">
+                    class="w-full sm:w-auto px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[38px]">
                 <option value="">كل المستويات</option>
                 <option value="info" {% if filter_severity == 'info' %}selected{% endif %}>معلومات</option>
                 <option value="success" {% if filter_severity == 'success' %}selected{% endif %}>نجاح</option>
@@ -82,26 +84,26 @@
     <!-- Notifications List -->
     <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
         {% for n in notifications %}
-        <div class="p-4 flex items-start gap-3.5 transition-colors {% if not n.is_read %}bg-teal-50/40{% else %}hover:bg-slate-50/70{% endif %}" data-notif-row="{{ n.id }}">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5
+        <div class="p-3.5 sm:p-4 flex items-start gap-3 transition-colors {% if not n.is_read %}bg-teal-50/40{% else %}hover:bg-slate-50/70{% endif %}" data-notif-row="{{ n.id }}">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5
                 {% if n.severity == 'danger' %}bg-rose-50 text-rose-600
                 {% elif n.severity == 'warning' %}bg-amber-50 text-amber-600
                 {% elif n.severity == 'success' %}bg-emerald-50 text-emerald-600
                 {% else %}bg-teal-50 text-[#27bebe]{% endif %}">
-                <span class="material-symbols-outlined text-xl">
+                <span class="material-symbols-outlined text-lg sm:text-xl">
                     {% if n.severity == 'danger' %}error{% elif n.severity == 'warning' %}warning{% elif n.severity == 'success' %}check_circle{% else %}notifications{% endif %}
                 </span>
             </div>
             <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <a href="{% url 'notification_open' n.id %}" class="text-sm font-bold text-slate-900 hover:text-brand-600 transition-colors flex items-center gap-2">
-                        {% if not n.is_read %}<span data-unread-dot class="w-2 h-2 rounded-full bg-brand-500 shrink-0"></span>{% endif %}
-                        <span>{{ n.title }}</span>
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
+                    <a href="{% url 'notification_open' n.id %}" class="text-sm font-bold text-slate-900 hover:text-brand-600 transition-colors flex items-start gap-2 leading-snug break-words">
+                        {% if not n.is_read %}<span data-unread-dot class="w-2 h-2 rounded-full bg-brand-500 shrink-0 mt-1.5"></span>{% endif %}
+                        <span class="break-words">{{ n.title }}</span>
                     </a>
-                    <span class="text-[11px] font-mono text-slate-400 shrink-0">{{ n.created_at|date:"Y-m-d H:i" }}</span>
+                    <span class="text-[11px] font-mono text-slate-400 shrink-0 whitespace-nowrap">{{ n.created_at|date:"Y-m-d H:i" }}</span>
                 </div>
                 {% if n.body %}
-                <p class="text-xs text-slate-600 mt-1 leading-relaxed">{{ n.body }}</p>
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed break-words">{{ n.body }}</p>
                 {% endif %}
                 <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
                     <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">{% for mk, mv in modules_meta.items %}{% if mk == n.module %}{{ mv.name_ar }}{% endif %}{% endfor %}{% if n.module not in modules_meta %}{{ n.module }}{% endif %}</span>

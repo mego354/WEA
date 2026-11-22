@@ -473,8 +473,19 @@ def contact_detail(request, pk):
     if not governorates.exists():
         governorates = Area.objects.filter(is_company_area=False).order_by('name')
 
+    can_edit_contact = (
+        has_perm_or_admin(request.user, 'contacts:contacts/edit')
+        and can_user_access_object(request.user, contact, 'edit')
+    )
+    can_delete_contact = (
+        has_perm_or_admin(request.user, 'contacts:contacts/delete')
+        and can_user_access_object(request.user, contact, 'delete')
+    )
+
     context = {
         'contact': contact,
+        'can_edit_contact': can_edit_contact,
+        'can_delete_contact': can_delete_contact,
         'active_tab': active_tab,
         'addresses': addresses,
         'communication_methods': communication_methods,
@@ -1230,12 +1241,25 @@ def contact_delete(request, pk):
 @require_permission('contacts:contacts/edit')
 def contact_update_status(request, pk):
     contact = get_object_or_404(Contact, pk=pk)
+    is_ajax = (
+        request.headers.get('x-requested-with') == 'XMLHttpRequest'
+        or 'application/json' in request.headers.get('accept', '')
+    )
     if not can_user_access_object(request.user, contact, 'edit'):
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': 'لا تملك صلاحية تعديل حالة جهة الاتصال هذه ضمن نطاقك الجغرافي.'}, status=403)
         return render_forbidden_response(request, "لا يمكنك تعديل حالة جهة الاتصال.")
 
     if request.method == 'POST':
+        status_ar_map = {
+            'customer': 'عميل',
+            'active': 'نشط',
+            'lead': 'عميل محتمل',
+            'inactive': 'غير نشط',
+            'supplier': 'مورد',
+        }
         old_status = contact.status
-        new_status = request.POST.get('status', '').strip().lower()
+        new_status = (request.POST.get('status') or '').strip().lower()
         if new_status in ['lead', 'customer', 'inactive', 'active', 'supplier']:
             if new_status == 'supplier':
                 contact.is_supplier = True
@@ -1247,6 +1271,9 @@ def contact_update_status(request, pk):
                     contact.is_customer = True
             contact.save()
 
+            old_ar = status_ar_map.get(old_status, old_status)
+            new_ar = status_ar_map.get(contact.status, contact.status)
+
             AuditLogService.log(
                 action='update',
                 module='contacts',
@@ -1254,21 +1281,32 @@ def contact_update_status(request, pk):
                 record_id=contact.id,
                 record_name=f"{contact.name} (#{contact.serial_num})",
                 previous_values={'status': old_status},
-                new_values={'status': new_status},
+                new_values={'status': contact.status},
                 ip_address=AuditLogService.get_client_ip(request),
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )
             ContactActivity.objects.create(
                 contact=contact,
                 activity_type='update',
-                title=f"تغيير الحالة إلى {contact.status_label}",
-                notes=f"تم تعديل حالة جهة الاتصال من {old_status} إلى {new_status}",
+                title=f"تغيير الحالة إلى {new_ar}",
+                notes=f"تم تعديل حالة جهة الاتصال من {old_ar} إلى {new_ar}",
                 performed_by=request.user
             )
 
-            messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {contact.status_label}.")
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', ''):
-                return JsonResponse({'status': 'ok', 'new_status': contact.status_label, 'stage': new_status, 'status_label': contact.status_label, 'contact_id': contact.id})
+            messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {new_ar}.")
+            if is_ajax:
+                return JsonResponse({
+                    'status': 'ok',
+                    'new_status': contact.status_label,
+                    'new_status_ar': new_ar,
+                    'stage': contact.status,
+                    'status_label': contact.status_label,
+                    'contact_id': contact.id,
+                })
+        else:
+            if is_ajax:
+                return JsonResponse({'status': 'error', 'message': 'حالة جهة الاتصال المطلوبة غير صالحة.'}, status=400)
+            messages.error(request, "تعذر تغيير الحالة: القيمة المرسلة غير صالحة.")
     return redirect('contact_detail', pk=pk)
 
 

@@ -123,30 +123,30 @@
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
 
-    <!-- Purchase Orders Table Card -->
+    <!-- Purchase Orders Table Card (Unified Desktop & Mobile Table) -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="hidden md:block overflow-x-auto scrollbar-thin">
-            <table id="purchase_orders_table" data-col-table="purchase_orders_table" class="min-w-[900px] w-full text-right text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+            <table id="purchase_orders_table" data-col-table="purchase_orders_table" class="min-w-[950px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th data-col="serial" data-col-label="رقم المسلسل" data-required="true" class="py-3.5 px-4">رقم المسلسل</th>
-                        <th data-col="supplier" data-col-label="المورد" data-required="true" class="py-3.5 px-4">الاسم</th>
-                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4 hidden md:table-cell">المنطقة</th>
-                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4 hidden sm:table-cell">انشئ فى</th>
-                        <th data-col="due_date" data-col-label="تاريخ الاستحقاق" class="py-3.5 px-4 font-mono">تاريخ الاستحقاق</th>
-                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4 hidden lg:table-cell">المنشئ</th>
-                        <th data-col="total" data-col-label="اجمالى القيمة" class="py-3.5 px-4">اجمالى القيمة</th>
-                        <th data-col="outstanding_balance" data-col-label="المتبقي" class="py-3.5 px-4">المتبقي</th>
-                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4">الحالة</th>
-                        <th data-col="delivery_agent" data-col-label="مسئول التوصيل" class="py-3.5 px-4 hidden xl:table-cell">مسئول التوصيل</th>
-                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
+                        <th data-col="serial" data-col-label="رقم المسلسل" data-required="true" class="py-3.5 px-4 whitespace-nowrap">رقم المسلسل</th>
+                        <th data-col="supplier" data-col-label="المورد" data-required="true" class="py-3.5 px-4 whitespace-nowrap">الاسم</th>
+                        <th data-col="area" data-col-label="المنطقة" class="py-3.5 px-4 whitespace-nowrap">المنطقة</th>
+                        <th data-col="created_at" data-col-label="انشئ فى" class="py-3.5 px-4 whitespace-nowrap">انشئ فى</th>
+                        <th data-col="due_date" data-col-label="تاريخ الاستحقاق" class="py-3.5 px-4 font-mono whitespace-nowrap">تاريخ الاستحقاق</th>
+                        <th data-col="created_by" data-col-label="المنشئ" class="py-3.5 px-4 whitespace-nowrap">المنشئ</th>
+                        <th data-col="total" data-col-label="اجمالى القيمة" class="py-3.5 px-4 whitespace-nowrap">اجمالى القيمة</th>
+                        <th data-col="outstanding_balance" data-col-label="المتبقي" class="py-3.5 px-4 whitespace-nowrap">المتبقي</th>
+                        <th data-col="status" data-col-label="الحالة" class="py-3.5 px-4 whitespace-nowrap">الحالة</th>
+                        <th data-col="delivery_agent" data-col-label="مسئول التوصيل" class="py-3.5 px-4 whitespace-nowrap">مسئول التوصيل</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center whitespace-nowrap">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for o in orders %}
                     <tr class="hover:bg-slate-50/80 transition-colors group">
                         <!-- Serial Number -->
-                        <td data-col="serial" class="py-3.5 px-4 font-mono font-bold text-slate-900">
+                        <td data-col="serial" class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                             <a href="{% url 'purchase_order_detail' o.id %}" class="hover:text-[#27bebe] transition-colors">
                                 {{ o.order_number }}
                             </a>
@@ -160,17 +160,17 @@
                         </td>
 
                         <!-- Area -->
-                        <td data-col="area" class="py-3.5 px-4 text-slate-600 hidden md:table-cell">
+                        <td data-col="area" class="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                             {{ o.supplier.area.name|default:"—" }}
                         </td>
 
                         <!-- Created At -->
-                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono hidden sm:table-cell">
+                        <td data-col="created_at" class="py-3.5 px-4 text-slate-500 font-mono whitespace-nowrap">
                             {{ o.created_at|date:"d/m/Y" }}
                         </td>
 
                         <!-- Due Date -->
-                        <td data-col="due_date" class="py-3.5 px-4 font-mono {% if o.is_overdue %}text-rose-600 font-bold{% else %}text-slate-600{% endif %}">
+                        <td data-col="due_date" class="py-3.5 px-4 font-mono whitespace-nowrap {% if o.is_overdue %}text-rose-600 font-bold{% else %}text-slate-600{% endif %}">
                             {{ o.due_date|date:"Y-m-d"|default:"—" }}
                             {% if o.is_overdue %}
                             <span class="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1" title="متأخر"></span>
@@ -178,7 +178,7 @@
                         </td>
 
                         <!-- Created By -->
-                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium hidden lg:table-cell">
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium whitespace-nowrap">
                             {{ o.created_by.get_full_name|default:o.created_by.username|default:"—" }}
                         </td>
 
@@ -200,7 +200,7 @@
                         </td>
 
                         <!-- Delivery Agent -->
-                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-500 hidden xl:table-cell">
+                        <td data-col="delivery_agent" class="py-3.5 px-4 text-slate-500 whitespace-nowrap">
                             {{ o.delivery_agent|default:"—" }}
                         </td>
 
@@ -244,73 +244,6 @@
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
-
-        <!-- Mobile Cards Presentation (< 768px) -->
-        <div class="block md:hidden bg-slate-50/50 p-3 space-y-3">
-            {% for o in orders %}
-            <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
-                <div class="flex items-center justify-between gap-2">
-                    <a href="{% url 'purchase_order_detail' o.id %}" class="font-mono font-black text-[#27bebe] text-sm hover:underline">
-                        {{ o.order_number }}
-                    </a>
-                    <div class="flex items-center gap-1.5">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold {{ o.payment_status_badge_class }}">
-                            {{ o.payment_status_display_ar }}
-                        </span>
-                        <div class="inline-flex justify-center" data-row-menu-host>
-                            <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
-                                    onclick="openRowActionMenu(this, event)"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
-                                    title="الإجراءات">
-                                <span class="material-symbols-outlined text-[20px]">more_vert</span>
-                            </button>
-                            <template class="row-menu-items">
-                                <a href="{% url 'purchase_order_detail' o.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
-                                    <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
-                                    <span>عرض التفاصيل</span>
-                                </a>
-                                {% if request.user|has_permission:'purchases:orders/pdf' %}
-                                <button type="button" onclick="openOrderPdfModal('{% url 'purchase_order_pdf' o.id %}', '{{ o.order_number|escapejs }}', 'purchaseorder')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
-                                    <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
-                                    <span>تصدير PDF</span>
-                                </button>
-                                {% endif %}
-                                {% if request.user|has_permission:'purchases:orders/delete' %}
-                                <div class="h-px bg-slate-100 my-1"></div>
-                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_delete' o.id %}', title: 'حذف أمر الشراء', itemName: '{{ o.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر الشراء رقم {{ o.order_number|escapejs }}؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
-                                        class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
-                                    <span class="material-symbols-outlined text-base">delete</span>
-                                    <span>حذف</span>
-                                </button>
-                                {% endif %}
-                            </template>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <h4 class="font-bold text-slate-900 text-sm">{{ o.supplier.name }}</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">{{ o.supplier.area.name|default:"بدون منطقة" }} • المخزن: {{ o.target_warehouse.name }}</p>
-                </div>
-                <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <div>
-                        <span class="font-mono font-bold text-slate-900">{{ o.grand_total|intcomma }} ج.م</span>
-                        {% if o.outstanding_balance > 0 %}
-                        <span class="text-[10px] text-rose-600 block">متبقي: {{ o.outstanding_balance|intcomma }} ج.م</span>
-                        {% endif %}
-                    </div>
-                    <a href="{% url 'purchase_order_detail' o.id %}" class="inline-flex items-center gap-1 text-[#27bebe] font-bold hover:underline">
-                        <span>عرض التفاصيل</span>
-                        <span class="material-symbols-outlined text-sm">arrow_back</span>
-                    </a>
-                </div>
-            </div>
-            {% empty %}
-            <div class="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200/80">
-                <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">shopping_cart</span>
-                <p class="font-bold text-slate-500 text-sm">لا توجد أوامر مشتريات مطابقة لخيارات البحث</p>
-            </div>
-            {% endfor %}
         </div>
 
         <!-- Standardized Pagination -->

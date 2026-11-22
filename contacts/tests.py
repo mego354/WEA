@@ -952,5 +952,69 @@ class SupplierActivationServiceTests(TestCase):
         self.assertNotContains(detail_resp, '/communication-methods/')
         self.assertContains(detail_resp, reverse('vendor_statement_pdf', args=[supplier.pk]))
 
+    def test_contact_status_change_respects_permissions_and_datascope(self):
+        """Regression test: contact status changes (customer/lead/inactive) work for authorized users and enforce RBAC + DataScope."""
+        from django.core.management import call_command
+        from accounts.models import Permission, RoleModuleScope
+
+        call_command('setup_permissions')
+        super_role = Role.objects.get(name=Role.ROLE_SUPERADMIN)
+        rep_role = Role.objects.get(name=Role.ROLE_REP)
+        cairo = Area.objects.create(code='ST-CAI', name='القاهرة حالة', area_type='governorate')
+        nasr = Area.objects.create(code='ST-NSR', name='مدينة نصر حالة', area_type='subarea', parent=cairo)
+        giza = Area.objects.create(code='ST-GIZ', name='الجيزة حالة', area_type='governorate')
+        dokki = Area.objects.create(code='ST-DOK', name='الدقي حالة', area_type='subarea', parent=giza)
+
+        admin = User.objects.create_superuser(username='st_admin@wea.com', email='st_admin@wea.com', password='Password123!', role=super_role)
+        rep_nasr = User.objects.create_user(username='st_rep_nasr@wea.com', email='st_rep_nasr@wea.com', password='Password123!', role=rep_role)
+        rep_nasr.assigned_areas.add(nasr)
+        rep_dokki = User.objects.create_user(username='st_rep_dokki@wea.com', email='st_rep_dokki@wea.com', password='Password123!', role=rep_role)
+        rep_dokki.assigned_areas.add(dokki)
+
+        # Grant contacts edit permission to rep_role with brick manage_scope
+        p_mod = Permission.objects.get(codename='module:contacts')
+        p_view = Permission.objects.get(codename='contacts:contacts/view')
+        p_edit = Permission.objects.get(codename='contacts:contacts/edit')
+        rep_role.permissions.add(p_mod, p_view, p_edit)
+        RoleModuleScope.objects.update_or_create(role=rep_role, module='contacts', defaults={'view_scope': 'brick', 'manage_scope': 'brick'})
+        rep_nasr.clear_perm_cache()
+        rep_dokki.clear_perm_cache()
+
+        contact = Contact.objects.create(
+            name='صيدلية اختبار الحالة',
+            is_customer=True,
+            status='customer',
+            area=cairo,
+            brick=nasr,
+            created_by=rep_nasr,
+        )
+
+        # 1. Authorized rep in Nasr City can view dropdown and transition customer -> lead -> inactive -> customer
+        self.client.force_login(rep_nasr)
+        det = self.client.get(reverse('contact_detail', kwargs={'pk': contact.pk}))
+        self.assertEqual(det.status_code, 200)
+        self.assertTrue(det.context['can_edit_contact'])
+        self.assertContains(det, 'id="contactStatusForm"')
+
+        for target_status in ('lead', 'inactive', 'customer'):
+            resp = self.client.post(reverse('contact_update_status', kwargs={'pk': contact.pk}), {'status': target_status})
+            self.assertEqual(resp.status_code, 302)
+            contact.refresh_from_db()
+            self.assertEqual(contact.status, target_status)
+
+        # 2. Out-of-scope rep in Dokki is blocked with 403 (HTML and AJAX JSON)
+        self.client.force_login(rep_dokki)
+        bad_html = self.client.post(reverse('contact_update_status', kwargs={'pk': contact.pk}), {'status': 'inactive'})
+        self.assertEqual(bad_html.status_code, 403)
+        bad_ajax = self.client.post(
+            reverse('contact_update_status', kwargs={'pk': contact.pk}),
+            {'status': 'inactive'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(bad_ajax.status_code, 403)
+        contact.refresh_from_db()
+        self.assertEqual(contact.status, 'customer')
+
+
 
 
