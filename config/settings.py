@@ -3,6 +3,30 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _load_dotenv_file(env_path: Path) -> None:
+    """Lightweight .env loader (real environment variables always take precedence)."""
+    if not env_path.is_file():
+        return
+    try:
+        with env_path.open('r', encoding='utf-8') as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                if key:
+                    os.environ.setdefault(key, value)
+    except Exception:
+        pass
+
+
+_load_dotenv_file(BASE_DIR / '.env')
+
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-enterprise-erp-secret-key-wea-pharma-2026')
 
 DEBUG = os.getenv('DEBUG', 'True').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -156,12 +180,19 @@ if not DEBUG:
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 
 # Firebase Cloud Messaging (FCM HTTP v1) & Native Push Configuration
-# Credentials MUST be provided via environment variables or secure server-side service account file.
-FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', '').strip()
-FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv(
+# NOTE: google-services.json is the Android CLIENT config (belongs in android/app/google-services.json in the Capacitor App Builder).
+# Django server push delivery requires a Firebase Admin Service Account JSON key (with private_key & client_email)
+# supplied via FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_PATH, or git-ignored secrets/firebase-service-account.json.
+FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', 'wea-pharma-mobile').strip()
+FIREBASE_ANDROID_PACKAGE_NAME = os.getenv('FIREBASE_ANDROID_PACKAGE_NAME', 'com.acme.WEA').strip()
+_default_firebase_sa_path = BASE_DIR / 'secrets' / 'firebase-service-account.json'
+_raw_firebase_sa_path = os.getenv(
     'FIREBASE_SERVICE_ACCOUNT_PATH',
-    os.getenv('GOOGLE_APPLICATION_CREDENTIALS', ''),
+    os.getenv('GOOGLE_APPLICATION_CREDENTIALS', str(_default_firebase_sa_path) if _default_firebase_sa_path.is_file() else ''),
 ).strip()
+if _raw_firebase_sa_path and not Path(_raw_firebase_sa_path).is_absolute():
+    _raw_firebase_sa_path = str((BASE_DIR / _raw_firebase_sa_path).resolve())
+FIREBASE_SERVICE_ACCOUNT_PATH = _raw_firebase_sa_path
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON', '').strip()
 FCM_DEFAULT_CHANNEL_ID = os.getenv('FCM_DEFAULT_CHANNEL_ID', 'app_push_notifications_channel').strip()
 

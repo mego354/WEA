@@ -79,3 +79,9 @@ backups/
 *.sqlite3-backup
 *copy*.sqlite3
 *.sqlite3.local_safe_backup
+
+# Firebase & Push Secrets (Never commit credentials)
+secrets/
+*firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
