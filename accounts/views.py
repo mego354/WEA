@@ -267,19 +267,26 @@ def users_list(request):
 
     users_qs, query, role_filter, status_filter, area_filter = _get_filtered_users_queryset(request)
 
+    from master_data.filter_utils import parse_multi_int, resolve_scoped_area_brick_filters
+    selected_role_ids = parse_multi_int(request.GET, 'role')
+    _, _, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
+        request, 'accounts',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+
     active_filters = []
     if query:
         active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
-    if role_filter:
-        selected_role = Role.objects.filter(pk=role_filter).first()
-        if selected_role:
-            active_filters.append({'label': 'الدور', 'value': selected_role.display_name, 'param': 'role'})
+    if selected_role_ids:
+        for r_obj in Role.objects.filter(pk__in=selected_role_ids):
+            active_filters.append({'label': 'الدور', 'value': r_obj.display_name, 'param': 'role', 'remove_value': str(r_obj.id)})
     if status_filter:
         active_filters.append({'label': 'الحالة', 'value': 'مفعل' if status_filter == 'active' else 'معطل', 'param': 'status'})
-    if area_filter:
-        selected_area_obj = Area.objects.filter(pk=area_filter).first()
-        if selected_area_obj:
-            active_filters.append({'label': 'المنطقة', 'value': selected_area_obj.name, 'param': 'area'})
+    for a_chip in selected_main_areas_chips:
+        active_filters.append({'label': 'المنطقة', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
+    for b_chip in selected_bricks_chips:
+        active_filters.append({'label': 'الخط الجغرافي', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
 
     paginator, page_obj = paginate_queryset(request, users_qs, default_per_page=25)
 
@@ -306,16 +313,9 @@ def users_list(request):
         'roles_count': roles.count(),
     }
 
-    from master_data.filter_utils import parse_multi_int, resolve_scoped_area_brick_filters
-    selected_role_ids = parse_multi_int(request.GET, 'role')
     role_options = [{'value': str(r.id), 'label': r.display_name} for r in roles]
     selected_role_str = [str(x) for x in selected_role_ids]
     selected_role_items = [o for o in role_options if o['value'] in selected_role_str]
-    _, _, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
-        request, 'accounts',
-        area_params=('main_area', 'area', 'area_id', 'governorate'),
-        brick_params=('brick', 'brick_id'),
-    )
 
     context = {
         'users': page_obj.object_list,
@@ -1412,6 +1412,7 @@ def audit_logs_list(request):
     from datetime import datetime, time
     from django.utils import timezone
     from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
 
     mod_dict = dict(SecurityAuditLog.MODULE_CHOICES)
     act_dict = dict(SecurityAuditLog.ACTION_CHOICES)
@@ -1421,8 +1422,7 @@ def audit_logs_list(request):
     action_filter = selected_actions[0] if len(selected_actions) == 1 else ''
     user_id_int = parse_single_int(request.GET, 'user')
     user_filter = str(user_id_int) if user_id_int else ''
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     query = request.GET.get('q', '').strip()
 
     logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
@@ -1436,21 +1436,13 @@ def audit_logs_list(request):
     if user_id_int:
         logs_qs = logs_qs.filter(actor_id=user_id_int)
 
-    if date_from:
-        try:
-            df = datetime.strptime(date_from, '%Y-%m-%d')
-            df_aware = timezone.make_aware(datetime.combine(df.date(), time.min))
-            logs_qs = logs_qs.filter(created_at__gte=df_aware)
-        except (ValueError, TypeError):
-            pass
+    if parsed_from:
+        df_aware = timezone.make_aware(datetime.combine(parsed_from, time.min))
+        logs_qs = logs_qs.filter(created_at__gte=df_aware)
 
-    if date_to:
-        try:
-            dt = datetime.strptime(date_to, '%Y-%m-%d')
-            dt_aware = timezone.make_aware(datetime.combine(dt.date(), time.max))
-            logs_qs = logs_qs.filter(created_at__lte=dt_aware)
-        except (ValueError, TypeError):
-            pass
+    if parsed_to:
+        dt_aware = timezone.make_aware(datetime.combine(parsed_to, time.max))
+        logs_qs = logs_qs.filter(created_at__lte=dt_aware)
 
     if query:
         logs_qs = logs_qs.filter(
@@ -1473,10 +1465,18 @@ def audit_logs_list(request):
         u_obj = User.objects.filter(pk=int(user_filter)).first()
         if u_obj:
             active_filters.append({'label': 'المستخدم', 'value': u_obj.name or u_obj.username, 'param': 'user'})
-    if date_from:
-        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
-    if date_to:
-        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
+    if active_preset and active_preset not in ('all_time', 'custom'):
+        preset_labels = {
+            'today': 'اليوم', 'yesterday': 'أمس', 'last_7_days': 'آخر 7 أيام',
+            'last_30_days': 'آخر 30 يوم', 'this_month': 'هذا الشهر',
+            'last_month': 'الشهر الماضي', 'this_year': 'هذه السنة',
+        }
+        active_filters.append({'label': 'الفترة', 'value': preset_labels.get(active_preset, active_preset), 'param': 'preset'})
+    else:
+        if date_from:
+            active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+        if date_to:
+            active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
     if query:
         active_filters.append({'label': 'بحث', 'value': query, 'param': 'q'})
 
@@ -1504,6 +1504,7 @@ def audit_logs_list(request):
         'module_filter': module_filter,
         'action_filter': action_filter,
         'user_filter': user_filter,
+        'active_preset': active_preset,
         'date_from': date_from,
         'date_to': date_to,
         'query': query,
@@ -1519,33 +1520,26 @@ def audit_logs_export(request):
     from datetime import datetime, time
     from django.utils import timezone
     from master_data.excel_utils import export_to_excel_response
+    from master_data.filter_utils import parse_multi_str
+    from master_data.date_filter_utils import resolve_date_range
 
-    module_filter = request.GET.get('module', '').strip()
-    action_filter = request.GET.get('action', '').strip()
+    selected_modules = parse_multi_str(request.GET, 'module')
+    selected_actions = parse_multi_str(request.GET, 'action')
     user_filter = request.GET.get('user', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     query = request.GET.get('q', '').strip()
 
     logs_qs = SecurityAuditLog.objects.select_related('actor', 'target_user', 'target_role').order_by('-created_at')
-    if module_filter:
-        logs_qs = logs_qs.filter(module=module_filter)
-    if action_filter:
-        logs_qs = logs_qs.filter(action_type=action_filter)
+    if selected_modules:
+        logs_qs = logs_qs.filter(module__in=selected_modules)
+    if selected_actions:
+        logs_qs = logs_qs.filter(action_type__in=selected_actions)
     if user_filter and user_filter.isdigit():
         logs_qs = logs_qs.filter(actor_id=int(user_filter))
-    if date_from:
-        try:
-            df = datetime.strptime(date_from, '%Y-%m-%d')
-            logs_qs = logs_qs.filter(created_at__gte=timezone.make_aware(datetime.combine(df.date(), time.min)))
-        except (ValueError, TypeError):
-            pass
-    if date_to:
-        try:
-            dt = datetime.strptime(date_to, '%Y-%m-%d')
-            logs_qs = logs_qs.filter(created_at__lte=timezone.make_aware(datetime.combine(dt.date(), time.max)))
-        except (ValueError, TypeError):
-            pass
+    if parsed_from:
+        logs_qs = logs_qs.filter(created_at__gte=timezone.make_aware(datetime.combine(parsed_from, time.min)))
+    if parsed_to:
+        logs_qs = logs_qs.filter(created_at__lte=timezone.make_aware(datetime.combine(parsed_to, time.max)))
     if query:
         logs_qs = logs_qs.filter(
             Q(description__icontains=query) |

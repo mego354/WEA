@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}أوامر المشتريات - Bricks Rep{% endblock %}
+{% block title %}أوامر المشتريات{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-medium text-slate-700">المشتريات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">أوامر المشتريات</span>
+{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
@@ -9,35 +17,25 @@
     <!-- 1. Page Header Section (Clean: Title, Actions - No statistics or search bars) -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight flex items-center gap-2.5">
-                <span class="material-symbols-outlined text-2xl">shopping_cart</span>
-                <span>أوامر المشتريات (Purchase Orders)</span>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">shopping_cart</span>
+                <span>أوامر المشتريات</span>
             </h1>
             <p class="text-xs text-slate-500 mt-1">إدارة أوامر الشراء، اعتمادات الإدارة، استلام البضائع بالمستودعات والفوترة.</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Print Batch Button -->
-            <button type="button" onclick="window.print()"
-                    class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">print</span>
-                <span class="hidden md:inline">اطبع</span>
-            </button>
-
-            <!-- Export to Excel -->
-            <a href="{% url 'purchase_orders_export' %}?search={{ search_query|urlencode }}&payment_status={{ current_payment_status|default:'all'|urlencode }}&supplier={{ selected_supplier|default:''|urlencode }}&date_from={{ date_from|default:''|urlencode }}&date_to={{ date_to|default:''|urlencode }}&total_min={{ total_min|default:''|urlencode }}&total_max={{ total_max|default:''|urlencode }}&remaining_min={{ remaining_min|default:''|urlencode }}&remaining_max={{ remaining_max|default:''|urlencode }}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-               title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span class="hidden sm:inline">تصدير إلى Excel</span>
-            </a>
+            {% url 'purchase_orders_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='purchases:orders/export' %}
 
             <!-- Create Purchase Order Button -->
+            {% if request.user|has_permission:'purchases:orders/create' %}
             <a href="{% url 'purchase_order_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>أمر مشتريات جديد</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -93,52 +91,28 @@
     </div>
 
     <!-- 3. Dedicated Search & Filters Toolbar -->
-    <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <form method="GET" class="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
-                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+    <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
                 {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
-                <div class="relative flex-1 w-full sm:w-auto">
-                    <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالمورد أو رقم الأمر أو المنطقة..."
+                {% for st in selected_statuses %}<input type="hidden" name="status" value="{{ st }}">{% endfor %}
+                {% for ps in selected_payment_statuses %}<input type="hidden" name="payment_status" value="{{ ps }}">{% endfor %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
+                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                {% if selected_total_min %}<input type="hidden" name="total_min" value="{{ selected_total_min }}">{% endif %}
+                {% if selected_total_max %}<input type="hidden" name="total_max" value="{{ selected_total_max }}">{% endif %}
+                {% if selected_remaining_min %}<input type="hidden" name="remaining_min" value="{{ selected_remaining_min }}">{% endif %}
+                {% if selected_remaining_max %}<input type="hidden" name="remaining_max" value="{{ selected_remaining_max }}">{% endif %}
+                <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالمورد أو رقم الأمر أو المنطقة..."
                        data-smart-search-module="purchase_orders"
-                           class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
-                    <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
-                </div>
-
-                <div class="w-full sm:w-48">
-                    <select name="supplier" onchange="this.form.submit()"
-                            data-smart-select="true"
-                            data-search-url="{% url 'purchases_suppliers_search_api' %}"
-                            data-search-placeholder="بحث عن مورد..."
-                            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-[#27bebe] min-h-[40px]">
-                        <option value="">كافة الموردين</option>
-                        {% for s in suppliers %}
-                        <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_supplier|stringformat:"s" == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] flex items-center justify-center gap-1">
-                    <span class="material-symbols-outlined text-base">filter_alt</span>
-                    <span>تصفية</span>
-                </button>
-                {% if search_query or selected_supplier or current_status != 'all' %}
-                <a href="{% url 'purchase_orders_list' %}" class="w-full sm:w-auto px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-colors min-h-[40px] flex items-center justify-center">
-                    إلغاء
-                </a>
-                {% endif %}
+                       class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[38px]">
+                <span class="material-symbols-outlined absolute right-2.5 top-2 text-slate-400 text-lg">search</span>
             </form>
 
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div class="flex items-center gap-2">
                 <!-- Slide-out Filter Drawer Button with Badge -->
-                <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
-                    <span class="material-symbols-outlined text-base">tune</span>
-                    <span>فلاتر متقدمة</span>
-                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                        {{ active_filters_count }}
-                    </span>
-                </button>
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
 
                 <!-- Column Picker -->
                 {% include 'components/table_column_picker.html' with table_id='purchase_orders_table' %}
@@ -151,7 +125,7 @@
 
     <!-- Purchase Orders Table Card -->
     <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto scrollbar-thin">
+        <div class="hidden md:block overflow-x-auto scrollbar-thin">
             <table id="purchase_orders_table" data-col-table="purchase_orders_table" class="min-w-[900px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
@@ -205,17 +179,17 @@
 
                         <!-- Created By -->
                         <td data-col="created_by" class="py-3.5 px-4 text-slate-700 font-medium hidden lg:table-cell">
-                            {{ o.created_by.get_full_name|default:o.created_by.username|default:"Accountant" }}
+                            {{ o.created_by.get_full_name|default:o.created_by.username|default:"—" }}
                         </td>
 
                         <!-- Grand Total -->
                         <td data-col="total" class="py-3.5 px-4 font-bold text-slate-900 font-mono">
-                            {{ o.grand_total|intcomma }} جنيه
+                            {{ o.grand_total|intcomma }} ج.م
                         </td>
 
                         <!-- Outstanding Balance -->
                         <td data-col="outstanding_balance" class="py-3.5 px-4 font-bold font-mono {% if o.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
-                            {{ o.outstanding_balance|intcomma }} جنيه
+                            {{ o.outstanding_balance|intcomma }} ج.م
                         </td>
 
                         <!-- Payment Status Badge -->
@@ -248,7 +222,7 @@
                                         <span>تصدير PDF</span>
                                     </button>
                                     {% endif %}
-                                    {% if perms.purchases.delete_purchaseorder or user.is_superuser %}
+                                    {% if request.user|has_permission:'purchases:orders/delete' %}
                                     <div class="h-px bg-slate-100 my-1"></div>
                                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_delete' o.id %}', title: 'حذف أمر الشراء', itemName: '{{ o.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر الشراء رقم {{ o.order_number|escapejs }}؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
                                             class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
@@ -262,7 +236,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="py-16 text-center text-slate-400">
+                        <td colspan="11" class="py-16 text-center text-slate-400">
                             <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">shopping_cart</span>
                             <p class="font-bold text-slate-500 text-sm">لا توجد أوامر مشتريات مطابقة لخيارات البحث</p>
                         </td>
@@ -273,28 +247,68 @@
         </div>
 
         <!-- Mobile Cards Presentation (< 768px) -->
-        <div class="block md:hidden divide-y divide-slate-100 bg-slate-50/50 p-3 space-y-3">
+        <div class="block md:hidden bg-slate-50/50 p-3 space-y-3">
             {% for o in orders %}
             <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                     <a href="{% url 'purchase_order_detail' o.id %}" class="font-mono font-black text-[#27bebe] text-sm hover:underline">
                         {{ o.order_number }}
                     </a>
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold {{ o.status_badge_class }}">
-                        {{ o.status_label_ar }}
-                    </span>
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold {{ o.payment_status_badge_class }}">
+                            {{ o.payment_status_display_ar }}
+                        </span>
+                        <div class="inline-flex justify-center" data-row-menu-host>
+                            <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                    onclick="openRowActionMenu(this, event)"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                    title="الإجراءات">
+                                <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                            </button>
+                            <template class="row-menu-items">
+                                <a href="{% url 'purchase_order_detail' o.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
+                                    <span>عرض التفاصيل</span>
+                                </a>
+                                {% if request.user|has_permission:'purchases:orders/pdf' %}
+                                <button type="button" onclick="openOrderPdfModal('{% url 'purchase_order_pdf' o.id %}', '{{ o.order_number|escapejs }}', 'purchaseorder')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                                    <span>تصدير PDF</span>
+                                </button>
+                                {% endif %}
+                                {% if request.user|has_permission:'purchases:orders/delete' %}
+                                <div class="h-px bg-slate-100 my-1"></div>
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_delete' o.id %}', title: 'حذف أمر الشراء', itemName: '{{ o.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر الشراء رقم {{ o.order_number|escapejs }}؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
+                                        class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                    <span>حذف</span>
+                                </button>
+                                {% endif %}
+                            </template>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <h4 class="font-bold text-slate-900 text-sm">{{ o.supplier.name }}</h4>
                     <p class="text-xs text-slate-400 mt-0.5">{{ o.supplier.area.name|default:"بدون منطقة" }} • المخزن: {{ o.target_warehouse.name }}</p>
                 </div>
                 <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <span class="font-mono font-bold text-slate-900">{{ o.grand_total|intcomma }} جنيه</span>
+                    <div>
+                        <span class="font-mono font-bold text-slate-900">{{ o.grand_total|intcomma }} ج.م</span>
+                        {% if o.outstanding_balance > 0 %}
+                        <span class="text-[10px] text-rose-600 block">متبقي: {{ o.outstanding_balance|intcomma }} ج.م</span>
+                        {% endif %}
+                    </div>
                     <a href="{% url 'purchase_order_detail' o.id %}" class="inline-flex items-center gap-1 text-[#27bebe] font-bold hover:underline">
-                        <span>عرض وتفاصيل</span>
+                        <span>عرض التفاصيل</span>
                         <span class="material-symbols-outlined text-sm">arrow_back</span>
                     </a>
                 </div>
+            </div>
+            {% empty %}
+            <div class="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200/80">
+                <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">shopping_cart</span>
+                <p class="font-bold text-slate-500 text-sm">لا توجد أوامر مشتريات مطابقة لخيارات البحث</p>
             </div>
             {% endfor %}
         </div>
@@ -303,29 +317,22 @@
         {% include 'components/pagination.html' %}
     </div>
 
-    <!-- Floating Action Button for Purchase Order Creation (Positioned above Global FAB) -->
-    <a href="{% url 'purchase_order_create' %}"
-       class="fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 w-14 h-14 bg-amber-600 hover:bg-amber-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-amber-600/40 hover:scale-105 transition-all z-30"
-       title="أمر مشتريات جديد" aria-label="أمر مشتريات جديد">
-        <span class="material-symbols-outlined text-2xl font-bold">add_shopping_cart</span>
-    </a>
-
     <!-- SLIDE-OUT FILTER DRAWER -->
-    <div id="filter-backdrop" onclick="closeFilterDrawer()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity"></div>
-    <div id="filter-drawer" class="fixed inset-y-0 left-0 w-80 sm:w-96 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
         <!-- Drawer Header -->
-        <div class="h-16 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
-                <span class="material-symbols-outlined text-[#27bebe]">tune</span>
-                <span>فلاتر أوامر المشتريات</span>
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+            <div class="flex items-center gap-2">
+                <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+                {% if active_filters %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
             </div>
-            <button type="button" onclick="closeFilterDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-lg">close</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
         </div>
 
         <!-- Drawer Content Form -->
-        <form method="GET" class="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-slate-700">
+        <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-slate-700">
             {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
             <!-- Supplier -->
@@ -349,7 +356,7 @@
             <!-- Payment Status (Multi-select) -->
             {% include 'components/choice_multiselect.html' with component_id='po_payment_status' field_name='payment_status' label='حالة السداد التجارية (اختيار متعدد)' options=po_payment_options selected_items=selected_po_payment_items selected_values=selected_payment_statuses placeholder='اختر حالة السداد...' %}
 
-            <!-- Financial Total Range (Requirement B1) -->
+            <!-- Financial Total Range -->
             <div>
                 <label class="block font-bold text-slate-700 mb-2">النطاق المالي لقيمة الطلب (ج.م)</label>
                 <div class="grid grid-cols-2 gap-2">
@@ -364,7 +371,7 @@
                 </div>
             </div>
 
-            <!-- Financial Remaining Balance Range (Requirement B1) -->
+            <!-- Financial Remaining Balance Range -->
             <div>
                 <label class="block font-bold text-slate-700 mb-2">نطاق الرصيد المتبقي (ج.م)</label>
                 <div class="grid grid-cols-2 gap-2">
@@ -381,35 +388,22 @@
 
             <!-- Date Range -->
             <div>
-                <label class="block font-bold text-slate-700 mb-2">نطاق تاريخ الطلب</label>
-                {% include 'components/date_range_filter.html' with date_from=selected_date_from date_to=selected_date_to %}
+                {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=selected_date_from date_to=selected_date_to label='نطاق تاريخ الطلب' %}
             </div>
 
             <!-- Actions -->
             <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                 <a href="{% url 'purchase_orders_list' %}"
-                   class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
+                   class="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
                     إعادة تعيين
                 </a>
                 <button type="submit"
-                        class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm flex-1">
+                        class="px-4 py-2.5 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-xl shadow-sm flex-1">
                     تطبيق الفلتر
                 </button>
             </div>
         </form>
-    </div>
+    </aside>
 
 </div>
-
-<script>
-function openFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.remove('hidden');
-    document.getElementById('filter-drawer').classList.remove('-translate-x-full');
-}
-
-function closeFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.add('hidden');
-    document.getElementById('filter-drawer').classList.add('-translate-x-full');
-}
-</script>
 {% endblock %}

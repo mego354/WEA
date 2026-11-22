@@ -283,6 +283,7 @@ def purchase_order_create(request):
         'suppliers': suppliers,
         'warehouses': warehouses,
         'products': products,
+        'selected_supplier_id': int(raw_selected_supplier) if raw_selected_supplier and str(raw_selected_supplier).isdigit() else None,
     }
     return render(request, 'purchases/purchase_order_create.html', context)
 
@@ -1110,7 +1111,7 @@ def purchase_return_order_delete(request, pk):
         return redirect('purchase_return_order_detail', pk=pk)
 
 
-@require_permission('purchases:returns/manage')
+@login_required
 def purchase_return_order_action(request, pk, action):
     if request.method != 'POST':
         messages.error(request, "طريقة طلب غير صالحة. يلزم استخدام POST لتغيير الحالة.")
@@ -1120,10 +1121,12 @@ def purchase_return_order_action(request, pk, action):
 
     if action in ['approve', 'reject']:
         if not has_perm_or_admin(request.user, 'purchases:returns/approve'):
-            return render_forbidden_response(request, "لا تملك صلاحية اعتماد أو رفض أمر الإرجاع.")
+            return render_forbidden_response(request, "لا تملك صلاحية اعتماد أو رفض أمر الإرجاع.", perm_codename='purchases:returns/approve')
         if not can_user_access_object(request.user, return_order, 'approve'):
             return render_forbidden_response(request, "لا يمكنك اعتماد أو رفض أمر إرجاع قمت بإنشائه بنفسك أو خارج نطاقك.")
     else:
+        if not has_perm_or_admin(request.user, 'purchases:returns/manage'):
+            return render_forbidden_response(request, "لا تملك صلاحية إدارة أوامر إرجاع المشتريات.", perm_codename='purchases:returns/manage')
         if not can_user_access_object(request.user, return_order, action):
             return render_forbidden_response(request, "لا يمكنك تنفيذ هذا الإجراء خارج نطاق منطقتك الجغرافية المصرح بها.")
 
@@ -1165,11 +1168,13 @@ def purchase_return_order_print(request, pk):
 
 @require_permission('purchases:returns/export')
 def purchase_return_orders_export(request):
-    status_filter = request.GET.get('status', 'all')
-    supplier_filter = request.GET.get('supplier')
+    from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
+    status_choices_dict = dict(PurchaseReturnOrder.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
+    supplier_filter = parse_single_int(request.GET, 'supplier')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
 
@@ -1178,14 +1183,14 @@ def purchase_return_orders_export(request):
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
-    if status_filter and status_filter != 'all':
-        qs = qs.filter(status=status_filter)
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
     if total_min:
         try:
             qs = qs.filter(grand_total__gte=Decimal(total_min))

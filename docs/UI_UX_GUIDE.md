@@ -118,8 +118,20 @@ This document outlines the user interface specifications, front-end architecture
   - Keeps primary workflow state-transition buttons visible in detail headers while grouping secondary actions (PDF export, print, edit, cancel, delete) inside a `more_vert` dropdown.
 - **Unified Transaction Attachments (`attachments_uploader.html`, `attachments_gallery.html`, `attachments_modal.html`)**:
   - Supports multi-file image/PDF uploads on create/edit forms, inline galleries on detail pages, and a shared modal (`openAttachmentsModal`) for list-only records (`Collection`, `VendorPayment`, `VaultTransaction`).
-- **Unified Date Range Filter (`templates/components/date_range_filter.html`, `master_data/date_filter_utils.py`)**:
+- **Standardized Contacts-Style Filter Drawer Toggle (`templates/components/filter_drawer_toggle.html`, `.erp-filter-drawer`, `toggleErpFilterDrawer`)**:
+  - All operational list pages use the compact `filter_list` drawer toggle button with a top-right circular active-filter count badge (`data-filter-badge`) and a left-docked slide-out `.erp-filter-drawer` (`320px`, `max-w-[92vw]`) featuring a `"فلتر"` header badge, `arrow_forward` close button, backdrop click dismissal, and `Escape` key handler.
+- **Unified Compact Date Range Filter (`templates/components/date_range_filter.html`, `static/js/date_range_filter.js`, `master_data/date_filter_utils.py`)**:
+  - Placed inside the standardized Filter Drawer (or report filter bar) with a collapsible summary header (`data-drf-toggle`) and quick preset pills (`all_time`, `today`, `yesterday`, `last_7_days`, `last_30_days`, `this_month`, `last_month`, `quarter`, `this_year`/`year`, `custom`).
+  - Vertical `من تاريخ` and `إلى تاريخ` date inputs (`data-drf-custom-box`) are revealed **only** when `فترة مخصصة` (`custom`) is selected, preventing horizontal overflow and unexpected form auto-submission inside drawers.
   - Transactional list pages default to `all_time`; Reports, Performance views, and `/home/` default to `this_month`.
+- **Responsive Mobile List Layouts & Action Parity (Option A)**:
+  - Below `768px` (`md`), operational list pages with mobile cards (`sales_orders_list`, `purchase_orders_list`, `visits_list`, `contacts_list`, `audit_logs`) hide the desktop table (`hidden md:block`) and display mobile cards (`block md:hidden`) with a viewport-safe `more_vert` (`openRowActionMenu`) action menu providing identical permission-gated actions to the desktop row.
+  - Dense accounting ledgers and financial/analytical reports preserve horizontal scrolling (`overflow-x-auto`), sticky first columns, and the interactive column visibility picker (`table_column_manager.js`, which dynamically syncs empty-row `colspan` and `<tfoot>` cells).
+- **Global Non-Blocking RTL Toast Stack (`templates/components/toast_container.html`, `window.ERPToast`)**:
+  - Replaces native blocking browser `alert(...)` calls with accessible RTL toast notifications (`ERPToast.error`, `ERPToast.warning`, `ERPToast.success`, `ERPToast.info`).
+- **Arabic Terminology & Currency Standardization**:
+  - Clean Arabic page titles and headings without redundant English parentheticals or duplicate `- WEA Pharma ERP` / `- Bricks Rep` suffixes (`base.html` appends `- WEA Pharma ERP` centrally).
+  - Currency is standardized to `ج.م` across all views, cards, tables, charts, and print templates. Standard technical abbreviations (`PDF`, `Excel`, `SKU`, `GPS`, `R2`) are preserved.
 - **Bottom-Only Form Primary Submit Actions**:
   - Create/edit forms and active visit completion forms (`visit_detail.html`) place primary submit actions at the bottom below all questions and fields across desktop, tablet, and mobile (with `save_draft` and unanswered-question client-side notices removed).
 - **Inventory Memo Form Consistency (`templates/inventory/memo_create.html`)**:

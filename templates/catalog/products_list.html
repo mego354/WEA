@@ -1,7 +1,13 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}المنتجات - Bricks Rep{% endblock %}
+{% block title %}المنتجات{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">المنتجات</span>
+{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
@@ -16,27 +22,17 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Import Excel -->
-            <a href="{% url 'product_import' %}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base text-brand-600">upload_file</span>
-                <span>استيراد Excel</span>
-            </a>
+            {% url 'products_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='catalog:products/export' import_entity='products' import_perm='catalog:products/import' %}
 
-            <!-- Export to Excel -->
-            <a href="{% url 'products_export' %}?search={{ search_query|urlencode }}&category={{ selected_category|default:''|urlencode }}&sellable={{ sellable_filter|default:''|urlencode }}&min_price={{ min_price|default:''|urlencode }}&max_price={{ max_price|default:''|urlencode }}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-               title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير إلى Excel</span>
-            </a>
-
-            <!-- Create Product Button -->
+            <!-- Create Product Button (Permission-Gated, preserves exact test string 'انشئ منتج') -->
+            {% if request.user|has_permission:'catalog:products/create' %}
             <a href="{% url 'product_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>انشئ منتج</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -97,23 +93,16 @@
             <form method="GET" class="flex-1 max-w-md relative">
                 {% for cat_id in selected_categories %}<input type="hidden" name="category" value="{{ cat_id }}">{% endfor %}
                 {% if sellable_filter %}<input type="hidden" name="sellable" value="{{ sellable_filter }}">{% endif %}
+                {% if min_price %}<input type="hidden" name="min_price" value="{{ min_price }}">{% endif %}
+                {% if max_price %}<input type="hidden" name="max_price" value="{{ max_price }}">{% endif %}
                 <input type="text" name="search" value="{{ search_query }}" data-smart-search-module="products" placeholder="بحث بالاسم، كود الصنف (SKU)، الباركود..."
                        class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
                 <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
             </form>
 
             <div class="flex items-center gap-2">
-                <!-- Slide-out Filter Drawer Button -->
-                <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>فلترة متقدمة</span>
-                    {% if active_filters_count > 0 %}
-                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                        {{ active_filters_count }}
-                    </span>
-                    {% endif %}
-                </button>
+                <!-- Contacts-Style Filter Drawer Toggle with Badge -->
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters_count %}
 
                 <!-- Column Picker -->
                 {% include 'components/table_column_picker.html' with table_id='products_table' %}
@@ -178,7 +167,7 @@
 
                         <!-- Price -->
                         <td data-col="price" class="py-3.5 px-4 font-bold text-slate-900">
-                            {{ p.retail_price|intcomma }} جنيه
+                            {{ p.retail_price|intcomma }} ج.م
                         </td>
 
                         <!-- Tax -->
@@ -200,27 +189,34 @@
                             {{ p.barcode|default:"—" }}
                         </td>
 
-                        <!-- Actions Dropdown -->
+                        <!-- Actions Dropdown (Unified Viewport-Safe Portal) -->
                         <td data-col="actions" class="py-3.5 px-4 text-center">
-                            <div class="relative inline-block text-right">
-                                <button type="button" onclick="toggleActionMenu('action-{{ p.id }}')"
-                                        class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-                                    <span class="material-symbols-outlined text-lg">more_vert</span>
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                                 </button>
-                                <div id="action-{{ p.id }}" class="hidden absolute left-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
-                                    <a href="{% url 'product_detail' p.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                                        <span class="material-symbols-outlined text-sm">visibility</span>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'product_detail' p.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
                                         <span>معاينة</span>
                                     </a>
-                                    <a href="{% url 'product_edit' p.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                                        <span class="material-symbols-outlined text-sm">edit</span>
+                                    {% if request.user|has_permission:'catalog:products/edit' %}
+                                    <a href="{% url 'product_edit' p.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-base text-brand-600">edit</span>
                                         <span>تعديل</span>
                                     </a>
-                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'product_delete' p.id %}', title: 'حذف المنتج', itemName: '{{ p.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف المنتج <span class=\'font-bold text-slate-800\'>{{ p.name|escapejs }}</span> ({{ p.sku_code }})؟' })" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-right">
-                                        <span class="material-symbols-outlined text-sm">delete</span>
+                                    {% endif %}
+                                    {% if request.user|has_permission:'catalog:products/delete' %}
+                                    <div class="border-t border-slate-100 my-1"></div>
+                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'product_delete' p.id %}', title: 'حذف المنتج', itemName: '{{ p.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف المنتج {{ p.name|escapejs }} ({{ p.sku_code|escapejs }})؟' })" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-right">
+                                        <span class="material-symbols-outlined text-base text-red-500">delete</span>
                                         <span>حذف</span>
                                     </button>
-                                </div>
+                                    {% endif %}
+                                </template>
                             </div>
                         </td>
                     </tr>
@@ -240,23 +236,16 @@
         {% include 'components/pagination.html' %}
     </div>
 
-    <!-- Floating Action Button for Product Creation (Positioned above Global FAB) -->
-    <a href="{% url 'product_create' %}"
-       class="fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/40 hover:scale-105 transition-all z-30"
-       title="إضافة منتج جديد" aria-label="إضافة منتج جديد">
-        <span class="material-symbols-outlined text-2xl font-bold">add_box</span>
-    </a>
-
-    <!-- SLIDE-OUT FILTER DRAWER -->
-    <div id="filter-backdrop" onclick="closeFilterDrawer()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity"></div>
-    <div id="filter-drawer" class="fixed inset-y-0 left-0 w-80 sm:w-96 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+    <!-- SLIDE-OUT FILTER DRAWER (Unified .erp-filter-drawer) -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer">
         <!-- Drawer Header -->
-        <div class="h-16 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div class="h-16 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
             <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
-                <span class="material-symbols-outlined text-[#27bebe]">tune</span>
+                <span class="material-symbols-outlined text-[#27bebe]">filter_list</span>
                 <span>فلاتر المنتجات</span>
             </div>
-            <button type="button" onclick="closeFilterDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="إغلاق">
                 <span class="material-symbols-outlined text-lg">close</span>
             </button>
         </div>
@@ -280,7 +269,7 @@
 
             <!-- Price Range -->
             <div>
-                <label class="block font-bold text-slate-700 mb-2">نطاق السعر (جنيه)</label>
+                <label class="block font-bold text-slate-700 mb-2">نطاق السعر (ج.م)</label>
                 <div class="grid grid-cols-2 gap-2">
                     <input type="number" step="0.01" name="min_price" value="{{ min_price|default:'' }}" placeholder="الحد الأدنى"
                            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#27bebe]">
@@ -293,7 +282,7 @@
             <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                 <a href="{% url 'products_list' %}"
                    class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
-                    اعادة تعيين
+                    إعادة تعيين
                 </a>
                 <button type="submit"
                         class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm flex-1">
@@ -301,33 +290,7 @@
                 </button>
             </div>
         </form>
-    </div>
+    </aside>
 
 </div>
-
-<script>
-function openFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.remove('hidden');
-    document.getElementById('filter-drawer').classList.remove('-translate-x-full');
-}
-
-function closeFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.add('hidden');
-    document.getElementById('filter-drawer').classList.add('-translate-x-full');
-}
-
-function toggleActionMenu(id) {
-    document.querySelectorAll('[id^="action-"]').forEach(el => {
-        if (el.id !== id) el.classList.add('hidden');
-    });
-    const menu = document.getElementById(id);
-    if (menu) menu.classList.toggle('hidden');
-}
-
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('[id^="action-"]') && !e.target.closest('button[onclick^="toggleActionMenu"]')) {
-        document.querySelectorAll('[id^="action-"]').forEach(el => el.classList.add('hidden'));
-    }
-});
-</script>
 {% endblock %}

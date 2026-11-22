@@ -32,14 +32,14 @@ User = get_user_model()
 @require_permission('treasury:payments/list')
 def vendor_payments_list(request):
     from master_data.filter_utils import parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
     search = request.GET.get('search', '').strip()
     supplier_id_int = parse_single_int(request.GET, 'supplier')
     supplier_id = str(supplier_id_int) if supplier_id_int else ''
     vault_id_int = parse_single_int(request.GET, 'vault')
     vault_id = str(vault_id_int) if vault_id_int else ''
     payment_method = request.GET.get('payment_method')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
 
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by', 'purchase_order').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'vendorpayment')
@@ -49,29 +49,29 @@ def vendor_payments_list(request):
     if supplier_id:
         qs = qs.filter(supplier_id=supplier_id)
         s_obj = ScopeResolutionService.get_scoped_choices(request.user, 'suppliers', 'treasury').filter(id=supplier_id).first()
-        active_filters.append({'label': f'المورد: {s_obj.name if s_obj else supplier_id}', 'param': 'supplier'})
+        active_filters.append({'label': 'المورد', 'value': s_obj.name if s_obj else supplier_id, 'param': 'supplier'})
 
     if vault_id:
         qs = qs.filter(vault_id=vault_id)
         v_obj = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury').filter(id=vault_id).first()
-        active_filters.append({'label': f'الخزنة: {v_obj.name if v_obj else vault_id}', 'param': 'vault'})
+        active_filters.append({'label': 'الخزنة', 'value': v_obj.name if v_obj else vault_id, 'param': 'vault'})
 
     if payment_method:
         qs = qs.filter(payment_method=payment_method)
         method_labels = dict(VendorPayment.PAYMENT_METHODS)
-        active_filters.append({'label': f'طريقة الدفع: {method_labels.get(payment_method, payment_method)}', 'param': 'payment_method'})
+        active_filters.append({'label': 'طريقة الدفع', 'value': method_labels.get(payment_method, payment_method), 'param': 'payment_method'})
 
-    if date_from:
-        qs = qs.filter(payment_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if parsed_from:
+        qs = qs.filter(payment_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
 
-    if date_to:
-        qs = qs.filter(payment_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_to:
+        qs = qs.filter(payment_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial_num', 'supplier__name', 'reference_number', 'notes'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     now = timezone.now()
     vp_agg = qs.aggregate(
@@ -112,9 +112,14 @@ def vendor_payments_list(request):
         'selected_supplier_id': supplier_id,
         'selected_vault_id': vault_id,
         'selected_payment_method': payment_method,
+        'active_preset': active_preset,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
+        'payment_methods': VendorPayment.PAYMENT_METHODS,
         'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
         'total_count': paginator.count,
         'stats': stats,
     }
@@ -123,11 +128,11 @@ def vendor_payments_list(request):
 
 @require_permission('treasury:payments/export')
 def vendor_payments_export(request):
+    from master_data.date_filter_utils import resolve_date_range
     supplier_id = request.GET.get('supplier')
     vault_id = request.GET.get('vault') or request.GET.get('vault_id')
     payment_method = request.GET.get('payment_method')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
     qs = VendorPayment.objects.select_related('supplier', 'vault', 'created_by', 'purchase_order').order_by('-serial_num')
@@ -138,10 +143,10 @@ def vendor_payments_export(request):
         qs = qs.filter(vault_id=vault_id)
     if payment_method:
         qs = qs.filter(payment_method=payment_method)
-    if date_from:
-        qs = qs.filter(payment_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(payment_date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(payment_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(payment_date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial_num', 'supplier__name', 'reference_number', 'notes'])
 
@@ -224,7 +229,7 @@ def vendor_payment_create(request):
             return redirect('vendor_payment_create')
 
     initial_supplier = request.GET.get('supplier_id') or request.GET.get('supplier')
-    initial_order = request.GET.get('order_id')
+    initial_order = request.GET.get('order_id') or request.GET.get('po')
 
     if initial_order and not initial_supplier:
         po_obj = PurchaseOrder.objects.filter(id=initial_order).first()
@@ -362,10 +367,10 @@ def vendor_transactions_list(request):
     """
     Vendor Ledger Transactions (عمليات الموردين).
     """
+    from master_data.date_filter_utils import resolve_date_range
     vendor_id = request.GET.get('vendor_id') or request.GET.get('supplier')
     tx_type = request.GET.get('type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
     qs = VendorTransaction.objects.select_related('account', 'account__supplier', 'created_by', 'purchase_order').order_by('-serial')
@@ -377,24 +382,24 @@ def vendor_transactions_list(request):
     if vendor_id:
         qs = qs.filter(account__supplier_id=vendor_id)
         v_obj = scoped_suppliers.filter(id=vendor_id).first()
-        active_filters.append({'label': f'المورد: {v_obj.name if v_obj else vendor_id}', 'param': 'vendor_id'})
+        active_filters.append({'label': 'المورد', 'value': v_obj.name if v_obj else vendor_id, 'param': 'vendor_id'})
 
     if tx_type in ['credit', 'debit']:
         qs = qs.filter(transaction_type=tx_type)
         tx_label = 'دائن (فاتورة مشتريات)' if tx_type == 'credit' else 'مدين (سداد / مردودات)'
-        active_filters.append({'label': f'النوع: {tx_label}', 'param': 'type'})
+        active_filters.append({'label': 'النوع', 'value': tx_label, 'param': 'type'})
 
-    if date_from:
-        qs = qs.filter(transaction_date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if parsed_from:
+        qs = qs.filter(transaction_date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
 
-    if date_to:
-        qs = qs.filter(transaction_date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_to:
+        qs = qs.filter(transaction_date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__supplier__name'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     vtx_agg = qs.aggregate(
         total_count=Count('id'),
@@ -425,10 +430,14 @@ def vendor_transactions_list(request):
         'suppliers': suppliers,
         'selected_vendor_id': vendor_id,
         'selected_type': tx_type,
+        'active_preset': active_preset,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
         'total_count': paginator.count,
         'stats': stats,
     }
@@ -438,10 +447,10 @@ def vendor_transactions_list(request):
 @require_permission('treasury:vendors/transactions_export')
 def vendor_transactions_export(request):
     """Export filtered and scoped vendor ledger transactions to Excel."""
+    from master_data.date_filter_utils import resolve_date_range
     vendor_id = request.GET.get('vendor_id') or request.GET.get('supplier')
     tx_type = request.GET.get('type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
     qs = VendorTransaction.objects.select_related('account', 'account__supplier', 'created_by', 'purchase_order').order_by('-serial')
@@ -451,10 +460,10 @@ def vendor_transactions_export(request):
         qs = qs.filter(account__supplier_id=vendor_id)
     if tx_type in ['credit', 'debit']:
         qs = qs.filter(transaction_type=tx_type)
-    if date_from:
-        qs = qs.filter(transaction_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(transaction_date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(transaction_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(transaction_date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__supplier__name'])
 
@@ -734,10 +743,10 @@ def vault_transactions_list(request):
     """
     Historical Vault Transactions with Dedicated Scoped Statistics Cards.
     """
+    from master_data.date_filter_utils import resolve_date_range
     vault_id = request.GET.get('vault_id')
     tx_type = request.GET.get('type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
     qs = VaultTransaction.objects.select_related('vault', 'created_by', 'reversal_transaction').order_by('-created_at')
@@ -748,24 +757,24 @@ def vault_transactions_list(request):
     if vault_id:
         qs = qs.filter(vault_id=vault_id)
         v_obj = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury').filter(id=vault_id).first()
-        active_filters.append({'label': f'الخزنة: {v_obj.name if v_obj else vault_id}', 'param': 'vault_id'})
+        active_filters.append({'label': 'الخزنة', 'value': v_obj.name if v_obj else vault_id, 'param': 'vault_id'})
 
     if tx_type in ['inflow', 'outflow']:
         qs = qs.filter(transaction_type=tx_type)
-        type_label = 'إيداع (Inflow)' if tx_type == 'inflow' else 'صرف (Outflow)'
-        active_filters.append({'label': f'نوع الحركة: {type_label}', 'param': 'type'})
+        type_label = 'إيداع' if tx_type == 'inflow' else 'صرف'
+        active_filters.append({'label': 'نوع الحركة', 'value': type_label, 'param': 'type'})
 
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
 
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['description', 'vault__name'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     vtx2_agg = qs.aggregate(
         total_count=Count('id'),
@@ -799,10 +808,14 @@ def vault_transactions_list(request):
         'vaults': vaults,
         'selected_vault_id': vault_id,
         'selected_tx_type': tx_type,
+        'active_preset': active_preset,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
         'total_count': paginator.count,
         'stats': stats,
         'can_reverse': can_reverse,
@@ -815,10 +828,10 @@ def vault_transactions_list(request):
 @require_permission('treasury:transactions/export')
 def vault_transactions_export(request):
     """Export filtered and scoped vault transactions to Excel."""
+    from master_data.date_filter_utils import resolve_date_range
     vault_id = request.GET.get('vault_id')
     tx_type = request.GET.get('type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
 
     qs = VaultTransaction.objects.select_related('vault', 'created_by', 'reversal_transaction').order_by('-created_at')
@@ -827,10 +840,10 @@ def vault_transactions_export(request):
         qs = qs.filter(vault_id=vault_id)
     if tx_type in ['inflow', 'outflow']:
         qs = qs.filter(transaction_type=tx_type)
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['description', 'vault__name'])
 
@@ -894,10 +907,13 @@ def vault_transfer(request):
 
     source_vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'treasury')
     dest_vaults = source_vaults
+    raw_source_vault = request.GET.get('source_vault') or request.GET.get('vault_id')
+    selected_source_vault_id = int(raw_source_vault) if raw_source_vault and str(raw_source_vault).isdigit() else None
 
     context = {
         'source_vaults': source_vaults,
         'destination_vaults': dest_vaults,
+        'selected_source_vault_id': selected_source_vault_id,
     }
     return render(request, 'treasury/vault_transfer.html', context)
 

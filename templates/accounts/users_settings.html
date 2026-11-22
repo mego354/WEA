@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}إعدادات المستخدمين وموارد المندوبين - WEA Pharma ERP{% endblock %}
+{% block title %}إعدادات المستخدمين وموارد المندوبين{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -105,18 +105,14 @@
             <div>
                 <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
                     <span class="material-symbols-outlined text-brand-600">inventory</span>
-                    <span>حالة موارد المندوبين الحاليين والمعالجة الاسترجاعية (Backfill)</span>
+                    <span>حالة موارد المندوبين الحاليين والمعالجة الاسترجاعية</span>
                 </h2>
                 <p class="text-xs text-slate-500 mt-0.5">معاينة حالة المندوبين والتأكد من امتلاك كل مندوب لمخزن وخزنة مخصصين دون تكرار أو مساس بالأرصدة</p>
             </div>
-            <form method="POST" onsubmit="return confirm('هل أنت متأكد من رغبتك في تشغيل المعالجة الاسترجاعية لإنشاء الموارد الناقصة للمندوبين الحاليين؟ هذه العملية آمنة تماماً ولن تمس الأرصدة القائمة.');">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="run_backfill">
-                <button type="submit" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-2">
-                    <span class="material-symbols-outlined text-base">sync</span>
-                    <span>تشغيل المعالجة الاسترجاعية (Backfill)</span>
-                </button>
-            </form>
+            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'users_settings' %}', extraInputs: { action: 'run_backfill' }, title: 'تشغيل المعالجة الاسترجاعية', itemName: 'موارد المندوبين', message: 'هل أنت متأكد من رغبتك في تشغيل المعالجة الاسترجاعية لإنشاء الموارد الناقصة للمندوبين الحاليين؟ هذه العملية آمنة تماماً ولن تمس الأرصدة القائمة.', submitText: 'تأكيد التشغيل', submitColor: 'bg-slate-900 hover:bg-slate-800', icon: 'sync', iconColor: 'text-brand-600 bg-brand-50' })" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">sync</span>
+                <span>تشغيل المعالجة الاسترجاعية</span>
+            </button>
         </div>
 
         <!-- Metrics Grid -->
@@ -161,7 +157,7 @@
                     {% for rep in reps %}
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="p-3 font-bold text-slate-900">
-                            {{ rep.get_full_name|default:rep.username }}
+                            {{ rep.name|default:rep.username }}
                             <span class="text-slate-400 font-normal block text-[11px]">@{{ rep.username }}</span>
                         </td>
                         <td class="p-3">

@@ -256,7 +256,7 @@
         const numLat = Number(lat);
         const numLng = Number(lng);
         if (!validCoordinates(numLat, numLng)) {
-            alert("الإحداثيات غير صالحة. تحقق من خط العرض وخط الطول.");
+            if (window.ERPToast) window.ERPToast.error("الإحداثيات غير صالحة. تحقق من خط العرض وخط الطول.");
             return;
         }
 
@@ -465,7 +465,7 @@
     if (locateBtn && canEdit) {
         locateBtn.addEventListener("click", () => {
             if (!navigator.geolocation) {
-                alert("متصفحك لا يدعم تحديد الموقع الجغرافي");
+                if (window.ERPToast) window.ERPToast.error("متصفحك لا يدعم تحديد الموقع الجغرافي");
                 return;
             }
             locateBtn.disabled = true;
@@ -485,7 +485,7 @@
                     2: "تعذر تحديد الموقع الحالي.",
                     3: "انتهت مهلة تحديد الموقع. حاول مرة أخرى."
                 };
-                alert(messages[error.code] || "تعذر تحديد موقعك الحالي.");
+                if (window.ERPToast) window.ERPToast.error(messages[error.code] || "تعذر تحديد موقعك الحالي.");
             }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
         });
     }
@@ -538,7 +538,7 @@
     if (applyManualBtn && canEdit) {
         applyManualBtn.addEventListener("click", () => {
             if (!syncManualToInputs(true)) {
-                alert("يرجى إدخال خط عرض وخط طول صحيحين.");
+                if (window.ERPToast) window.ERPToast.error("يرجى إدخال خط عرض وخط طول صحيحين.");
                 return;
             }
             manualDrawer.classList.add("hidden");

@@ -1,9 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load erp_tags %}
 
-{% block title %}
-    {% if is_create %}إضافة مخزن جديد{% else %}تعديل المخزن: {{ warehouse.name }}{% endif %} - WEA Pharma ERP
-{% endblock %}
+{% block title %}{% if is_create %}إضافة مخزن جديد{% else %}تعديل المخزن: {{ warehouse.name }}{% endif %}{% endblock %}
 
 {% block breadcrumb %}
     <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>

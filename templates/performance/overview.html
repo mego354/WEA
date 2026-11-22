@@ -1,68 +1,67 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}الأداء الميداني — نظرة عامة — WEA Pharma ERP{% endblock %}
+{% block title %}الأداء الميداني — نظرة عامة{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الأداء الميداني</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">نظرة عامة</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Top Header & Sub-navigation -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-3xl">speed</span>
-                <span>لوحة الأداء الميداني (Performance Overview)</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                مؤشرات الأداء الرئيسية والإنتاجية والمبيعات مقارنة بذات الفترة من الشهر السابق.
-            </p>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">speed</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">لوحة الأداء الميداني</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    مؤشرات الأداء الرئيسية والإنتاجية والمبيعات مقارنة بذات الفترة من الشهر السابق.
+                </p>
+            </div>
         </div>
 
-        <!-- Section Tabs Switcher -->
+        <!-- Section Tabs Switcher & Export -->
         <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {% if request.user|has_permission:'performance:overview/export' %}
-            <a href="{% url 'performance_overview_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold min-h-[38px]">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير Excel</span>
-            </a>
-            {% endif %}
-        <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
-            <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">dashboard</span>
-                <span>نظرة عامة</span>
-            </a>
-            <a href="{% url 'performance_analysis' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">insights</span>
-                <span>تحليلي</span>
-            </a>
-            <a href="{% url 'performance_daily' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">today</span>
-                <span>يومي</span>
-            </a>
-            <a href="{% url 'performance_detailed' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">grid_on</span>
-                <span>مفصل</span>
-            </a>
-        </div>
+            {% url 'performance_overview_export' as perf_overview_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=perf_overview_export_url export_perm='performance:overview/export' %}
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
+                <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">dashboard</span>
+                    <span>نظرة عامة</span>
+                </a>
+                <a href="{% url 'performance_analysis' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">insights</span>
+                    <span>تحليلي</span>
+                </a>
+                <a href="{% url 'performance_daily' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">today</span>
+                    <span>يومي</span>
+                </a>
+                <a href="{% url 'performance_detailed' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">grid_on</span>
+                    <span>مفصل</span>
+                </a>
+            </div>
         </div>
     </div>
 
     <!-- Filters Bar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
             <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">الفترة الزمنية</label>
-                <select name="period" onchange="toggleCustomDates(this.value); this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
-                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي (حتى اليوم)</option>
-                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي كاملاً</option>
-                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
-                    <option value="year" {% if period == 'year' %}selected{% endif %}>العام الحالي</option>
-                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة...</option>
-                </select>
+                {% include 'components/date_range_filter.html' with preset_name='period' from_name='start_date' to_name='end_date' active_preset=period|default:'this_month' date_from=start_date date_to=end_date allow_all_time=False include_quarter=True year_value='year' %}
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">المندوب / المسؤول</label>
-                <select name="rep" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                <select name="rep" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
                     <option value="">جميع المناديب</option>
                     {% for r in reps %}
                     <option value="{{ r.id }}" {% if selected_rep == r.id %}selected{% endif %}>{{ r.name|default:r.username }}</option>
@@ -72,7 +71,7 @@
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">المنطقة الجغرافية</label>
-                <select name="area" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                <select name="area" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
                     <option value="">كافة المحافظات والمناطق</option>
                     {% for a in areas %}
                     <option value="{{ a.id }}" {% if selected_area == a.id %}selected{% endif %}>{{ a.name }}</option>
@@ -80,27 +79,17 @@
                 </select>
             </div>
 
-            <div id="custom-dates" class="{% if period != 'custom' %}hidden{% endif %} sm:col-span-2 grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
-                    <input type="date" name="start_date" value="{{ start_date }}" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 text-slate-800 min-h-[38px]">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
-                    <input type="date" name="end_date" value="{{ end_date }}" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 text-slate-800 min-h-[38px]">
-                </div>
-            </div>
-
-            <div>
-                <button type="submit" class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_alt</span>
+            <div class="lg:pt-5 flex items-center gap-2">
+                <button type="submit" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
                     <span>تطبيق الفلاتر</span>
                 </button>
+                <a href="{% url 'performance_overview' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold min-h-[40px] inline-flex items-center">مسح</a>
             </div>
         </form>
     </div>
 
-    <!-- KPI Grid (The 22 KPI Cards) -->
+    <!-- KPI Grid -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
         {% for key, kpi in kpis.items %}
         <div class="erp-stat-card p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-brand-300 transition-colors">
@@ -112,13 +101,13 @@
             </div>
 
             <div class="my-1">
-                <div class="erp-stat-value text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                <div class="erp-stat-value text-lg sm:text-xl font-black text-slate-900 tracking-tight font-mono">
                     {% if kpi.unit == 'ج.م' %}
-                        {{ kpi.value|floatformat:2 }} <span class="text-xs font-bold text-slate-400">ج.م</span>
+                        {{ kpi.value|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span>
                     {% elif kpi.unit == '%' %}
-                        {{ kpi.value }}<span class="text-xs font-bold text-slate-400">%</span>
+                        {{ kpi.value }}<span class="text-xs font-bold text-slate-400 font-sans">%</span>
                     {% elif kpi.unit %}
-                        {{ kpi.value }} <span class="text-xs font-bold text-slate-400">{{ kpi.unit }}</span>
+                        {{ kpi.value }} <span class="text-xs font-bold text-slate-400 font-sans">{{ kpi.unit }}</span>
                     {% else %}
                         {{ kpi.value }}
                     {% endif %}
@@ -128,12 +117,12 @@
             <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] sm:text-xs">
                 <span class="text-slate-400 truncate" title="{{ kpi.detail }}">{{ kpi.detail }}</span>
                 {% if kpi.variance > 0 %}
-                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 shrink-0" title="زيادة عن الشهر السابق">
+                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 shrink-0" title="زيادة عن الفترة السابقة">
                     <span class="material-symbols-outlined text-xs">trending_up</span>
                     <span>+{{ kpi.variance }}%</span>
                 </span>
                 {% elif kpi.variance < 0 %}
-                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-rose-700 bg-rose-50 shrink-0" title="انخفاض عن الشهر السابق">
+                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-rose-700 bg-rose-50 shrink-0" title="انخفاض عن الفترة السابقة">
                     <span class="material-symbols-outlined text-xs">trending_down</span>
                     <span>{{ kpi.variance }}%</span>
                 </span>
@@ -154,7 +143,7 @@
             <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
                 <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <span class="material-symbols-outlined text-brand-600 text-lg">medical_services</span>
-                    <span>الأصناف الأكثر شرحاً وترويجاً (Top Detailed Products)</span>
+                    <span>الأصناف الأكثر شرحاً وترويجاً</span>
                 </h3>
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-slate-400 font-medium">أعلى 10 أصناف خلال الفترة</span>
@@ -167,21 +156,21 @@
                 <table id="performance_overview_products_table" data-col-table="performance_overview_products_table" class="w-full text-right text-xs">
                     <thead>
                         <tr class="text-slate-400 border-b border-slate-100 pb-2">
-                            <th class="py-2 px-3 font-bold" data-col="rank" data-col-required="true">#</th>
-                            <th class="py-2 px-3 font-bold" data-col="name" data-col-required="true">اسم المنتج / الصنف</th>
-                            <th class="py-2 px-3 font-bold" data-col="code">الكود</th>
-                            <th class="py-2 px-3 font-bold text-center" data-col="count">مرات الشرح</th>
-                            <th class="py-2 px-3 font-bold text-left" data-col="share">الحصة من الإجمالي</th>
+                            <th class="py-2 px-3 font-bold" data-col="rank" data-col-label="#" data-required="true">#</th>
+                            <th class="py-2 px-3 font-bold" data-col="name" data-col-label="اسم المنتج" data-required="true">اسم المنتج / الصنف</th>
+                            <th class="py-2 px-3 font-bold" data-col="code" data-col-label="الكود">الكود</th>
+                            <th class="py-2 px-3 font-bold text-center" data-col="count" data-col-label="مرات الشرح">مرات الشرح</th>
+                            <th class="py-2 px-3 font-bold text-left" data-col="share" data-col-label="الحصة">الحصة من الإجمالي</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         {% for p in top_detailed_products %}
                         <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="py-2.5 px-3 font-bold text-slate-400">{{ forloop.counter }}</td>
-                            <td class="py-2.5 px-3 font-bold text-slate-900">{{ p.name }}</td>
-                            <td class="py-2.5 px-3 text-slate-500 font-mono">{{ p.code|default:'–' }}</td>
-                            <td class="py-2.5 px-3 text-center font-bold text-brand-600">{{ p.count }}</td>
-                            <td class="py-2.5 px-3 text-left">
+                            <td data-col="rank" class="py-2.5 px-3 font-bold text-slate-400">{{ forloop.counter }}</td>
+                            <td data-col="name" class="py-2.5 px-3 font-bold text-slate-900">{{ p.name }}</td>
+                            <td data-col="code" class="py-2.5 px-3 text-slate-500 font-mono">{{ p.code|default:'–' }}</td>
+                            <td data-col="count" class="py-2.5 px-3 text-center font-bold text-brand-600">{{ p.count }}</td>
+                            <td data-col="share" class="py-2.5 px-3 text-left">
                                 <div class="flex items-center justify-end gap-2">
                                     <div class="w-20 bg-slate-100 rounded-full h-2 overflow-hidden">
                                         <div class="bg-brand-500 h-2 rounded-full" style="width: {{ p.share_pct }}%"></div>
@@ -210,7 +199,6 @@
                 </h3>
 
                 <div class="space-y-4 pt-2">
-                    <!-- Planned -->
                     <div>
                         <div class="flex items-center justify-between text-xs font-bold mb-1">
                             <span class="text-slate-700">زيارات مخططة</span>
@@ -221,7 +209,6 @@
                         </div>
                     </div>
 
-                    <!-- Unplanned -->
                     <div>
                         <div class="flex items-center justify-between text-xs font-bold mb-1">
                             <span class="text-slate-700">زيارات خارج الخطة</span>
@@ -232,7 +219,6 @@
                         </div>
                     </div>
 
-                    <!-- Double Visits -->
                     <div>
                         <div class="flex items-center justify-between text-xs font-bold mb-1">
                             <span class="text-slate-700">زيارات مزدوجة (إشراف)</span>
@@ -245,29 +231,17 @@
                 </div>
             </div>
 
-            <!-- Total Visits Mini Card -->
             <div class="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
                 <div>
                     <span class="text-xs font-bold text-slate-500 block">إجمالي الزيارات</span>
-                    <span class="text-xl font-black text-slate-900">{{ current.total_visits }}</span>
+                    <span class="text-xl font-black text-slate-900 font-mono">{{ current.total_visits }}</span>
                 </div>
                 <div class="text-left">
                     <span class="text-xs font-bold text-slate-500 block">نسبة تغطية العملاء</span>
-                    <span class="text-xl font-black text-brand-600">{{ current.coverage_pct }}%</span>
+                    <span class="text-xl font-black text-brand-600 font-mono">{{ current.coverage_pct }}%</span>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-function toggleCustomDates(val) {
-    const el = document.getElementById('custom-dates');
-    if (val === 'custom') {
-        el.classList.remove('hidden');
-    } else {
-        el.classList.add('hidden');
-    }
-}
-</script>
 {% endblock %}

@@ -1,50 +1,54 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}المستخدمون - WEA Pharma ERP{% endblock %}
+{% block title %}المستخدمون{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">المستخدمون</span>
+<span class="font-bold text-brand-600">المستخدمون</span>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-4">
 
-    <!-- Top Action Bar matching Reference ERP (media_1792379892471.png) -->
+    <!-- Page Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <!-- Right: Page Title -->
-        <h1 class="text-xl sm:text-2xl font-bold text-[#27bebe]">المستخدمون</h1>
+        <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-xl">group</span>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900">المستخدمون</h1>
+        </div>
 
-        <!-- Left: Action Buttons -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+            {% url 'users_export' as users_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=users_export_url export_perm='users:users/export' %}
+
             {% if request.user.is_superuser or request.user.is_super_admin %}
-            <a href="{% url 'users_settings' %}" class="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold rounded-lg border border-slate-200 shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[38px]">
-                <span class="material-symbols-outlined text-base text-slate-600">settings</span>
+            <a href="{% url 'users_settings' %}" class="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-2xs transition-colors inline-flex items-center gap-1.5 min-h-[40px]">
+                <span class="material-symbols-outlined text-base text-slate-500">settings</span>
                 <span>إعدادات المستخدمين</span>
             </a>
             {% endif %}
-            <a href="{% url 'user_create' %}" class="px-3 sm:px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-lg border border-slate-200 shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[38px]">
-                <span class="material-symbols-outlined text-base text-[#27bebe]">person_add</span>
-                <span>اضف مستخدم</span>
+
+            {% if request.user|has_permission:'users:users/create' %}
+            <a href="{% url 'user_create' %}" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs shadow-brand-500/20 transition-colors inline-flex items-center gap-1.5 min-h-[40px]">
+                <span class="material-symbols-outlined text-base">person_add</span>
+                <span>أضف مستخدم</span>
             </a>
-            <a href="{% url 'users_export' %}" class="px-3 sm:px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs sm:text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[38px]">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير البيانات</span>
-            </a>
+            {% endif %}
         </div>
     </div>
 
     <!-- Dedicated Statistics Cards Section -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
-        <!-- Card 1: Total Users -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 flex flex-col justify-between min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">إجمالي المستخدمين</span>
-                <span class="p-1.5 sm:p-2 bg-teal-50 text-[#27bebe] rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">group</span>
+                <span class="p-1.5 sm:p-2 bg-brand-50 text-brand-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">group</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
                 <span class="text-sm sm:text-lg lg:text-xl font-black text-slate-900 font-mono tracking-tight break-words leading-snug block" title="{{ stats.total_users|default:0|stat_number }}">{{ stats.total_users|default:0|stat_number }}</span>
@@ -52,10 +56,9 @@
             </div>
         </div>
 
-        <!-- Card 2: Active Users -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 flex flex-col justify-between min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المستخدمين المفعلين</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المستخدمون المفعلون</span>
                 <span class="p-1.5 sm:p-2 bg-emerald-50 text-emerald-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">check_circle</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
@@ -64,10 +67,9 @@
             </div>
         </div>
 
-        <!-- Card 3: Inactive Users -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 flex flex-col justify-between min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
-                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المستخدمين المعطلين</span>
+                <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">المستخدمون المعطلون</span>
                 <span class="p-1.5 sm:p-2 bg-slate-100 text-slate-500 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">block</span>
             </div>
             <div class="mt-2 sm:mt-3 min-w-0">
@@ -76,8 +78,7 @@
             </div>
         </div>
 
-        <!-- Card 4: Available Roles -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 flex flex-col justify-between min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">الأدوار المتاحة</span>
                 <span class="p-1.5 sm:p-2 bg-indigo-50 text-indigo-600 rounded-lg material-symbols-outlined text-base sm:text-lg shrink-0">shield_person</span>
@@ -90,92 +91,83 @@
     </div>
 
     <!-- Search & Filter Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-        <form method="GET" action="{% url 'users_list' %}" class="w-full sm:w-auto flex-1 min-w-[180px] sm:max-w-xs relative">
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 flex flex-wrap items-center justify-between gap-2.5">
+        <form method="GET" action="{% url 'users_list' %}" class="w-full sm:w-auto flex-1 min-w-[200px] sm:max-w-md relative">
             {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
             {% for rid in selected_roles %}<input type="hidden" name="role" value="{{ rid }}">{% endfor %}
             {% for ma in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ ma.id }}">{% endfor %}
             {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
-            <input type="text" name="q" value="{{ query }}" placeholder="بحث"
+            <input type="text" name="q" value="{{ query }}" placeholder="بحث بالاسم، البريد، الكود أو الهاتف..."
                    data-smart-search-module="users"
-                   class="w-full pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent transition-all shadow-xs">
-            <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
+                   class="w-full pr-9 pl-4 py-2 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
         </form>
 
-        <div class="flex items-center gap-2">
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')"
-                    class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
-                <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
-                <span>فلتر</span>
-                {% if active_filters|length > 0 %}
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">{{ active_filters|length }}</span>
-                {% endif %}
-            </button>
-            <!-- Column Picker -->
+        <div class="flex items-center gap-1.5 shrink-0">
+            {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
             {% include 'components/table_column_picker.html' with table_id='users_table' %}
         </div>
     </div>
 
-    <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-    <div id="filterDrawer" class="erp-filter-drawer">
-        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <!-- Slide-out Filter Drawer -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer">
+        <div class="h-14 border-b border-slate-100 px-5 flex items-center justify-between bg-white shrink-0">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                <span class="material-symbols-outlined text-brand-600 text-xl">filter_list</span>
+                <h2 class="text-sm font-bold text-slate-900">تصفية النتائج</h2>
+                {% if active_filters|length > 0 %}
+                <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                {% endif %}
             </div>
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-xl">close</span>
             </button>
         </div>
-        <form method="GET" action="{% url 'users_list' %}" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
-            <div>
-                <label class="mat-like-label">الحالة</label>
-                <select name="status" class="mat-like-control">
-                    <option value="">جميع الحالات</option>
-                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
-                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
-                </select>
+        <form method="GET" action="{% url 'users_list' %}" class="flex-1 flex flex-col overflow-hidden text-xs">
+            <div class="flex-1 overflow-y-auto p-5 space-y-4">
+                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                <div>
+                    <label class="mat-like-label">الحالة</label>
+                    <select name="status" class="mat-like-control">
+                        <option value="">جميع الحالات</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
+                    </select>
+                </div>
+                {% include 'components/choice_multiselect.html' with component_id='users_role' field_name='role' label='الأدوار (اختيار متعدد)' options=role_options selected_items=selected_role_items selected_values=selected_roles placeholder='جميع الأدوار...' %}
+                {% url 'contacts_search_areas_api' as users_areas_url %}
+                {% url 'contacts_search_bricks_api' as users_bricks_url %}
+                {% include 'components/area_brick_multiselect.html' with component_id='users_area' area_field_name='main_area' brick_field_name='brick' areas_api_url=users_areas_url bricks_api_url=users_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
             </div>
-            {% include 'components/choice_multiselect.html' with component_id='users_role' field_name='role' label='الأدوار (اختيار متعدد)' options=role_options selected_items=selected_role_items selected_values=selected_roles placeholder='جميع الأدوار...' %}
-            {% url 'contacts_search_areas_api' as users_areas_url %}
-            {% url 'contacts_search_bricks_api' as users_bricks_url %}
-            {% include 'components/area_brick_multiselect.html' with component_id='users_area' area_field_name='main_area' brick_field_name='brick' areas_api_url=users_areas_url bricks_api_url=users_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
-            <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
-                <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
-                <a href="{% url 'users_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
+            <div class="p-4 border-t border-slate-100 bg-white flex items-center gap-2 shrink-0">
+                <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[40px]">تطبيق الفلتر</button>
+                <a href="{% url 'users_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px] inline-flex items-center">إعادة تعيين</a>
             </div>
         </form>
-    </div>
+    </aside>
 
     <!-- Active Filters Chips -->
     {% include 'components/active_filters.html' %}
 
-    <!-- Users Table matching Reference ERP Columns & Typography -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+    <!-- Users Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto scrollbar-thin">
             <table id="users_table" data-col-table="users_table" class="min-w-[750px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/70 text-slate-600 text-xs font-bold border-b border-slate-200/80 select-none">
-                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3 px-6">
-                            <div class="flex items-center gap-1.5">
-                                <span class="material-symbols-outlined text-base text-slate-400">sort</span>
-                                <span>الاسم</span>
-                            </div>
-                        </th>
+                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3 px-6">الاسم</th>
                         <th data-col="email" data-col-label="البريد الإلكتروني" class="py-3 px-6">البريد الإلكتروني</th>
                         <th data-col="is_active" data-col-label="مفعل" class="py-3 px-6 text-center">مفعل</th>
                         <th data-col="role" data-col-label="الدور" class="py-3 px-6">الدور</th>
-                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3 px-6 text-center">إجراءات</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3 px-4 text-center w-14">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-800">
                     {% for u in users %}
                     <tr class="hover:bg-slate-50/60 transition-colors">
-                        <!-- User Name with blue/teal link matching reference -->
                         <td data-col="name" class="py-3.5 px-6 font-semibold">
-                            <a href="{% url 'user_detail' u.pk %}" class="text-blue-700 hover:text-[#27bebe] hover:underline transition-colors flex items-center gap-2">
+                            <a href="{% url 'user_detail' u.pk %}" class="text-slate-900 hover:text-brand-600 hover:underline transition-colors flex items-center gap-2">
                                 <span>{{ u.name|default:u.username }}</span>
                                 {% if u.code %}
                                 <span class="text-xs text-slate-400 font-mono">({{ u.code }})</span>
@@ -183,21 +175,18 @@
                             </a>
                         </td>
 
-                        <!-- Email -->
-                        <td data-col="email" class="py-3.5 px-6 text-xs text-slate-600 font-mono">
-                            {{ u.email|default:"—" }}
+                        <td data-col="email" class="py-3.5 px-6 text-xs text-slate-600 font-mono" dir="ltr">
+                            <div class="text-right">{{ u.email|default:"—" }}</div>
                         </td>
 
-                        <!-- Active status checkmark -->
                         <td data-col="is_active" class="py-3.5 px-6 text-center">
                             {% if u.is_active %}
-                            <span class="material-symbols-outlined text-emerald-600 text-xl font-bold" title="مفعل">check</span>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مفعل</span>
                             {% else %}
-                            <span class="material-symbols-outlined text-slate-300 text-xl" title="معطل">close</span>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">معطل</span>
                             {% endif %}
                         </td>
 
-                        <!-- Role Title & Designated Resources -->
                         <td data-col="role" class="py-3.5 px-6 text-xs font-medium text-slate-700">
                             <div>{{ u.role.display_name|default:u.role_name }}</div>
                             {% with wh=u.get_default_warehouse v=u.get_default_treasury %}
@@ -220,31 +209,43 @@
                             {% endwith %}
                         </td>
 
-                        <!-- Actions Menu -->
-                        <td data-col="actions" class="py-3.5 px-6 text-center">
-                            <div class="flex items-center justify-center gap-1.5">
-                                <a href="{% url 'user_detail' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="عرض الملف الشخصي">
-                                    <span class="material-symbols-outlined text-lg">visibility</span>
-                                </a>
-
-                                <a href="{% url 'user_edit' u.pk %}" class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 transition-colors" title="تعديل">
-                                    <span class="material-symbols-outlined text-lg">edit</span>
-                                </a>
-
-                                {% if u.pk != request.user.pk %}
-                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'user_toggle_status' u.pk %}', title: '{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}', itemName: '{{ u.name|escapejs }}', message: 'هل أنت متأكد من تغيير حالة تفعيل المستخدم <span class=\'font-bold text-slate-800\'>{{ u.name|escapejs }}</span>؟', submitText: 'تأكيد التغيير', submitColor: '{% if u.is_active %}bg-red-600 hover:bg-red-700{% else %}bg-emerald-600 hover:bg-emerald-700{% endif %}', icon: '{% if u.is_active %}person_off{% else %}how_to_reg{% endif %}', iconColor: '{% if u.is_active %}text-red-600 bg-red-50{% else %}text-emerald-600 bg-emerald-50{% endif %}' })"
-                                        class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center {% if u.is_active %}text-emerald-600 hover:text-red-600 hover:bg-red-50{% else %}text-slate-400 hover:text-emerald-600 hover:bg-emerald-50{% endif %} transition-colors"
-                                        title="{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}">
-                                    <span class="material-symbols-outlined text-lg">{% if u.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                                 </button>
-                                {% endif %}
-                                {% if request.user|has_permission:'users:users/delete' and u.pk != request.user.pk %}
-                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'user_delete' u.pk %}', title: 'حذف حساب المستخدم', itemName: '{{ u.name|default:u.username|escapejs }}', message: 'هل أنت متأكد من حذف حساب المستخدم <span class=\'font-bold text-slate-800\'>{{ u.name|default:u.username|escapejs }}</span>؟ سيتم سحب الجلسات النشطة والحفاظ على سلامة السجلات المالية والتاريخية.' })"
-                                        class="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                        title="حذف المستخدم">
-                                    <span class="material-symbols-outlined text-lg">delete</span>
-                                </button>
-                                {% endif %}
+                                <template class="row-menu-items">
+                                    <a href="{% url 'user_detail' u.pk %}" class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                                        <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
+                                        <span>عرض الملف الشخصي</span>
+                                    </a>
+                                    {% if request.user|has_permission:'users:users/edit' %}
+                                    <a href="{% url 'user_edit' u.pk %}" class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                                        <span class="material-symbols-outlined text-base text-brand-600">edit</span>
+                                        <span>تعديل البيانات</span>
+                                    </a>
+                                    {% if u.pk != request.user.pk %}
+                                    <button type="button"
+                                            onclick="showConfirmDeleteModal({ action: '{% url 'user_toggle_status' u.pk %}', title: '{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}', itemName: '{{ u.name|default:u.username|escapejs }}', message: 'هل أنت متأكد من {% if u.is_active %}تعطيل{% else %}تفعيل{% endif %} حساب المستخدم {{ u.name|default:u.username|escapejs }}؟', submitText: 'تأكيد التغيير', submitColor: '{% if u.is_active %}bg-amber-600 hover:bg-amber-700{% else %}bg-emerald-600 hover:bg-emerald-700{% endif %}', icon: '{% if u.is_active %}person_off{% else %}how_to_reg{% endif %}', iconColor: '{% if u.is_active %}text-amber-600 bg-amber-50{% else %}text-emerald-600 bg-emerald-50{% endif %}' })"
+                                            class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold {% if u.is_active %}text-amber-700 hover:bg-amber-50{% else %}text-emerald-700 hover:bg-emerald-50{% endif %} transition-colors text-right">
+                                        <span class="material-symbols-outlined text-base">{% if u.is_active %}person_off{% else %}how_to_reg{% endif %}</span>
+                                        <span>{% if u.is_active %}تعطيل الحساب{% else %}تفعيل الحساب{% endif %}</span>
+                                    </button>
+                                    {% endif %}
+                                    {% endif %}
+                                    {% if request.user|has_permission:'users:users/delete' and u.pk != request.user.pk %}
+                                    <div class="h-px bg-slate-100 my-1"></div>
+                                    <button type="button"
+                                            onclick="showConfirmDeleteModal({ action: '{% url 'user_delete' u.pk %}', title: 'حذف حساب المستخدم', itemName: '{{ u.name|default:u.username|escapejs }}', message: 'هل أنت متأكد من حذف حساب المستخدم {{ u.name|default:u.username|escapejs }}؟ سيتم سحب الجلسات النشطة والحفاظ على سلامة السجلات المالية والتاريخية.' })"
+                                            class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-right">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                        <span>حذف المستخدم</span>
+                                    </button>
+                                    {% endif %}
+                                </template>
                             </div>
                         </td>
                     </tr>
@@ -260,7 +261,6 @@
             </table>
         </div>
 
-        <!-- Server-side Pagination Component -->
         {% include 'components/pagination.html' %}
     </div>
 

@@ -952,103 +952,18 @@ def collection_create(request):
 @require_permission(['contacts:contacts/list', 'sales:orders/list', 'sales:customers/accounting'])
 def sales_customers_list(request):
     """
-    Sales Customer Directory & Profiles (دليل وبيانات العملاء).
-    Fully scoped by user role and geographic territory.
+    Canonical redirect: /sales/customers/ redirects to the unified Contacts directory
+    pre-filtered to customers (relation=customer), preserving any active filter query params.
     """
-    from master_data.filter_utils import (
-        parse_multi_str,
-        resolve_scoped_area_brick_filters,
-        build_contact_area_q,
-        build_contact_brick_q,
-    )
-    from contacts.constants import ACCOUNT_TYPES
-
-    search = request.GET.get('search', '').strip() or request.GET.get('q', '').strip()
-    status = request.GET.get('status', 'all').strip()
-    category = request.GET.get('category', 'all').strip()
-    selected_account_types = parse_multi_str(request.GET, 'account_type')
-
-    main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
-        request, 'sales',
-        area_params=('main_area', 'area_id', 'governorate'),
-        brick_params=('brick', 'brick_id', 'area'),
-    )
-    area_id = str(main_area_ids[0]) if len(main_area_ids) == 1 else ''
-
-    qs = Contact.objects.filter(is_customer=True).select_related('area', 'brick', 'customer_account', 'created_by').prefetch_related('addresses__area', 'addresses__brick')
-    qs = get_scoped_queryset(qs, request.user, 'contact')
-
-    active_filters = []
-    if status and status != 'all':
-        qs = qs.filter(status=status)
-        active_filters.append({'label': 'الحالة', 'value': status, 'param': 'status'})
-    if main_area_ids:
-        qs = qs.filter(build_contact_area_q(main_area_ids, include_addresses=True)).distinct()
-        for a_chip in selected_main_areas_chips:
-            active_filters.append({'label': 'المنطقة الرئيسية', 'value': a_chip['name'], 'param': 'main_area', 'remove_value': str(a_chip['id'])})
-    if brick_ids:
-        qs = qs.filter(build_contact_brick_q(brick_ids, include_addresses=True)).distinct()
-        for b_chip in selected_bricks_chips:
-            active_filters.append({'label': 'الخط الجغرافي / Brick', 'value': b_chip['name'], 'param': 'brick', 'remove_value': str(b_chip['id'])})
-    if selected_account_types:
-        qs = qs.filter(account_type__in=selected_account_types)
-        for at in selected_account_types:
-            active_filters.append({'label': 'نوع الحساب', 'value': at, 'param': 'account_type', 'remove_value': at})
-    if category and category != 'all':
-        qs = qs.filter(customer_category=category)
-        active_filters.append({'label': 'التصنيف', 'value': category, 'param': 'category'})
-
-    if search:
-        qs = filter_by_arabic_search(
-            qs, search,
-            ['name', 'serial_num', 'mobile', 'phone', 'code', 'contact_person', 'tax_id']
-        ).distinct()
-        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
-
-    qs = qs.order_by('name')
-
-    # Dedicated scoped statistics matching active filters
-    cust_agg = qs.aggregate(
-        total_customers=Count('id', distinct=True),
-        active_customers=Count('id', filter=Q(status__in=['active', 'customer']), distinct=True),
-        lead_customers=Count('id', filter=Q(status='lead'), distinct=True),
-    )
-    stats = {
-        'total_customers': cust_agg['total_customers'] or 0,
-        'active_customers': cust_agg['active_customers'] or 0,
-        'lead_customers': cust_agg['lead_customers'] or 0,
-        'total_receivable': CustomerAccount.objects.filter(customer__in=qs, current_balance__gt=0).aggregate(tot=Sum('current_balance'))['tot'] or Decimal('0.00'),
-    }
-
-    paginator, page_obj = paginate_queryset(request, qs, default_per_page=25)
-
-    governorates = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', 'sales')
-
-    categories = [c[0] if isinstance(c, (list, tuple)) else c for c in CUSTOMER_CATEGORIES]
-
-    context = {
-        'customers': page_obj.object_list,
-        'page_obj': page_obj,
-        'paginator': paginator,
-        'total_count': paginator.count,
-        'stats': stats,
-        'search_query': search,
-        'current_status': status,
-        'selected_status': status,
-        'current_area_id': area_id,
-        'selected_area_id': area_id,
-        'selected_main_areas_chips': selected_main_areas_chips,
-        'selected_bricks_chips': selected_bricks_chips,
-        'account_types': ACCOUNT_TYPES,
-        'selected_account_types': selected_account_types,
-        'active_filters': active_filters,
-        'current_category': category,
-        'selected_category': category,
-        'governorates': governorates,
-        'categories': categories,
-        'customer_categories': categories,
-    }
-    return render(request, 'sales/customers_list.html', context)
+    params = request.GET.copy()
+    params['relation'] = 'customer'
+    if 'main_area' in params and 'area_id' not in params:
+        params.setlist('area_id', params.getlist('main_area'))
+        del params['main_area']
+    if 'brick' in params and 'brick_id' not in params:
+        params.setlist('brick_id', params.getlist('brick'))
+        del params['brick']
+    return redirect(f"{reverse('contacts_list')}?{params.urlencode()}")
 
 
 @require_permission(['contacts:contacts/create', 'sales:orders/create'])
@@ -1141,11 +1056,17 @@ def accounting_customers_list(request):
     }
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
+    customers = get_bounded_select_options(
+        ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales'),
+        selected_id=customer_id,
+        limit=100,
+    )
 
     context = {
         'accounts': page_obj.object_list,
         'page_obj': page_obj,
         'paginator': paginator,
+        'customers': customers,
         'selected_customer_id': customer_id,
         'selected_area_id': area_id,
         'selected_main_areas_chips': selected_main_areas_chips,

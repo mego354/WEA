@@ -1,6 +1,6 @@
 from django.contrib import admin
 from master_data.admin_mixins import SafeCascadeAdminMixin
-from .models import RoleNotificationRule, Notification, NotificationDevice
+from .models import RoleNotificationRule, Notification, NotificationDevice, PushDeliveryAttempt
 
 
 @admin.register(RoleNotificationRule)
@@ -22,6 +22,16 @@ class NotificationAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
 
 @admin.register(NotificationDevice)
 class NotificationDeviceAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
-    list_display = ('user', 'platform', 'provider', 'device_name', 'is_active', 'last_seen_at')
+    list_display = ('user', 'platform', 'provider', 'device_name', 'app_id', 'is_active', 'last_seen_at', 'last_push_attempt_at')
     list_filter = ('platform', 'provider', 'is_active')
-    search_fields = ('user__username', 'user__name', 'device_name', 'device_token')
+    search_fields = ('user__username', 'user__name', 'device_name', 'app_id')
+    readonly_fields = ('last_seen_at', 'created_at', 'last_push_attempt_at', 'last_push_success_at')
+
+
+@admin.register(PushDeliveryAttempt)
+class PushDeliveryAttemptAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
+    list_display = ('id', 'recipient', 'device', 'provider', 'status', 'target_url', 'error_code', 'created_at')
+    list_filter = ('status', 'provider', 'created_at')
+    search_fields = ('recipient__username', 'recipient__name', 'target_url', 'error_code', 'provider_message_id')
+    readonly_fields = ('created_at',)
+

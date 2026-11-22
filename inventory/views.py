@@ -345,12 +345,15 @@ def warehouses_export(request):
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['name', 'code'])
-    if wh_type == 'main':
-        qs = qs.filter(is_main=True)
-    elif wh_type == 'rep':
-        qs = qs.filter(is_rep_warehouse=True)
-    elif wh_type == 'standard':
-        qs = qs.filter(is_main=False, is_rep_warehouse=False)
+    if selected_wh_types:
+        wh_q = Q()
+        if 'main' in selected_wh_types:
+            wh_q |= Q(is_main=True)
+        if 'rep' in selected_wh_types:
+            wh_q |= Q(is_rep_warehouse=True)
+        if 'standard' in selected_wh_types:
+            wh_q |= Q(is_main=False, is_rep_warehouse=False)
+        qs = qs.filter(wh_q)
     if status == 'active':
         qs = qs.filter(is_active=True)
     elif status == 'inactive':
@@ -458,9 +461,11 @@ def warehouse_delete(request, pk):
 
 @require_permission('inventory:memos/manage')
 def inventory_memos_list(request):
+    from master_data.date_filter_utils import resolve_date_range
     search = request.GET.get('search', '').strip()
     warehouse_id = request.GET.get('warehouse')
     memo_type = request.GET.get('memo_type')
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
 
     qs = InventoryMemo.objects.select_related('warehouse', 'created_by').annotate(
         items_count=Count('items')
@@ -472,25 +477,23 @@ def inventory_memos_list(request):
     if warehouse_id:
         qs = qs.filter(warehouse_id=warehouse_id)
         wh = Warehouse.objects.filter(id=warehouse_id).first()
-        active_filters.append({'label': f'المخزن: {wh.name if wh else warehouse_id}', 'param': 'warehouse'})
+        active_filters.append({'label': 'المخزن', 'value': wh.name if wh else warehouse_id, 'param': 'warehouse'})
 
     if memo_type in ['inward', 'outward']:
         qs = qs.filter(memo_type=memo_type)
         type_label = 'إذن إضافة' if memo_type == 'inward' else 'إذن صرف / خصم'
-        active_filters.append({'label': f'النوع: {type_label}', 'param': 'memo_type'})
+        active_filters.append({'label': 'النوع', 'value': type_label, 'param': 'memo_type'})
 
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(qs, search, ['memo_number', 'statement'])
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     warehouses = get_scoped_queryset(Warehouse.objects.filter(is_active=True), request.user, 'warehouse').order_by('name')
 
@@ -507,10 +510,14 @@ def inventory_memos_list(request):
         'warehouses': warehouses,
         'selected_warehouse_id': warehouse_id,
         'selected_memo_type': memo_type,
+        'active_preset': active_preset,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
         'total_count': paginator.count,
         'can_stock_in': can_stock_in,
         'can_stock_out': can_stock_out,
@@ -522,11 +529,11 @@ def inventory_memos_list(request):
 @require_permission('inventory:memos/export')
 def inventory_memos_export(request):
     """Export filtered and scoped inventory memos to Excel."""
+    from master_data.date_filter_utils import resolve_date_range
     search = request.GET.get('search', '').strip()
     warehouse_id = request.GET.get('warehouse')
     memo_type = request.GET.get('memo_type')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
 
     qs = InventoryMemo.objects.select_related('warehouse', 'created_by').annotate(
         items_count=Count('items')
@@ -537,10 +544,10 @@ def inventory_memos_export(request):
         qs = qs.filter(warehouse_id=warehouse_id)
     if memo_type in ['inward', 'outward']:
         qs = qs.filter(memo_type=memo_type)
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['memo_number', 'statement'])
 
@@ -715,8 +722,10 @@ def product_transfers_list(request):
     List of product transfer requests scoped by user role and main area.
     Integrated into existing inventory/warehouse navigation.
     """
+    from master_data.date_filter_utils import resolve_date_range
     status_filter = request.GET.get('status', 'all')
     search = request.GET.get('search', '').strip()
+    parsed_from, parsed_to, active_preset, date_from, date_to = resolve_date_range(request, default_preset='all_time')
 
     qs = ProductTransferRequest.objects.select_related(
         'requesting_user', 'destination_warehouse', 'destination_warehouse__assigned_user',
@@ -729,23 +738,21 @@ def product_transfers_list(request):
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
         status_labels = dict(ProductTransferRequest.STATUS_CHOICES)
-        active_filters.append({'label': f'الحالة: {status_labels.get(status_filter, status_filter)}', 'param': 'status'})
+        active_filters.append({'label': 'الحالة', 'value': status_labels.get(status_filter, status_filter), 'param': 'status'})
 
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-        active_filters.append({'label': f'من تاريخ: {date_from}', 'param': 'date_from'})
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
-        active_filters.append({'label': f'إلى تاريخ: {date_to}', 'param': 'date_to'})
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+        active_filters.append({'label': 'من تاريخ', 'value': date_from, 'param': 'date_from'})
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
+        active_filters.append({'label': 'إلى تاريخ', 'value': date_to, 'param': 'date_to'})
 
     if search:
         qs = filter_by_arabic_search(
             qs, search,
             ['reference_number', 'requesting_user__username', 'requesting_user__first_name', 'requesting_user__last_name', 'destination_warehouse__name', 'source_warehouse__name']
         )
-        active_filters.append({'label': f'بحث: {search}', 'param': 'search'})
+        active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
 
@@ -757,10 +764,14 @@ def product_transfers_list(request):
         'page_obj': page_obj,
         'paginator': paginator,
         'current_status': status_filter,
+        'active_preset': active_preset,
         'selected_date_from': date_from,
         'selected_date_to': date_to,
+        'date_from': date_from,
+        'date_to': date_to,
         'search_query': search,
         'active_filters': active_filters,
+        'active_filters_count': len(active_filters),
         'total_count': paginator.count,
         'can_approve': can_approve,
     }
@@ -770,10 +781,10 @@ def product_transfers_list(request):
 @require_permission('inventory:transfers/export')
 def product_transfers_export(request):
     """Export filtered and scoped product transfer requests to Excel."""
+    from master_data.date_filter_utils import resolve_date_range
     status_filter = request.GET.get('status', 'all')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
 
     qs = ProductTransferRequest.objects.select_related(
         'requesting_user', 'destination_warehouse', 'source_warehouse', 'approved_by', 'executed_by'
@@ -782,10 +793,10 @@ def product_transfers_export(request):
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+    if parsed_from:
+        qs = qs.filter(created_at__date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(created_at__date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(
             qs, search,
@@ -977,6 +988,10 @@ def product_transfer_action(request, pk, action):
     Action endpoint to approve, reject, cancel, or execute an inter-warehouse transfer.
     Strictly enforced via permissions.
     """
+    if request.method != 'POST':
+        messages.error(request, "طريقة الطلب غير صالحة. يجب استخدام POST لتنفيذ الإجراء.")
+        return redirect('product_transfer_detail', pk=pk)
+
     transfer_req = get_object_or_404(ProductTransferRequest, pk=pk)
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
 

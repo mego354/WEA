@@ -1,144 +1,133 @@
 {% extends 'layouts/base.html' %}
 {% load erp_tags %}
 
-{% block title %}سجل التدقيق الشامل للعمليات - WEA Pharma ERP{% endblock %}
+{% block title %}سجل التدقيق الشامل{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">سجل التدقيق الشامل</span>
+<span class="font-bold text-brand-600">سجل التدقيق الشامل</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-4">
 
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200">
-        <div>
-            <h1 class="text-2xl font-bold text-[#27bebe] flex items-center gap-2">
-                <span class="material-symbols-outlined">history_toggle_off</span>
-                <span>سجل التدقيق الشامل لكافة العمليات</span>
-            </h1>
-            <p class="text-xs text-slate-500 mt-1">تتبع دقيق وتاريخي لكافة العمليات الحساسة في النظام (المستخدمين، جهات الاتصال، الزيارات، المخازن، المبيعات، والخزينة).</p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-xl">history_toggle_off</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900">سجل التدقيق الشامل</h1>
+                <p class="text-xs text-slate-500">تتبع تاريخي لكافة العمليات الحساسة في النظام</p>
+            </div>
         </div>
-        <div class="flex items-center gap-2">
-            {% include 'components/table_column_picker.html' with table_id='audit_logs_table' %}
-            {% if request.user|has_permission:'settings:auditLogs/export' %}
-            <a href="{% url 'audit_logs_export' %}?q={{ query|urlencode }}&module={{ module_filter|urlencode }}&action={{ action_filter|urlencode }}&user={{ user_filter|urlencode }}&date_from={{ date_from|urlencode }}&date_to={{ date_to|urlencode }}"
-               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span class="hidden sm:inline">تصدير Excel</span>
-            </a>
-            {% endif %}
-            <span class="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5 min-h-[40px]">
-                <span class="material-symbols-outlined text-base text-teal-600">security</span>
-                <span>إجمالي السجلات: {{ paginator.count }}</span>
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="px-3 py-2 bg-white text-slate-700 text-xs font-bold rounded-xl border border-slate-200 inline-flex items-center gap-1.5 min-h-[40px]">
+                <span class="material-symbols-outlined text-base text-brand-600">security</span>
+                <span>إجمالي السجلات: <span class="font-mono">{{ paginator.count }}</span></span>
             </span>
+            {% url 'audit_logs_export' as audit_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=audit_export_url export_perm='settings:auditLogs/export' %}
         </div>
     </div>
 
-    <!-- Active Filters Chips -->
-    {% include 'components/active_filters.html' %}
-
     <!-- Compact Search & Filter Drawer Trigger Toolbar -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <form method="GET" action="{% url 'audit_logs_list' %}" class="flex-1 min-w-[200px] sm:max-w-md relative">
                 {% for m in selected_modules %}<input type="hidden" name="module" value="{{ m }}">{% endfor %}
                 {% for a in selected_actions %}<input type="hidden" name="action" value="{{ a }}">{% endfor %}
                 {% if user_filter %}<input type="hidden" name="user" value="{{ user_filter }}">{% endif %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
                 {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
                 {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
-                <input type="text" name="q" value="{{ query }}" placeholder="بحث (المسؤول، السجل، IP، الوصف)..."
+                <input type="text" name="q" value="{{ query }}" placeholder="بحث (المنفذ، السجل، IP، الوصف)..."
                        data-smart-search-module="audit_logs"
-                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[38px]">
+                       class="w-full h-10 pr-9 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
                 <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
             </form>
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')"
-                    class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[38px]">
-                <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
-                <span>فلتر</span>
-                {% if active_filters|length > 0 %}
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">{{ active_filters|length }}</span>
-                {% endif %}
-            </button>
+            <div class="flex items-center gap-1.5 shrink-0">
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+                {% include 'components/table_column_picker.html' with table_id='audit_logs_table' %}
+            </div>
         </div>
     </div>
 
-    <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-    <div id="filterDrawer" class="erp-filter-drawer">
-        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <!-- Active Filters Chips (Directly below search toolbar) -->
+    {% include 'components/active_filters.html' %}
+
+    <!-- Slide-out Filter Drawer -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer">
+        <div class="h-14 border-b border-slate-100 px-5 flex items-center justify-between bg-white shrink-0">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                <span class="material-symbols-outlined text-brand-600 text-xl">filter_list</span>
+                <h2 class="text-sm font-bold text-slate-900">تصفية النتائج</h2>
+                {% if active_filters|length > 0 %}
+                <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                {% endif %}
             </div>
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-xl">close</span>
             </button>
         </div>
-        <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
-            {% include 'components/choice_multiselect.html' with component_id='audit_module' field_name='module' label='الموديول (اختيار متعدد)' options=module_options selected_items=selected_module_items selected_values=selected_modules placeholder='جميع الموديولات...' %}
-            {% include 'components/choice_multiselect.html' with component_id='audit_action' field_name='action' label='نوع العملية (اختيار متعدد)' options=action_options selected_items=selected_action_items selected_values=selected_actions placeholder='جميع العمليات...' %}
-            <div>
-                <label class="mat-like-label">المستخدم</label>
-                <select name="user" data-smart-select="true" data-search-placeholder="ابحث عن المستخدم..." class="mat-like-control">
-                    <option value="">جميع المستخدمين</option>
-                    {% for u in users %}
-                    <option value="{{ u.id }}" {% if user_filter == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
+        <form method="GET" action="{% url 'audit_logs_list' %}" class="flex-1 flex flex-col overflow-hidden text-xs">
+            <div class="flex-1 overflow-y-auto p-5 space-y-4">
+                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                {% include 'components/choice_multiselect.html' with component_id='audit_module' field_name='module' label='الموديول (اختيار متعدد)' options=module_options selected_items=selected_module_items selected_values=selected_modules placeholder='جميع الموديولات...' %}
+                {% include 'components/choice_multiselect.html' with component_id='audit_action' field_name='action' label='نوع العملية (اختيار متعدد)' options=action_options selected_items=selected_action_items selected_values=selected_actions placeholder='جميع العمليات...' %}
                 <div>
-                    <label class="mat-like-label">من تاريخ</label>
-                    <input type="date" name="date_from" value="{{ date_from }}" class="mat-like-control">
+                    <label class="mat-like-label">المستخدم</label>
+                    <select name="user" data-smart-select="true" data-search-placeholder="ابحث عن المستخدم..." class="mat-like-control">
+                        <option value="">جميع المستخدمين</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if user_filter == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name|default:u.username }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-                <div>
-                    <label class="mat-like-label">إلى تاريخ</label>
-                    <input type="date" name="date_to" value="{{ date_to }}" class="mat-like-control">
-                </div>
+                {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=date_from date_to=date_to %}
             </div>
-            <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
-                <button type="submit" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
-                <a href="{% url 'audit_logs_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
+            <div class="p-4 border-t border-slate-100 bg-white flex items-center gap-2 shrink-0">
+                <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[40px]">تطبيق الفلتر</button>
+                <a href="{% url 'audit_logs_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px] inline-flex items-center">إعادة تعيين</a>
             </div>
         </form>
-    </div>
+    </aside>
 
     <!-- Logs Table / Mobile Cards -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <!-- Desktop Table (hidden on mobile < 768px) -->
         <div class="hidden md:block overflow-x-auto">
             <table id="audit_logs_table" data-col-table="audit_logs_table" class="w-full text-right border-collapse">
                 <thead>
                     <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] font-bold">
-                        <th class="p-3.5" data-col="created_at" data-col-required="true">التاريخ والوقت</th>
-                        <th class="p-3.5" data-col="module">الموديول</th>
-                        <th class="p-3.5" data-col="action_type" data-col-required="true">نوع العملية</th>
-                        <th class="p-3.5" data-col="actor">المنفذ</th>
-                        <th class="p-3.5" data-col="target">السجل المستهدف</th>
-                        <th class="p-3.5" data-col="status">الحالة</th>
-                        <th class="p-3.5" data-col="ip_address">عنوان IP</th>
-                        <th class="p-3.5" data-col="description">الوصف</th>
-                        <th class="p-3.5 text-center" data-col="details" data-col-required="true">التفاصيل</th>
+                        <th class="p-3.5" data-col="created_at" data-col-label="التاريخ والوقت" data-required="true">التاريخ والوقت</th>
+                        <th class="p-3.5" data-col="module" data-col-label="الموديول">الموديول</th>
+                        <th class="p-3.5" data-col="action_type" data-col-label="نوع العملية" data-required="true">نوع العملية</th>
+                        <th class="p-3.5" data-col="actor" data-col-label="المنفذ">المنفذ</th>
+                        <th class="p-3.5" data-col="target" data-col-label="السجل المستهدف">السجل المستهدف</th>
+                        <th class="p-3.5" data-col="status" data-col-label="الحالة">الحالة</th>
+                        <th class="p-3.5" data-col="ip_address" data-col-label="عنوان IP">عنوان IP</th>
+                        <th class="p-3.5" data-col="description" data-col-label="الوصف">الوصف</th>
+                        <th class="p-3.5 text-center w-14" data-col="actions" data-col-label="إجراءات" data-required="true">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-xs">
                     {% for log in logs %}
                     <tr class="hover:bg-slate-50/60 transition-colors">
-                        <td class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                            {{ log.created_at|date:"Y-m-d H:i:s" }}
+                        <td data-col="created_at" class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap" dir="ltr">
+                            <div class="text-right">{{ log.created_at|date:"Y-m-d H:i:s" }}</div>
                         </td>
-                        <td class="p-3.5 whitespace-nowrap">
+                        <td data-col="module" class="p-3.5 whitespace-nowrap">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                 {{ log.get_module_display }}
                             </span>
                         </td>
-                        <td class="p-3.5 whitespace-nowrap">
+                        <td data-col="action_type" class="p-3.5 whitespace-nowrap">
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold
                                 {% if 'CREATE' in log.action_type|upper or 'ADD' in log.action_type|upper %}bg-emerald-50 text-emerald-700 border border-emerald-200
                                 {% elif 'DELETE' in log.action_type|upper or 'CANCEL' in log.action_type|upper or 'REJECT' in log.action_type|upper %}bg-rose-50 text-rose-700 border border-rose-200
@@ -154,14 +143,14 @@
                                 <span>{{ log.get_action_type_display }}</span>
                             </span>
                         </td>
-                        <td class="p-3.5 whitespace-nowrap">
+                        <td data-col="actor" class="p-3.5 whitespace-nowrap">
                             {% if log.actor %}
                             <span class="font-bold text-slate-800">{{ log.actor.name|default:log.actor.username }}</span>
                             {% else %}
                             <span class="text-slate-400 italic">النظام تلقائياً</span>
                             {% endif %}
                         </td>
-                        <td class="p-3.5 whitespace-nowrap">
+                        <td data-col="target" class="p-3.5 whitespace-nowrap">
                             {% if log.record_name or log.record_id %}
                             <span class="font-medium text-slate-700">{{ log.record_name|default:log.record_id }}</span>
                             {% elif log.target_user %}
@@ -172,7 +161,7 @@
                             <span class="text-slate-400">-</span>
                             {% endif %}
                         </td>
-                        <td class="p-3.5 whitespace-nowrap">
+                        <td data-col="status" class="p-3.5 whitespace-nowrap">
                             {% if log.status == 'SUCCESS' %}
                             <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                                 <span class="material-symbols-outlined text-[12px]">check_circle</span>
@@ -187,18 +176,28 @@
                             <span class="text-slate-400">-</span>
                             {% endif %}
                         </td>
-                        <td class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                        <td data-col="ip_address" class="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                             {{ log.ip_address|default:"-" }}
                         </td>
-                        <td class="p-3.5 text-slate-600 max-w-xs truncate" title="{{ log.description }}">
+                        <td data-col="description" class="p-3.5 text-slate-600 max-w-xs truncate" title="{{ log.description }}">
                             {{ log.description }}
                         </td>
-                        <td class="p-3.5 text-center whitespace-nowrap">
-                            <button onclick="openAuditModal({{ log.id }})"
-                                    class="px-2.5 py-1 bg-slate-50 hover:bg-[#27bebe] hover:text-white text-slate-600 text-xs font-semibold rounded-lg border border-slate-200 transition-all flex items-center gap-1 mx-auto">
-                                <span class="material-symbols-outlined text-sm">visibility</span>
-                                <span>عرض</span>
-                            </button>
+                        <td data-col="actions" class="p-3.5 text-center whitespace-nowrap">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                                </button>
+                                <template class="row-menu-items">
+                                    <button type="button" onclick="openAuditModal('{% url 'audit_log_detail' log.id %}')"
+                                            class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-right">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                        <span>عرض التفاصيل</span>
+                                    </button>
+                                </template>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -213,11 +212,11 @@
         </div>
 
         <!-- Mobile Card View (< 768px) -->
-        <div class="md:hidden divide-y divide-slate-100">
+        <div class="block md:hidden divide-y divide-slate-100">
             {% for log in logs %}
             <div class="p-4 space-y-2.5">
-                <div class="flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-1.5 flex-wrap">
+                <div class="flex items-start justify-between gap-2 text-xs">
+                    <div class="flex items-center gap-1.5 flex-wrap min-w-0">
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                             {{ log.get_module_display }}
                         </span>
@@ -236,7 +235,21 @@
                             <span>{{ log.get_action_type_display }}</span>
                         </span>
                     </div>
-                    <span class="text-[10px] font-mono text-slate-400">{{ log.created_at|date:"Y-m-d H:i" }}</span>
+                    <div class="inline-flex justify-center shrink-0" data-row-menu-host>
+                        <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                onclick="openRowActionMenu(this, event)"
+                                class="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                title="الإجراءات">
+                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                        <template class="row-menu-items">
+                            <button type="button" onclick="openAuditModal('{% url 'audit_log_detail' log.id %}')"
+                                    class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-right">
+                                <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                <span>عرض التفاصيل</span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
 
                 <div class="flex items-center justify-between text-xs">
@@ -255,18 +268,14 @@
                     {{ log.description }}
                 </p>
 
-                <div class="flex items-center justify-between text-[11px] pt-1">
-                    <span class="text-slate-400 font-mono">IP: {{ log.ip_address|default:"-" }}</span>
-                    <button onclick="openAuditModal({{ log.id }})"
-                            class="px-3 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-lg border border-teal-200 flex items-center gap-1 hover:bg-[#27bebe] hover:text-white transition-colors">
-                        <span class="material-symbols-outlined text-sm">visibility</span>
-                        <span>تفاصيل الحدث</span>
-                    </button>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+                    <span>IP: {{ log.ip_address|default:"-" }}</span>
+                    <span>{{ log.created_at|date:"Y-m-d H:i" }}</span>
                 </div>
             </div>
             {% empty %}
             <div class="p-8 text-center text-slate-400 text-xs">
-                لا توجد أحداث تدقيق مسجلة.
+                لا توجد أحداث تدقيق مسجلة مطابقة لمعايير البحث.
             </div>
             {% endfor %}
         </div>
@@ -278,30 +287,27 @@
 </div>
 
 <!-- Audit Log Detail Modal -->
-<div id="auditDetailModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
-        <!-- Modal Header -->
+<div id="auditDetailModal" onclick="if (event.target === this) closeAuditModal()" class="fixed inset-0 z-[60] hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90dvh] flex flex-col overflow-hidden border border-slate-200">
         <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-teal-600">manage_search</span>
+                <span class="material-symbols-outlined text-brand-600">manage_search</span>
                 <h3 class="font-bold text-slate-800 text-sm sm:text-base">تفاصيل حدث التدقيق</h3>
             </div>
-            <button onclick="closeAuditModal()" class="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-200 transition-colors">
+            <button type="button" onclick="closeAuditModal()" class="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-200 transition-colors" aria-label="إغلاق">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
 
-        <!-- Modal Body -->
         <div id="auditModalContent" class="p-5 overflow-y-auto space-y-4 text-xs">
             <div class="flex items-center justify-center py-12 text-slate-400">
-                <span class="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+                <span class="material-symbols-outlined animate-spin ml-2">progress_activity</span>
                 <span>جاري تحميل التفاصيل...</span>
             </div>
         </div>
 
-        <!-- Modal Footer -->
         <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
-            <button onclick="closeAuditModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+            <button type="button" onclick="closeAuditModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors min-h-[38px]">
                 إغلاق
             </button>
         </div>
@@ -309,18 +315,24 @@
 </div>
 
 <script>
-function openAuditModal(logId) {
+function _auditEsc(val) {
+    if (typeof window.erpEscapeHtml === 'function') return window.erpEscapeHtml(val);
+    if (val === null || val === undefined) return '';
+    return String(val).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+}
+
+function openAuditModal(detailUrl) {
     const modal = document.getElementById('auditDetailModal');
     const content = document.getElementById('auditModalContent');
     modal.classList.remove('hidden');
     content.innerHTML = `
         <div class="flex items-center justify-center py-12 text-slate-400">
-            <span class="material-symbols-outlined animate-spin text-2xl mr-2">progress_activity</span>
+            <span class="material-symbols-outlined animate-spin text-2xl ml-2">progress_activity</span>
             <span>جاري تحميل تفاصيل السجل...</span>
         </div>
     `;
 
-    fetch(`/settings/audit-logs/${logId}/detail/`)
+    fetch(detailUrl)
         .then(res => {
             if (!res.ok) throw new Error('فشل جلب التفاصيل');
             return res.json();
@@ -331,8 +343,8 @@ function openAuditModal(logId) {
                 prevHtml = '<dl class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
                 for (const [k, v] of Object.entries(data.previous_values)) {
                     prevHtml += `<div class="bg-rose-50/70 border border-rose-100 p-2 rounded">
-                        <dt class="font-mono text-[10px] text-rose-600">${escapeHtml(k)}</dt>
-                        <dd class="font-semibold text-slate-800 break-words">${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
+                        <dt class="font-mono text-[10px] text-rose-600">${_auditEsc(k)}</dt>
+                        <dd class="font-semibold text-slate-800 break-words">${_auditEsc(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
                     </div>`;
                 }
                 prevHtml += '</dl>';
@@ -343,49 +355,51 @@ function openAuditModal(logId) {
                 newHtml = '<dl class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
                 for (const [k, v] of Object.entries(data.new_values)) {
                     newHtml += `<div class="bg-emerald-50/70 border border-emerald-100 p-2 rounded">
-                        <dt class="font-mono text-[10px] text-emerald-600">${escapeHtml(k)}</dt>
-                        <dd class="font-semibold text-slate-800 break-words">${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
+                        <dt class="font-mono text-[10px] text-emerald-600">${_auditEsc(k)}</dt>
+                        <dd class="font-semibold text-slate-800 break-words">${_auditEsc(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>
                     </div>`;
                 }
                 newHtml += '</dl>';
             }
 
+            const statusLabel = data.status === 'SUCCESS' ? 'ناجح' : (data.status === 'FAILURE' ? 'فشل' : (data.status || '-'));
+
             content.innerHTML = `
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                     <div>
                         <span class="text-slate-400 block text-[10px]">الموديول:</span>
-                        <span class="font-bold text-slate-800">${escapeHtml(data.module || '-')}</span>
+                        <span class="font-bold text-slate-800">${_auditEsc(data.module_display || data.module || '-')}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block text-[10px]">نوع العملية:</span>
-                        <span class="font-bold text-teal-700">${escapeHtml(data.action_type_display || data.action_type || '-')}</span>
+                        <span class="font-bold text-brand-700">${_auditEsc(data.action_type_display || data.action_type || '-')}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block text-[10px]">التاريخ والوقت:</span>
-                        <span class="font-mono text-slate-700">${escapeHtml(data.created_at || '-')}</span>
+                        <span class="font-mono text-slate-700">${_auditEsc(data.created_at || '-')}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block text-[10px]">المنفذ:</span>
-                        <span class="font-bold text-slate-800">${escapeHtml(data.actor || '-')}</span>
+                        <span class="font-bold text-slate-800">${_auditEsc(data.actor || '-')}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block text-[10px]">السجل المستهدف:</span>
-                        <span class="font-medium text-slate-700">${escapeHtml(data.record_name || data.record_id || '-')}</span>
+                        <span class="font-medium text-slate-700">${_auditEsc(data.record_name || data.record_id || '-')}</span>
                     </div>
                     <div>
                         <span class="text-slate-400 block text-[10px]">الحالة:</span>
-                        <span class="font-bold ${data.status === 'SUCCESS' ? 'text-emerald-600' : 'text-rose-600'}">${escapeHtml(data.status || '-')}</span>
+                        <span class="font-bold ${data.status === 'SUCCESS' ? 'text-emerald-600' : 'text-rose-600'}">${_auditEsc(statusLabel)}</span>
                     </div>
                     <div class="col-span-2 sm:col-span-3">
                         <span class="text-slate-400 block text-[10px]">عنوان IP والجهاز:</span>
-                        <span class="font-mono text-[11px] text-slate-600">${escapeHtml(data.ip_address || '-')} - ${escapeHtml(data.user_agent || '-')}</span>
+                        <span class="font-mono text-[11px] text-slate-600">${_auditEsc(data.ip_address || '-')} - ${_auditEsc(data.user_agent || '-')}</span>
                     </div>
                 </div>
 
                 <div>
                     <label class="font-bold text-slate-700 block mb-1">الوصف الكامل:</label>
                     <div class="bg-white border border-slate-200 p-3 rounded-lg text-slate-700">
-                        ${escapeHtml(data.description || '-')}
+                        ${_auditEsc(data.description || '-')}
                     </div>
                 </div>
 
@@ -393,15 +407,14 @@ function openAuditModal(logId) {
                 <div>
                     <label class="font-bold text-amber-700 block mb-1">السبب / الملاحظات:</label>
                     <div class="bg-amber-50/60 border border-amber-200 p-3 rounded-lg text-amber-900">
-                        ${escapeHtml(data.reason)}
+                        ${_auditEsc(data.reason)}
                     </div>
                 </div>
                 ` : ''}
 
-                <!-- Diff Values -->
                 <div class="space-y-3 pt-2">
                     <h4 class="font-bold text-slate-800 border-b border-slate-200 pb-1 flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-sm text-teal-600">difference</span>
+                        <span class="material-symbols-outlined text-sm text-brand-600">difference</span>
                         <span>مقارنة التغييرات (السابقة مقابل الجديدة):</span>
                     </h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -427,7 +440,7 @@ function openAuditModal(logId) {
             content.innerHTML = `
                 <div class="p-6 text-center text-rose-500">
                     <span class="material-symbols-outlined text-3xl">error</span>
-                    <p class="mt-2 font-bold">${escapeHtml(err.message)}</p>
+                    <p class="mt-2 font-bold">${_auditEsc(err.message)}</p>
                 </div>
             `;
         });
@@ -437,13 +450,6 @@ function closeAuditModal() {
     document.getElementById('auditDetailModal').classList.add('hidden');
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
-}
-
-// Close modal on escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeAuditModal();
 });

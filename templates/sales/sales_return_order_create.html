@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}أمر إرجاع مبيعات جديد - Bricks Rep{% endblock %}
+{% block title %}أمر إرجاع مبيعات جديد{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'sales_return_orders_list' %}" class="hover:text-[#27bebe] transition-colors">مرتجعات المبيعات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">أمر إرجاع مبيعات جديد</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-5xl mx-auto pb-16">
@@ -222,7 +230,7 @@ function handleOrderSelection(orderId) {
         .then(res => res.json())
         .then(data => {
             if (data.error) {
-                alert(data.error);
+                if (window.ERPToast) window.ERPToast.error(data.error);
                 return;
             }
             document.getElementById('customer_display').value = data.customer_name;
@@ -240,19 +248,20 @@ function handleOrderSelection(orderId) {
                 return;
             }
 
+            const esc = (v) => (window.erpEscapeHtml ? window.erpEscapeHtml(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
             let html = '';
             data.items.forEach(itm => {
                 const remQty = parseFloat(itm.remaining_returnable) || 0;
                 html += `
-                <tr class="item-row hover:bg-slate-50/50 transition-colors" data-unit-price="${itm.unit_price}" data-disc="${itm.discount_percentage}" data-tax="${itm.tax_percentage}">
+                <tr class="item-row hover:bg-slate-50/50 transition-colors" data-unit-price="${esc(itm.unit_price)}" data-disc="${esc(itm.discount_percentage)}" data-tax="${esc(itm.tax_percentage)}">
                     <td class="py-3 px-4">
-                        <input type="hidden" name="original_item_id[]" value="${itm.item_id}">
-                        <input type="hidden" name="batch_number[]" value="${itm.batch_number || ''}">
-                        <input type="hidden" name="expiry_date[]" value="${itm.expiry_date || ''}">
-                        <div class="font-bold text-slate-900">${itm.product_name}</div>
+                        <input type="hidden" name="original_item_id[]" value="${esc(itm.item_id)}">
+                        <input type="hidden" name="batch_number[]" value="${esc(itm.batch_number || '')}">
+                        <input type="hidden" name="expiry_date[]" value="${esc(itm.expiry_date || '')}">
+                        <div class="font-bold text-slate-900">${esc(itm.product_name)}</div>
                         <div class="text-[10px] text-slate-400 font-mono">
-                            كود: ${itm.product_code}
-                            ${itm.batch_number ? ' | تشغيلة: ' + itm.batch_number : ''}
+                            كود: ${esc(itm.product_code)}
+                            ${itm.batch_number ? ' | تشغيلة: ' + esc(itm.batch_number) : ''}
                         </div>
                     </td>
                     <td class="py-3 px-4 text-center font-mono font-bold text-slate-600">

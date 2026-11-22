@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}غير مصرح بالوصول (403 Forbidden) - WEA Pharma ERP{% endblock %}
+{% block title %}غير مصرح بالوصول (403){% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
@@ -18,7 +18,7 @@
         <div class="space-y-2">
             <h1 class="text-2xl font-bold text-slate-900">عذراً، الوصول غير مصرح</h1>
             <p class="text-sm text-slate-500 leading-relaxed">
-                لا تمتلك الصلاحية الكافية للوصول إلى هذه الصفحة أو تنفيذ هذا الإجراء. إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع مسؤول النظام الأعلى لتعديل صلاحيات دورك الوظيفي.
+                {% if detail %}{{ detail }}{% else %}لا تمتلك الصلاحية الكافية للوصول إلى هذه الصفحة أو تنفيذ هذا الإجراء. إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع مسؤول النظام الأعلى لتعديل صلاحيات دورك الوظيفي.{% endif %}
             </p>
         </div>
 

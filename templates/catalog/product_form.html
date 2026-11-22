@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 
 {% block title %}
-{% if is_create %}انشئ منتج - Bricks Rep{% else %}تعديل منتج: {{ product.name }} - Bricks Rep{% endif %}
+{% if is_create %}إنشاء منتج{% else %}تعديل منتج: {{ product.name }}{% endif %}
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'products_list' %}" class="hover:text-[#27bebe] transition-colors">المنتجات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{% if is_create %}إنشاء منتج{% else %}{{ product.name }}{% endif %}</span>
 {% endblock %}
 
 {% block content %}
@@ -17,8 +25,9 @@
         </div>
 
         <div class="flex items-center gap-3 w-full sm:w-auto">
-            <a href="{% url 'products_list' %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors flex items-center min-h-[44px]">
-                العودة للقائمة
+            <a href="{% url 'products_list' %}" class="flex-1 sm:flex-initial justify-center px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5 min-h-[40px]">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>العودة للقائمة</span>
             </a>
         </div>
     </div>
@@ -101,8 +110,15 @@
                 <!-- Unit -->
                 <div>
                     <label class="block font-bold text-slate-700 mb-1.5">الوحدة</label>
-                    <input type="text" name="unit" value="{{ product.unit|default:'عبوة (Pack)' }}" placeholder="عبوة / شريط / زجاجة"
+                    <input type="text" name="unit" value="{{ product.unit|default:'عبوة' }}" placeholder="عبوة / شريط / زجاجة"
                            class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">
+                </div>
+
+                <!-- Description -->
+                <div class="col-span-full">
+                    <label class="block font-bold text-slate-700 mb-1.5">وصف المنتج والملاحظات</label>
+                    <textarea name="description" rows="2" placeholder="وصف مختصر أو المادة الفعالة أو ملاحظات الصنف..."
+                              class="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#27bebe] focus:bg-white transition-colors">{{ product.description|default:'' }}</textarea>
                 </div>
 
                 <!-- Sellable Checkbox Toggle -->
@@ -269,7 +285,7 @@
             <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe]">image</span>
-                    <span>صورة المنتج (Thumbnail)</span>
+                    <span>صورة المنتج</span>
                 </h2>
                 <span class="text-[11px] text-slate-400">JPG, PNG, WEBP حتى 5 ميجابايت</span>
             </div>

@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}#{{ order.serial_num }} - أوامر المشتريات - Bricks Rep{% endblock %}
+{% block title %}#{{ order.serial_num }} - أوامر المشتريات{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'purchase_orders_list' %}" class="hover:text-[#27bebe] transition-colors">أوامر المشتريات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{{ order.order_number }}</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6 pb-16">
@@ -67,10 +75,12 @@
             </form>
             {% endif %}
 
+            {% if request.user|has_permission:'treasury:payments/create' %}
             <a href="{% url 'vendor_payment_create' %}?supplier_id={{ order.supplier.id }}&order_id={{ order.id }}&po={{ order.id }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors shadow-xs">
                 <span class="material-symbols-outlined text-base">payments</span>
                 <span>تسجيل سداد</span>
             </a>
+            {% endif %}
 
             <!-- Context Menu -->
             <div class="relative inline-block text-right" data-detail-action-menu>
@@ -102,19 +112,25 @@
                         <span>تحديث حالة السداد</span>
                     </button>
                     {% endif %}
+                    {% if can_edit %}
                     <button type="button" onclick="openSplitOrderModal()" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base text-[#27bebe]">call_split</span>
-                        <span>فصل الطلب (Split)</span>
+                        <span>فصل الطلب</span>
                     </button>
+                    {% endif %}
+                    {% if request.user|has_permission:'purchases:returns/create' %}
                     <a href="{% url 'purchase_return_order_create' %}?po={{ order.id }}" class="w-full text-right px-3.5 py-2 text-amber-700 hover:bg-amber-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base text-amber-600">refresh</span>
                         <span>إنشاء أمر إرجاع</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'purchases:orders/cancel' and order.status not in 'settled,cancelled' %}
                     <div class="h-px bg-slate-100 my-1"></div>
-                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_action' order.id 'cancel' %}', title: 'إلغاء أمر الشراء', itemName: '{{ order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء أمر الشراء رقم <span class=\'font-bold text-slate-800\'>#{{ order.serial_num }}</span> نهائياً؟', submitText: 'نعم، إلغاء الأمر', icon: 'cancel' })" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_action' order.id 'cancel' %}', title: 'إلغاء أمر الشراء', itemName: '{{ order.order_number|escapejs }}', message: 'هل أنت متأكد من رغبتك في إلغاء أمر الشراء رقم {{ order.order_number|escapejs }} نهائياً؟', submitText: 'نعم، إلغاء الأمر', icon: 'cancel' })" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base">cancel</span>
                         <span>إلغاء الأمر</span>
                     </button>
+                    {% endif %}
                     {% if can_delete %}
                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_delete' order.id %}', title: 'حذف أمر الشراء', itemName: '{{ order.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر الشراء رقم {{ order.order_number|escapejs }} نهائياً؟ سيتم عكس المخزون والحسابات.', submitText: 'تأكيد الحذف' })"
                             class="w-full text-right px-3.5 py-2 text-rose-700 hover:bg-rose-50 flex items-center gap-2">
@@ -125,7 +141,10 @@
                 </div>
             </div>
 
-            </div>
+            <a href="{% url 'purchase_orders_list' %}"
+               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة للقائمة">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
         </div>
     </div>
 
@@ -226,22 +245,24 @@
             <!-- 2. Price Breakdown Summary Card -->
             <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3 text-xs">
                 <div class="flex items-center justify-between text-slate-600">
-                    <span>إجمالي السعر</span>
-                    <span class="font-bold text-slate-900 font-mono">{{ order.subtotal|intcomma }} جنيه</span>
+                    <span>إجمالي البنود</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ order.subtotal|intcomma }} ج.م</span>
                 </div>
+                {% if order.custom_discount_percentage > 0 %}
                 <div class="flex items-center justify-between text-slate-600">
-                    <span>الصافي بعد الخصومات</span>
-                    <span class="font-bold text-slate-900 font-mono">{{ order.subtotal|intcomma }} جنيه</span>
+                    <span>خصم إضافي ({{ order.custom_discount_percentage }}%)</span>
+                    <span class="font-bold text-rose-600 font-mono">- {{ order.custom_discount_amount|default:0|intcomma }} ج.م</span>
                 </div>
+                {% endif %}
                 {% if order.shipping_fees > 0 %}
                 <div class="flex items-center justify-between text-slate-600">
-                    <span>بعد مصاريف الشحن {{ order.shipping_fees|intcomma }} جنيه</span>
-                    <span class="font-bold text-slate-900 font-mono">{{ order.grand_total|intcomma }} جنيه</span>
+                    <span>مصاريف الشحن والتوصيل</span>
+                    <span class="font-bold text-slate-900 font-mono">{{ order.shipping_fees|intcomma }} ج.م</span>
                 </div>
                 {% endif %}
                 <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-sm">
                     <span class="font-bold text-slate-900">الإجمالي النهائي</span>
-                    <span class="font-black text-[#27bebe] text-lg font-mono">{{ order.grand_total|intcomma }} جنيه</span>
+                    <span class="font-black text-[#27bebe] text-lg font-mono">{{ order.grand_total|intcomma }} ج.م</span>
                 </div>
                 <div class="flex items-center justify-between text-slate-400 text-[11px] pt-1">
                     <span>عدد القطع</span>
@@ -285,16 +306,16 @@
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-0.5">القيمة الكلية</span>
-                        <strong class="font-mono text-slate-900 font-bold">{{ order.grand_total|intcomma }} جنيه</strong>
+                        <strong class="font-mono text-slate-900 font-bold">{{ order.grand_total|intcomma }} ج.م</strong>
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-0.5">القيمة المسددة</span>
-                        <strong class="font-mono text-emerald-700 font-bold">{{ order.total_paid|intcomma }} جنيه</strong>
+                        <strong class="font-mono text-emerald-700 font-bold">{{ order.total_paid|intcomma }} ج.م</strong>
                     </div>
                     <div>
                         <span class="text-slate-400 block mb-0.5">المتبقي المطلوب</span>
                         <strong class="font-mono {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %} font-bold">
-                            {{ order.outstanding_balance|intcomma }} جنيه
+                            {{ order.outstanding_balance|intcomma }} ج.م
                         </strong>
                     </div>
                 </div>
@@ -321,7 +342,7 @@
                                     <td class="py-2.5 px-3 font-medium">{{ vp.vault.name }}</td>
                                     <td class="py-2.5 px-3 text-slate-500">{{ vp.get_payment_method_display }}</td>
                                     <td class="py-2.5 px-3 font-mono text-slate-500">{{ vp.created_at|date:"Y-m-d H:i" }}</td>
-                                    <td class="py-2.5 px-3 font-mono font-bold text-emerald-700 text-left">{{ vp.amount|intcomma }} جنيه</td>
+                                    <td class="py-2.5 px-3 font-mono font-bold text-emerald-700 text-left">{{ vp.amount|intcomma }} ج.م</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -334,10 +355,12 @@
                 {% if order.payment_requests.all %}
                 <div class="pt-3 border-t border-slate-100">
                     <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-bold text-slate-700">طلبات الصرف المرتبطة (Payment Requests)</h3>
+                        <h3 class="text-xs font-bold text-slate-700">طلبات الصرف المرتبطة</h3>
+                        {% if request.user|has_permission:'treasury:payments/create' %}
                         <a href="{% url 'vendor_payment_create' %}?po={{ order.id }}" class="text-[11px] text-[#27bebe] font-bold hover:underline">
                             + تسجيل سداد جديد
                         </a>
+                        {% endif %}
                     </div>
                     <div class="overflow-x-auto border border-slate-100 rounded-lg">
                         <table class="w-full text-right text-xs">
@@ -369,40 +392,6 @@
                 {% endif %}
             </div>
 
-            <!-- 4. Attachments Card (المرفقات) -->
-            <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
-                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[#27bebe]">attach_file</span>
-                        <span>المرفقات</span>
-                    </h2>
-                    <form method="POST" action="{% url 'purchase_order_upload_attachment' order.id %}" enctype="multipart/form-data" class="flex items-center gap-2">
-                        {% csrf_token %}
-                        <input type="file" name="file" id="po-file-upload" class="hidden" onchange="this.form.submit()">
-                        <button type="button" onclick="document.getElementById('po-file-upload').click()"
-                                class="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-[#27bebe] hover:bg-slate-50 transition-colors" title="إرفاق ملف">
-                            <span class="material-symbols-outlined text-lg">attach_file</span>
-                        </button>
-                    </form>
-                </div>
-
-                <div class="space-y-2">
-                    {% for att in order.attachments.all %}
-                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                        <div class="flex items-center gap-2.5">
-                            <span class="material-symbols-outlined text-slate-400">description</span>
-                            <span class="font-bold text-slate-800">{{ att.title }}</span>
-                        </div>
-                        <a href="{{ att.file.url }}" download class="p-1 text-slate-400 hover:text-slate-600">
-                            <span class="material-symbols-outlined text-base">download</span>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <p class="text-xs text-slate-400 text-center py-3">لا توجد مرفقات مضافة بعد</p>
-                    {% endfor %}
-                </div>
-            </div>
-
             {% include 'components/attachments_gallery.html' with target_obj=order model_key='purchaseorder' %}
 
             <!-- 5. Comments Stream (التعليقات) -->
@@ -412,6 +401,7 @@
                     <span>التعليقات</span>
                 </h2>
 
+                {% if can_edit %}
                 <form method="POST" action="{% url 'purchase_order_add_comment' order.id %}" class="space-y-3">
                     {% csrf_token %}
                     <textarea name="comment" rows="2" placeholder="أضف تعليقاً على أمر الشراء..."
@@ -422,6 +412,7 @@
                         </button>
                     </div>
                 </form>
+                {% endif %}
 
                 <div class="space-y-3 pt-2">
                     {% for c in order.comments.all %}
@@ -488,7 +479,7 @@
                 <div id="sec-basic" class="p-4 space-y-3 text-slate-600">
                     <div>
                         <span class="text-slate-400 block text-[11px]">معلومات الإنشاء</span>
-                        <strong class="text-slate-800">{{ order.created_by.get_full_name|default:order.created_by.username|default:"Accountant" }}</strong>
+                        <strong class="text-slate-800">{{ order.created_by.get_full_name|default:order.created_by.username|default:"—" }}</strong>
                         <span class="text-slate-400 block text-[10px] mt-0.5">{{ order.created_at|timesince }} مضت</span>
                     </div>
                     <div class="pt-2 border-t border-slate-100">
@@ -534,11 +525,11 @@
                 <div id="sec-vendor-acc" class="p-4 space-y-2.5 text-slate-600">
                     <div class="flex justify-between">
                         <span>الرصيد الحالي:</span>
-                        <strong class="font-mono text-slate-900 font-bold">{{ current_vendor_balance|intcomma }} جنيه</strong>
+                        <strong class="font-mono text-slate-900 font-bold">{{ current_vendor_balance|intcomma }} ج.م</strong>
                     </div>
                     <div class="flex justify-between">
                         <span>حد الائتمان:</span>
-                        <strong class="font-mono text-slate-700">{{ order.supplier.credit_limit|intcomma }} جنيه</strong>
+                        <strong class="font-mono text-slate-700">{{ order.supplier.credit_limit|intcomma }} ج.م</strong>
                     </div>
                     <div class="flex justify-between">
                         <span>فترة الائتمان:</span>
@@ -583,7 +574,7 @@
             <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-4 text-[11px] text-slate-500 space-y-2">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-base text-slate-400">schedule</span>
-                    <span>انشئ بواسطة: <strong class="text-slate-700">{{ order.created_by.get_full_name|default:order.created_by.username|default:"Accountant" }}</strong> في {{ order.created_at|date:"d/m/Y h:i A" }}</span>
+                    <span>انشئ بواسطة: <strong class="text-slate-700">{{ order.created_by.get_full_name|default:order.created_by.username|default:"—" }}</strong> في {{ order.created_at|date:"d/m/Y h:i A" }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-base text-slate-400">history</span>
@@ -628,8 +619,8 @@ function updateOrderStatus(newStatus) {
     .then(data => {
         if (data.status === 'ok') {
             location.reload();
-        } else {
-            alert(data.message || 'حدث خطأ أثناء تحديث الحالة.');
+        } else if (window.ERPToast) {
+            window.ERPToast.error(data.message || 'حدث خطأ أثناء تحديث الحالة.');
         }
     })
     .catch(e => {
@@ -781,8 +772,16 @@ function openRejectModal() {
     document.getElementById('po-reject-modal').classList.remove('hidden');
 }
 function closeRejectModal() {
-    document.getElementById('po-reject-modal').classList.add('hidden');
+    const m = document.getElementById('po-reject-modal');
+    if (m) m.classList.add('hidden');
 }
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closePaymentStatusModal();
+        closeRejectModal();
+        closeSplitOrderModal();
+    }
+});
 </script>
 {% endblock %}
 

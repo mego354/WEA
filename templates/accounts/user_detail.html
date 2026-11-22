@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}بيانات المستخدم: {{ target_user.name|default:target_user.username }} - WEA Pharma ERP{% endblock %}
+{% block title %}بيانات المستخدم: {{ target_user.name|default:target_user.username }}{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
@@ -163,7 +163,7 @@
                             {% for v in vaults %}
                             <li class="font-semibold text-slate-800 flex items-center justify-between">
                                 <span>{{ v.name }}</span>
-                                <span class="font-mono text-emerald-700 font-bold">{{ v.balance|floatformat:2 }} ج.م</span>
+                                <span class="font-mono text-emerald-700 font-bold">{{ v.current_balance|floatformat:2 }} ج.م</span>
                             </li>
                             {% endfor %}
                         </ul>
@@ -196,9 +196,9 @@
             <!-- Recent Security Audit Logs -->
             <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-3">
                 <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">سجل العمليات الأخير</h3>
-                {% if recent_logs %}
+                {% if recent_audit_logs %}
                 <div class="divide-y divide-slate-100 text-xs">
-                    {% for log in recent_logs %}
+                    {% for log in recent_audit_logs %}
                     <div class="py-2.5 space-y-0.5">
                         <div class="flex items-center justify-between">
                             <span class="font-bold text-slate-800">{{ log.get_action_type_display|default:log.action_type }}</span>

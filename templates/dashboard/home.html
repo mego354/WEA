@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 
-{% block title %}الرئيسية - Bricks Rep{% endblock %}
+{% block title %}الرئيسية{% endblock %}
 
 {% block breadcrumb %}
     <span class="text-slate-400">نظام الموارد</span>
@@ -26,7 +26,7 @@
             </button>
 
             <!-- Dropdown Popover -->
-            <div id="dateRangeDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4 transition-all animate-fadeIn">
+            <div id="dateRangeDropdown" class="hidden absolute right-0 mt-2 w-80 max-w-[92vw] bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4 transition-all animate-fadeIn">
                 <form method="GET" action="{% url 'home' %}" id="dateFilterForm" class="space-y-3">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                         <span class="text-xs font-bold text-slate-700">تحديد الفترة الزمنية</span>
@@ -37,17 +37,17 @@
 
                     <!-- Quick Preset Buttons -->
                     <div class="grid grid-cols-2 gap-1.5 text-xs">
-                        <a href="{% url 'home' %}?period=today{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=today{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
                             اليوم
                         </a>
-                        <a href="{% url 'home' %}?period=this_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=this_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
                             هذا الشهر
                         </a>
-                        <a href="{% url 'home' %}?period=last_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=last_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
                             الشهر الماضي
                         </a>
-                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
-                            كل الوقت (All Time)
+                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                            كل الوقت
                         </a>
                     </div>
 
@@ -66,12 +66,14 @@
                     {% if selected_rep %}
                         <input type="hidden" name="rep_id" value="{{ selected_rep.id }}">
                     {% endif %}
+                    {% for a in selected_main_areas %}<input type="hidden" name="main_area" value="{{ a.id }}">{% endfor %}
+                    {% for b in selected_bricks %}<input type="hidden" name="brick" value="{{ b.id }}">{% endfor %}
 
                     <div class="flex items-center gap-2 pt-2">
                         <button type="submit" class="flex-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition-colors">
                             تطبيق
                         </button>
-                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors">
+                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors">
                             الكل
                         </a>
                     </div>
@@ -85,7 +87,7 @@
             <input type="hidden" name="start_date" value="{{ start_date_str }}">
             <input type="hidden" name="end_date" value="{{ end_date_str }}">
             <input type="hidden" name="period" value="{{ period }}">
-            {% for a in selected_areas %}<input type="hidden" name="main_area" value="{{ a.id }}">{% endfor %}
+            {% for a in selected_main_areas %}<input type="hidden" name="main_area" value="{{ a.id }}">{% endfor %}
             {% for b in selected_bricks %}<input type="hidden" name="brick" value="{{ b.id }}">{% endfor %}
             <div class="relative w-full sm:w-auto min-w-[260px]">
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
@@ -113,7 +115,9 @@
         {% if selected_rep %}<input type="hidden" name="rep_id" value="{{ selected_rep.id }}">{% endif %}
         <div class="flex flex-col lg:flex-row items-stretch lg:items-end gap-3">
             <div class="flex-1 min-w-0">
-                {% include 'components/area_brick_multiselect.html' with component_id='dashboard_geo' area_field_name='main_area' brick_field_name='brick' areas_api_url='/api/dashboard/search-areas/' bricks_api_url='/api/dashboard/search-bricks/' selected_areas=selected_main_areas selected_bricks=selected_bricks %}
+                {% url 'dashboard_search_areas_api' as dash_areas_url %}
+                {% url 'dashboard_search_bricks_api' as dash_bricks_url %}
+                {% include 'components/area_brick_multiselect.html' with component_id='dashboard_geo' area_field_name='main_area' brick_field_name='brick' areas_api_url=dash_areas_url bricks_api_url=dash_bricks_url selected_areas=selected_main_areas selected_bricks=selected_bricks %}
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <button type="submit" class="px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
@@ -140,7 +144,7 @@
                 <span class="text-xs text-brand-700 bg-brand-100 px-2.5 py-0.5 rounded-full mr-1.5 font-semibold">{{ selected_rep.role_name }}</span>
             </div>
         </div>
-        <a href="{% url 'home' %}?{% if period == 'all' %}period=all{% elif start_date_str and end_date_str %}start_date={{ start_date_str }}&end_date={{ end_date_str }}{% endif %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-brand-300 text-brand-700 rounded-lg text-xs font-bold shadow-sm transition-colors">
+        <a href="{% url 'home' %}?{% if period == 'all' %}period=all{% elif start_date_str and end_date_str %}start_date={{ start_date_str }}&end_date={{ end_date_str }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-brand-300 text-brand-700 rounded-lg text-xs font-bold shadow-sm transition-colors">
             <span class="material-symbols-outlined text-sm text-brand-600">close</span>
             العودة لإحصائيات الفريق كامل
         </a>
@@ -223,7 +227,7 @@
         <!-- Chart 4: Delivered Orders by Area -->
         {% if 'orders_delivered_by_area' in available_charts %}
         <div class="bg-white rounded-lg border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 hover:shadow-md transition-shadow">
-            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المسملة حسب المنطقة</h3>
+            <h3 class="text-xs sm:text-sm font-medium text-slate-600 mb-2 text-right">الطلبات المسلمة حسب المنطقة</h3>
             <div id="chart_orders_delivered_by_area" class="w-full h-[420px]"></div>
         </div>
         {% endif %}
@@ -399,19 +403,6 @@
         });
     }
 
-    function setPreset(start, end) {
-        if (start === 'all') {
-            document.getElementById('input_period').value = 'all';
-            document.getElementById('input_start_date').value = '';
-            document.getElementById('input_end_date').value = '';
-        } else {
-            document.getElementById('input_period').value = '';
-            document.getElementById('input_start_date').value = start;
-            document.getElementById('input_end_date').value = end;
-        }
-        document.getElementById('dateFilterForm').submit();
-    }
-
     // Dashboard Charts Data from Django
     const chartsData = {{ charts_json|safe }};
 
@@ -422,7 +413,7 @@
         '#4ade80', '#fb923c', '#64748b', '#facc15'
     ];
 
-    function createSunburstOption(data, unitName = 'جنيه') {
+    function createSunburstOption(data, unitName = 'ج.م') {
         return {
             color: chartPalette,
             tooltip: {
@@ -480,7 +471,7 @@
 
     const chartInstances = [];
 
-    function initChart(domId, data, unitName = 'جنيه') {
+    function initChart(domId, data, unitName = 'ج.م') {
         const dom = document.getElementById(domId);
         if (!dom) return;
         const chart = echarts.init(dom);
@@ -507,22 +498,22 @@
 
     function initAllCharts() {
         if (chartsData.collections_by_area !== undefined) {
-            initChart('chart_collections_by_area', chartsData.collections_by_area, 'جنيه');
+            initChart('chart_collections_by_area', chartsData.collections_by_area, 'ج.م');
         }
         if (chartsData.visits_by_area !== undefined) {
             initChart('chart_visits_by_area', chartsData.visits_by_area, 'زيارة');
         }
         if (chartsData.orders_created_by_area !== undefined) {
-            initChart('chart_orders_created_by_area', chartsData.orders_created_by_area, 'جنيه');
+            initChart('chart_orders_created_by_area', chartsData.orders_created_by_area, 'ج.م');
         }
         if (chartsData.orders_delivered_by_area !== undefined) {
-            initChart('chart_orders_delivered_by_area', chartsData.orders_delivered_by_area, 'جنيه');
+            initChart('chart_orders_delivered_by_area', chartsData.orders_delivered_by_area, 'ج.م');
         }
         if (chartsData.reps_balance !== undefined) {
-            initChart('chart_reps_balance', chartsData.reps_balance, 'جنيه');
+            initChart('chart_reps_balance', chartsData.reps_balance, 'ج.م');
         }
         if (chartsData.reps_overdue !== undefined) {
-            initChart('chart_reps_overdue', chartsData.reps_overdue, 'جنيه');
+            initChart('chart_reps_overdue', chartsData.reps_overdue, 'ج.م');
         }
 
         window.addEventListener('resize', () => {

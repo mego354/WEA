@@ -1,14 +1,14 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}حسابات وأرصدة الموردين (Vendor Accounts) - WEA Pharma ERP{% endblock %}
+{% block title %}حسابات وأرصدة الموردين{% endblock %}
 
 {% block breadcrumb %}
     <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
     <span class="text-slate-400">المالية والمشتريات</span>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">حسابات وأرصدة الموردين (Vendor Balances)</span>
+    <span class="font-bold text-slate-800">حسابات وأرصدة الموردين</span>
 {% endblock %}
 
 {% block content %}
@@ -23,15 +23,19 @@
             </h1>
             <p class="text-sm text-slate-500 mt-1">متابعة المديونيات المستحقة للموردين، حدود الائتمان، ومواعيد وفترات السداد.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2.5">
-            <a href="{% url 'vendor_payments_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+        <div class="flex flex-wrap items-center gap-2">
+            {% url 'accounting_vendors_export' as av_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=av_export_url export_perm='treasury:vendors/accounting_export' %}
+            <a href="{% url 'vendor_payments_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-500">receipt_long</span>
                 <span>سندات صرف الموردين</span>
             </a>
-            <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+            {% if request.user|has_permission:'treasury:payments/create' %}
+            <a href="{% url 'vendor_payment_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>سند صرف جديد</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -120,13 +124,6 @@
                 </span>
             </h2>
             <div class="flex items-center gap-2">
-                {% if request.user|has_permission:'treasury:vendors/accounting_export' %}
-                <a href="{% url 'accounting_vendors_export' %}{% if search_query %}?search={{ search_query|urlencode }}{% endif %}"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
-                    <span class="material-symbols-outlined text-base">download</span>
-                    <span class="hidden sm:inline">تصدير Excel</span>
-                </a>
-                {% endif %}
                 {% include 'components/table_column_picker.html' with table_id='accounting_vendors_table' %}
             </div>
         </div>
@@ -176,10 +173,12 @@
                                         <span>كشف حساب PDF</span>
                                     </button>
                                     {% endif %}
+                                    {% if request.user|has_permission:'treasury:payments/create' %}
                                     <a href="{% url 'vendor_payment_create' %}?supplier_id={{ acc.supplier.id }}" class="w-full text-right px-3.5 py-2 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-emerald-600">payments</span>
                                         <span>سداد</span>
                                     </a>
+                                    {% endif %}
                                     {% if request.user|has_permission:'treasury:vendors/zero_balance' and acc.current_balance != 0 %}
                                     <button type="button"
                                             onclick="openZeroVendorBalanceModal('{% url 'accounting_vendor_zero_balance' acc.id %}', '{{ acc.supplier.name|escapejs }}', '{{ acc.current_balance|stringformat:'.2f' }}')"

@@ -2,7 +2,13 @@
 {% load static %}
 {% load humanize %}
 
-{% block title %}جدول الاعمال - {{ display_date }} - Bricks Rep{% endblock %}
+{% block title %}جدول الاعمال - {{ display_date }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">جدول الاعمال</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-5xl mx-auto space-y-6 pb-20">
@@ -54,14 +60,14 @@
         </div>
     </div>
 
-    <!-- TABS BAR (الزيارات / Todos) - Matching Reference Application -->
+    <!-- TABS BAR (الزيارات / المهام اليومية) -->
     <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
         <div class="grid grid-cols-2 text-center text-sm font-bold border-b border-slate-200">
-            <!-- Todos Tab -->
+            <!-- المهام اليومية Tab (preserves tab=todos URL param) -->
             <a href="?date={{ formatted_date }}&assignee={{ selected_rep.id }}&tab=todos"
                class="py-3.5 px-4 flex items-center justify-center gap-2 transition-colors relative {% if current_tab == 'todos' %}text-[#27bebe] bg-teal-50/30{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50/50{% endif %}">
                 <span class="material-symbols-outlined text-xl {% if current_tab == 'todos' %}text-[#27bebe]{% endif %}">checklist</span>
-                <span>Todos</span>
+                <span>المهام اليومية</span>
                 {% if todos_count > 0 %}
                 <span class="px-2 py-0.5 text-[11px] rounded-full {% if current_tab == 'todos' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700{% endif %}">
                     {{ todos_count }}
@@ -268,7 +274,7 @@
             <button type="button" onclick="openAddTodoModal()"
                     class="px-4 py-2 border border-slate-200 hover:border-[#27bebe] text-[#27bebe] bg-white hover:bg-teal-50/30 text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1.5 min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
-                <span>اضف Todo جديد</span>
+                <span>إضافة مهمة جديدة</span>
             </button>
         </div>
 
@@ -289,7 +295,7 @@
 
                 <div class="flex items-center gap-2 shrink-0">
                     <span class="text-[11px] text-slate-400 font-mono">{{ todo.created_at|date:"h:i A" }}</span>
-                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agenda_todo_delete' todo.id %}', title: 'حذف المهمة', itemName: '{{ todo.title|escapejs }}', message: 'هل تريد حذف المهمة <span class=\'font-bold text-slate-800\'>{{ todo.title|escapejs }}</span> نهائياً؟' })" class="p-1.5 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'agenda_todo_delete' todo.id %}', title: 'حذف المهمة', itemName: '{{ todo.title|escapejs }}', message: 'هل تريد حذف المهمة {{ todo.title|escapejs }} نهائياً؟' })" class="p-1.5 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
                         <span class="material-symbols-outlined text-base">delete</span>
                     </button>
                 </div>
@@ -595,7 +601,7 @@ function handleAgendaStartSubmit(e) {
             <div class="flex items-center gap-2.5 text-[#27bebe]">
                 <span class="material-symbols-outlined text-2xl">play_circle</span>
                 <div>
-                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور (Check-in)</h3>
+                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور</h3>
                     <p class="text-[11px] text-slate-500">التحقق من الموقع واستكمال أسئلة الحضور لتفعيل الزيارة</p>
                 </div>
             </div>

@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}طلب تحويل بضاعة بين المخازن - WEA Pharma ERP{% endblock %}
+{% block title %}طلب تحويل بضاعة بين المخازن{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -21,8 +21,9 @@
             <p class="text-sm text-slate-500 mt-0.5">طلب نقل أصناف من مخزن زميل في نفس المنطقة الرئيسية</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{% url 'product_transfers_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
-                العودة للقائمة
+            <a href="{% url 'product_transfers_list' %}" class="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 shadow-xs min-h-[40px]">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>العودة للقائمة</span>
             </a>
         </div>
     </div>
@@ -205,8 +206,9 @@ function createTransferRow(index, itemData = null) {
         options += `<option value="${p.id}" ${selected}>${p.name} (كود: ${p.sku})</option>`;
     });
 
-    const qty = itemData ? (itemData.quantity || 1) : 1;
-    const batch = itemData ? (itemData.batch_number || '') : '';
+    const esc = (v) => window.erpEscapeHtml ? window.erpEscapeHtml(v) : String(v ?? '');
+    const qty = esc(itemData ? (itemData.quantity || '1') : '1');
+    const batch = esc(itemData ? (itemData.batch_number || '') : '');
 
     return `
         <tr id="transfer-row-${index}" class="item-row">
@@ -252,7 +254,9 @@ function removeTransferRow(index) {
         const row = document.getElementById(`transfer-row-${index}`);
         if (row) row.remove();
     } else {
-        alert('يجب الإبقاء على بند واحد على الأقل في طلب التحويل.');
+        if (window.ERPToast) {
+            window.ERPToast.warning('يجب الإبقاء على بند واحد على الأقل في طلب التحويل.');
+        }
     }
 }
 
@@ -263,8 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitted = [
             {% for itm in submitted_items %}
             {
-                product_id: "{{ itm.product_id }}",
-                quantity: {{ itm.quantity|default:"1" }},
+                product_id: "{{ itm.product_id|escapejs }}",
+                quantity: "{{ itm.quantity|default:'1'|escapejs }}",
                 batch_number: "{{ itm.batch_number|escapejs }}"
             },
             {% endfor %}

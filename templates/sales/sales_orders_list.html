@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}أوامر البيع - WEA Pharma ERP{% endblock %}
+{% block title %}أوامر البيع{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -21,21 +21,19 @@
         <div>
             <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
                 <span class="material-symbols-outlined text-brand-600 text-2xl">point_of_sale</span>
-                <span>أوامر البيع (Sales Orders)</span>
+                <span>أوامر البيع</span>
             </h1>
             <p class="text-sm text-slate-500 mt-0.5">متابعة طلبات العملاء، اعتمادات الإدارة، التجهيز بالمستودع والتسليم والفوترة</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-            <a href="{% url 'sales_orders_export' %}?payment_status={{ current_payment_status }}&customer={{ selected_customer|default:'' }}&search={{ search_query }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}&total_min={{ selected_total_min|default:'' }}&total_max={{ selected_total_max|default:'' }}&remaining_min={{ selected_remaining_min|default:'' }}&remaining_max={{ selected_remaining_max|default:'' }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]"
-               title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير إلى Excel</span>
-            </a>
-            <a href="{% url 'sales_order_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+            {% url 'sales_orders_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='sales:orders/export' %}
+            {% if request.user|has_permission:'sales:orders/create' %}
+            <a href="{% url 'sales_order_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إنشاء أمر بيع جديد</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -99,6 +97,7 @@
                 {% for st in selected_statuses %}<input type="hidden" name="status" value="{{ st }}">{% endfor %}
                 {% for ma in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ ma.id }}">{% endfor %}
                 {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
                 {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
                 {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
                 {% if selected_total_min %}<input type="hidden" name="total_min" value="{{ selected_total_min }}">{% endif %}
@@ -112,16 +111,7 @@
 
             <div class="flex items-center gap-2">
                 <!-- Filter Drawer Button -->
-                <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>فلترة متقدمة</span>
-                    {% if active_filters|length > 0 %}
-                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-brand-500 rounded-full">
-                        {{ active_filters|length }}
-                    </span>
-                    {% endif %}
-                </button>
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
 
                 <!-- Column Picker -->
                 {% include 'components/table_column_picker.html' with table_id='sales_orders_table' %}
@@ -134,7 +124,7 @@
 
     <!-- Sales Orders Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto scrollbar-thin">
+        <div class="hidden md:block overflow-x-auto scrollbar-thin">
             <table id="sales_orders_table" data-col-table="sales_orders_table" class="min-w-[850px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/80 text-slate-500 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
@@ -205,7 +195,7 @@
                                         <span>تصدير PDF</span>
                                     </button>
                                     {% endif %}
-                                    {% if perms.sales.delete_salesorder or user.is_superuser %}
+                                    {% if request.user|has_permission:'sales:orders/delete' %}
                                     <div class="h-px bg-slate-100 my-1"></div>
                                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_order_delete' order.pk %}', title: 'حذف أمر البيع', itemName: '{{ order.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر البيع رقم {{ order.order_number|escapejs }} نهائياً؟ سيتم عكس المخزون وحسابات العميل.', submitText: 'تأكيد الحذف' })"
                                             class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
@@ -230,16 +220,46 @@
         </div>
 
         <!-- Mobile Cards Presentation (< 768px) -->
-        <div class="block md:hidden divide-y divide-slate-100 bg-slate-50/50 p-3 space-y-3">
+        <div class="block md:hidden bg-slate-50/50 p-3 space-y-3">
             {% for order in orders %}
             <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                     <a href="{% url 'sales_order_detail' order.pk %}" class="font-mono font-black text-brand-700 text-sm hover:underline">
                         {{ order.order_number }}
                     </a>
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold {{ order.payment_status_badge_class }}">
-                        {{ order.payment_status_display_ar }}
-                    </span>
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold {{ order.payment_status_badge_class }}">
+                            {{ order.payment_status_display_ar }}
+                        </span>
+                        <div class="inline-flex justify-center" data-row-menu-host>
+                            <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                    onclick="openRowActionMenu(this, event)"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                    title="الإجراءات">
+                                <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                            </button>
+                            <template class="row-menu-items">
+                                <a href="{% url 'sales_order_detail' order.pk %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
+                                    <span>عرض التفاصيل</span>
+                                </a>
+                                {% if request.user|has_permission:'sales:orders/pdf' %}
+                                <button type="button" onclick="openOrderPdfModal('{% url 'sales_order_pdf' order.pk %}', '{{ order.order_number|escapejs }}', 'salesorder')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base text-[#27bebe]">picture_as_pdf</span>
+                                    <span>تصدير PDF</span>
+                                </button>
+                                {% endif %}
+                                {% if request.user|has_permission:'sales:orders/delete' %}
+                                <div class="h-px bg-slate-100 my-1"></div>
+                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_order_delete' order.pk %}', title: 'حذف أمر البيع', itemName: '{{ order.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر البيع رقم {{ order.order_number|escapejs }} نهائياً؟ سيتم عكس المخزون وحسابات العميل.', submitText: 'تأكيد الحذف' })"
+                                        class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                    <span>حذف</span>
+                                </button>
+                                {% endif %}
+                            </template>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <h4 class="font-bold text-slate-900 text-sm">{{ order.customer.name }}</h4>
@@ -253,10 +273,15 @@
                         {% endif %}
                     </div>
                     <a href="{% url 'sales_order_detail' order.pk %}" class="inline-flex items-center gap-1 text-brand-600 font-bold hover:underline">
-                        <span>عرض وتفاصيل</span>
+                        <span>عرض التفاصيل</span>
                         <span class="material-symbols-outlined text-sm">arrow_back</span>
                     </a>
                 </div>
+            </div>
+            {% empty %}
+            <div class="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200/80">
+                <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">receipt_long</span>
+                <p class="font-medium text-slate-600 text-sm">لا توجد أوامر بيع مطابقة</p>
             </div>
             {% endfor %}
         </div>
@@ -265,22 +290,22 @@
         {% include 'components/pagination.html' %}
     </div>
 
-    <!-- SLIDE-OUT FILTER DRAWER (Requirement B1) -->
-    <div id="filter-backdrop" onclick="closeFilterDrawer()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity"></div>
-    <div id="filter-drawer" class="fixed inset-y-0 left-0 w-80 sm:w-96 bg-white shadow-2xl z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+    <!-- SLIDE-OUT FILTER DRAWER -->
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
         <!-- Drawer Header -->
-        <div class="h-16 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
-                <span class="material-symbols-outlined text-brand-600">tune</span>
-                <span>فلاتر أوامر البيع المتقدمة</span>
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+            <div class="flex items-center gap-2">
+                <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+                {% if active_filters %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
             </div>
-            <button type="button" onclick="closeFilterDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-lg">close</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
         </div>
 
         <!-- Drawer Content Form -->
-        <form method="GET" class="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-slate-700">
+        <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-slate-700">
             {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
             <!-- Customer -->
@@ -341,35 +366,22 @@
 
             <!-- Date Range -->
             <div>
-                <label class="block font-bold text-slate-700 mb-2">نطاق تاريخ الطلب</label>
-                {% include 'components/date_range_filter.html' with date_from=selected_date_from date_to=selected_date_to %}
+                {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=selected_date_from date_to=selected_date_to label='نطاق تاريخ الطلب' %}
             </div>
 
             <!-- Actions -->
             <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                 <a href="{% url 'sales_orders_list' %}"
-                   class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
+                   class="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
                     إعادة تعيين
                 </a>
                 <button type="submit"
-                        class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-lg shadow-sm flex-1">
+                        class="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-sm flex-1">
                     تطبيق الفلتر
                 </button>
             </div>
         </form>
-    </div>
+    </aside>
 
 </div>
-
-<script>
-function openFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.remove('hidden');
-    document.getElementById('filter-drawer').classList.remove('-translate-x-full');
-}
-
-function closeFilterDrawer() {
-    document.getElementById('filter-backdrop').classList.add('hidden');
-    document.getElementById('filter-drawer').classList.add('-translate-x-full');
-}
-</script>
 {% endblock %}

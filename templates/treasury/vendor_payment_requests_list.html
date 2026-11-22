@@ -1,40 +1,47 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}طلبات صرف الموردين - Bricks Rep{% endblock %}
+{% block title %}طلبات صرف الموردين{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="text-slate-400">المالية والمشتريات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">طلبات صرف الموردين</span>
+{% endblock %}
 
 {% block content %}
-<div class="relative min-h-[calc(100vh-5rem)]">
+<div class="relative min-h-[calc(100vh-5rem)] space-y-6">
 
     <!-- 1. Top Action Bar -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">طلبات صرف الموردين</h1>
-            <a href="{% url 'vendor_payments_list' %}" class="text-xs px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-[#27bebe] font-bold rounded-full border border-teal-200 transition-colors">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">request_quote</span>
+                <span>طلبات صرف الموردين</span>
+            </h1>
+            <a href="{% url 'vendor_payments_list' %}" class="text-xs px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-brand-700 font-bold rounded-full border border-teal-200 transition-colors">
                 سندات الصرف
             </a>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Export to Excel -->
-            <a href="{% url 'vendor_payment_requests_export' %}?status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-               title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير إلى Excel</span>
-            </a>
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            {% url 'vendor_payment_requests_export' as vpr_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=vpr_export_url export_perm='treasury:payment_requests/export' %}
 
-            <!-- New Payment Button (Requirement B6) -->
+            {% if request.user|has_permission:'treasury:payments/create' %}
             <a href="{% url 'vendor_payment_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>سند صرف جديد</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
     <!-- 2. Statistics Cards Section -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         <!-- Card 1: Total Requests -->
         <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
@@ -85,29 +92,22 @@
     </div>
 
     <!-- 3. Search & Filter Bar -->
-    <div class="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-xs mb-4">
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3">
-            <form method="GET" class="flex-1 max-w-md relative">
-                {% if current_status != 'all' %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+                {% for st in selected_statuses %}<input type="hidden" name="status" value="{{ st }}">{% endfor %}
                 {% if selected_supplier %}<input type="hidden" name="supplier" value="{{ selected_supplier }}">{% endif %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="بحث برقم الطلب أو المورد أو أمر الشراء..."
                        data-smart-search-module="vendor_payment_requests"
-                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
-                <span class="material-symbols-outlined absolute right-3 top-2 text-slate-400 text-lg">search</span>
+                       class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
             </form>
 
             <div class="flex items-center gap-2">
-                <!-- Slide-out Filter Drawer Button -->
-                <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>فلترة متقدمة</span>
-                    {% if active_filters_count > 0 %}
-                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                        {{ active_filters_count }}
-                    </span>
-                    {% endif %}
-                </button>
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters_count %}
                 {% include 'components/table_column_picker.html' with table_id='vendor_payment_requests_table' %}
             </div>
         </div>
@@ -117,35 +117,38 @@
     {% include 'components/active_filters.html' %}
 
     <!-- 4. Table Card -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden mb-6">
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div class="overflow-x-auto scrollbar-thin">
-            <table id="vendor_payment_requests_table" data-col-table="vendor_payment_requests_table" class="w-full text-right text-xs">
+            <table id="vendor_payment_requests_table" data-col-table="vendor_payment_requests_table" class="min-w-[850px] w-full text-right text-xs">
                 <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 select-none">
                     <tr>
-                        <th class="py-3.5 px-4" data-col="request_number" data-col-required="true">رقم الطلب</th>
-                        <th class="py-3.5 px-4" data-col="supplier" data-col-required="true">المورد</th>
-                        <th class="py-3.5 px-4" data-col="purchase_order">أمر الشراء المرتبط</th>
-                        <th class="py-3.5 px-4 text-left" data-col="amount">المبلغ المطلوب</th>
-                        <th class="py-3.5 px-4" data-col="vault">الخزنة المقترحة</th>
-                        <th class="py-3.5 px-4" data-col="request_date">تاريخ الطلب</th>
-                        <th class="py-3.5 px-4" data-col="created_by">المنشئ</th>
-                        <th class="py-3.5 px-4" data-col="status">الحالة</th>
-                        <th class="py-3.5 px-4" data-col="payment_voucher">سند الصرف المنفذ</th>
+                        <th class="py-3.5 px-4" data-col="request_number" data-col-label="رقم الطلب" data-col-required="true">رقم الطلب</th>
+                        <th class="py-3.5 px-4" data-col="supplier" data-col-label="المورد" data-col-required="true">المورد</th>
+                        <th class="py-3.5 px-4" data-col="purchase_order" data-col-label="أمر الشراء المرتبط">أمر الشراء المرتبط</th>
+                        <th class="py-3.5 px-4 text-left" data-col="amount" data-col-label="المبلغ المطلوب">المبلغ المطلوب</th>
+                        <th class="py-3.5 px-4" data-col="vault" data-col-label="الخزنة المقترحة">الخزنة المقترحة</th>
+                        <th class="py-3.5 px-4" data-col="request_date" data-col-label="تاريخ الطلب">تاريخ الطلب</th>
+                        <th class="py-3.5 px-4" data-col="created_by" data-col-label="المنشئ">المنشئ</th>
+                        <th class="py-3.5 px-4" data-col="status" data-col-label="الحالة">الحالة</th>
+                        <th class="py-3.5 px-4" data-col="payment_voucher" data-col-label="سند الصرف المنفذ">سند الصرف المنفذ</th>
+                        <th class="py-3.5 px-4 text-center" data-col="actions" data-col-label="إجراءات" data-col-required="true">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for r in requests %}
                     <tr class="hover:bg-slate-50/80 transition-colors cursor-pointer" onclick="window.location='{% url 'vendor_payment_request_detail' r.id %}'">
-                        <td class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
-                            {{ r.request_number }}
+                        <td data-col="request_number" class="py-3.5 px-4 font-mono font-bold text-[#27bebe]">
+                            <a href="{% url 'vendor_payment_request_detail' r.id %}" class="hover:underline" onclick="event.stopPropagation()">
+                                {{ r.request_number }}
+                            </a>
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
+                        <td data-col="supplier" class="py-3.5 px-4 font-bold text-slate-900">
                             {{ r.supplier.name }}
                             {% if r.supplier.area %}
                             <span class="text-[10px] text-slate-400 block font-normal">{{ r.supplier.area.name }}</span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 font-mono text-slate-600">
+                        <td data-col="purchase_order" class="py-3.5 px-4 font-mono text-slate-600">
                             {% if r.purchase_order %}
                             <a href="{% url 'purchase_order_detail' r.purchase_order.id %}" class="hover:text-brand-600 underline" onclick="event.stopPropagation()">
                                 {{ r.purchase_order.order_number }}
@@ -154,34 +157,61 @@
                             —
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 font-mono font-bold text-emerald-700 text-left">
+                        <td data-col="amount" class="py-3.5 px-4 font-mono font-bold text-emerald-700 text-left">
                             {{ r.amount|stat_number }} ج.م
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600">
+                        <td data-col="vault" class="py-3.5 px-4 text-slate-600">
                             {{ r.preferred_vault.name|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-500 font-mono">
+                        <td data-col="request_date" class="py-3.5 px-4 text-slate-500 font-mono">
                             {{ r.request_date|date:"Y-m-d" }}
                         </td>
-                        <td class="py-3.5 px-4 text-slate-600">
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-600">
                             {{ r.created_by.get_full_name|default:r.created_by.username|default:"—" }}
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td data-col="status" class="py-3.5 px-4">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ r.status_badge_class }}">
                                 {{ r.status_display_ar }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 font-mono">
+                        <td data-col="payment_voucher" class="py-3.5 px-4 font-mono">
                             {% if r.vendor_payment %}
                             <span class="text-emerald-700 font-bold">#{{ r.vendor_payment.serial_num }}</span>
                             {% else %}
                             <span class="text-slate-400">—</span>
                             {% endif %}
                         </td>
+                        <td data-col="actions" class="py-3.5 px-4 text-center" onclick="event.stopPropagation()">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                                </button>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'vendor_payment_request_detail' r.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                        <span>عرض التفاصيل</span>
+                                    </a>
+                                    {% if r.purchase_order %}
+                                    <a href="{% url 'purchase_order_detail' r.purchase_order.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-slate-500">shopping_cart</span>
+                                        <span>عرض أمر الشراء</span>
+                                    </a>
+                                    {% endif %}
+                                    <button type="button" onclick="openAttachmentsModal('vendorpaymentrequest', {{ r.id }}, 'طلب صرف {{ r.request_number|escapejs }}')"
+                                            class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-brand-700 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">attach_file</span>
+                                        <span>عرض المرفقات</span>
+                                    </button>
+                                </template>
+                            </div>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="py-12 text-center text-slate-400">
+                        <td colspan="10" class="py-12 text-center text-slate-400">
                             <span class="material-symbols-outlined text-4xl mb-2 text-slate-300 block">request_quote</span>
                             لا توجد طلبات صرف موردين مسجلة أو مطابقة لمعايير البحث.
                         </td>
@@ -191,87 +221,54 @@
             </table>
         </div>
 
-        <!-- Bounded Pagination -->
-        {% if paginator.num_pages > 1 %}
-        <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-xs text-slate-500 font-medium">
-                عرض {{ page_obj.start_index }} إلى {{ page_obj.end_index }} من إجمالي {{ total_count }} طلب
-            </span>
-            <div class="flex items-center gap-1">
-                {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
-                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">السابق</a>
-                {% endif %}
-                <span class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-[#27bebe] font-mono">
-                    {{ page_obj.number }} / {{ paginator.num_pages }}
-                </span>
-                {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}&status={{ current_status }}&supplier={{ selected_supplier|default:'' }}&search={{ search_query }}"
-                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">التالي</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
     <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-    <div id="filterDrawerBackdrop" onclick="closeFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-    <div id="filter-drawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+                {% if active_filters_count %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters_count }}</span>{% endif %}
             </div>
-            <button type="button" onclick="closeFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
         </div>
 
         <form method="GET" class="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
-                    {% include 'components/choice_multiselect.html' with component_id='vpr_status' field_name='status' label='حالة الطلب (اختيار متعدد)' options=vpr_status_options selected_items=selected_vpr_status_items selected_values=selected_statuses placeholder='اختر الحالة...' %}
+            {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-2">المورد</label>
-                        <select name="supplier"
-                                data-smart-select="true"
-                                data-search-url="{% url 'purchases_suppliers_search_api' %}"
-                                data-search-placeholder="بحث عن مورد..."
-                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">
-                            <option value="">جميع الموردين</option>
-                            {% for s in suppliers %}
-                            <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_supplier == s.id|stringformat:'i' %}selected{% endif %}>{{ s.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+            {% include 'components/choice_multiselect.html' with component_id='vpr_status' field_name='status' label='حالة الطلب (اختيار متعدد)' options=vpr_status_options selected_items=selected_vpr_status_items selected_values=selected_statuses placeholder='اختر الحالة...' %}
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-2">الفترة الزمنية</label>
-                        {% include 'components/date_range_filter.html' with date_from=date_from date_to=date_to active_preset=active_preset|default:'all_time' %}
-                    </div>
+            <div>
+                <label class="block font-bold text-slate-700 mb-1.5">المورد</label>
+                <select name="supplier"
+                        data-smart-select="true"
+                        data-search-url="{% url 'purchases_suppliers_search_api' %}"
+                        data-search-placeholder="بحث عن مورد..."
+                        class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium">
+                    <option value="">جميع الموردين</option>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}" data-subtext="{{ s.formatted_number }}{% if s.area %} | {{ s.area.name }}{% endif %}" data-search="{{ s.serial_num }} {{ s.code }} {{ s.area.name|default:'' }}" {% if selected_supplier == s.id|stringformat:'i' %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-                    <div class="pt-6 border-t border-slate-100 flex items-center justify-end gap-2">
-                        <a href="{% url 'vendor_payment_requests_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
-                            مسح الفلاتر
-                        </a>
-                        <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
-                            تطبيق
-                        </button>
-                    </div>
+            {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=date_from date_to=date_to %}
+
+            <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+                <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-xs transition-colors">
+                    تطبيق
+                </button>
+                <a href="{% url 'vendor_payment_requests_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-600 font-bold transition-colors">
+                    إعادة تعيين
+                </a>
+            </div>
         </form>
-    </div>
+    </aside>
 
 </div>
-
-<script>
-function openFilterDrawer() {
-    document.getElementById('filter-drawer').classList.add('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.remove('hidden');
-}
-function closeFilterDrawer() {
-    document.getElementById('filter-drawer').classList.remove('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.add('hidden');
-}
-</script>
 {% endblock %}

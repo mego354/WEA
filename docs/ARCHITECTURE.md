@@ -244,18 +244,13 @@ The `reports` app provides real-time field performance tracking, analytical comp
   - `detailed/`: 63-column mega performance matrix across all field metrics and operational rates + dual-visit coaching evaluations audit log table with supervisor feedback + Excel export.
 - **Reports Section (`/reports/*`)**:
   - `reports_hub`: Unified enterprise portal categorizing reports into Financial, Commercial, Supply Chain, and Activity categories with permission-aware cards.
-  - **13 Standalone Reports**:
+  - **8 Standalone Reports**:
     1. AR Aging (`/reports/ar-aging/` + `/export/` + `/print/`): 5 overdue aging buckets + DSO.
     2. Trial Balance (`/reports/trial-balance/` + `/export/` + `/print/`): Opening, debit, credit, and closing balances.
-    3. Target Achievement (`/reports/target-achievement/` + `/export/`): Monthly sales and collections quotas vs actual achievements with progress indicators.
-    4. Net Sales & Profitability (`/reports/net-sales/` + `/export/`): Delivered sales minus returns, COGS, gross profit, and margin % per product.
-    5. Customer 360 (`/reports/customer-360/` + `/export/`): 22-column comprehensive client audit.
-    6. Promotions (`/reports/promotions/` + `/export/`): Composite discount offers, bundle discounts, and promo sales volume.
-    7. Item Sales by Customer (`/reports/item-sales-by-customer/` + `/export/`): Product distribution matrix across clinics and pharmacies.
-    8. Order Deliveries (`/reports/order-deliveries/` + `/export/` + `/print/`): Logistics, dispatch status, fulfillment %, and customer GPS coordinates.
-    9. Delivery Stock Availability (`/reports/delivery-stock/` + `/export/`): Open orders allocation against on-hand, reserved, and free stock.
-    10. Item Purchases & Vendors (`/reports/item-purchases/` + `/export/`): Purchase order volumes, vendor spend, and average purchase unit cost.
-    11. Agreements ROI (`/reports/agreements-roi/` + `/export/`): Budget vs actual sales and ROI %.
-    12. Calls & Telesales (`/reports/calls/` + `/export/`): Telesales and doctor phone calls tracking, durations, and resulting orders.
-    13. Medical Samples Tracking (`/reports/samples/` + `/export/`): 16-column medical sample allocation, inventory valuations, and physician tracking.
+    3. Net Sales & Profitability (`/reports/net-sales/` + `/export/`): Delivered sales minus returns, COGS, gross profit, and margin % per product.
+    4. Customer 360 (`/reports/customer-360/` + `/export/`): 18-column comprehensive client financial and operational audit.
+    5. Item Sales by Customer (`/reports/item-sales-by-customer/` + `/export/`): Product distribution matrix across clinics and pharmacies.
+    6. Delivery Stock Availability (`/reports/delivery-stock/` + `/export/`): Open orders allocation against on-hand, reserved, and free stock with warehouse filtering.
+    7. Item Purchases & Vendors (`/reports/item-purchases/` + `/export/`): Purchase order volumes, vendor spend, and average purchase unit cost.
+    8. Agreements ROI (`/reports/agreements-roi/` + `/export/`): Budget vs actual sales and ROI %.
 - **Data Scoping**: Every report and KPI strictly executes `get_scoped_queryset(qs, request.user)`, ensuring complete data isolation between managers and reps.

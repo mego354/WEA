@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 
-{% block title %}{{ title }} - WEA Pharma ERP{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'visits_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الزيارات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">{{ title }}</span>
+{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -280,7 +288,7 @@
             <div class="pt-2 border-t border-slate-100">
                 <label for="{{ form.doubled.id_for_label }}" class="inline-flex items-center gap-2.5 cursor-pointer select-none px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-teal-300 transition-colors">
                     {{ form.doubled }}
-                    <span class="text-xs font-bold text-slate-800">زيارة مزدوجة (Double Visit)</span>
+                    <span class="text-xs font-bold text-slate-800">زيارة مزدوجة</span>
                 </label>
                 {% if form.doubled.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.doubled.errors.0 }}</p>{% endif %}
             </div>
@@ -829,7 +837,7 @@
     function handleFormSubmit(e) {
         const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
         if (!djangoSelect || !djangoSelect.value) {
-            alert('يرجى اختيار العميل المطلوب تسجيل الزيارة له أولاً.');
+            window.ERPToast.warning('يرجى اختيار العميل المطلوب تسجيل الزيارة له أولاً.');
             clearCustomerSelection();
             if (e) e.preventDefault();
             return false;
@@ -837,7 +845,7 @@
 
         const templateSelect = document.getElementById('visit-template-select') || document.getElementById('id_template') || document.querySelector('select[name="template"]');
         if (!templateSelect || !templateSelect.value) {
-            alert('اختيار قالب الزيارة إلزامي لإتمام العملية.');
+            window.ERPToast.warning('اختيار قالب الزيارة إلزامي لإتمام العملية.');
             if (templateSelect) templateSelect.focus();
             if (e) e.preventDefault();
             return false;
@@ -848,7 +856,7 @@
             const chosenDate = dateInput.value;
             const minDate = dateInput.getAttribute('min') || todayStr;
             if (chosenDate < minDate) {
-                alert('لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+                window.ERPToast.warning('لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.');
                 dateInput.focus();
                 if (e) e.preventDefault();
                 return false;
@@ -858,7 +866,7 @@
         const warningBox = document.getElementById('duplicate-visit-warning-box');
         const confirmChk = document.getElementById('id_confirm_duplicate');
         if (!isEditMode && warningBox && !warningBox.classList.contains('hidden') && confirmChk && !confirmChk.checked) {
-            alert('يوجد زيارة مسجلة أو مجدولة لهذا العميل في نفس التاريخ. يرجى تأكيد الرغبة في المتابعة من مربع التنبيه.');
+            window.ERPToast.warning('يوجد زيارة مسجلة أو مجدولة لهذا العميل في نفس التاريخ. يرجى تأكيد الرغبة في المتابعة من مربع التنبيه.');
             confirmChk.focus();
             if (e) e.preventDefault();
             return false;

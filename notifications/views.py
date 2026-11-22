@@ -1,15 +1,44 @@
 import json
+import logging
+from django.apps import apps
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
+from accounts.scope_service import ScopeResolutionService
 from master_data.pagination_utils import paginate_queryset
 
-from .models import Notification
+from .fcm_provider import FCMProvider
+from .models import Notification, NotificationDevice, PushDeliveryAttempt
 from .registry import NOTIFICATION_MODULES_META
 from .services import NotificationService
+
+logger = logging.getLogger(__name__)
+
+TARGET_MODEL_APP_MAP = {
+    'salesorder': ('sales', 'SalesOrder'),
+    'salesreturnorder': ('sales', 'SalesReturnOrder'),
+    'collection': ('sales', 'Collection'),
+    'customeraccount': ('sales', 'CustomerAccount'),
+    'purchaseorder': ('purchases', 'PurchaseOrder'),
+    'purchasereturnorder': ('purchases', 'PurchaseReturnOrder'),
+    'vendorpayment': ('treasury', 'VendorPayment'),
+    'vendorpaymentrequest': ('treasury', 'VendorPaymentRequest'),
+    'vault': ('treasury', 'Vault'),
+    'vaulttransaction': ('treasury', 'VaultTransaction'),
+    'producttransferrequest': ('inventory', 'ProductTransferRequest'),
+    'inventorymemo': ('inventory', 'InventoryMemo'),
+    'inventorystock': ('inventory', 'InventoryStock'),
+    'visit': ('activities', 'Visit'),
+    'visitplan': ('activities', 'VisitPlan'),
+    'agreement': ('activities', 'Agreement'),
+    'contact': ('contacts', 'Contact'),
+    'product': ('catalog', 'Product'),
+    'user': ('accounts', 'User'),
+}
 
 
 def _parse_json_body(request):
@@ -19,6 +48,13 @@ def _parse_json_body(request):
         except Exception:
             return {}
     return request.POST
+
+
+def _is_safe_internal_target_url(request, target: str) -> bool:
+    clean = (target or '').strip()
+    if not clean or clean.startswith('//') or clean.lower().startswith(('javascript:', 'data:', 'file:', 'vbscript:')):
+        return False
+    return url_has_allowed_host_and_scheme(clean, allowed_hosts={request.get_host()}, require_https=False)
 
 
 @login_required
@@ -40,6 +76,8 @@ def notifications_inbox(request):
 
     paginator, page_obj = paginate_queryset(request, qs, default_per_page=25, max_per_page=100)
     unread_count = NotificationService.get_unread_count(request.user)
+    user_devices = list(NotificationDevice.objects.filter(user=request.user).order_by('-last_seen_at')[:5])
+    fcm_status = FCMProvider.get_config_status()
 
     return render(request, 'notifications/notifications_list.html', {
         'notifications': page_obj.object_list,
@@ -51,16 +89,44 @@ def notifications_inbox(request):
         'filter_module': filter_module,
         'filter_severity': filter_severity,
         'modules_meta': NOTIFICATION_MODULES_META,
+        'user_devices': user_devices,
+        'fcm_status': fcm_status,
     })
 
 
 @login_required
 def notification_open(request, pk):
-    """Marks notification read (recipient-owned only) and safely redirects to its action_url."""
-    n = get_object_or_404(Notification, pk=pk, recipient=request.user)
+    """
+    Marks notification read (recipient-owned only), verifies target record existence
+    and current user permissions gracefully, and safely redirects to its action_url.
+    """
+    n = Notification.objects.filter(pk=pk, recipient=request.user).first()
+    if not n:
+        messages.warning(request, "عذراً، هذا الإشعار غير موجود أو لا ينتمي إلى حسابك.")
+        return redirect('notifications_inbox')
+
     NotificationService.mark_as_read(request.user, n.id)
+
+    # Check if the target record was deleted or user no longer has access
+    t_model = (n.target_model or '').strip().lower()
+    t_obj_id = n.target_object_id
+    if t_model in TARGET_MODEL_APP_MAP and t_obj_id:
+        app_label, model_name = TARGET_MODEL_APP_MAP[t_model]
+        try:
+            model_cls = apps.get_model(app_label, model_name)
+            target_instance = model_cls.objects.filter(pk=t_obj_id).first()
+            if target_instance is None:
+                messages.warning(request, "عذراً، السجل المرتبط بهذا الإشعار تم حذفه أو لم يعد موجوداً.")
+                return redirect('notifications_inbox')
+            is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+            if not is_super and not ScopeResolutionService.can_user_access_object(request.user, target_instance, 'view'):
+                messages.error(request, "عذراً، لم تعد تملك صلاحية عرض السجل المرتبط بهذا الإشعار.")
+                return redirect('notifications_inbox')
+        except Exception:
+            logger.exception("Error validating target record for notification %s", n.id)
+
     target = (n.action_url or '').strip()
-    if target and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=False):
+    if _is_safe_internal_target_url(request, target):
         return redirect(target)
     return redirect('notifications_inbox')
 
@@ -200,26 +266,54 @@ def api_notifications_mark_all_read(request):
 @login_required
 @require_POST
 def api_device_register(request):
-    """Registers a Capacitor Android/iOS or Web Push device token for future push channels."""
+    """
+    Registers a Capacitor Android/iOS native FCM/APNs device token against the authenticated user.
+    Accepts `device_token` (or `token` alias for compatibility) and rejects browser Web Push tokens
+    when a native platform is specified.
+    """
     payload = _parse_json_body(request)
-    token = (payload.get('device_token') or '').strip() if hasattr(payload, 'get') else ''
+    token = ''
+    if hasattr(payload, 'get'):
+        token = (payload.get('device_token') or payload.get('token') or '').strip()
     if not token:
         return JsonResponse({'status': 'error', 'message': 'device_token is required.'}, status=400)
-    device = NotificationService.register_device(
-        user=request.user,
-        device_token=token,
-        platform=(payload.get('platform') or 'android').strip(),
-        provider=(payload.get('provider') or 'fcm').strip(),
-        device_name=(payload.get('device_name') or '').strip(),
-        app_version=(payload.get('app_version') or '').strip(),
-    )
+
+    platform = (payload.get('platform') or 'android').strip().lower() if hasattr(payload, 'get') else 'android'
+    default_provider = 'apns' if platform == 'ios' else 'fcm'
+    provider = (payload.get('provider') or default_provider).strip().lower() if hasattr(payload, 'get') else default_provider
+    device_name = (payload.get('device_name') or payload.get('deviceName') or '').strip() if hasattr(payload, 'get') else ''
+    app_version = (payload.get('app_version') or payload.get('appVersion') or '').strip() if hasattr(payload, 'get') else ''
+    app_id = (payload.get('app_id') or payload.get('appId') or payload.get('app') or '').strip() if hasattr(payload, 'get') else ''
+    permission_status = (payload.get('permission_status') or payload.get('permissionStatus') or 'granted').strip() if hasattr(payload, 'get') else 'granted'
+
+    try:
+        device = NotificationService.register_device(
+            user=request.user,
+            device_token=token,
+            platform=platform,
+            provider=provider,
+            device_name=device_name,
+            app_version=app_version,
+            app_id=app_id,
+            permission_status=permission_status,
+        )
+    except ValueError as exc:
+        logger.warning("[api_device_register] Rejected token for user=%s: %s", request.user.pk, str(exc))
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    fcm_status = FCMProvider.get_config_status()
     return JsonResponse({
         'status': 'ok',
         'device_id': device.id,
+        'masked_token': device.masked_token,
         'platform': device.platform,
         'provider': device.provider,
+        'app_id': device.app_id,
         'is_active': device.is_active,
-        'push_delivery_enabled': False,
+        'user_id': request.user.pk,
+        'username': request.user.username,
+        'push_delivery_enabled': fcm_status['fcm_configured'],
+        'firebase_project_id': fcm_status['firebase_project_id'],
     })
 
 
@@ -228,8 +322,104 @@ def api_device_register(request):
 def api_device_unregister(request):
     """Deactivates a previously registered device token for the authenticated user."""
     payload = _parse_json_body(request)
-    token = (payload.get('device_token') or '').strip() if hasattr(payload, 'get') else ''
+    token = ''
+    if hasattr(payload, 'get'):
+        token = (payload.get('device_token') or payload.get('token') or '').strip()
     if not token:
         return JsonResponse({'status': 'error', 'message': 'device_token is required.'}, status=400)
     updated = NotificationService.unregister_device(request.user, token)
     return JsonResponse({'status': 'ok', 'deactivated_count': updated})
+
+
+@login_required
+@require_POST
+def api_send_test_push(request):
+    """
+    Authenticated endpoint to trigger an end-to-end test push notification
+    (Django -> FCM/APNs -> Physical Phone -> Deep Link Tap -> Target Page).
+    """
+    payload = _parse_json_body(request)
+    title = (payload.get('title') or '').strip() if hasattr(payload, 'get') else ''
+    body = (payload.get('body') or '').strip() if hasattr(payload, 'get') else ''
+    target_url = (payload.get('target_url') or '/notifications/').strip() if hasattr(payload, 'get') else '/notifications/'
+    raw_device_id = payload.get('device_id') if hasattr(payload, 'get') else None
+    device_id = int(raw_device_id) if raw_device_id and str(raw_device_id).isdigit() else None
+
+    if not _is_safe_internal_target_url(request, target_url):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'الرابط المستهدف غير صالح. يجب أن يكون مساراً داخلياً ينتمي لنفس النطاق (مثل /notifications/).',
+        }, status=400)
+
+    result = NotificationService.send_test_push_to_user(
+        user=request.user,
+        title=title,
+        body=body,
+        target_url=target_url,
+        device_id=device_id,
+    )
+    http_status = 200 if result.get('success') or result.get('status') in ('ok', 'no_devices', 'provider_error') else 400
+    return JsonResponse(result, status=http_status)
+
+
+@login_required
+@require_GET
+def api_push_diagnostics(request):
+    """
+    Authorized diagnostic endpoint returning the authenticated user's registered devices
+    (with masked tokens), FCM provider status, and recent push delivery attempts.
+    Never exposes private keys or raw tokens.
+    """
+    fcm_config = FCMProvider.get_config_status()
+    devices = list(NotificationDevice.objects.filter(user=request.user).order_by('-last_seen_at')[:10])
+    attempts = list(
+        PushDeliveryAttempt.objects.filter(recipient=request.user)
+        .select_related('device')
+        .order_by('-created_at', '-id')[:15]
+    )
+
+    return JsonResponse({
+        'status': 'ok',
+        'user': {
+            'id': request.user.pk,
+            'username': request.user.username,
+            'name': getattr(request.user, 'name', '') or request.user.username,
+        },
+        'fcm_provider': fcm_config,
+        'devices': [
+            {
+                'id': d.id,
+                'platform': d.platform,
+                'provider': d.provider,
+                'masked_token': d.masked_token,
+                'device_name': d.device_name,
+                'app_version': d.app_version,
+                'app_id': d.app_id,
+                'permission_status': d.permission_status,
+                'is_active': d.is_active,
+                'last_seen_at': d.last_seen_at.isoformat() if d.last_seen_at else None,
+                'last_push_attempt_at': d.last_push_attempt_at.isoformat() if d.last_push_attempt_at else None,
+                'last_push_success_at': d.last_push_success_at.isoformat() if d.last_push_success_at else None,
+                'last_push_error': d.last_push_error,
+                'failure_count': d.failure_count,
+                'deactivated_reason': d.deactivated_reason,
+            }
+            for d in devices
+        ],
+        'recent_attempts': [
+            {
+                'id': a.id,
+                'notification_id': a.notification_id,
+                'device_id': a.device_id,
+                'masked_token': a.device.masked_token if a.device else '***',
+                'provider': a.provider,
+                'status': a.status,
+                'target_url': a.target_url,
+                'provider_message_id': a.provider_message_id,
+                'error_code': a.error_code,
+                'error_message': a.error_message,
+                'created_at': a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in attempts
+        ],
+    })

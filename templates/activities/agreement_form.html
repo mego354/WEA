@@ -1,6 +1,14 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}{{ title }} - Bricks Rep{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'agreements_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الاتفاقيات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">{{ title }}</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-6">
@@ -76,199 +84,14 @@
 </div>
 
 <script>
-let searchDebounceTimeout = null;
-let currentCustomer = null;
-
-async function preloadCustomers() {
-    try {
-        const res = await fetch('{% url "customers_search_api" %}?q=');
-        if (res.ok) {
-            const data = await res.json();
-            const list = data.results || data || [];
-            renderSearchResults(list);
-        }
-    } catch(e) {}
-}
-
-function toggleSearchResults(e) {
-    if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    const dropdown = document.getElementById('customer-search-dropdown');
-    if (dropdown) {
-        if (dropdown.classList.contains('hidden')) {
-            openSearchResults();
-        } else {
-            dropdown.classList.add('hidden');
-        }
-    }
-}
-
-function handleCustomerSearch(e) {
-    clearTimeout(searchDebounceTimeout);
-    const query = (e && e.target ? e.target.value : '').trim();
-    const spinner = document.getElementById('search-spinner');
-    const dropdown = document.getElementById('customer-search-dropdown');
-    const resultsEl = document.getElementById('customer-search-results');
-
-    if (spinner) spinner.classList.remove('hidden');
-
-    searchDebounceTimeout = setTimeout(async function() {
-        try {
-            const res = await fetch(`{% url "customers_search_api" %}?q=${encodeURIComponent(query)}`);
-            if (res.ok) {
-                const data = await res.json();
-                const list = data.results || data || [];
-                renderSearchResults(list);
-            }
-        } catch (err) {
-            if (resultsEl) resultsEl.innerHTML = '<p class="text-xs text-rose-500 text-center py-3">حدث خطأ أثناء تحميل العملاء</p>';
-        } finally {
-            if (spinner) spinner.classList.add('hidden');
-            if (dropdown) dropdown.classList.remove('hidden');
-        }
-    }, 200);
-}
-
-function openSearchResults() {
-    const dropdown = document.getElementById('customer-search-dropdown');
-    if (dropdown) dropdown.classList.remove('hidden');
-    const input = document.getElementById('customer-search-input');
-    if (input) {
-        handleCustomerSearch({ target: input });
-    }
-}
-
-function renderSearchResults(contacts) {
-    const resultsEl = document.getElementById('customer-search-results');
-    const countEl = document.getElementById('customer-results-count');
-    if (!resultsEl) return;
-
-    if (countEl) {
-        countEl.textContent = `${contacts.length} عميل`;
-    }
-
-    if (!contacts.length) {
-        resultsEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">لم يتم العثور على أي عملاء مطابقين ضمن نطاقك الجغرافي.</p>';
-        return;
-    }
-
-    const _esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
-    resultsEl.innerHTML = '';
-    contacts.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-teal-50/70 transition-colors';
-        item.innerHTML = `
-            <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-full bg-teal-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                    ${_esc(c.initials || (c.name ? c.name.substring(0, 2) : 'CL'))}
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-900">${_esc(c.name)}</span>
-                        <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${_esc(c.category || c.account_type || 'عميل')}</span>
-                    </div>
-                    <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <span>${_esc(c.specialty || 'عام')}</span>
-                        <span>•</span>
-                        <span>${_esc(c.area_name || 'غير محدد')}</span>
-                    </div>
-                </div>
-            </div>
-            <span class="material-symbols-outlined text-sm text-slate-400">chevron_left</span>
-        `;
-        item.addEventListener('click', () => selectCustomer(c));
-        resultsEl.appendChild(item);
-    });
-}
-
-function selectCustomer(c) {
-    currentCustomer = c;
-    const djangoSelect = document.getElementById('id_customer') || document.querySelector('select[name="customer"]');
-    if (djangoSelect) {
-        let optionExists = false;
-        for (let i = 0; i < djangoSelect.options.length; i++) {
-            if (djangoSelect.options[i].value == c.id) {
-                djangoSelect.selectedIndex = i;
-                optionExists = true;
-                break;
-            }
-        }
-        if (!optionExists) {
-            const opt = new Option(c.name, c.id, true, true);
-            djangoSelect.add(opt);
-        }
-    }
-
-    const card = document.getElementById('selected-customer-card');
-    const searchContainer = document.getElementById('customer-search-container');
-    const dropdown = document.getElementById('customer-search-dropdown');
-    const nameEl = document.getElementById('customer-display-name');
-    const avatarEl = document.getElementById('customer-avatar-initials');
-    const catEl = document.getElementById('customer-category-badge');
-    const specEl = document.getElementById('customer-specialty-text');
-    const areaEl = document.getElementById('customer-area-text');
-
-    if (nameEl) nameEl.textContent = c.name;
-    if (avatarEl) avatarEl.textContent = c.initials || (c.name ? c.name.substring(0, 2) : 'CL');
-    if (catEl) catEl.textContent = c.category || c.account_type || 'عميل';
-    if (specEl) specEl.textContent = `تخصص: ${c.specialty || 'عام'}`;
-    if (areaEl) areaEl.textContent = `المنطقة: ${c.area_name || 'غير محددة'}`;
-
-    if (dropdown) dropdown.classList.add('hidden');
-    if (searchContainer) searchContainer.classList.add('hidden');
-    if (card) card.classList.remove('hidden');
-}
-
-function clearCustomerSelection() {
-    currentCustomer = null;
-    const djangoSelect = document.getElementById('id_customer') || document.querySelector('select[name="customer"]');
-    if (djangoSelect) djangoSelect.value = '';
-
-    const card = document.getElementById('selected-customer-card');
-    const searchContainer = document.getElementById('customer-search-container');
-    const searchInput = document.getElementById('customer-search-input');
-
-    if (card) card.classList.add('hidden');
-    if (searchContainer) searchContainer.classList.remove('hidden');
-    if (searchInput) {
-        searchInput.value = '';
-        searchInput.focus();
-        openSearchResults();
-    }
-}
-
 function handleAgreementSubmit(e) {
     const djangoSelect = document.getElementById('id_customer') || document.querySelector('select[name="customer"]');
     if (!djangoSelect || !djangoSelect.value) {
-        alert('يرجى اختيار العميل أولاً لحفظ الاتفاقية.');
+        window.ERPToast.warning('يرجى اختيار العميل أولاً لحفظ الاتفاقية.');
         if (e) e.preventDefault();
         return false;
     }
     return true;
 }
-
-// Close dropdown on outside click
-document.addEventListener('click', function(e) {
-    const container = document.getElementById('customer-search-container');
-    const dropdown = document.getElementById('customer-search-dropdown');
-    if (container && dropdown && !container.contains(e.target)) {
-        dropdown.classList.add('hidden');
-    }
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    const djangoSelect = document.getElementById('id_customer') || document.querySelector('select[name="customer"]');
-    if (djangoSelect && djangoSelect.value && (!currentCustomer)) {
-        fetch(`{% url "customers_search_api" %}?id=${djangoSelect.value}`)
-            .then(res => res.json())
-            .then(data => {
-                const list = data.results || data || [];
-                const found = list.find(x => x.id == djangoSelect.value);
-                if (found) selectCustomer(found);
-            }).catch(e => {});
-    }
-});
 </script>
 {% endblock %}

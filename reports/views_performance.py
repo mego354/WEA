@@ -88,24 +88,53 @@ def performance_overview_export(request):
     headers = ["المؤشر", "الفترة الحالية", "الفترة السابقة", "نسبة التغير %"]
     rows = []
     kpis = data.get('kpis') or {}
+    prior_map = data.get('prior') or {}
+    kpi_prior_keys = {
+        'coverage': 'coverage_pct',
+        'frequency_ach': 'frequency_ach_pct',
+        'daily_rate_ach': 'daily_rate_ach_pct',
+        'plan_ach': 'plan_ach_pct',
+        'frequency': 'frequency',
+        'daily_rate': 'daily_rate',
+        'smart_daily_rate': 'smart_daily_rate',
+        'expected_days': 'expected_days',
+        'field_days': 'field_days',
+        'off_field_days': 'off_field_days',
+        'avg_duration': 'avg_visit_duration_mins',
+        'avg_hours': 'avg_working_hours',
+        'total_visits': 'total_visits',
+        'planned_pct': 'planned_pct',
+        'unplanned_pct': 'unplanned_pct',
+        'double_visits': 'double_visits_pct',
+        'assessments': 'assessments_count',
+        'avg_detailing': 'avg_detailing',
+        'expenses': 'expenses_total',
+        'sales': 'sales_total',
+        'collections': 'collections_total',
+    }
     if isinstance(kpis, dict):
         for k, v in kpis.items():
             if isinstance(v, dict):
+                prior_val = v.get('prior')
+                if prior_val is None and k in kpi_prior_keys:
+                    prior_val = prior_map.get(kpi_prior_keys[k], '')
+                variance = v.get('variance', v.get('change_pct', 0))
                 rows.append([
                     v.get('label') or k,
                     v.get('value', v.get('current', '')),
-                    v.get('prior', ''),
-                    f"{v.get('change_pct', 0)}%",
+                    prior_val if prior_val is not None else '',
+                    f"{variance}%",
                 ])
             else:
                 rows.append([str(k), v, '', ''])
     elif isinstance(kpis, list):
         for v in kpis:
+            variance = v.get('variance', v.get('change_pct', 0))
             rows.append([
                 v.get('label', ''),
                 v.get('value', v.get('current', '')),
                 v.get('prior', ''),
-                f"{v.get('change_pct', 0)}%",
+                f"{variance}%",
             ])
 
     for p in data.get('top_detailed_products') or []:

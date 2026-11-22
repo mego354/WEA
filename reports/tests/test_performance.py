@@ -214,3 +214,25 @@ class PerformanceViewsTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def test_performance_overview_export_populates_prior_and_variance(self):
+        """Regression test: performance_overview_export exports real prior period and variance percentage columns."""
+        import io
+        import openpyxl
+
+        url = reverse('performance_overview_export')
+        response = self.client.get(url, {'period': 'this_month'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        non_empty_prior = 0
+        non_zero_variance = 0
+        for row in ws.iter_rows(values_only=True):
+            if row and len(row) >= 4 and row[0] and row[2] not in (None, '', 'الفترة السابقة'):
+                non_empty_prior += 1
+                if str(row[3]) not in ('0%', '0.0%', '% التغير'):
+                    non_zero_variance += 1
+        self.assertGreater(non_empty_prior, 0)
+        self.assertGreater(non_zero_variance, 0)
+

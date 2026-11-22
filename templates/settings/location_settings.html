@@ -1,81 +1,84 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}اعدادات الموقع - WEA Pharma ERP{% endblock %}
+{% block title %}إعدادات الموقع{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">اعدادات الموقع</span>
+<span class="font-bold text-brand-600">إعدادات الموقع</span>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-6">
 
-    <!-- Title matching Reference ERP (media_1792380138214.png) -->
-    <div class="flex items-center justify-between pb-2">
-        <h1 class="text-2xl font-bold text-[#27bebe]">اعدادات الموقع</h1>
+    <!-- Title -->
+    <div class="flex items-center gap-2.5 pb-2">
+        <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-xl">my_location</span>
+        </div>
+        <h1 class="text-xl sm:text-2xl font-black text-slate-900">إعدادات الموقع</h1>
     </div>
 
     <form method="POST" action="{% url 'location_settings' %}" class="space-y-6">
         {% csrf_token %}
 
-        <!-- Card 1: اعدادات الموقع -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 md:p-8 space-y-5">
-            <h2 class="text-sm font-bold text-slate-800 mb-4">اعدادات الموقع</h2>
+        <!-- Card 1: إعدادات الموقع -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 md:p-8 space-y-5">
+            <h2 class="text-sm font-bold text-slate-800 mb-4">إعدادات دقة وسماحية الموقع</h2>
 
             <!-- سماحية الموقع -->
             <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm text-[#27bebe]">info</span>
+                    <span class="material-symbols-outlined text-sm text-brand-600">info</span>
                     <span>سماحية الموقع</span>
                 </label>
                 <div class="relative">
                     <input type="number" name="tolerance" value="{{ settings.tolerance }}" required
-                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
-                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">متر</span>
+                           class="w-full pr-4 pl-12 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold pointer-events-none">متر</span>
                 </div>
             </div>
 
             <!-- الحد الأقصى للدقة المحققة -->
             <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm text-[#27bebe]">info</span>
+                    <span class="material-symbols-outlined text-sm text-brand-600">info</span>
                     <span>الحد الأقصى للدقة المحققة</span>
                 </label>
                 <div class="relative">
                     <input type="number" name="max_verified_accuracy" value="{{ settings.max_verified_accuracy }}" required
-                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
-                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">متر</span>
+                           class="w-full pr-4 pl-12 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold pointer-events-none">متر</span>
                 </div>
             </div>
 
             <!-- الحد الأقصى للدقة المحققة (مع التحذير) -->
             <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm text-[#27bebe]">info</span>
+                    <span class="material-symbols-outlined text-sm text-brand-600">info</span>
                     <span>الحد الأقصى للدقة المحققة (مع التحذير)</span>
                 </label>
                 <div class="relative">
                     <input type="number" name="max_verified_warn_accuracy" value="{{ settings.max_verified_warn_accuracy }}" required
-                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
-                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">متر</span>
+                           class="w-full pr-4 pl-12 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+                    <span class="absolute left-3 top-2.5 text-xs text-slate-400 font-bold pointer-events-none">متر</span>
                 </div>
             </div>
 
-            <!-- Toggles matching Reference ERP switch UI -->
+            <!-- Toggles -->
             <div class="pt-4 space-y-3">
                 <label class="flex items-center justify-between cursor-pointer py-1.5">
                     <span class="text-xs font-bold text-slate-700">تشغيل تلقائي لمتابعة الموقع</span>
                     <input type="checkbox" name="auto_start_location_tracking_service" {% if settings.auto_start_location_tracking_service %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <label class="flex items-center justify-between cursor-pointer py-1.5">
-                    <span class="text-xs font-bold text-slate-700">حفظ موقع العميل بشكل تلقائى مع أول زيارة</span>
+                    <span class="text-xs font-bold text-slate-700">حفظ موقع العميل بشكل تلقائي مع أول زيارة</span>
                     <input type="checkbox" name="auto_set_customer_location_in_visit" {% if settings.auto_set_customer_location_in_visit %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
             </div>
         </div>
@@ -105,7 +108,7 @@
                         <span class="text-[11px] text-slate-400">تتطلب الزيارة موافقة مدير المنطقة إذا لم يكن منشئها مديراً أو أعلى</span>
                     </div>
                     <input type="checkbox" name="require_manager_approval_for_visits" {% if settings.require_manager_approval_for_visits %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- السماح بحذف الزيارات غير المنتهية للمصرح لهم -->
@@ -115,7 +118,7 @@
                         <span class="text-[11px] text-slate-400">إتاحة حذف الزيارات المخططة أو الجارية قبل إنهائها فقط للمستخدمين الحاصلين على صلاحية الحذف</span>
                     </div>
                     <input type="checkbox" name="allow_visit_deletion_before_end" {% if settings.allow_visit_deletion_before_end %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- طلب موافقة المدير للاتفاقيات لغير المدراء -->
@@ -125,7 +128,7 @@
                         <span class="text-[11px] text-slate-400">تبقى الاتفاقية بحالة جديدة قيد الاعتماد إذا كان منشئها ليس مديراً</span>
                     </div>
                     <input type="checkbox" name="require_manager_approval_for_agreements" {% if settings.require_manager_approval_for_agreements %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
             </div>
         </div>
@@ -147,7 +150,7 @@
                         <span class="text-[11px] text-slate-400">استخدام المسافة المخصصة في قالب الزيارة بدلاً من المسافة الافتراضية عند تفعيلها بالقالب</span>
                     </div>
                     <input type="checkbox" name="allow_template_distance_override" {% if settings.allow_template_distance_override %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- التحقق من مسافة الزيارات غير المخططة عند الإنشاء -->
@@ -157,7 +160,7 @@
                         <span class="text-[11px] text-slate-400">الزيارات المخططة لا تتطلب تحقق المسافة عند الإنشاء، بينما تلتزم الزيارات الحرة بالمسافة المسموحة</span>
                     </div>
                     <input type="checkbox" name="verify_unplanned_visit_distance" {% if settings.verify_unplanned_visit_distance %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- التحقق من المسافة عند إنهاء الزيارة -->
@@ -167,7 +170,7 @@
                         <span class="text-[11px] text-slate-400">مطابقة موقع المندوب الحالي مع موقع العميل عند استكمال وإنهاء الزيارة</span>
                     </div>
                     <input type="checkbox" name="verify_end_visit_distance" {% if settings.verify_end_visit_distance %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- إلزامية ذكر السبب عند تجاوز المسافة للمصرح لهم -->
@@ -177,7 +180,7 @@
                         <span class="text-[11px] text-slate-400">اشتراط إدخال سبب واضح حتى عند التجاوز المباشر من قبل المدراء أو الأدوار المصرح لها</span>
                     </div>
                     <input type="checkbox" name="bypass_reason_mandatory" {% if settings.bypass_reason_mandatory %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 <!-- تجاوز المسافة لغير المصرح لهم يتطلب اعتماد المدير -->
@@ -187,7 +190,7 @@
                         <span class="text-[11px] text-slate-400">عند تجاوز المندوب للمسافة المسموحة، يُلزم بكتابة السبب وتتحول الزيارة لحالة قيد اعتماد المدير</span>
                     </div>
                     <input type="checkbox" name="distance_bypass_requires_approval" {% if settings.distance_bypass_requires_approval %}checked{% endif %} class="sr-only peer">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                 </label>
 
                 {% if all_roles %}

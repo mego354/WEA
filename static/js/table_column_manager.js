@@ -185,8 +185,10 @@ window.TableColumnManager = (function () {
         // 2. Update tbody rows
         const rows = table.querySelectorAll('tbody tr');
         rows.forEach(tr => {
-            // If row is a full-width empty state or colspan row, skip column hiding
+            // If row is a full-width empty state or colspan row, update colspan to visible column count
             if (tr.children.length === 1 && tr.children[0].hasAttribute('colspan')) {
+                const visCount = meta.columns.filter(c => colMap[c.id] !== false).length || 1;
+                tr.children[0].setAttribute('colspan', String(visCount));
                 return;
             }
 
@@ -200,6 +202,35 @@ window.TableColumnManager = (function () {
                     td.style.display = 'none';
                     td.setAttribute('data-col-hidden', 'true');
                 }
+            });
+        });
+
+        // 3. Update tfoot rows (handles both 1-to-1 cells and leading colspan summary cells cleanly)
+        const footRows = table.querySelectorAll('tfoot tr');
+        footRows.forEach(tr => {
+            let colCursor = 0;
+            Array.from(tr.children).forEach(cell => {
+                const origSpan = parseInt(cell.getAttribute('data-orig-colspan') || cell.getAttribute('colspan') || '1', 10);
+                if (!cell.hasAttribute('data-orig-colspan')) {
+                    cell.setAttribute('data-orig-colspan', String(origSpan));
+                }
+                if (origSpan > 1) {
+                    let visibleInSpan = 0;
+                    for (let k = colCursor; k < colCursor + origSpan && k < meta.columns.length; k++) {
+                        if (colMap[meta.columns[k].id] !== false) visibleInSpan += 1;
+                    }
+                    if (visibleInSpan > 0) {
+                        cell.style.display = '';
+                        cell.setAttribute('colspan', String(visibleInSpan));
+                    } else {
+                        cell.style.display = 'none';
+                    }
+                } else {
+                    const colId = cell.getAttribute('data-col') || (meta.columns[colCursor] ? meta.columns[colCursor].id : ('col_' + colCursor));
+                    const isVis = colMap[colId] !== false;
+                    cell.style.display = isVis ? '' : 'none';
+                }
+                colCursor += origSpan;
             });
         });
 

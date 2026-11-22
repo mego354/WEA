@@ -34,8 +34,9 @@ if (!window.renderAttachmentPreviewChips) {
             chip.className = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold';
             const isPdf = file.name.toLowerCase().endsWith('.pdf');
             const mb = (file.size / (1024 * 1024)).toFixed(2);
+            const safeName = window.erpEscapeHtml ? window.erpEscapeHtml(file.name) : file.name.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
             chip.innerHTML = `<span class="material-symbols-outlined text-sm text-[#27bebe]">${isPdf ? 'picture_as_pdf' : 'image'}</span>` +
-                             `<span class="truncate max-w-[180px]">${file.name}</span>` +
+                             `<span class="truncate max-w-[180px]">${safeName}</span>` +
                              `<span class="text-[10px] text-slate-500 font-mono">(${mb} MB)</span>`;
             container.appendChild(chip);
         });

@@ -1,0 +1,69 @@
+<!-- Global Non-Blocking RTL Toast Notification Stack (Replaces native browser alert()) -->
+<div id="erp-toast-container"
+     dir="rtl"
+     aria-live="polite"
+     aria-atomic="true"
+     class="fixed top-4 left-4 right-4 sm:right-auto sm:left-4 sm:w-96 z-[140] flex flex-col gap-2 pointer-events-none">
+</div>
+<script>
+(function () {
+    'use strict';
+    if (window.ERPToast) return;
+
+    const STYLES = {
+        error:   { box: 'bg-rose-50 border-rose-200 text-rose-900',    icon: 'error',        iconCls: 'text-rose-600' },
+        warning: { box: 'bg-amber-50 border-amber-200 text-amber-900', icon: 'warning',      iconCls: 'text-amber-600' },
+        success: { box: 'bg-emerald-50 border-emerald-200 text-emerald-900', icon: 'check_circle', iconCls: 'text-emerald-600' },
+        info:    { box: 'bg-sky-50 border-sky-200 text-sky-900',       icon: 'info',         iconCls: 'text-sky-600' },
+    };
+
+    function show(message, type = 'info', durationMs = 4500) {
+        const container = document.getElementById('erp-toast-container');
+        if (!container || !message) return;
+        const meta = STYLES[type] || STYLES.info;
+        const toast = document.createElement('div');
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        toast.className = 'pointer-events-auto flex items-start gap-2.5 p-3.5 rounded-xl border shadow-lg text-xs font-bold transition-all duration-200 opacity-0 -translate-y-2 ' + meta.box;
+
+        const iconEl = document.createElement('span');
+        iconEl.className = 'material-symbols-outlined text-lg shrink-0 mt-0.5 ' + meta.iconCls;
+        iconEl.textContent = meta.icon;
+
+        const textEl = document.createElement('span');
+        textEl.className = 'flex-1 leading-relaxed break-words';
+        textEl.textContent = String(message);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'p-0.5 rounded-lg opacity-60 hover:opacity-100 transition-opacity shrink-0';
+        closeBtn.setAttribute('aria-label', 'إغلاق');
+        closeBtn.innerHTML = '<span class="material-symbols-outlined text-base">close</span>';
+
+        let timer = null;
+        const dismiss = () => {
+            if (timer) clearTimeout(timer);
+            toast.classList.add('opacity-0', '-translate-y-2');
+            setTimeout(() => toast.remove(), 200);
+        };
+        closeBtn.addEventListener('click', dismiss);
+
+        toast.append(iconEl, textEl, closeBtn);
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.classList.remove('opacity-0', '-translate-y-2');
+        });
+        if (durationMs > 0) {
+            timer = setTimeout(dismiss, durationMs);
+        }
+    }
+
+    window.ERPToast = {
+        show,
+        error:   (msg, ms) => show(msg, 'error', ms || 5000),
+        warning: (msg, ms) => show(msg, 'warning', ms || 4500),
+        success: (msg, ms) => show(msg, 'success', ms || 3500),
+        info:    (msg, ms) => show(msg, 'info', ms || 4000),
+    };
+})();
+</script>

@@ -26,7 +26,6 @@ from .models import (
     CompanyProfile, LocationSettings, Area, ExpenseType,
     TicketType, ApprovalRequestType,
     SalesSettings, PurchaseSettings, ContactFieldSetting,
-    DataSyncConfig
 )
 from .services import SettingsService
 
@@ -1153,40 +1152,6 @@ def inventory_settings_view(request):
     })
 
 
-
-
-# ==========================================
-# 12. DATA SYNC (/settings/sync-data)
-# ==========================================
-
-@login_required
-@require_permission('settings:syncData/manage')
-def sync_data_view(request):
-    configs = {c.sync_type: c for c in DataSyncConfig.objects.all()}
-    if request.method == 'POST':
-        sync_type = request.POST.get('sync_type')
-        sheet_url = request.POST.get('google_sheet_url', '').strip()
-
-        cfg = DataSyncConfig.objects.filter(sync_type=sync_type).first()
-        if cfg:
-            cfg.google_sheet_url = sheet_url
-            cfg.save()
-            messages.success(request, f"تم حفظ رابط جدول بيانات جوجل لـ '{cfg.title}'.")
-        return redirect('sync_data')
-
-    return render(request, 'settings/sync_data.html', {'configs': configs})
-
-
-@login_required
-@require_permission('settings:syncData/manage')
-def sync_data_trigger(request, sync_type):
-    cfg = get_object_or_404(DataSyncConfig, sync_type=sync_type)
-    cfg.last_synced_at = timezone.now()
-    cfg.status = 'success'
-    cfg.save()
-
-    messages.success(request, f"تم بدء مزامنة '{cfg.title}' بنجاح.")
-    return redirect('sync_data')
 
 
 # ==========================================

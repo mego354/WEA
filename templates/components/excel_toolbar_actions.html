@@ -1,20 +1,34 @@
 {% load erp_tags %}
 <div class="flex items-center gap-1.5 shrink-0">
     {% if export_url %}
-    <a href="{{ export_url }}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
-       class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-colors min-h-[38px]"
-       title="تصدير Excel">
-        <span class="material-symbols-outlined text-base">download</span>
-        <span class="hidden sm:inline">تصدير</span>
-    </a>
+        {% if not export_perm or request.user|has_permission:export_perm %}
+        <a href="{{ export_url }}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+           class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-colors min-h-[40px]"
+           title="تصدير Excel">
+            <span class="material-symbols-outlined text-base">download</span>
+            <span class="hidden sm:inline">تصدير Excel</span>
+        </a>
+        {% endif %}
+    {% endif %}
+    {% if print_url %}
+        {% if not print_perm or request.user|has_permission:print_perm %}
+        <a href="{{ print_url }}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-colors min-h-[40px]"
+           title="طباعة">
+            <span class="material-symbols-outlined text-base">print</span>
+            <span class="hidden sm:inline">طباعة</span>
+        </a>
+        {% endif %}
     {% endif %}
     {% if import_entity and import_perm %}
         {% if request.user|has_permission:import_perm %}
         <a href="{% url 'excel_import' entity=import_entity %}"
-           class="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors min-h-[38px]"
+           class="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors min-h-[40px]"
            title="استيراد Excel">
             <span class="material-symbols-outlined text-base">upload_file</span>
-            <span class="hidden sm:inline">استيراد</span>
+            <span class="hidden sm:inline">استيراد Excel</span>
         </a>
         {% endif %}
     {% endif %}

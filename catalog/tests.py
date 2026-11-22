@@ -311,4 +311,54 @@ class CatalogModelsAndViewsTestCase(TestCase):
         self.assertEqual(res_none.status_code, 200)
         self.assertEqual(res_none.context['stats']['total_products'], 0)
 
+    def test_product_edit_preserves_and_updates_description_with_audit_log(self):
+        """Regression test: product_edit preserves description when omitted, updates it when provided, and writes SecurityAuditLog."""
+        from accounts.models import SecurityAuditLog
+
+        self.product.description = 'وصف دوائي أصلي هام'
+        self.product.save()
+
+        # 1. GET form renders description textarea
+        form_resp = self.client.get(reverse('product_edit', args=[self.product.id]))
+        self.assertEqual(form_resp.status_code, 200)
+        self.assertContains(form_resp, 'وصف دوائي أصلي هام')
+
+        # 2. POST without description field preserves existing description
+        post_without = self.client.post(reverse('product_edit', args=[self.product.id]), {
+            'name': self.product.name,
+            'sku_code': self.product.sku_code,
+            'category': self.category.id,
+            'retail_price': '120.00',
+            'default_purchase_cost': '80.00',
+            'tax_percentage': '0.00',
+            'packaging_unit': 'box',
+            'sellable': 'on',
+        })
+        self.assertEqual(post_without.status_code, 302)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.description, 'وصف دوائي أصلي هام')
+
+        # 3. POST with description updates it and logs PRODUCT_UPDATED
+        post_with = self.client.post(reverse('product_edit', args=[self.product.id]), {
+            'name': self.product.name,
+            'sku_code': self.product.sku_code,
+            'category': self.category.id,
+            'retail_price': '125.00',
+            'default_purchase_cost': '80.00',
+            'tax_percentage': '0.00',
+            'packaging_unit': 'box',
+            'sellable': 'on',
+            'description': 'وصف دوائي محدث بالكامل',
+        })
+        self.assertEqual(post_with.status_code, 302)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.description, 'وصف دوائي محدث بالكامل')
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='PRODUCT_UPDATED', record_id=self.product.id).exists())
+
+        # 4. Detail page displays updated description
+        detail_resp = self.client.get(reverse('product_detail', args=[self.product.id]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, 'وصف دوائي محدث بالكامل')
+
+
 

@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
 {% block title %}[{{ contact.formatted_number }}] {{ contact.name }} - تفاصيل جهة الاتصال{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'contacts_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">جهات الاتصال</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">{{ contact.name }}</span>
+{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -94,13 +102,8 @@
             
             <!-- Right Side (in RTL): Avatar, Name, Chips -->
             <div class="flex items-center gap-4">
-                <div class="relative group">
-                    <div class="w-16 h-16 rounded-full bg-[#27bebe] text-white flex items-center justify-center font-bold text-2xl shadow-md">
-                        {{ contact.initials }}
-                    </div>
-                    <span class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-white text-slate-500 shadow border border-slate-200 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title="تغيير الصورة">
-                        <span class="material-symbols-outlined text-sm">add_a_photo</span>
-                    </span>
+                <div class="w-16 h-16 rounded-full bg-[#27bebe] text-white flex items-center justify-center font-bold text-2xl shadow-md shrink-0">
+                    {{ contact.initials }}
                 </div>
 
                 <div>
@@ -109,7 +112,7 @@
                         {% if contact.parent_org %}
                         <span>تابع لـ: </span>
                         <a href="{% url 'contact_detail_overview' contact.parent_org.id %}" class="text-brand-600 hover:underline font-semibold">{{ contact.parent_org.name }}</a>
-                        {% else %}
+                        {% elif request.user|has_permission:'contacts:contacts/edit' %}
                         <a href="{% url 'contact_edit' contact.id %}" class="hover:text-brand-600 hover:underline">اضف مؤسسة</a>
                         {% endif %}
                     </div>
@@ -154,95 +157,102 @@
                 </div>
             </div>
 
-            <!-- Left Side (in RTL): Controls (Status Dropdown, Eye, 3-dots) -->
-            <div class="flex items-center gap-3 w-full md:w-auto justify-end">
-                <!-- Status Dropdown (Customer, Lead, Inactive) -->
-                <div class="relative" x-data="{ open: false }">
-                    <button type="button" onclick="toggleStatusDropdown()" id="statusDropdownBtn" class="px-3.5 py-1.5 rounded-lg bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-colors">
+            <!-- Left Side (in RTL): Status, Primary Action, Secondary Menu, Back -->
+            <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                <!-- Status Dropdown (Permission-Gated) -->
+                {% if request.user|has_permission:'contacts:contacts/edit' %}
+                <div class="relative">
+                    <button type="button" onclick="toggleStatusDropdown()" id="statusDropdownBtn" class="px-3.5 py-2 rounded-xl bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-colors min-h-[40px]">
                         <span>{{ contact.status_label }}</span>
                         <span class="material-symbols-outlined text-sm">expand_more</span>
                     </button>
-                    <!-- Status Menu -->
-                    <div id="statusDropdownMenu" class="hidden absolute left-0 mt-1.5 w-36 bg-white rounded-lg shadow-xl border border-slate-100 py-1.5 z-40 text-right">
+                    <div id="statusDropdownMenu" class="hidden absolute left-0 mt-1.5 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-40 text-right">
                         <form method="POST" action="{% url 'contact_update_status' contact.id %}">
                             {% csrf_token %}
-                            <button type="submit" name="status" value="customer" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                                <span>Customer</span>
+                            <button type="submit" name="status" value="customer" class="w-full text-right px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>عميل معتمد</span>
                                 {% if contact.status == 'customer' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
                             </button>
-                            <button type="submit" name="status" value="lead" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                                <span>Lead</span>
+                            <button type="submit" name="status" value="active" class="w-full text-right px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>عميل نشط</span>
+                                {% if contact.status == 'active' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
+                            </button>
+                            <button type="submit" name="status" value="lead" class="w-full text-right px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>عميل محتمل</span>
                                 {% if contact.status == 'lead' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
                             </button>
-                            <button type="submit" name="status" value="inactive" class="w-full text-right px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                                <span>Inactive</span>
+                            <button type="submit" name="status" value="inactive" class="w-full text-right px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
+                                <span>غير نشط</span>
                                 {% if contact.status == 'inactive' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
                             </button>
                         </form>
                     </div>
                 </div>
+                {% else %}
+                <span class="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold min-h-[40px] inline-flex items-center">{{ contact.status_label }}</span>
+                {% endif %}
 
-                <!-- Eye icon (Visibility) -->
-                <button type="button" class="p-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-slate-100 transition-colors" title="معاينة">
-                    <span class="material-symbols-outlined text-xl">visibility</span>
-                </button>
-
-                {% if contact.is_customer %}
+                {% if contact.is_customer and request.user|has_permission:'activities:visits/create' %}
                 <!-- Register Visit Button (Canonical Workflow) -->
-                <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title="تسجيل زيارة لهذا العميل">
+                <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors min-h-[40px]" title="تسجيل زيارة لهذا العميل">
                     <span class="material-symbols-outlined text-sm">add_location_alt</span>
                     <span>تسجيل زيارة</span>
                 </a>
                 {% endif %}
 
-                <!-- 3-Dots Vertical Action Menu -->
-                <div class="relative">
-                    <button type="button" onclick="toggleHeaderActionsMenu()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
-                        <span class="material-symbols-outlined text-xl">more_vert</span>
+                <!-- Unified Detail Secondary Actions Menu (Viewport-Safe more_vert) -->
+                <div class="relative inline-block text-right" data-detail-action-menu>
+                    <button type="button"
+                            onclick="toggleDetailActionMenu(this, event)"
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors"
+                            title="إجراءات إضافية"
+                            aria-label="إجراءات إضافية">
+                        <span class="material-symbols-outlined text-[20px]">more_vert</span>
                     </button>
-                    <div id="headerActionsMenu" class="hidden absolute left-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-40 text-right">
-                        {% if contact.is_customer %}
-                        <!-- Register Visit -->
-                        <a href="{% url 'visit_create' %}?contact_id={{ contact.id }}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">
-                            <span class="material-symbols-outlined text-base text-emerald-600">add_location_alt</span>
-                            <span>تسجيل زيارة</span>
-                        </a>
-                        {% if request.user|has_permission:'sales:statements/pdf' %}
+                    <div class="detail-action-dropdown hidden fixed z-[110] min-w-[210px] max-w-[260px] rounded-xl bg-white border border-slate-200 shadow-2xl py-1.5 text-xs font-semibold text-slate-700">
+                        {% if contact.is_customer and request.user|has_permission:'sales:statements/pdf' %}
                         <button type="button" onclick="openStatementPdfModal('{% url 'customer_statement_pdf' contact.id %}', '{{ contact.name|escapejs }}')" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#27bebe] hover:bg-teal-50 text-right">
                             <span class="material-symbols-outlined text-base">receipt_long</span>
                             <span>كشف حساب عميل PDF</span>
                         </button>
                         {% endif %}
-                        {% endif %}
-                        {% if contact.is_vendor and request.user|has_permission:'purchases:statements/pdf' %}
+                        {% if contact.is_supplier and request.user|has_permission:'purchases:statements/pdf' %}
                         <button type="button" onclick="openStatementPdfModal('{% url 'vendor_statement_pdf' contact.id %}', '{{ contact.name|escapejs }}')" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 text-right">
                             <span class="material-symbols-outlined text-base">receipt_long</span>
                             <span>كشف حساب مورد PDF</span>
                         </button>
                         {% endif %}
-                        <!-- Timeline -->
                         <a href="?tab=overview#timeline" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                             <span class="material-symbols-outlined text-base text-brand-600">timeline</span>
                             <span>تسلسل الأحداث</span>
                         </a>
-                        <!-- Edit -->
+                        {% if request.user|has_permission:'contacts:contacts/edit' %}
                         <a href="{% url 'contact_edit' contact.id %}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                             <span class="material-symbols-outlined text-base text-brand-600">edit</span>
                             <span>تعديل</span>
                         </a>
-                        <!-- Delete modal trigger -->
-                        <button type="button" onclick="openDeleteModal()" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 text-right">
+                        {% endif %}
+                        {% if request.user|has_permission:'contacts:contacts/delete' %}
+                        <div class="border-t border-slate-100 my-1"></div>
+                        <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete' contact.id %}', title: 'تأكيد مسح جهة الاتصال', itemName: '{{ contact.name|escapejs }}', message: 'هل أنت متأكد من مسح جهة الاتصال {{ contact.name|escapejs }}؟' })" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 text-right">
                             <span class="material-symbols-outlined text-base text-red-500">delete</span>
                             <span>مسح</span>
                         </button>
+                        {% endif %}
                     </div>
                 </div>
 
+                <!-- Back Button -->
+                <a href="{% url 'contacts_list' %}" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors" title="العودة للقائمة" aria-label="العودة للقائمة">
+                    <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+                </a>
             </div>
 
         </div>
 
-        <!-- 2. NAVIGATION TABS BAR (Matching Reference ERP Tabs) -->
+        <!-- 2. NAVIGATION TABS BAR -->
         <div class="flex items-center gap-2 border-b border-slate-200 mt-6 overflow-x-auto select-none">
             <a href="?tab=overview" class="erp-tab-btn {% if active_tab == 'overview' %}active{% endif %}">
                 نظرة عامة
@@ -264,10 +274,7 @@
                 المرفقات
             </a>
             <a href="?tab=todos" class="erp-tab-btn {% if active_tab == 'todos' %}active{% endif %}">
-                Todos
-            </a>
-            <a href="?tab=tasks" class="erp-tab-btn {% if active_tab == 'tasks' %}active{% endif %}">
-                المهام
+                المهام اليومية
             </a>
         </div>
     </div>
@@ -482,9 +489,11 @@
                                 {% endif %}
                             </div>
                             <!-- Delete action -->
-                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_address' contact.id addr.id %}', title: 'حذف العنوان', itemName: '{{ addr.title|default:'العنوان'|escapejs }}', message: 'هل أنت متأكد من حذف هذا العنوان: <span class=\'font-bold text-slate-800\'>{{ addr.title|default:'العنوان'|escapejs }}</span>؟' })" class="text-slate-400 hover:text-red-500" title="حذف الموقع">
+                            {% if request.user|has_permission:'contacts:contacts/edit' %}
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_address' contact.id addr.id %}', title: 'حذف العنوان', itemName: '{{ addr.title|default:'العنوان'|escapejs }}', message: 'هل أنت متأكد من حذف هذا العنوان ({{ addr.title|default:'العنوان'|escapejs }})؟' })" class="text-slate-400 hover:text-red-500" title="حذف الموقع">
                                 <span class="material-symbols-outlined text-sm">delete</span>
                             </button>
+                            {% endif %}
                         </div>
                         <p class="text-xs text-slate-600">
                             {% if addr.area %}{{ addr.area.name }} | {% endif %}{{ addr.brick.name }}
@@ -588,25 +597,29 @@
                                 </div>
                             </div>
                         </div>
+                        {% if request.user|has_permission:'contacts:contacts/edit' %}
                         <div class="flex items-center gap-1 shrink-0 mr-2">
                             <button type="button" onclick="openEditCommModal({{ comm.id }}, '{{ comm.method_type }}', '{{ comm.value|escapejs }}', '{{ comm.label|default:''|escapejs }}', {{ comm.is_primary|yesno:'true,false' }})" class="p-1 text-slate-400 hover:text-brand-600 rounded" title="تعديل">
                                 <span class="material-symbols-outlined text-sm">edit</span>
                             </button>
-                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_communication_method' contact.id comm.id %}', title: 'حذف وسيلة الاتصال', itemName: '{{ comm.value|escapejs }}', message: 'هل أنت متأكد من حذف وسيلة الاتصال: <span class=\'font-bold text-slate-800\'>{{ comm.get_method_type_display }} ({{ comm.value|escapejs }})</span>؟' })" class="p-1 text-slate-400 hover:text-red-500 rounded" title="حذف">
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete_communication_method' contact.id comm.id %}', title: 'حذف وسيلة الاتصال', itemName: '{{ comm.value|escapejs }}', message: 'هل أنت متأكد من حذف وسيلة الاتصال {{ comm.get_method_type_display|escapejs }} ({{ comm.value|escapejs }})؟' })" class="p-1 text-slate-400 hover:text-red-500 rounded" title="حذف">
                                 <span class="material-symbols-outlined text-sm">delete</span>
                             </button>
                         </div>
+                        {% endif %}
                     </div>
                     {% empty %}
                     <p class="text-xs text-slate-400 text-center py-2">لا يوجد طرق اتصال مسجلة</p>
                     {% endfor %}
 
+                    {% if request.user|has_permission:'contacts:contacts/edit' %}
                     <div class="pt-2 text-center border-t border-slate-100">
                         <button type="button" onclick="openAddCommModal()" class="inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
                             <span class="material-symbols-outlined text-sm">add</span>
                             <span>إضافة وسيلة اتصال</span>
                         </button>
                     </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -839,7 +852,6 @@
                     <span class="material-symbols-outlined text-brand-600">shopping_cart</span>
                     <span>اوامر البيع</span>
                 </div>
-                <button type="button" class="erp-btn-teal text-xs">تصدير البيانات</button>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -946,10 +958,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-[#27bebe]">المرفقات</h3>
-            <div class="flex items-center gap-2 text-slate-400">
-                <span class="material-symbols-outlined text-lg">attach_file</span>
-                <span class="material-symbols-outlined text-lg">mic</span>
-            </div>
+            <span class="material-symbols-outlined text-lg text-slate-400">attach_file</span>
         </div>
 
         <!-- Drag & Drop Upload Zone -->
@@ -957,7 +966,7 @@
             {% csrf_token %}
             <label class="border-2 border-dashed border-slate-200 hover:border-brand-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors block text-center">
                 <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">cloud_upload</span>
-                <span class="text-xs font-semibold text-slate-600">Drag&Drop files here</span>
+                <span class="text-xs font-semibold text-slate-600">اسحب وأفلت الملفات هنا</span>
                 <span class="text-[11px] text-slate-400 mt-1">أو انقر لاختيار ملف من جهازك</span>
                 <input type="file" name="file" onchange="this.form.submit()" class="hidden">
             </label>
@@ -981,11 +990,11 @@
     </div>
     {% endif %}
 
-    <!-- TAB 5: TODOS -->
+    <!-- TAB 5: المهام اليومية (tab=todos) -->
     {% if active_tab == 'todos' %}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex items-center justify-between mb-6">
-            <h3 class="text-base font-bold text-[#27bebe]">Todos</h3>
+            <h3 class="text-base font-bold text-[#27bebe]">المهام اليومية</h3>
             <div class="flex items-center gap-4">
                 <!-- Toggle show completed -->
                 <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-600">
@@ -994,7 +1003,7 @@
                 </label>
                 <!-- Add Todo Button -->
                 <button type="button" onclick="document.getElementById('newTodoBox').classList.toggle('hidden'); document.getElementById('newTodoTitle').focus();" class="erp-btn-outline text-xs text-brand-600 border-brand-300">
-                    اضف Todo جديد
+                    إضافة مهمة جديدة
                 </button>
             </div>
         </div>
@@ -1027,14 +1036,6 @@
             <p id="noTodosMsg" class="text-xs text-slate-400 text-center py-8">لا توجد مهام مسجلة.</p>
             {% endfor %}
         </div>
-    </div>
-    {% endif %}
-
-    <!-- TAB 6: TASKS (المهام) -->
-    {% if active_tab == 'tasks' %}
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center">
-        <h3 class="text-base font-bold text-[#27bebe] mb-6 text-right">المهام</h3>
-        <p class="text-xs text-slate-400 py-12">لا يوجد مهام</p>
     </div>
     {% endif %}
 
@@ -1079,28 +1080,6 @@
                 <button type="submit" id="commModalSubmitBtn" class="erp-btn-teal">حفظ وسيلة الاتصال</button>
             </div>
         </form>
-    </div>
-</div>
-
-<!-- MODAL: DELETE CONFIRMATION -->
-<div id="deleteModal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center">
-        <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
-            <span class="material-symbols-outlined text-2xl">delete</span>
-        </div>
-        <h3 class="font-bold text-slate-900 text-lg mb-2">تأكيد مسح جهة الاتصال</h3>
-        <p class="text-xs text-slate-500 mb-6">
-            هل أنت متأكد من مسح جهة الاتصال <span class="font-bold text-slate-800">"{{ contact.name }}"</span>؟
-        </p>
-        <div class="flex items-center justify-center gap-3">
-            <button type="button" onclick="closeDeleteModal()" class="erp-btn-outline px-6">إلغاء</button>
-            <form method="POST" action="{% url 'contact_delete' contact.id %}">
-                {% csrf_token %}
-                <button type="submit" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs">
-                    تأكيد المسح
-                </button>
-            </form>
-        </div>
     </div>
 </div>
 
@@ -1202,10 +1181,6 @@
         document.getElementById('statusDropdownMenu').classList.toggle('hidden');
     }
 
-    function toggleHeaderActionsMenu() {
-        document.getElementById('headerActionsMenu').classList.toggle('hidden');
-    }
-
     const addCommUrl = "{% url 'contact_add_communication_method' contact.id %}";
 
     function openAddCommModal() {
@@ -1224,7 +1199,7 @@
         document.getElementById('commModalTitle').innerText = 'تعديل وسيلة الاتصال';
         document.getElementById('commModalSubmitBtn').innerText = 'تحديث التعديلات';
         const form = document.getElementById('commModalForm');
-        form.action = `/contacts/{{ contact.id }}/communication-methods/${id}/edit/`;
+        form.action = `/contacts/{{ contact.id }}/communications/${id}/edit/`;
         document.getElementById('modal_comm_type').value = type;
         document.getElementById('modal_comm_value').value = value;
         document.getElementById('modal_comm_label').value = label || '';
@@ -1234,14 +1209,6 @@
 
     function closeCommModal() {
         document.getElementById('commModal').classList.add('hidden');
-    }
-
-    function openDeleteModal() {
-        document.getElementById('headerActionsMenu').classList.add('hidden');
-        document.getElementById('deleteModal').classList.remove('hidden');
-    }
-    function closeDeleteModal() {
-        document.getElementById('deleteModal').classList.add('hidden');
     }
 
     // --- TIMELINE MODAL LOGIC (Phase 7) ---
@@ -1335,6 +1302,7 @@
 
             data.events.forEach(evt => {
                 const colors = colorMap[evt.activity_type] || { dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-700' };
+                const esc = window.erpEscapeHtml || (s => String(s ?? ''));
                 const div = document.createElement('div');
                 div.className = 'relative';
                 div.innerHTML = `
@@ -1342,15 +1310,15 @@
                     <div class="flex items-start justify-between gap-2">
                         <div>
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mb-1 ${colors.badge}">
-                                ${evt.type_label}
+                                ${esc(evt.type_label)}
                             </span>
-                            <h4 class="text-xs font-bold text-slate-800">${evt.title}</h4>
-                            ${evt.notes ? `<p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">${evt.notes}</p>` : ''}
+                            <h4 class="text-xs font-bold text-slate-800">${esc(evt.title)}</h4>
+                            ${evt.notes ? `<p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">${esc(evt.notes)}</p>` : ''}
                             <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
-                                <span>بواسطة: ${evt.performed_by}</span>
+                                <span>بواسطة: ${esc(evt.performed_by)}</span>
                             </div>
                         </div>
-                        <span class="text-[11px] text-slate-400 font-mono whitespace-nowrap">${evt.created_at}</span>
+                        <span class="text-[11px] text-slate-400 font-mono whitespace-nowrap">${esc(evt.created_at)}</span>
                     </div>
                 `;
                 list.appendChild(div);
@@ -1433,16 +1401,17 @@
 
                 const list = document.getElementById('todosListContainer');
                 const todo = data.todo;
+                const esc = window.erpEscapeHtml || (s => String(s ?? ''));
                 const div = document.createElement('div');
                 div.id = `todo-row-${todo.id}`;
                 div.className = 'todo-item flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors';
                 div.innerHTML = `
                     <div class="flex items-center gap-3">
                         <input type="checkbox" onchange="toggleTodoAjax(${todo.id}, this)" class="rounded text-brand-500 cursor-pointer w-4 h-4">
-                        <span id="todo-text-${todo.id}" class="text-xs font-semibold text-slate-800">${todo.title}</span>
+                        <span id="todo-text-${todo.id}" class="text-xs font-semibold text-slate-800">${esc(todo.title)}</span>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-[11px] text-slate-400 font-mono">${todo.created_at}</span>
+                        <span class="text-[11px] text-slate-400 font-mono">${esc(todo.created_at)}</span>
                         <button type="button" onclick="deleteTodoAjax(${todo.id})" class="text-slate-400 hover:text-red-500 p-1 transition-colors" title="حذف المهمة">
                             <span class="material-symbols-outlined text-sm">delete</span>
                         </button>
@@ -1472,15 +1441,8 @@
             const el = document.getElementById('statusDropdownMenu');
             if (el) el.classList.add('hidden');
         }
-        if (!e.target.closest('[onclick*="toggleHeaderActionsMenu"]') && !e.target.closest('#headerActionsMenu')) {
-            const el = document.getElementById('headerActionsMenu');
-            if (el) el.classList.add('hidden');
-        }
         if (e.target.id === 'timelineModal') {
             closeTimelineModal();
-        }
-        if (e.target.id === 'deleteModal') {
-            closeDeleteModal();
         }
         if (e.target.id === 'contactMapModal') {
             closeContactMapModal();
@@ -1493,7 +1455,6 @@
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             closeTimelineModal();
-            closeDeleteModal();
             closeContactMapModal();
             closeCommModal();
         }

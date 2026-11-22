@@ -1,38 +1,53 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}بوابة التقارير وسجلات الأعمال — WEA Pharma ERP{% endblock %}
+{% block title %}بوابة التقارير وسجلات الأعمال{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">بوابة التقارير</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-3xl">bar_chart</span>
-                <span>بوابة التقارير وسجلات الأعمال</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                دليل التقارير المؤسسية الشاملة للعمليات المالية، البيعية، المخزنية والأنشطة الميدانية.
-            </p>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">bar_chart</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">بوابة التقارير وسجلات الأعمال</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    دليل التقارير المؤسسية الشاملة للعمليات المالية والبيعية والمخزنية والأنشطة الميدانية.
+                </p>
+            </div>
         </div>
     </div>
+
+    {% if not request.user|has_permission:'reports:financial/view' and not request.user|has_permission:'reports:sales/view' and not request.user|has_permission:'reports:inventory/view' and not request.user|has_permission:'reports:activities/view' %}
+    <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+        <span class="material-symbols-outlined text-4xl text-slate-300 block mb-2">lock</span>
+        <p class="text-sm font-bold text-slate-600">لا توجد تقارير مصرح لك بعرضها حالياً.</p>
+    </div>
+    {% endif %}
 
     <!-- 1. Financial & Accounting Reports -->
     {% if request.user|has_permission:'reports:financial/view' %}
     <div class="space-y-3">
         <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
-            <span class="material-symbols-outlined text-teal-600 text-lg">account_balance_wallet</span>
-            <span>التقارير المالية والديون والمراجعة (Financial & Receivables)</span>
+            <span class="material-symbols-outlined text-brand-600 text-lg">account_balance_wallet</span>
+            <span>التقارير المالية والديون والمراجعة</span>
         </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <!-- AR Aging -->
             <a href="{% url 'report_ar_aging' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <span class="material-symbols-outlined text-2xl">pending_actions</span>
                     </div>
-                    <h3 class="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors">أعمار الديون (AR Aging)</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">تحليل أعمار المديونيات غير المسددة مقسمة حسب فترات التأخير (1-30، 31-60، >120) ومؤشر DSO.</p>
+                    <h3 class="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors">أعمار الديون</h3>
+                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">تحليل أعمار المديونيات غير المسددة مقسمة حسب فترات التأخير (1-30، 31-60، >120) ومؤشر فترة التحصيل.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
                     <span>فتح التقرير</span>
@@ -40,13 +55,12 @@
                 </div>
             </a>
 
-            <!-- Customers Trial Balance -->
             <a href="{% url 'report_trial_balance' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <span class="material-symbols-outlined text-2xl">account_balance</span>
                     </div>
-                    <h3 class="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors">ميزان المراجعة للعملاء (Trial Balance)</h3>
+                    <h3 class="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors">ميزان المراجعة للعملاء</h3>
                     <p class="text-xs text-slate-500 mt-1 leading-relaxed">كشف ميزان المراجعة لحسابات العملاء يوضح الأرصدة الافتتاحية وحركات المدين والدائن ورصيد الإقفال.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
@@ -60,20 +74,19 @@
 
     <!-- 2. Sales & Commercial Reports -->
     {% if request.user|has_permission:'reports:sales/view' %}
-    <div class="space-y-3 pt-4">
+    <div class="space-y-3 pt-2">
         <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
-            <span class="material-symbols-outlined text-teal-600 text-lg">storefront</span>
-            <span>تقارير المبيعات والربحية والعملاء (Sales & Profitability)</span>
+            <span class="material-symbols-outlined text-brand-600 text-lg">storefront</span>
+            <span>تقارير المبيعات والربحية والعملاء</span>
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Net Sales & Profitability -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <a href="{% url 'report_net_sales' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <span class="material-symbols-outlined text-2xl">query_stats</span>
                     </div>
                     <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">صافي المبيعات وربحية الأصناف</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">حساب تكلفة البضاعة المباعة (COGS) ومجمل الربح وهامش الربحية % لجميع الأصناف.</p>
+                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">حساب تكلفة البضاعة المباعة ومجمل الربح وهامش الربحية % لجميع الأصناف.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
                     <span>فتح التقرير</span>
@@ -81,14 +94,13 @@
                 </div>
             </a>
 
-            <!-- Customer 360 Summary -->
             <a href="{% url 'report_customer_360' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <span class="material-symbols-outlined text-2xl">person_search</span>
                     </div>
                     <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">ملخص العملاء 360</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">كشف مجمع من 22 عموداً يدمج الزيارات، المبيعات، الخصومات، المرتجعات، والمديونيات.</p>
+                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">كشف مجمع من 18 عموداً يدمج الزيارات والمبيعات والخصومات والمرتجعات والمديونيات.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
                     <span>فتح التقرير</span>
@@ -96,7 +108,6 @@
                 </div>
             </a>
 
-            <!-- Item Sales by Customer -->
             <a href="{% url 'report_item_sales_by_customer' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -116,13 +127,12 @@
 
     <!-- 3. Logistics & Warehouses -->
     {% if request.user|has_permission:'reports:inventory/view' %}
-    <div class="space-y-3 pt-4">
+    <div class="space-y-3 pt-2">
         <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
-            <span class="material-symbols-outlined text-teal-600 text-lg">warehouse</span>
-            <span>اللوجستيات والمخازن والتوريد (Supply Chain & Inventory)</span>
+            <span class="material-symbols-outlined text-brand-600 text-lg">warehouse</span>
+            <span>اللوجستيات والمخازن والتوريد</span>
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Stock Availability -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <a href="{% url 'report_delivery_stock' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -137,7 +147,6 @@
                 </div>
             </a>
 
-            <!-- Item Purchases -->
             <a href="{% url 'report_item_purchases' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -157,20 +166,19 @@
 
     <!-- 4. Activities & Promotions -->
     {% if request.user|has_permission:'reports:activities/view' %}
-    <div class="space-y-3 pt-4">
+    <div class="space-y-3 pt-2">
         <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
-            <span class="material-symbols-outlined text-teal-600 text-lg">medical_services</span>
-            <span>الأنشطة الميدانية والترويجية (Activities & Detailing)</span>
+            <span class="material-symbols-outlined text-brand-600 text-lg">medical_services</span>
+            <span>الأنشطة الميدانية والترويجية</span>
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <!-- Agreements ROI -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <a href="{% url 'report_agreements_roi' %}" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-brand-500 hover:shadow-md transition-all group flex flex-col justify-between">
                 <div>
                     <div class="w-10 h-10 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <span class="material-symbols-outlined text-2xl">handshake</span>
                     </div>
                     <h3 class="text-sm font-bold text-slate-900 group-hover:text-brand-600 transition-colors">تحقيق الاتفاقيات وعائد الاستثمار</h3>
-                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">متابعة مبيعات الصيدليات والمراكز الطبية المرتبطة باتفاقيات تجارية ونسبة العائد ROI %.</p>
+                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">متابعة مبيعات الصيدليات والمراكز الطبية المرتبطة باتفاقيات تجارية ونسبة العائد على الاستثمار.</p>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-brand-600">
                     <span>فتح التقرير</span>

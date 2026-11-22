@@ -3,19 +3,20 @@
 
 {% block title %}تفاصيل الخزنة #{{ vault.serial_num }} - {{ vault.name }}{% endblock %}
 
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'vaults_list' %}" class="hover:text-brand-600 transition-colors">الخزائن والحسابات النقدية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">#{{ vault.serial_num }}</span>
+{% endblock %}
+
 {% block content %}
 <div class="space-y-6">
 
-    <!-- 1. Breadcrumbs & Header / Hero Section -->
+    <!-- 1. Header / Hero Section -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
-                <span class="text-slate-300">/</span>
-                <a href="{% url 'vaults_list' %}" class="hover:text-brand-600 transition-colors">الخزائن والحسابات النقدية</a>
-                <span class="text-slate-300">/</span>
-                <span class="text-slate-700 font-bold">#{{ vault.serial_num }}</span>
-            </div>
             <div class="flex flex-wrap items-center gap-2.5">
                 <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                     <span class="material-symbols-outlined text-brand-600 text-2xl">account_balance_wallet</span>
@@ -47,31 +48,44 @@
                 <span>صرف نقدي</span>
             </a>
             {% endif %}
-            {% if can_transfer and vault.is_active %}
-            <a href="{% url 'vault_transfer' %}?source_vault={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">swap_horiz</span>
-                <span>تحويل أموال</span>
-            </a>
-            {% endif %}
-            <a href="{% url 'vault_transactions_list' %}?vault_id={{ vault.id }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
-                <span>سجل الحركات التفصيلي</span>
-            </a>
-            {% if can_manage %}
-            <a href="{% url 'vault_edit' vault.id %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">edit</span>
-                <span>تعديل</span>
-            </a>
-            {% endif %}
-            {% if can_delete %}
-            <button type="button"
-                    onclick="showConfirmDeleteModal({ action: '{% url 'vault_delete' vault.id %}', title: 'حذف الخزنة', itemName: '{{ vault.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف الخزنة <span class=\'font-bold text-slate-800\'>{{ vault.name|escapejs }}</span> نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف الخزنة إذا كانت بها حركات مالية مسجلة أو رصيد غير صفري.' })"
-                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl border border-rose-200 transition-colors min-h-[40px]">
-                <span class="material-symbols-outlined text-base">delete</span>
-                <span>حذف</span>
-            </button>
-            {% endif %}
-            <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px]" title="العودة لقائمة الخزن">
+
+            <!-- Secondary Actions Menu -->
+            <div class="relative inline-block text-right" data-detail-action-menu>
+                <button type="button" onclick="toggleDetailActionMenu(this, event)" aria-haspopup="true" aria-expanded="false" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors" title="إجراءات إضافية" aria-label="إجراءات إضافية">
+                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                </button>
+                <div class="detail-action-dropdown hidden fixed z-[110] min-w-[200px] max-w-[260px] rounded-xl bg-white border border-slate-200 shadow-2xl py-1.5 text-xs font-semibold text-slate-700">
+                    {% if can_transfer and vault.is_active %}
+                    <a href="{% url 'vault_transfer' %}?source_vault={{ vault.id }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-brand-600">swap_horiz</span>
+                        <span>تحويل أموال</span>
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'vault_transactions_list' %}?vault_id={{ vault.id }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-slate-500">receipt_long</span>
+                        <span>سجل الحركات</span>
+                    </a>
+                    {% if can_manage or can_delete %}
+                    <div class="my-1 border-t border-slate-100"></div>
+                    {% endif %}
+                    {% if can_manage %}
+                    <a href="{% url 'vault_edit' vault.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-slate-500">edit</span>
+                        <span>تعديل الخزنة</span>
+                    </a>
+                    {% endif %}
+                    {% if can_delete %}
+                    <button type="button"
+                            onclick="showConfirmDeleteModal({ action: '{% url 'vault_delete' vault.id %}', title: 'حذف الخزنة', itemName: '{{ vault.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف الخزنة {{ vault.name|escapejs }} نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف الخزنة إذا كانت بها حركات مالية مسجلة أو رصيد غير صفري.' })"
+                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                        <span>حذف الخزنة</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-xl shadow-2xs transition-colors min-h-[40px]" title="العودة لقائمة الخزن">
                 <span class="material-symbols-outlined text-base">arrow_forward</span>
                 <span class="hidden sm:inline">العودة</span>
             </a>
@@ -163,7 +177,7 @@
                 <span class="text-[11px] text-slate-400 block mb-0.5">نوع الحساب / التصنيف</span>
                 <span class="font-bold text-slate-900 text-sm block leading-tight break-words">{{ vault.get_vault_type_display }}</span>
                 <span class="text-[10px] text-slate-500 block mt-0.5 leading-tight">
-                    {% if vault.is_rep_vault %}عهدة نقدية ميدانية (Rep Safe){% else %}خزينة رسمية للمؤسسة{% endif %}
+                    {% if vault.is_rep_vault %}عهدة نقدية ميدانية{% else %}خزينة رسمية للمؤسسة{% endif %}
                 </span>
             </div>
 
@@ -226,12 +240,12 @@
                             {% if tx.transaction_type == 'inflow' %}
                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <span class="material-symbols-outlined text-xs">arrow_downward</span>
-                                <span>إيداع (Inflow)</span>
+                                <span>إيداع</span>
                             </span>
                             {% else %}
                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                 <span class="material-symbols-outlined text-xs">arrow_upward</span>
-                                <span>صرف (Outflow)</span>
+                                <span>صرف</span>
                             </span>
                             {% endif %}
                         </td>

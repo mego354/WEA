@@ -1,50 +1,15 @@
-<!-- Unified Detail Page Secondary Actions Menu (more_vert RTL Dropdown) -->
+<!-- Unified Detail Page Secondary Actions Menu (Viewport-Safe more_vert RTL Dropdown) -->
 <div class="relative inline-block text-right" data-detail-action-menu>
     <button type="button"
             onclick="toggleDetailActionMenu(this)"
             aria-haspopup="true"
             aria-expanded="false"
-            class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors"
-            title="{{ menu_title|default:'إجراءات إضافية' }}">
+            class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-colors"
+            title="{{ menu_title|default:'إجراءات إضافية' }}"
+            aria-label="{{ menu_title|default:'إجراءات إضافية' }}">
         <span class="material-symbols-outlined text-[20px]">more_vert</span>
     </button>
-    <div class="detail-action-dropdown hidden fixed sm:absolute left-0 mt-1.5 w-52 rounded-xl bg-white border border-slate-200 shadow-xl py-1.5 z-[90] text-xs font-semibold text-slate-700">
+    <div class="detail-action-dropdown hidden fixed z-[110] min-w-[200px] max-w-[260px] rounded-xl bg-white border border-slate-200 shadow-2xl py-1.5 text-xs font-semibold text-slate-700">
         {{ menu_items }}
     </div>
 </div>
-<script>
-if (!window.toggleDetailActionMenu) {
-    window.toggleDetailActionMenu = function(btn) {
-        const wrap = btn.closest('[data-detail-action-menu]');
-        const menu = wrap ? wrap.querySelector('.detail-action-dropdown') : null;
-        if (!menu) return;
-        const isOpen = !menu.classList.contains('hidden');
-        document.querySelectorAll('.detail-action-dropdown').forEach(el => el.classList.add('hidden'));
-        if (!isOpen) {
-            menu.classList.remove('hidden');
-            // On mobile, anchor fixed near button
-            if (window.innerWidth < 640) {
-                const rect = btn.getBoundingClientRect();
-                menu.style.top = (rect.bottom + 6) + 'px';
-                menu.style.left = Math.max(12, rect.left) + 'px';
-            } else {
-                menu.style.top = '';
-                menu.style.left = '';
-            }
-            btn.setAttribute('aria-expanded', 'true');
-        } else {
-            btn.setAttribute('aria-expanded', 'false');
-        }
-    };
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('[data-detail-action-menu]')) {
-            document.querySelectorAll('.detail-action-dropdown').forEach(el => el.classList.add('hidden'));
-        }
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            document.querySelectorAll('.detail-action-dropdown').forEach(el => el.classList.add('hidden'));
-        }
-    });
-}
-</script>

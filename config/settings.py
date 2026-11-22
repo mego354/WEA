@@ -155,3 +155,14 @@ if not DEBUG:
 # Google Maps & Geolocation Integration
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 
+# Firebase Cloud Messaging (FCM HTTP v1) & Native Push Configuration
+# Credentials MUST be provided via environment variables or secure server-side service account file.
+FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', '').strip()
+FIREBASE_SERVICE_ACCOUNT_PATH = os.getenv(
+    'FIREBASE_SERVICE_ACCOUNT_PATH',
+    os.getenv('GOOGLE_APPLICATION_CREDENTIALS', ''),
+).strip()
+FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON', '').strip()
+FCM_DEFAULT_CHANNEL_ID = os.getenv('FCM_DEFAULT_CHANNEL_ID', 'app_push_notifications_channel').strip()
+
+

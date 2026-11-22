@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}#{{ return_order.serial_num }} - أوامر إرجاع المشتريات - Bricks Rep{% endblock %}
+{% block title %}#{{ return_order.serial_num }} - مرتجعات المشتريات{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'purchase_return_orders_list' %}" class="hover:text-[#27bebe] transition-colors">مرتجعات المشتريات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{{ return_order.order_number }}</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6 pb-16">
@@ -71,7 +79,7 @@
                         <span>رفض المرتجع</span>
                     </button>
                     {% endif %}
-                    {% if return_order.status not in 'settled,cancelled' %}
+                    {% if can_cancel %}
                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء مرتجع المشتريات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من إلغاء هذا المرتجع؟', submitText: 'تأكيد الإلغاء', icon: 'block' })"
                             class="w-full text-right px-3.5 py-2 text-amber-700 hover:bg-amber-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base">block</span>
@@ -90,8 +98,8 @@
             </div>
 
             <a href="{% url 'purchase_return_orders_list' %}"
-               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة">
-                <span class="material-symbols-outlined text-lg">arrow_back</span>
+               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة للقائمة">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </a>
         </div>
     </div>
@@ -241,7 +249,7 @@
             <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5">
                 <h3 class="font-bold text-slate-900 text-xs pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe] text-base">history</span>
-                    <span>سجل الإجراءات والتدقيق (Timeline)</span>
+                    <span>سجل الإجراءات والتدقيق</span>
                 </h3>
 
                 <div class="relative border-r-2 border-slate-100 mr-3 space-y-6">
@@ -396,5 +404,10 @@ function openRejectModal() {
 function closeRejectModal() {
     document.getElementById('reject-modal').classList.add('hidden');
 }
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRejectModal();
+    }
+});
 </script>
 {% endblock %}

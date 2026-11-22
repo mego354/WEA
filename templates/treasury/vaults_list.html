@@ -1,14 +1,14 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}الخزن النقدية والحسابات (Vaults) - WEA Pharma ERP{% endblock %}
+{% block title %}الخزن النقدية والحسابات{% endblock %}
 
 {% block breadcrumb %}
     <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
     <span class="text-slate-400">المالية والخزينة</span>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">الخزن النقدية (Vaults)</span>
+    <span class="font-bold text-slate-800">الخزن النقدية</span>
 {% endblock %}
 
 {% block content %}
@@ -23,29 +23,31 @@
             </h1>
             <p class="text-sm text-slate-500 mt-1">متابعة أرصدة الخزن الرئيسية والفرعية، حسابات البنوك، وعهد مناديب المبيعات المصرح بها.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2">
+            {% url 'vaults_export' as vaults_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=vaults_export_url export_perm='treasury:vaults/export' %}
             {% if can_create_tx %}
-            <a href="{% url 'vault_deposit' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_deposit' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_downward</span>
                 <span>إيداع نقدي</span>
             </a>
-            <a href="{% url 'vault_withdraw' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-rose-600/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_withdraw' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-rose-600/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_upward</span>
                 <span>صرف نقدي</span>
             </a>
             {% endif %}
             {% if can_transfer %}
-            <a href="{% url 'vault_transfer' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all min-h-[44px]">
+            <a href="{% url 'vault_transfer' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-brand-600">swap_horiz</span>
                 <span>تحويل أموال</span>
             </a>
             {% endif %}
-            <a href="{% url 'vault_transactions_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all min-h-[44px]">
+            <a href="{% url 'vault_transactions_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-500">history</span>
                 <span>سجل الحركات</span>
             </a>
             {% if can_manage %}
-            <a href="{% url 'vault_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_create' %}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إضافة خزنة</span>
             </a>
@@ -104,37 +106,28 @@
         </div>
     </div>
 
-    <!-- 3. Dedicated Search & Filter Controls Toolbar -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-        <form method="GET" class="flex flex-col sm:flex-row gap-3">
-            <div class="flex-1 relative">
-                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+    <!-- 3. Compact Search & Filter Drawer Trigger Toolbar -->
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+                {% for vt in selected_vault_types %}<input type="hidden" name="vault_type" value="{{ vt }}">{% endfor %}
+                {% if selected_custody_type %}<input type="hidden" name="custody_type" value="{{ selected_custody_type }}">{% endif %}
+                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                {% for a_chip in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ a_chip.id }}">{% endfor %}
+                {% for b_chip in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ b_chip.id }}">{% endfor %}
+                {% if selected_assigned_user %}<input type="hidden" name="assigned_user" value="{{ selected_assigned_user }}">{% endif %}
+                {% if selected_balance_min %}<input type="hidden" name="balance_min" value="{{ selected_balance_min }}">{% endif %}
+                {% if selected_balance_max %}<input type="hidden" name="balance_max" value="{{ selected_balance_max }}">{% endif %}
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث باسم الخزنة أو رقمها المسلسل..."
                        data-smart-search-module="vaults"
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
+                       class="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </form>
+            <div class="flex items-center gap-2">
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+                {% include 'components/table_column_picker.html' with table_id='vaults_table' %}
             </div>
-            {% if selected_vault_type %}<input type="hidden" name="vault_type" value="{{ selected_vault_type }}">{% endif %}
-            {% if selected_custody_type %}<input type="hidden" name="custody_type" value="{{ selected_custody_type }}">{% endif %}
-            {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-            {% if selected_area %}<input type="hidden" name="area" value="{{ selected_area }}">{% endif %}
-            {% if selected_assigned_user %}<input type="hidden" name="assigned_user" value="{{ selected_assigned_user }}">{% endif %}
-            {% if selected_balance_min %}<input type="hidden" name="balance_min" value="{{ selected_balance_min }}">{% endif %}
-            {% if selected_balance_max %}<input type="hidden" name="balance_max" value="{{ selected_balance_max }}">{% endif %}
-
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base">search</span>
-                <span>بحث</span>
-            </button>
-            <button type="button" onclick="openFilterDrawer()" class="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base text-brand-600">tune</span>
-                <span>فلترة متقدمة</span>
-            </button>
-            {% if search_query or active_filters %}
-            <a href="{% url 'vaults_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
-                إلغاء الفلاتر
-            </a>
-            {% endif %}
-        </form>
+        </div>
     </div>
 
     <!-- Active Filter Chips Bar -->
@@ -150,18 +143,6 @@
                     {{ total_count }} خزنة
                 </span>
             </h2>
-
-            <!-- Column Picker -->
-            <div class="flex items-center gap-2">
-                {% if request.user|has_permission:'treasury:vaults/export' %}
-                <a href="{% url 'vaults_export' %}?search={{ search_query|urlencode }}&vault_type={{ selected_vault_type|default:''|urlencode }}&custody_type={{ selected_custody_type|default:''|urlencode }}&status={{ selected_status|default:''|urlencode }}&area={{ selected_area|default:''|urlencode }}&assigned_user={{ selected_assigned_user|default:''|urlencode }}&balance_min={{ balance_min|default:''|urlencode }}&balance_max={{ balance_max|default:''|urlencode }}"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
-                    <span class="material-symbols-outlined text-base">download</span>
-                    <span class="hidden sm:inline">تصدير Excel</span>
-                </a>
-                {% endif %}
-                {% include 'components/table_column_picker.html' with table_id='vaults_table' %}
-            </div>
         </div>
 
         <div class="overflow-x-auto scrollbar-thin">
@@ -210,41 +191,52 @@
                             {% endif %}
                         </td>
                         <td data-col="actions" class="py-3.5 px-4 text-center">
-                            <div class="inline-flex items-center gap-1.5 flex-wrap justify-center">
-                                <a href="{% url 'vault_detail' v.id %}" class="px-2.5 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 min-h-[36px]" title="تفاصيل الخزنة">
-                                    <span class="material-symbols-outlined text-sm">visibility</span>
-                                    <span>تفاصيل</span>
-                                </a>
-                                {% if can_create_tx and v.is_active %}
-                                <a href="{% url 'vault_deposit' %}?vault={{ v.id }}" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 min-h-[36px]" title="إيداع نقدي">
-                                    <span class="material-symbols-outlined text-sm">arrow_downward</span>
-                                    <span>إيداع</span>
-                                </a>
-                                <a href="{% url 'vault_withdraw' %}?vault={{ v.id }}" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 min-h-[36px]" title="صرف نقدي">
-                                    <span class="material-symbols-outlined text-sm">arrow_upward</span>
-                                    <span>صرف</span>
-                                </a>
-                                {% endif %}
-                                <a href="{% url 'vault_transactions_list' %}?vault_id={{ v.id }}" class="px-2.5 py-1.5 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 min-h-[36px]" title="سجل الحركات">
-                                    <span class="material-symbols-outlined text-sm">history</span>
-                                    <span>الحركات</span>
-                                </a>
-                                {% if can_transfer and v.is_active %}
-                                <a href="{% url 'vault_transfer' %}?source_vault={{ v.id }}" class="px-2.5 py-1.5 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 min-h-[36px]" title="تحويل أموال">
-                                    <span class="material-symbols-outlined text-sm">swap_horiz</span>
-                                    <span>تحويل</span>
-                                </a>
-                                {% endif %}
-                                {% if can_manage %}
-                                <a href="{% url 'vault_edit' v.id %}" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors min-h-[36px] flex items-center justify-center" title="تعديل الخزنة">
-                                    <span class="material-symbols-outlined text-base">edit</span>
-                                </a>
-                                <button type="button"
-                                        onclick="showConfirmDeleteModal({ action: '{% url 'vault_delete' v.id %}', title: 'حذف الخزنة', itemName: '{{ v.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف الخزنة <span class=\'font-bold text-slate-800\'>{{ v.name|escapejs }}</span> نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف الخزنة إذا كانت بها حركات مالية مسجلة أو رصيد غير صفري.' })"
-                                        class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors min-h-[36px] flex items-center justify-center" title="حذف الخزنة">
-                                    <span class="material-symbols-outlined text-base">delete</span>
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                                 </button>
-                                {% endif %}
+                                <template class="row-menu-items">
+                                    <a href="{% url 'vault_detail' v.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                        <span>تفاصيل</span>
+                                    </a>
+                                    {% if can_create_tx and v.is_active %}
+                                    <a href="{% url 'vault_deposit' %}?vault={{ v.id }}" class="w-full text-right px-3.5 py-2 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-emerald-600">arrow_downward</span>
+                                        <span>إيداع</span>
+                                    </a>
+                                    <a href="{% url 'vault_withdraw' %}?vault={{ v.id }}" class="w-full text-right px-3.5 py-2 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-rose-600">arrow_upward</span>
+                                        <span>صرف</span>
+                                    </a>
+                                    {% endif %}
+                                    <a href="{% url 'vault_transactions_list' %}?vault_id={{ v.id }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-slate-500">history</span>
+                                        <span>الحركات</span>
+                                    </a>
+                                    {% if can_transfer and v.is_active %}
+                                    <a href="{% url 'vault_transfer' %}?source_vault={{ v.id }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">swap_horiz</span>
+                                        <span>تحويل</span>
+                                    </a>
+                                    {% endif %}
+                                    {% if can_manage %}
+                                    <div class="my-1 border-t border-slate-100"></div>
+                                    <a href="{% url 'vault_edit' v.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-slate-500">edit</span>
+                                        <span>تعديل</span>
+                                    </a>
+                                    <button type="button"
+                                            onclick="showConfirmDeleteModal({ action: '{% url 'vault_delete' v.id %}', title: 'حذف الخزنة', itemName: '{{ v.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف الخزنة {{ v.name|escapejs }} نهائياً؟', relatedText: 'ملاحظة: لا يمكن حذف الخزنة إذا كانت بها حركات مالية مسجلة أو رصيد غير صفري.' })"
+                                            class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                        <span>حذف</span>
+                                    </button>
+                                    {% endif %}
+                                </template>
                             </div>
                         </td>
                     </tr>
@@ -267,89 +259,75 @@
 </div>
 
 <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-<div id="filterDrawerBackdrop" onclick="closeFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-<div id="filter-drawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+<div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+<aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
         <div class="flex items-center gap-2">
-            <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-            <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+            <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+            {% if active_filters|length %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
         </div>
-        <button type="button" onclick="closeFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-            <span class="material-symbols-outlined text-xl">arrow_forward</span>
+        <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+            <span class="material-symbols-outlined text-lg">arrow_forward</span>
         </button>
     </div>
-    <form method="GET" class="p-5 space-y-4 flex-1 overflow-y-auto">
-                {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+    <form method="GET" class="p-5 space-y-4 flex-1 overflow-y-auto text-xs">
+        {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
 
-                {% include 'components/choice_multiselect.html' with component_id='vaults_type' field_name='vault_type' label='نوع الخزنة (اختيار متعدد)' options=vault_type_options selected_items=selected_vault_type_items selected_values=selected_vault_types placeholder='جميع الأنواع...' %}
+        {% include 'components/choice_multiselect.html' with component_id='vaults_type' field_name='vault_type' label='نوع الخزنة (اختيار متعدد)' options=vault_type_options selected_items=selected_vault_type_items selected_values=selected_vault_types placeholder='جميع الأنواع...' %}
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">تبعية العهدة</label>
-                    <select name="custody_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                        <option value="">الكل</option>
-                        <option value="rep" {% if selected_custody_type == 'rep' %}selected{% endif %}>عهدة مندوب مبيعات</option>
-                        <option value="central" {% if selected_custody_type == 'central' %}selected{% endif %}>خزينة مركزية عامة / فرع</option>
-                    </select>
-                </div>
+        <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">تبعية العهدة</label>
+            <select name="custody_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">الكل</option>
+                <option value="rep" {% if selected_custody_type == 'rep' %}selected{% endif %}>عهدة مندوب مبيعات</option>
+                <option value="central" {% if selected_custody_type == 'central' %}selected{% endif %}>خزينة مركزية عامة / فرع</option>
+            </select>
+        </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">الحالة التشغيلية</label>
-                    <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                        <option value="">جميع الحالات</option>
-                        <option value="active" {% if selected_status == 'active' %}selected{% endif %}>مفعلة وتعمل</option>
-                        <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>معطلة</option>
-                    </select>
-                </div>
+        <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">الحالة التشغيلية</label>
+            <select name="status" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">جميع الحالات</option>
+                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>مفعلة وتعمل</option>
+                <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>معطلة</option>
+            </select>
+        </div>
 
-                {% url 'contacts_search_areas_api' as vaults_areas_url %}
-                {% url 'contacts_search_bricks_api' as vaults_bricks_url %}
-                {% include 'components/area_brick_multiselect.html' with component_id='vaults' area_field_name='main_area' brick_field_name='brick' areas_api_url=vaults_areas_url bricks_api_url=vaults_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
+        {% url 'contacts_search_areas_api' as vaults_areas_url %}
+        {% url 'contacts_search_bricks_api' as vaults_bricks_url %}
+        {% include 'components/area_brick_multiselect.html' with component_id='vaults' area_field_name='main_area' brick_field_name='brick' areas_api_url=vaults_areas_url bricks_api_url=vaults_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول / الحائز للعهدة</label>
-                    <select name="assigned_user" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                        <option value="">جميع المسؤولين</option>
-                        {% for u in assignees %}
-                        <option value="{{ u.id }}" {% if selected_assigned_user == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.role.display_name|default:u.username }})</option>
-                        {% endfor %}
-                    </select>
-                </div>
+        <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">المسؤول / الحائز للعهدة</label>
+            <select name="assigned_user" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">جميع المسؤولين</option>
+                {% for u in assignees %}
+                <option value="{{ u.id }}" {% if selected_assigned_user == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.role.display_name|default:u.username }})</option>
+                {% endfor %}
+            </select>
+        </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">الرصيد من (ج.م)</label>
-                        <input type="number" step="0.01" name="balance_min" value="{{ selected_balance_min }}" placeholder="0.00"
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-mono">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">الرصيد إلى (ج.م)</label>
-                        <input type="number" step="0.01" name="balance_max" value="{{ selected_balance_max }}" placeholder="0.00"
-                               class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-mono">
-                    </div>
-                </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">الرصيد من (ج.م)</label>
+                <input type="number" step="0.01" name="balance_min" value="{{ selected_balance_min }}" placeholder="0.00"
+                       class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-mono">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">الرصيد إلى (ج.م)</label>
+                <input type="number" step="0.01" name="balance_max" value="{{ selected_balance_max }}" placeholder="0.00"
+                       class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-mono">
+            </div>
+        </div>
 
-                <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <a href="{% url 'vaults_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
-                        إعادة تعيين
-                    </a>
-                    <button type="submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all">
-                        تطبيق الفلترة
-                    </button>
-                </div>
-            </form>
-</div>
-
-<script>
-    function openFilterDrawer() {
-        document.getElementById('filter-drawer').classList.add('open');
-        const bd = document.getElementById('filterDrawerBackdrop');
-        if (bd) bd.classList.remove('hidden');
-    }
-
-    function closeFilterDrawer() {
-        document.getElementById('filter-drawer').classList.remove('open');
-        const bd = document.getElementById('filterDrawerBackdrop');
-        if (bd) bd.classList.add('hidden');
-    }
-</script>
+        <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+            <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+                تطبيق
+            </button>
+            <a href="{% url 'vaults_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+                إعادة تعيين
+            </a>
+        </div>
+    </form>
+</aside>
 {% endblock %}

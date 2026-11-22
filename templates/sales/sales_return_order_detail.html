@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}{{ return_order.order_number }} - مرتجعات المبيعات - Bricks Rep{% endblock %}
+{% block title %}{{ return_order.order_number }} - مرتجعات المبيعات{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'sales_return_orders_list' %}" class="hover:text-[#27bebe] transition-colors">مرتجعات المبيعات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">{{ return_order.order_number }}</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6 pb-16">
@@ -65,13 +73,13 @@
                         <span>نسخة للطباعة</span>
                     </a>
                     {% if return_order.status == 'pending' and request.user|has_permission:'sales:returns/approve' and return_order.created_by_id != request.user.id %}
-                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_action' return_order.id 'reject' %}', title: 'رفض مرتجع المبيعات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من رفض هذا المرتجع؟', submitText: 'تأكيد الرفض', icon: 'cancel' })"
+                    <button type="button" onclick="openRejectModal()"
                             class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base">cancel</span>
                         <span>رفض المرتجع</span>
                     </button>
                     {% endif %}
-                    {% if return_order.status not in 'settled,cancelled' %}
+                    {% if can_cancel %}
                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_action' return_order.id 'cancel' %}', title: 'إلغاء مرتجع المبيعات', itemName: '{{ return_order.order_number|escapejs }}', message: 'هل أنت متأكد من إلغاء هذا المرتجع؟', submitText: 'تأكيد الإلغاء', icon: 'block' })"
                             class="w-full text-right px-3.5 py-2 text-amber-700 hover:bg-amber-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base">block</span>
@@ -90,8 +98,8 @@
             </div>
 
             <a href="{% url 'sales_return_orders_list' %}"
-               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة">
-                <span class="material-symbols-outlined text-lg">arrow_back</span>
+               class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors" title="العودة للقائمة">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </a>
         </div>
     </div>
@@ -143,7 +151,7 @@
                                 <td class="py-3 px-4 font-bold text-slate-900">
                                     {{ item.product.name }}
                                     <div class="text-[10px] text-slate-400 font-mono font-normal">
-                                        كود: {{ item.product.code }}
+                                        كود: {{ item.product.sku_code }}
                                         {% if item.batch_number %} | تشغيلة: {{ item.batch_number }}{% endif %}
                                         {% if item.expiry_date %} | صلاحية: {{ item.expiry_date|date:"Y-m-d" }}{% endif %}
                                     </div>
@@ -218,7 +226,7 @@
             <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-5">
                 <h3 class="font-bold text-slate-900 text-xs pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
                     <span class="material-symbols-outlined text-[#27bebe] text-base">history</span>
-                    <span>سجل الإجراءات والتدقيق (Timeline)</span>
+                    <span>سجل الإجراءات والتدقيق</span>
                 </h3>
 
                 <div class="relative border-r-2 border-slate-100 mr-3 space-y-6">
@@ -352,4 +360,38 @@
     {% include 'components/attachments_gallery.html' with target_obj=return_order model_key='salesreturnorder' %}
 
 </div>
+
+<!-- Reject Modal -->
+<div id="reject-modal" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeRejectModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-xs space-y-4 relative z-10">
+            <h3 class="text-sm font-bold text-slate-900">رفض مرتجع المبيعات</h3>
+            <p class="text-slate-500">يرجى توضيح سبب رفض المرتجع ليتم حفظه في سجل التدقيق:</p>
+            <form method="POST" action="{% url 'sales_return_order_action' return_order.id 'reject' %}">
+                {% csrf_token %}
+                <textarea name="rejection_reason" rows="3" required placeholder="سبب الرفض..."
+                          class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500"></textarea>
+                <div class="pt-4 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold">إلغاء</button>
+                    <button type="submit" class="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold hover:bg-rose-700">تأكيد الرفض</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openRejectModal() {
+    document.getElementById('reject-modal').classList.remove('hidden');
+}
+function closeRejectModal() {
+    document.getElementById('reject-modal').classList.add('hidden');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRejectModal();
+    }
+});
+</script>
 {% endblock %}

@@ -1,20 +1,20 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}سجل حركات النقدية والخزن (Vault Transactions) - WEA Pharma ERP{% endblock %}
+{% block title %}سجل حركات النقدية والخزن{% endblock %}
 
 {% block breadcrumb %}
     <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
     <a href="{% url 'vaults_list' %}" class="hover:text-brand-600 transition-colors">الخزن النقدية</a>
     <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
-    <span class="font-bold text-slate-800">حركات النقدية (Transactions)</span>
+    <span class="font-bold text-slate-800">حركات النقدية</span>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-6">
 
-    <!-- 1. Page Header Section (Clean: Title, Actions - No statistics or search bars) -->
+    <!-- 1. Page Header Section -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
@@ -23,23 +23,25 @@
             </h1>
             <p class="text-sm text-slate-500 mt-1">سجل مقيد لكافة الإيداعات والمصروفات، التحويلات بين الخزن، والعمليات العكسية.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2">
+            {% url 'vault_transactions_export' as vault_tx_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=vault_tx_export_url export_perm='treasury:transactions/export' %}
             {% if can_create_tx %}
-            <a href="{% url 'vault_deposit' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_deposit' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-600/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_downward</span>
                 <span>إيداع نقدي</span>
             </a>
-            <a href="{% url 'vault_withdraw' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-rose-600/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_withdraw' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-rose-600/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_upward</span>
                 <span>صرف نقدي</span>
             </a>
             {% endif %}
-            <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[44px]">
+            <a href="{% url 'vaults_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-500">account_balance_wallet</span>
                 <span>الخزن النقدية</span>
             </a>
             {% if can_transfer %}
-            <a href="{% url 'vault_transfer' %}" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[44px]">
+            <a href="{% url 'vault_transfer' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">swap_horiz</span>
                 <span>تحويل أموال</span>
             </a>
@@ -98,48 +100,24 @@
         </div>
     </div>
 
-    <!-- 3. Dedicated Search & Filters Toolbar -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
-        <form method="GET" class="flex flex-col md:flex-row items-center gap-3">
-            <div class="flex-1 w-full relative">
-                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم الحركة، البيان أو الخزنة..."
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
+    <!-- 3. Compact Search & Filter Drawer Trigger Toolbar -->
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+                {% if selected_vault_id %}<input type="hidden" name="vault_id" value="{{ selected_vault_id }}">{% endif %}
+                {% if selected_tx_type %}<input type="hidden" name="type" value="{{ selected_tx_type }}">{% endif %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input type="text" name="search" value="{{ search_query }}" placeholder="البحث بالبيان أو الخزنة..."
+                       class="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </form>
+            <div class="flex items-center gap-2">
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+                {% include 'components/table_column_picker.html' with table_id='vault_transactions_table' %}
             </div>
-
-            <div class="w-full md:w-56">
-                <select name="vault_id" onchange="this.form.submit()"
-                        data-smart-select="true"
-                        data-search-url="{% url 'purchases_vaults_search_api' %}"
-                        data-search-placeholder="بحث عن خزنة..."
-                        class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900 min-h-[44px]">
-                    <option value="">-- كافة الخزن المتاحة --</option>
-                    {% for v in vaults %}
-                    <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="w-full md:w-48">
-                <select name="type" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-brand-500 text-slate-900 min-h-[44px]">
-                    <option value="">كافة أنواع الحركات</option>
-                    <option value="inflow" {% if selected_tx_type == 'inflow' %}selected{% endif %}>إيداع (Inflow)</option>
-                    <option value="outflow" {% if selected_tx_type == 'outflow' %}selected{% endif %}>صرف (Outflow)</option>
-                </select>
-            </div>
-
-            {% include 'components/date_range_filter.html' with date_from=request.GET.date_from date_to=request.GET.date_to active_preset=request.GET.preset|default:'all_time' %}
-
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5 min-h-[44px]">
-                <span class="material-symbols-outlined text-base">filter_alt</span>
-                <span>تصفية</span>
-            </button>
-            {% if search_query or selected_vault_id or selected_tx_type %}
-            <a href="{% url 'vault_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center min-h-[44px]">
-                إلغاء
-            </a>
-            {% endif %}
-        </form>
+        </div>
     </div>
 
     <!-- Active Filter Chips Bar -->
@@ -155,16 +133,6 @@
                     {{ total_count }} حركة
                 </span>
             </h2>
-            <div class="flex items-center gap-2">
-                {% if request.user|has_permission:'treasury:transactions/export' %}
-                <a href="{% url 'vault_transactions_export' %}?search={{ search_query|urlencode }}&vault_id={{ selected_vault_id|default:''|urlencode }}&type={{ selected_tx_type|default:''|urlencode }}&date_from={{ selected_date_from|default:''|urlencode }}&date_to={{ selected_date_to|default:''|urlencode }}"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
-                    <span class="material-symbols-outlined text-base">download</span>
-                    <span class="hidden sm:inline">تصدير Excel</span>
-                </a>
-                {% endif %}
-                {% include 'components/table_column_picker.html' with table_id='vault_transactions_table' %}
-            </div>
         </div>
 
         <div class="overflow-x-auto scrollbar-thin">
@@ -189,12 +157,12 @@
                             {% if tx.transaction_type == 'inflow' %}
                             <span class="text-emerald-700 flex items-center gap-1 font-semibold">
                                 <span class="material-symbols-outlined text-sm">arrow_downward</span>
-                                <span>إيداع (Inflow)</span>
+                                <span>إيداع</span>
                             </span>
                             {% else %}
                             <span class="text-red-700 flex items-center gap-1 font-semibold">
                                 <span class="material-symbols-outlined text-sm">arrow_upward</span>
-                                <span>صرف (Outflow)</span>
+                                <span>صرف</span>
                             </span>
                             {% endif %}
                         </td>
@@ -220,7 +188,7 @@
                             {% if tx.is_reversed %}
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">معكوسة</span>
                             {% elif can_reverse and tx.reference_type != 'reversal' %}
-                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'vault_transaction_reverse' tx.id %}', title: 'عكس الحركة النقدية', itemName: '{{ tx.serial_num }}', message: 'هل أنت متأكد من رغبتك في عكس هذه الحركة النقدية رقم <span class=\'font-bold text-slate-800\'>#{{ tx.serial_num }}</span> مالياً؟ سيتم إنشاء قيد عكسي مطابق وموازنة رصيد الخزينة.', submitText: 'نعم، عكس الحركة', submitColor: 'bg-amber-600 hover:bg-amber-700', icon: 'undo', iconColor: 'text-amber-600 bg-amber-50' })" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 min-h-[32px]" title="عكس هذه الحركة مالياً">
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'vault_transaction_reverse' tx.id %}', title: 'عكس الحركة النقدية', itemName: '#{{ tx.id }}', message: 'هل أنت متأكد من رغبتك في عكس الحركة النقدية رقم #{{ tx.id }} مالياً؟ سيتم إنشاء قيد عكسي مطابق وموازنة رصيد الخزينة.', submitText: 'نعم، عكس الحركة', submitColor: 'bg-amber-600 hover:bg-amber-700', icon: 'undo', iconColor: 'text-amber-600 bg-amber-50' })" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition-colors inline-flex items-center gap-1 min-h-[32px]" title="عكس هذه الحركة مالياً">
                                 <span class="material-symbols-outlined text-sm">undo</span>
                                 <span>عكس</span>
                             </button>
@@ -241,21 +209,56 @@
             </table>
         </div>
 
-        <!-- 5. Pagination Section -->
-        {% if page_obj.has_other_pages %}
-        <div class="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-            <span>صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }} (إجمالي {{ total_count }} حركة)</span>
-            <div class="flex items-center gap-1">
-                {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_vault_id %}&vault_id={{ selected_vault_id }}{% endif %}{% if selected_tx_type %}&type={{ selected_tx_type }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 font-bold min-h-[36px] flex items-center">السابق</a>
-                {% endif %}
-                {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_vault_id %}&vault_id={{ selected_vault_id }}{% endif %}{% if selected_tx_type %}&type={{ selected_tx_type }}{% endif %}" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 font-bold min-h-[36px] flex items-center">التالي</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        <!-- 5. Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
 </div>
+
+<!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
+<div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+<aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+            {% if active_filters|length %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
+        </div>
+        <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+        </button>
+    </div>
+    <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+
+        <div>
+            <label class="block font-bold text-slate-700 mb-1.5">الخزنة</label>
+            <select name="vault_id"
+                    data-smart-select="true"
+                    data-search-url="{% url 'purchases_vaults_search_api' %}"
+                    data-search-placeholder="بحث عن خزنة..."
+                    class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">كافة الخزن المتاحة</option>
+                {% for v in vaults %}
+                <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|floatformat:2 }} ج.م" data-search="{{ v.serial_num }}" {% if selected_vault_id|stringformat:"s" == v.id|stringformat:"s" %}selected{% endif %}>{{ v.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="block font-bold text-slate-700 mb-1.5">نوع الحركة</label>
+            <select name="type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">كافة أنواع الحركات</option>
+                <option value="inflow" {% if selected_tx_type == 'inflow' %}selected{% endif %}>إيداع</option>
+                <option value="outflow" {% if selected_tx_type == 'outflow' %}selected{% endif %}>صرف</option>
+            </select>
+        </div>
+
+        {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=date_from date_to=date_to %}
+
+        <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+            <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
+            <a href="{% url 'vault_transactions_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
+        </div>
+    </form>
+</aside>
 {% endblock %}

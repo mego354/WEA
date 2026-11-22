@@ -1,75 +1,130 @@
-<!-- Unified Date Range Filter Control (Presets + Custom Range) -->
-<div class="flex flex-wrap items-center gap-2 text-xs">
-    <select name="{{ preset_name|default:'preset' }}"
-            onchange="window.applyDatePreset && window.applyDatePreset(this)"
-            class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#27bebe]">
-        {% if allow_all_time|default:True %}
-        <option value="all_time" {% if active_preset == 'all_time' or not active_preset and not date_from and not date_to %}selected{% endif %}>كل الوقت</option>
-        {% endif %}
-        <option value="today" {% if active_preset == 'today' %}selected{% endif %}>اليوم</option>
-        <option value="yesterday" {% if active_preset == 'yesterday' %}selected{% endif %}>أمس</option>
-        <option value="last_7_days" {% if active_preset == 'last_7_days' %}selected{% endif %}>آخر 7 أيام</option>
-        <option value="last_30_days" {% if active_preset == 'last_30_days' %}selected{% endif %}>آخر 30 يوم</option>
-        <option value="this_month" {% if active_preset == 'this_month' %}selected{% endif %}>هذا الشهر</option>
-        <option value="last_month" {% if active_preset == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
-        <option value="this_year" {% if active_preset == 'this_year' %}selected{% endif %}>هذه السنة</option>
-        <option value="custom" {% if active_preset == 'custom' or date_from or date_to %}selected{% endif %}>فترة مخصصة</option>
-    </select>
+{% load static %}
+{% comment %}
+Unified Compact Date Range Filter Component (Option A — Drawer-First & Mobile-Safe)
+- Displays a collapsible predefined-ranges section so it stays compact on mobile & inside 320px drawers.
+- Shows "من تاريخ" and "إلى تاريخ" stacked vertically ONLY when "فترة مخصصة" is selected.
+- Never auto-submits unexpectedly inside filter drawers (auto_submit defaults to False).
 
-    <div class="flex items-center gap-1.5">
-        <input type="date"
-               name="{{ from_name|default:'date_from' }}"
-               value="{{ date_from|default:'' }}"
-               aria-label="من تاريخ"
-               class="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-[#27bebe]">
-        <span class="text-slate-400 font-bold">-</span>
-        <input type="date"
-               name="{{ to_name|default:'date_to' }}"
-               value="{{ date_to|default:'' }}"
-               aria-label="إلى تاريخ"
-               class="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-[#27bebe]">
+Parameters:
+  preset_name    : GET param name for preset (default: 'preset')
+  from_name      : GET param name for start date (default: 'date_from')
+  to_name        : GET param name for end date (default: 'date_to')
+  active_preset  : currently active preset string
+  date_from      : YYYY-MM-DD start date string
+  date_to        : YYYY-MM-DD end date string
+  allow_all_time : boolean (default: True; pass False on reports/dashboard if needed)
+  include_quarter: boolean (default: False; pass True on reports/performance)
+  year_value     : value for this-year option (default: 'this_year'; pass 'year' for reports)
+  auto_submit    : boolean (default: False)
+  label          : optional section label (default: 'الفترة الزمنية')
+  start_open     : boolean (default: False; auto-opens if active_preset == 'custom')
+{% endcomment %}
+{% with p_name=preset_name|default:'preset' f_name=from_name|default:'date_from' t_name=to_name|default:'date_to' yr_val=year_value|default:'this_year' %}
+{% with resolved_preset=active_preset|default:'' %}
+<div data-erp-date-range
+     data-auto-submit="{% if auto_submit %}true{% else %}false{% endif %}"
+     data-drf-default="{% if allow_all_time|default:True %}all_time{% else %}this_month{% endif %}"
+     class="w-full rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden text-xs">
+
+    <!-- Collapsible Summary Header -->
+    <button type="button"
+            data-drf-toggle
+            aria-expanded="{% if start_open or resolved_preset == 'custom' %}true{% else %}false{% endif %}"
+            class="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-white hover:bg-slate-50 transition-colors text-right min-h-[40px]">
+        <span class="flex items-center gap-2 min-w-0">
+            <span class="material-symbols-outlined text-base text-brand-600 shrink-0">calendar_month</span>
+            <span class="min-w-0">
+                <span class="block text-[10px] font-semibold text-slate-400 leading-tight">{{ label|default:'الفترة الزمنية' }}</span>
+                <span data-drf-summary class="block text-xs font-bold text-slate-800 truncate">
+                    {% if resolved_preset == 'today' %}اليوم
+                    {% elif resolved_preset == 'yesterday' %}أمس
+                    {% elif resolved_preset == 'last_7_days' %}آخر 7 أيام
+                    {% elif resolved_preset == 'last_30_days' %}آخر 30 يوم
+                    {% elif resolved_preset == 'this_month' %}هذا الشهر
+                    {% elif resolved_preset == 'last_month' %}الشهر الماضي
+                    {% elif resolved_preset == 'quarter' %}هذا الربع
+                    {% elif resolved_preset == 'this_year' or resolved_preset == 'year' %}هذه السنة
+                    {% elif resolved_preset == 'custom' or date_from or date_to %}{{ date_from|default:'...' }} ⟵ {{ date_to|default:'...' }}
+                    {% else %}كل الوقت{% endif %}
+                </span>
+            </span>
+        </span>
+        <span class="flex items-center gap-1 shrink-0">
+            <span role="button"
+                  tabindex="0"
+                  data-drf-clear
+                  title="مسح التاريخ"
+                  class="{% if not date_from and not date_to and not resolved_preset or resolved_preset == 'all_time' %}hidden {% endif %}p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                <span class="material-symbols-outlined text-sm leading-none">close</span>
+            </span>
+            <span data-drf-chevron class="material-symbols-outlined text-base text-slate-400 transition-transform duration-150 {% if start_open or resolved_preset == 'custom' %}rotate-180{% endif %}">expand_more</span>
+        </span>
+    </button>
+
+    <!-- Collapsible Presets & Conditional Custom Range Body -->
+    <div data-drf-panel class="{% if not start_open and resolved_preset != 'custom' %}hidden {% endif %}p-3 border-t border-slate-200/80 space-y-3 bg-slate-50/60">
+
+        <!-- Native Select (Preserves exact GET parameter name for backend compatibility) -->
+        <select name="{{ p_name }}" data-drf-preset class="sr-only" aria-label="{{ label|default:'الفترة الزمنية' }}">
+            {% if allow_all_time|default:True %}
+            <option value="all_time" {% if resolved_preset == 'all_time' or not resolved_preset and not date_from and not date_to %}selected{% endif %}>كل الوقت</option>
+            {% endif %}
+            <option value="today" {% if resolved_preset == 'today' %}selected{% endif %}>اليوم</option>
+            <option value="yesterday" {% if resolved_preset == 'yesterday' %}selected{% endif %}>أمس</option>
+            <option value="last_7_days" {% if resolved_preset == 'last_7_days' %}selected{% endif %}>آخر 7 أيام</option>
+            <option value="last_30_days" {% if resolved_preset == 'last_30_days' %}selected{% endif %}>آخر 30 يوم</option>
+            <option value="this_month" {% if resolved_preset == 'this_month' or not allow_all_time|default:True and not resolved_preset and not date_from and not date_to %}selected{% endif %}>هذا الشهر</option>
+            <option value="last_month" {% if resolved_preset == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
+            {% if include_quarter %}
+            <option value="quarter" {% if resolved_preset == 'quarter' %}selected{% endif %}>هذا الربع</option>
+            {% endif %}
+            <option value="{{ yr_val }}" {% if resolved_preset == 'this_year' or resolved_preset == 'year' %}selected{% endif %}>هذه السنة</option>
+            <option value="custom" {% if resolved_preset == 'custom' or not resolved_preset and date_from or not resolved_preset and date_to %}selected{% endif %}>فترة مخصصة</option>
+        </select>
+
+        <!-- Compact Quick Preset Pills Grid -->
+        <div class="grid grid-cols-2 gap-1.5">
+            {% if allow_all_time|default:True %}
+            <button type="button" data-drf-pill="all_time" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">كل الوقت</button>
+            {% endif %}
+            <button type="button" data-drf-pill="today" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">اليوم</button>
+            <button type="button" data-drf-pill="yesterday" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">أمس</button>
+            <button type="button" data-drf-pill="last_7_days" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">آخر 7 أيام</button>
+            <button type="button" data-drf-pill="last_30_days" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">آخر 30 يوم</button>
+            <button type="button" data-drf-pill="this_month" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذا الشهر</button>
+            <button type="button" data-drf-pill="last_month" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">الشهر الماضي</button>
+            {% if include_quarter %}
+            <button type="button" data-drf-pill="quarter" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذا الربع</button>
+            {% endif %}
+            <button type="button" data-drf-pill="{{ yr_val }}" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذه السنة</button>
+            <button type="button" data-drf-pill="custom" class="col-span-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400 flex items-center justify-center gap-1">
+                <span class="material-symbols-outlined text-sm">date_range</span>
+                <span>فترة مخصصة</span>
+            </button>
+        </div>
+
+        <!-- Vertical Custom Date Inputs (Shown ONLY when "فترة مخصصة" is selected) -->
+        <div data-drf-custom-box class="{% if resolved_preset != 'custom' %}hidden {% endif %}space-y-2.5 pt-2 border-t border-slate-200/80">
+            <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">من تاريخ</label>
+                <input type="date"
+                       name="{{ f_name }}"
+                       value="{{ date_from|default:'' }}"
+                       data-drf-from
+                       dir="ltr"
+                       class="w-full min-h-[40px] px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 text-right focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+            </div>
+            <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">إلى تاريخ</label>
+                <input type="date"
+                       name="{{ t_name }}"
+                       value="{{ date_to|default:'' }}"
+                       data-drf-to
+                       dir="ltr"
+                       class="w-full min-h-[40px] px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 text-right focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+            </div>
+        </div>
     </div>
 </div>
-<script>
-if (!window.applyDatePreset) {
-    window.applyDatePreset = function(selectEl) {
-        const form = selectEl.closest('form');
-        if (!form) return;
-        const fromInput = form.querySelector('input[type="date"][name="date_from"], input[type="date"][name="start_date"]');
-        const toInput = form.querySelector('input[type="date"][name="date_to"], input[type="date"][name="end_date"]');
-        const val = selectEl.value;
-        if (val === 'custom') return;
-        const pad = n => String(n).padStart(2, '0');
-        const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        const now = new Date();
-        let s = '', e = '';
-        if (val === 'today') {
-            s = e = fmt(now);
-        } else if (val === 'yesterday') {
-            const y = new Date(now); y.setDate(y.getDate() - 1);
-            s = e = fmt(y);
-        } else if (val === 'last_7_days') {
-            const d = new Date(now); d.setDate(d.getDate() - 6);
-            s = fmt(d); e = fmt(now);
-        } else if (val === 'last_30_days') {
-            const d = new Date(now); d.setDate(d.getDate() - 29);
-            s = fmt(d); e = fmt(now);
-        } else if (val === 'this_month') {
-            s = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
-            e = fmt(now);
-        } else if (val === 'last_month') {
-            const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            const last = new Date(now.getFullYear(), now.getMonth(), 0);
-            s = fmt(first); e = fmt(last);
-        } else if (val === 'this_year') {
-            s = `${now.getFullYear()}-01-01`;
-            e = fmt(now);
-        }
-        if (fromInput) fromInput.value = s;
-        if (toInput) toInput.value = e;
-        if (selectEl.dataset.autoSubmit !== 'false') {
-            form.submit();
-        }
-    };
-}
-</script>
+{% endwith %}
+{% endwith %}

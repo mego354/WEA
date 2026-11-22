@@ -1,58 +1,73 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}الأداء الميداني — النشاط اليومي — WEA Pharma ERP{% endblock %}
+{% block title %}الأداء الميداني — النشاط اليومي{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'performance_overview' %}" class="hover:text-brand-600 transition-colors">الأداء الميداني</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">النشاط اليومي</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header & Sub-nav -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-3xl">today</span>
-                <span>متابعة النشاط اليومي الحي (Daily Field Operations)</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                سجل حركة المناديب على مدار اليوم، أوامر البيع، التحصيلات، والزيارات الميدانية.
-            </p>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">today</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">متابعة النشاط اليومي الحي</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    سجل حركة المناديب على مدار اليوم، أوامر البيع، التحصيلات، والزيارات الميدانية.
+                </p>
+            </div>
         </div>
 
-        <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold self-start sm:self-auto overflow-x-auto max-w-full">
-            <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">dashboard</span>
-                <span>نظرة عامة</span>
-            </a>
-            <a href="{% url 'performance_analysis' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">insights</span>
-                <span>تحليلي</span>
-            </a>
-            <a href="{% url 'performance_daily' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">today</span>
-                <span>يومي</span>
-            </a>
-            <a href="{% url 'performance_detailed' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                <span class="material-symbols-outlined text-base">grid_on</span>
-                <span>مفصل</span>
-            </a>
+        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {% url 'performance_daily_export' as perf_daily_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=perf_daily_export_url export_perm='performance:daily/export' %}
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
+                <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">dashboard</span>
+                    <span>نظرة عامة</span>
+                </a>
+                <a href="{% url 'performance_analysis' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">insights</span>
+                    <span>تحليلي</span>
+                </a>
+                <a href="{% url 'performance_daily' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">today</span>
+                    <span>يومي</span>
+                </a>
+                <a href="{% url 'performance_detailed' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base">grid_on</span>
+                    <span>مفصل</span>
+                </a>
+            </div>
         </div>
     </div>
 
     <!-- Date Picker Bar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-            <a href="{% url 'performance_daily' %}?date={{ prev_date_str }}" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors" title="اليوم السابق">
-                <span class="material-symbols-outlined text-base">arrow_forward</span>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'performance_daily' %}?date={{ prev_date_str }}" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors" title="اليوم السابق">
+                <span class="material-symbols-outlined text-base">chevron_right</span>
             </a>
 
             <form method="GET" class="flex items-center gap-2">
-                <input type="date" name="date" value="{{ target_date_str }}" onchange="this.form.submit();" class="text-xs font-bold border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-900 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                <input type="date" name="date" value="{{ target_date_str }}" onchange="this.form.submit();" dir="ltr" class="text-xs font-bold font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-900 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
             </form>
 
-            <a href="{% url 'performance_daily' %}?date={{ next_date_str }}" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors" title="اليوم التالي">
-                <span class="material-symbols-outlined text-base">arrow_back</span>
+            <a href="{% url 'performance_daily' %}?date={{ next_date_str }}" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors" title="اليوم التالي">
+                <span class="material-symbols-outlined text-base">chevron_left</span>
             </a>
 
             {% if not is_today %}
-            <a href="{% url 'performance_daily' %}" class="px-3 py-2 text-xs font-bold bg-brand-50 text-brand-700 rounded-xl hover:bg-brand-100 transition-colors">
+            <a href="{% url 'performance_daily' %}" class="px-3 py-2 text-xs font-bold bg-brand-50 text-brand-700 rounded-xl hover:bg-brand-100 transition-colors min-h-[40px] inline-flex items-center">
                 العودة لليوم
             </a>
             {% endif %}
@@ -60,127 +75,117 @@
 
         <div class="flex items-center gap-2 shrink-0">
             {% include 'components/table_column_picker.html' with table_id='performance_daily_table' %}
-            {% if request.user|has_permission:'performance:daily/export' %}
-            <a href="{% url 'performance_daily_export' %}?date={{ target_date_str }}" class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shrink-0 min-h-[38px]">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير اليوم إلى Excel</span>
-            </a>
-            {% endif %}
         </div>
     </div>
 
     <!-- Daily 4 Summary Cards (vs Yesterday) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Visits Today -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
             <div>
                 <span class="text-xs font-bold text-slate-500 block">زيارات اليوم</span>
-                <span class="text-2xl font-black text-slate-900">{{ daily_kpis.visits.today }}</span>
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ daily_kpis.visits.today }}</span>
                 <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.visits.yesterday }}</span>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center">
+            <div class="w-12 h-12 rounded-xl bg-teal-50 text-brand-600 flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-2xl">pin_drop</span>
             </div>
         </div>
 
-        <!-- Active Reps Today -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
             <div>
                 <span class="text-xs font-bold text-slate-500 block">المناديب النشطون ميدانياً</span>
-                <span class="text-2xl font-black text-slate-900">{{ daily_kpis.active_reps.today }}</span>
+                <span class="text-2xl font-black text-slate-900 font-mono">{{ daily_kpis.active_reps.today }}</span>
                 <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.active_reps.yesterday }}</span>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-2xl">badge</span>
             </div>
         </div>
 
-        <!-- Sales Today -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
             <div>
                 <span class="text-xs font-bold text-slate-500 block">قيمة مبيعات اليوم</span>
-                <span class="text-2xl font-black text-slate-900">{{ daily_kpis.orders_val.today|floatformat:0 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
-                <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.orders_val.yesterday|floatformat:0 }} ج.م</span>
+                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono">{{ daily_kpis.orders_val.today|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
+                <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.orders_val.yesterday|floatformat:2 }} ج.م</span>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-2xl">shopping_cart</span>
             </div>
         </div>
 
-        <!-- Collections Today -->
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
             <div>
                 <span class="text-xs font-bold text-slate-500 block">تحصيلات اليوم</span>
-                <span class="text-2xl font-black text-slate-900">{{ daily_kpis.collections_val.today|floatformat:0 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
-                <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.collections_val.yesterday|floatformat:0 }} ج.م</span>
+                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono">{{ daily_kpis.collections_val.today|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
+                <span class="text-[11px] font-medium text-slate-400 block mt-0.5">أمس: {{ daily_kpis.collections_val.yesterday|floatformat:2 }} ج.م</span>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-2xl">payments</span>
             </div>
         </div>
     </div>
 
-    <!-- 20-Column Daily Rep Grid -->
+    <!-- Daily Rep Grid (15 Columns) -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="p-4 border-b border-slate-100 flex items-center justify-between">
             <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span class="material-symbols-outlined text-brand-600 text-lg">format_list_bulleted</span>
-                <span>سجل النشاط الميداني اليومي للمناديب (Daily Activity Grid)</span>
+                <span>سجل النشاط الميداني اليومي للمناديب</span>
             </h2>
             <span class="text-xs text-slate-400 font-medium">{{ daily_rep_grid|length }} مندوب</span>
         </div>
 
         <div class="overflow-x-auto">
-            <table id="performance_daily_table" data-col-table="performance_daily_table" class="w-full text-right text-xs">
+            <table id="performance_daily_table" data-col-table="performance_daily_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-3" data-col="rep" data-col-required="true">المندوب</th>
-                        <th class="py-3 px-3" data-col="area">المنطقة</th>
-                        <th class="py-3 px-3 text-center" data-col="first_checkin">أول تسجيل</th>
-                        <th class="py-3 px-3 text-center" data-col="last_checkin">آخر تسجيل</th>
-                        <th class="py-3 px-3 text-center" data-col="hours">الساعات</th>
-                        <th class="py-3 px-3 text-center" data-col="planned">المخططة</th>
-                        <th class="py-3 px-3 text-center" data-col="executed">المنفذة</th>
-                        <th class="py-3 px-3 text-center" data-col="unplanned">خارج الخطة</th>
-                        <th class="py-3 px-3 text-center" data-col="double">مزدوجة</th>
-                        <th class="py-3 px-3 text-center" data-col="detailing">الشرح</th>
-                        <th class="py-3 px-3 text-center" data-col="geo_accuracy">دقة الموقع %</th>
-                        <th class="py-3 px-3 text-center" data-col="orders">الطلبيات</th>
-                        <th class="py-3 px-3 text-left" data-col="sales" data-col-required="true">المبيعات (ج.م)</th>
-                        <th class="py-3 px-3 text-left" data-col="collections">التحصيلات (ج.م)</th>
-                        <th class="py-3 px-3 text-center" data-col="status">الحالة</th>
+                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-10" data-col="rep" data-col-label="المندوب" data-required="true">المندوب</th>
+                        <th class="py-3 px-3" data-col="area" data-col-label="المنطقة">المنطقة</th>
+                        <th class="py-3 px-3 text-center" data-col="first_checkin" data-col-label="أول تسجيل">أول تسجيل</th>
+                        <th class="py-3 px-3 text-center" data-col="last_checkin" data-col-label="آخر تسجيل">آخر تسجيل</th>
+                        <th class="py-3 px-3 text-center" data-col="hours" data-col-label="الساعات">الساعات</th>
+                        <th class="py-3 px-3 text-center" data-col="planned" data-col-label="المخططة">المخططة</th>
+                        <th class="py-3 px-3 text-center" data-col="executed" data-col-label="المنفذة">المنفذة</th>
+                        <th class="py-3 px-3 text-center" data-col="unplanned" data-col-label="خارج الخطة">خارج الخطة</th>
+                        <th class="py-3 px-3 text-center" data-col="double" data-col-label="مزدوجة">مزدوجة</th>
+                        <th class="py-3 px-3 text-center" data-col="detailing" data-col-label="الشرح">الشرح</th>
+                        <th class="py-3 px-3 text-center" data-col="geo_accuracy" data-col-label="دقة الموقع %">دقة الموقع %</th>
+                        <th class="py-3 px-3 text-center" data-col="orders" data-col-label="الطلبيات">الطلبيات</th>
+                        <th class="py-3 px-3 text-left" data-col="sales" data-col-label="المبيعات" data-required="true">المبيعات (ج.م)</th>
+                        <th class="py-3 px-3 text-left" data-col="collections" data-col-label="التحصيلات">التحصيلات (ج.م)</th>
+                        <th class="py-3 px-3 text-center" data-col="status" data-col-label="الحالة">الحالة</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     {% for r in daily_rep_grid %}
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="py-3 px-3 font-bold text-slate-900">{{ r.name }}</td>
-                        <td class="py-3 px-3 text-slate-600">{{ r.area }}</td>
-                        <td class="py-3 px-3 text-center font-mono text-slate-700">{{ r.first_checkin }}</td>
-                        <td class="py-3 px-3 text-center font-mono text-slate-700">{{ r.last_checkout }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.working_hours }}</td>
-                        <td class="py-3 px-3 text-center text-slate-600">{{ r.planned_visits }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-brand-600">{{ r.completed_visits }}</td>
-                        <td class="py-3 px-3 text-center text-slate-600">{{ r.unplanned_visits }}</td>
-                        <td class="py-3 px-3 text-center text-slate-600">{{ r.double_visits }}</td>
-                        <td class="py-3 px-3 text-center text-slate-600">{{ r.detailing_count }}</td>
-                        <td class="py-3 px-3 text-center">
+                        <td data-col="rep" class="py-3 px-3 font-bold text-slate-900 sticky right-0 bg-white z-10">{{ r.name }}</td>
+                        <td data-col="area" class="py-3 px-3 text-slate-600">{{ r.area }}</td>
+                        <td data-col="first_checkin" class="py-3 px-3 text-center font-mono text-slate-700">{{ r.first_checkin }}</td>
+                        <td data-col="last_checkin" class="py-3 px-3 text-center font-mono text-slate-700">{{ r.last_checkout }}</td>
+                        <td data-col="hours" class="py-3 px-3 text-center font-bold text-slate-900 font-mono">{{ r.working_hours }}</td>
+                        <td data-col="planned" class="py-3 px-3 text-center text-slate-600 font-mono">{{ r.planned_visits }}</td>
+                        <td data-col="executed" class="py-3 px-3 text-center font-bold text-brand-600 font-mono">{{ r.completed_visits }}</td>
+                        <td data-col="unplanned" class="py-3 px-3 text-center text-slate-600 font-mono">{{ r.unplanned_visits }}</td>
+                        <td data-col="double" class="py-3 px-3 text-center text-slate-600 font-mono">{{ r.double_visits }}</td>
+                        <td data-col="detailing" class="py-3 px-3 text-center text-slate-600 font-mono">{{ r.detailing_count }}</td>
+                        <td data-col="geo_accuracy" class="py-3 px-3 text-center">
                             <span class="inline-block px-1.5 py-0.5 rounded font-bold {% if r.in_range_pct >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">
                                 {{ r.in_range_pct }}%
                             </span>
                         </td>
-                        <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.orders_count }}</td>
-                        <td class="py-3 px-3 text-left font-bold text-slate-900">{{ r.orders_val|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-bold text-emerald-700">{{ r.cols_val|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-center">
-                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-{{ r.status_color }}-50 text-{{ r.status_color }}-700 border border-{{ r.status_color }}-200">
+                        <td data-col="orders" class="py-3 px-3 text-center font-bold text-slate-900 font-mono">{{ r.orders_count }}</td>
+                        <td data-col="sales" class="py-3 px-3 text-left font-bold text-slate-900 font-mono">{{ r.orders_val|floatformat:2 }}</td>
+                        <td data-col="collections" class="py-3 px-3 text-left font-bold text-emerald-700 font-mono">{{ r.cols_val|floatformat:2 }}</td>
+                        <td data-col="status" class="py-3 px-3 text-center">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border {% if r.status_color == 'emerald' %}bg-emerald-50 text-emerald-700 border-emerald-200{% elif r.status_color == 'amber' %}bg-amber-50 text-amber-700 border-amber-200{% elif r.status_color == 'rose' or r.status_color == 'red' %}bg-rose-50 text-rose-700 border-rose-200{% else %}bg-slate-50 text-slate-700 border-slate-200{% endif %}">
                                 {{ r.status }}
                             </span>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="16" class="py-8 text-center text-slate-400">لا يوجد نشاط مسجل اليوم.</td>
+                        <td colspan="15" class="py-8 text-center text-slate-400">لا يوجد نشاط مسجل اليوم.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -190,19 +195,18 @@
 
     <!-- 8 Daily Drilldown Sub-tabs -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <!-- Sub-tabs Navigation -->
         <div class="border-b border-slate-200 bg-slate-50/75 p-2 overflow-x-auto flex gap-1">
-            <button onclick="switchDailyTab('tab-visits')" id="btn-tab-visits" class="daily-tab-btn active px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-brand-700 shadow-xs whitespace-nowrap">الزيارات المنفذة ({{ subtabs.visits|length }})</button>
-            <button onclick="switchDailyTab('tab-customers')" id="btn-tab-customers" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">العملاء المزارون ({{ subtabs.customers|length }})</button>
-            <button onclick="switchDailyTab('tab-calls')" id="btn-tab-calls" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المكالمات ({{ subtabs.calls|length }})</button>
-            <button onclick="switchDailyTab('tab-expenses')" id="btn-tab-expenses" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المصروفات ({{ subtabs.expenses|length }})</button>
-            <button onclick="switchDailyTab('tab-tasks')" id="btn-tab-tasks" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المهام ({{ subtabs.tasks|length }})</button>
-            <button onclick="switchDailyTab('tab-approvals')" id="btn-tab-approvals" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">الموافقات المعلقة ({{ subtabs.approvals|length }})</button>
-            <button onclick="switchDailyTab('tab-orders')" id="btn-tab-orders" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">أوامر البيع ({{ subtabs.orders|length }})</button>
-            <button onclick="switchDailyTab('tab-collections')" id="btn-tab-collections" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">التحصيلات ({{ subtabs.collections|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-visits')" id="btn-tab-visits" class="daily-tab-btn active px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-brand-700 shadow-xs whitespace-nowrap">الزيارات المنفذة ({{ subtabs.visits|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-customers')" id="btn-tab-customers" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">العملاء المزارون ({{ subtabs.customers|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-calls')" id="btn-tab-calls" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المكالمات ({{ subtabs.calls|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-expenses')" id="btn-tab-expenses" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المصروفات ({{ subtabs.expenses|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-tasks')" id="btn-tab-tasks" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">المهام ({{ subtabs.tasks|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-approvals')" id="btn-tab-approvals" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">الموافقات المعلقة ({{ subtabs.approvals|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-orders')" id="btn-tab-orders" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">أوامر البيع ({{ subtabs.orders|length }})</button>
+            <button type="button" onclick="switchDailyTab('tab-collections')" id="btn-tab-collections" class="daily-tab-btn px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 whitespace-nowrap">التحصيلات ({{ subtabs.collections|length }})</button>
         </div>
 
-        <!-- 1. Visits Tab Content -->
+        <!-- 1. Visits Tab -->
         <div id="tab-visits" class="daily-tab-content p-4">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -220,10 +224,10 @@
                     <tbody class="divide-y divide-slate-100">
                         {% for v in subtabs.visits %}
                         <tr>
-                            <td class="py-2.5 px-3 font-bold text-slate-900">#{{ v.serial_num }}</td>
+                            <td class="py-2.5 px-3 font-bold text-slate-900 font-mono">#{{ v.serial_num }}</td>
                             <td class="py-2.5 px-3">{{ v.owner.name }}</td>
                             <td class="py-2.5 px-3 font-bold">{{ v.contact.name }}</td>
-                            <td class="py-2.5 px-3">{{ v.formatted_time|default:'–' }}</td>
+                            <td class="py-2.5 px-3 font-mono">{{ v.formatted_time|default:'–' }}</td>
                             <td class="py-2.5 px-3">{{ v.duration_formatted }}</td>
                             <td class="py-2.5 px-3">
                                 <span class="inline-flex items-center gap-1 text-[11px] font-bold {{ v.verification_badge_color }} px-2 py-0.5 rounded-full border">
@@ -240,7 +244,7 @@
             </div>
         </div>
 
-        <!-- 2. Customers Tab Content -->
+        <!-- 2. Customers Tab -->
         <div id="tab-customers" class="daily-tab-content p-4 hidden">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {% for c in subtabs.customers %}
@@ -256,7 +260,7 @@
             </div>
         </div>
 
-        <!-- 3. Calls Tab Content -->
+        <!-- 3. Calls Tab -->
         <div id="tab-calls" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -286,7 +290,7 @@
             </div>
         </div>
 
-        <!-- 4. Expenses Tab Content -->
+        <!-- 4. Expenses Tab -->
         <div id="tab-expenses" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -305,7 +309,7 @@
                             <td class="py-2.5 px-3 font-bold">{{ exp.visit.owner.name }}</td>
                             <td class="py-2.5 px-3">#{{ exp.visit.serial_num }} ({{ exp.visit.contact.name }})</td>
                             <td class="py-2.5 px-3">{{ exp.expense_type }}</td>
-                            <td class="py-2.5 px-3 font-bold text-slate-900">{{ exp.amount }} ج.م</td>
+                            <td class="py-2.5 px-3 font-bold text-slate-900 font-mono">{{ exp.amount|floatformat:2 }} ج.م</td>
                             <td class="py-2.5 px-3 text-slate-500">{{ exp.notes|default:'–' }}</td>
                         </tr>
                         {% empty %}
@@ -316,7 +320,7 @@
             </div>
         </div>
 
-        <!-- 5. Tasks Tab Content -->
+        <!-- 5. Tasks Tab -->
         <div id="tab-tasks" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -348,7 +352,7 @@
             </div>
         </div>
 
-        <!-- 6. Approvals Tab Content -->
+        <!-- 6. Approvals Tab -->
         <div id="tab-approvals" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -363,7 +367,7 @@
                     <tbody class="divide-y divide-slate-100">
                         {% for a in subtabs.approvals %}
                         <tr>
-                            <td class="py-2.5 px-3 font-bold">#{{ a.serial_num }}</td>
+                            <td class="py-2.5 px-3 font-bold font-mono">#{{ a.serial_num }}</td>
                             <td class="py-2.5 px-3">{{ a.owner.name }}</td>
                             <td class="py-2.5 px-3 font-bold">{{ a.contact.name }}</td>
                             <td class="py-2.5 px-3 text-rose-700 font-medium">{{ a.location_status|default:'تجاوز نطاق الموقع الجغرافي' }}</td>
@@ -376,7 +380,7 @@
             </div>
         </div>
 
-        <!-- 7. Orders Tab Content -->
+        <!-- 7. Orders Tab -->
         <div id="tab-orders" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -392,11 +396,11 @@
                     <tbody class="divide-y divide-slate-100">
                         {% for o in subtabs.orders %}
                         <tr>
-                            <td class="py-2.5 px-3 font-bold text-slate-900">{{ o.order_number }}</td>
+                            <td class="py-2.5 px-3 font-bold text-slate-900 font-mono">{{ o.order_number }}</td>
                             <td class="py-2.5 px-3 font-bold">{{ o.customer.name }}</td>
                             <td class="py-2.5 px-3">{{ o.created_by.name }}</td>
                             <td class="py-2.5 px-3">{{ o.status_display_ar }}</td>
-                            <td class="py-2.5 px-3 text-left font-bold text-slate-900">{{ o.grand_total }} ج.م</td>
+                            <td class="py-2.5 px-3 text-left font-bold text-slate-900 font-mono">{{ o.grand_total|floatformat:2 }} ج.م</td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="5" class="py-6 text-center text-slate-400">لا توجد أوامر بيع مسجلة اليوم.</td></tr>
@@ -406,7 +410,7 @@
             </div>
         </div>
 
-        <!-- 8. Collections Tab Content -->
+        <!-- 8. Collections Tab -->
         <div id="tab-collections" class="daily-tab-content p-4 hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
@@ -422,11 +426,11 @@
                     <tbody class="divide-y divide-slate-100">
                         {% for col in subtabs.collections %}
                         <tr>
-                            <td class="py-2.5 px-3 font-bold text-slate-900">#{{ col.serial_num }}</td>
+                            <td class="py-2.5 px-3 font-bold text-slate-900 font-mono">#{{ col.serial_num }}</td>
                             <td class="py-2.5 px-3 font-bold">{{ col.customer.name }}</td>
                             <td class="py-2.5 px-3">{{ col.created_by.name }}</td>
                             <td class="py-2.5 px-3">{{ col.vault.name }}</td>
-                            <td class="py-2.5 px-3 text-left font-bold text-emerald-700">{{ col.amount }} ج.م</td>
+                            <td class="py-2.5 px-3 text-left font-bold text-emerald-700 font-mono">{{ col.amount|floatformat:2 }} ج.م</td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="5" class="py-6 text-center text-slate-400">لا توجد تحصيلات مسجلة اليوم.</td></tr>

@@ -10,10 +10,11 @@ Comprehensive tests for the Centralized Notifications System (Capacitor-Ready):
 
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
 from django.db import transaction
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -22,7 +23,8 @@ from contacts.models import Contact
 from inventory.models import InventoryStock, Warehouse
 from master_data.models import Area, SalesSettings
 from catalog.models import Product, ProductCategory
-from notifications.models import Notification, NotificationDevice, RoleNotificationRule
+from notifications.fcm_provider import FCMProvider
+from notifications.models import Notification, NotificationDevice, PushDeliveryAttempt, RoleNotificationRule
 from notifications.registry import NOTIFICATION_EVENTS_CATALOG, NOTIFICATION_MODULES_META
 from notifications.services import NotificationService
 from sales.models import SalesOrder
@@ -210,6 +212,177 @@ class NotificationsSystemTests(TestCase):
         self.assertEqual(deleted, 1)
         self.assertFalse(Notification.objects.filter(pk=old_n.pk).exists())
         self.assertTrue(Notification.objects.filter(pk=fresh_n.pk).exists())
+
+    def test_rejects_webpush_token_on_native_device_registration(self):
+        self.client.force_login(self.cairo_mgr)
+        # Web Push endpoint URL must be rejected for Android FCM registration
+        res_bad_url = self.client.post(
+            '/api/v1/notifications/devices/register/',
+            {
+                'platform': 'android',
+                'provider': 'fcm',
+                'device_token': 'https://fcm.googleapis.com/fcm/send/eXampleWebPushEndpoint',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(res_bad_url.status_code, 400)
+
+        # Web Push subscription JSON must be rejected for Android FCM registration
+        res_bad_json = self.client.post(
+            '/api/v1/notifications/devices/register/',
+            {
+                'platform': 'android',
+                'provider': 'fcm',
+                'device_token': '{"endpoint":"https://fcm.googleapis.com/fcm/send/123","keys":{"p256dh":"a","auth":"b"}}',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(res_bad_json.status_code, 400)
+
+    @patch('notifications.fcm_provider.FCMProvider._load_service_account_info')
+    @patch('notifications.fcm_provider.FCMProvider._get_access_token')
+    @patch('notifications.fcm_provider.requests.post')
+    def test_fcm_v1_push_delivery_multiple_devices_and_expired_token_deactivation(
+        self, mock_post, mock_access_token, mock_sa_info
+    ):
+        mock_sa_info.return_value = (
+            {'project_id': 'wea-pharma-mobile', 'client_email': 'fcm@wea-pharma-mobile.iam.gserviceaccount.com', 'private_key': 'DUMMY'},
+            'env:FIREBASE_SERVICE_ACCOUNT_JSON',
+        )
+        mock_access_token.return_value = 'ya29.mock_oauth_token'
+
+        # Register 2 active devices for Cairo Manager: one valid, one expired (UNREGISTERED)
+        dev_valid = NotificationService.register_device(
+            user=self.cairo_mgr,
+            device_token='fcm_valid_native_token_11111111111111111111',
+            platform='android',
+            provider='fcm',
+            device_name='Samsung S24',
+            app_id='com.acme.WEA',
+        )
+        dev_expired = NotificationService.register_device(
+            user=self.cairo_mgr,
+            device_token='fcm_expired_native_token_222222222222222222',
+            platform='android',
+            provider='fcm',
+            device_name='Old Pixel 5',
+            app_id='com.acme.WEA',
+        )
+
+        def side_effect(url, headers=None, json=None, timeout=15):
+            tok = json['message']['token']
+            resp = MagicMock()
+            if tok == dev_valid.device_token:
+                resp.status_code = 200
+                resp.content = b'{"name":"projects/wea-pharma-mobile/messages/msg_9001"}'
+                resp.json.return_value = {'name': 'projects/wea-pharma-mobile/messages/msg_9001'}
+            else:
+                resp.status_code = 404
+                resp.content = b'{"error":{"status":"NOT_FOUND","message":"Requested entity was not found.","details":[{"errorCode":"UNREGISTERED"}]}}'
+                resp.json.return_value = {
+                    'error': {
+                        'status': 'NOT_FOUND',
+                        'message': 'Requested entity was not found.',
+                        'details': [{'errorCode': 'UNREGISTERED'}],
+                    }
+                }
+            return resp
+
+        mock_post.side_effect = side_effect
+
+        # Emit business notification event
+        NotificationService.emit(
+            event_code='sales.order_pending_approval',
+            target_obj=self.order_cairo,
+            actor=self.rep_nasr,
+            title='أمر بيع جديد #SO-NOTIF-1',
+            body='يرجى مراجعة أمر البيع واعتماده',
+            action_url=f'/sales/orders/{self.order_cairo.pk}/',
+            dedupe_key='test_fcm_multi_device_1',
+            sync=True,
+        )
+
+        dev_valid.refresh_from_db()
+        dev_expired.refresh_from_db()
+        self.assertTrue(dev_valid.is_active)
+        self.assertIsNotNone(dev_valid.last_push_success_at)
+        self.assertFalse(dev_expired.is_active)
+        self.assertEqual(dev_expired.deactivated_reason, 'UNREGISTERED')
+
+        sent_attempt = PushDeliveryAttempt.objects.filter(device=dev_valid, status='sent').first()
+        self.assertIsNotNone(sent_attempt)
+        self.assertEqual(sent_attempt.provider_message_id, 'projects/wea-pharma-mobile/messages/msg_9001')
+        self.assertEqual(sent_attempt.target_url, f'/sales/orders/{self.order_cairo.pk}/')
+
+        dead_attempt = PushDeliveryAttempt.objects.filter(device=dev_expired, status='invalid_token').first()
+        self.assertIsNotNone(dead_attempt)
+        self.assertEqual(dead_attempt.error_code, 'UNREGISTERED')
+
+    @patch('notifications.fcm_provider.FCMProvider._load_service_account_info')
+    @patch('notifications.fcm_provider.FCMProvider._get_access_token')
+    @patch('notifications.fcm_provider.requests.post')
+    def test_test_push_endpoint_and_diagnostics_and_deleted_target_handling(
+        self, mock_post, mock_access_token, mock_sa_info
+    ):
+        mock_sa_info.return_value = (
+            {'project_id': 'wea-pharma-mobile', 'client_email': 'fcm@wea-pharma-mobile.iam.gserviceaccount.com', 'private_key': 'DUMMY'},
+            'env:FIREBASE_SERVICE_ACCOUNT_JSON',
+        )
+        mock_access_token.return_value = 'ya29.mock_oauth_token'
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+        resp_ok.content = b'{"name":"projects/wea-pharma-mobile/messages/test_msg_1"}'
+        resp_ok.json.return_value = {'name': 'projects/wea-pharma-mobile/messages/test_msg_1'}
+        mock_post.return_value = resp_ok
+
+        self.client.force_login(self.cairo_mgr)
+        NotificationService.register_device(
+            user=self.cairo_mgr,
+            device_token='fcm_cairo_test_device_token_99999999999999',
+            platform='android',
+            provider='fcm',
+        )
+
+        # Reject external target_url on test-push
+        bad_test = self.client.post(
+            '/api/v1/notifications/test-push/',
+            {'title': 'Evil', 'body': 'Phish', 'target_url': 'https://evil.example.com/phish'},
+            content_type='application/json',
+        )
+        self.assertEqual(bad_test.status_code, 400)
+
+        # Valid test push to /notifications/
+        good_test = self.client.post(
+            '/api/v1/notifications/test-push/',
+            {'title': 'Test Push', 'body': 'Tap to open inbox', 'target_url': '/notifications/'},
+            content_type='application/json',
+        )
+        self.assertEqual(good_test.status_code, 200)
+        self.assertTrue(good_test.json()['success'])
+        self.assertEqual(good_test.json()['delivered_count'], 1)
+
+        # Diagnostics endpoint returns masked token without exposing full token
+        diag_res = self.client.get('/api/v1/notifications/diagnostics/')
+        self.assertEqual(diag_res.status_code, 200)
+        diag_json = diag_res.json()
+        self.assertEqual(len(diag_json['devices']), 1)
+        self.assertNotIn('fcm_cairo_test_device_token_99999999999999', json_str := str(diag_json))
+        self.assertIn('...', diag_json['devices'][0]['masked_token'])
+
+        # Deleted target record graceful handling on notification_open
+        n_deleted = Notification.objects.create(
+            recipient=self.cairo_mgr,
+            event_code='sales.order_created',
+            module='sales',
+            title='Deleted Order Notification',
+            action_url='/sales/orders/999999/',
+            target_model='salesorder',
+            target_object_id=999999,
+        )
+        open_res = self.client.get(reverse('notification_open', kwargs={'pk': n_deleted.pk}))
+        self.assertEqual(open_res.status_code, 302)
+        self.assertEqual(open_res.url, reverse('notifications_inbox'))
+
 
 
 class NotificationTransactionRollbackTests(TransactionTestCase):

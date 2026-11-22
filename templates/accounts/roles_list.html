@@ -1,131 +1,136 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}أدوار المستخدمين - WEA Pharma ERP{% endblock %}
+{% block title %}أدوار المستخدمين{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">أدوار المستخدمين</span>
+<span class="font-bold text-brand-600">أدوار المستخدمين</span>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-4">
 
-    <!-- Top Action Bar matching Reference ERP (media_1792379956880.png) -->
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <!-- Right: Page Title -->
-        <h1 class="text-2xl font-bold text-[#27bebe]">أدوار المستخدمين</h1>
-
-        <!-- Left: Search, Filter & Create Role Button -->
-        <div class="flex flex-wrap items-center gap-2">
-            <!-- Search Input -->
-            <form method="GET" action="{% url 'roles_list' %}" class="relative flex-1 sm:w-64">
-                <input type="text" name="q" value="{{ query }}" placeholder="بحث بالاسم أو المعرف..."
-                       data-smart-search-module="roles"
-                       class="w-full py-2 pr-9 pl-4 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:border-transparent">
-                <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
-                {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
-            </form>
-
-            <!-- Status Filter -->
-            <div class="relative">
-                <select onchange="window.location.href='{% url 'roles_list' %}?status=' + this.value + '&q={{ query }}'"
-                        class="py-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
-                    <option value="">جميع الحالات</option>
-                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
-                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
-                </select>
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-xl">admin_panel_settings</span>
             </div>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900">أدوار المستخدمين</h1>
+        </div>
 
-            {% include 'components/table_column_picker.html' with table_id='roles_table' %}
+        <div class="flex flex-wrap items-center gap-2">
+            {% url 'roles_export' as roles_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=roles_export_url %}
 
-            <a href="{% url 'roles_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="min-h-[38px] px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5" title="تصدير Excel">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span class="hidden sm:inline">تصدير Excel</span>
-            </a>
-
-            <!-- Create Role Button -->
-            <a href="{% url 'role_create' %}" class="min-h-[38px] px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs shadow-teal-500/20 transition-all flex items-center gap-1.5">
+            <a href="{% url 'role_create' %}" class="min-h-[40px] px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs shadow-brand-500/20 transition-colors inline-flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>إنشاء دور</span>
             </a>
         </div>
     </div>
 
+    <!-- Search & Filter Toolbar -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 flex flex-wrap items-center justify-between gap-2.5">
+        <form method="GET" action="{% url 'roles_list' %}" class="relative flex-1 min-w-[200px] sm:max-w-md">
+            <input type="text" name="q" value="{{ query }}" placeholder="بحث بالاسم أو المعرف..."
+                   data-smart-search-module="roles"
+                   class="w-full h-10 py-2 pr-9 pl-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+            <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 text-lg">search</span>
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        </form>
+
+        <div class="flex items-center gap-2 shrink-0">
+            <form method="GET" action="{% url 'roles_list' %}" class="inline-flex">
+                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                <select name="status" onchange="this.form.submit()" aria-label="تصفية حسب الحالة"
+                        class="h-10 py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <option value="">جميع الحالات</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>مفعل فقط</option>
+                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>معطل فقط</option>
+                </select>
+            </form>
+
+            {% include 'components/table_column_picker.html' with table_id='roles_table' %}
+        </div>
+    </div>
+
     <!-- Active Filters Chips -->
     {% include 'components/active_filters.html' %}
 
-    <!-- Roles Table matching Reference ERP Columns & Layout -->
-    <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+    <!-- Roles Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto">
-            <table id="roles_table" data-col-table="roles_table" class="w-full text-right text-sm">
+            <table id="roles_table" data-col-table="roles_table" class="min-w-[640px] w-full text-right text-sm">
                 <thead>
                     <tr class="bg-slate-50/70 text-slate-600 text-xs font-bold border-b border-slate-200/80">
-                        <th class="py-3.5 px-6" data-col="code" data-col-required="true">المعرف</th>
-                        <th class="py-3.5 px-6" data-col="display_name" data-col-required="true">الاسم</th>
-                        <th class="py-3.5 px-6 text-center" data-col="is_active">مفعل</th>
-                        <th class="py-3.5 px-6 text-center" data-col="users_count">المستخدمون</th>
-                        <th class="py-3.5 px-6 text-center" data-col="actions" data-col-required="true">إجراءات</th>
+                        <th class="py-3.5 px-6" data-col="code" data-col-label="المعرف" data-required="true">المعرف</th>
+                        <th class="py-3.5 px-6" data-col="display_name" data-col-label="الاسم" data-required="true">الاسم</th>
+                        <th class="py-3.5 px-6 text-center" data-col="is_active" data-col-label="مفعل">مفعل</th>
+                        <th class="py-3.5 px-6 text-center" data-col="users_count" data-col-label="المستخدمون">المستخدمون</th>
+                        <th class="py-3.5 px-4 text-center w-14" data-col="actions" data-col-label="إجراءات" data-required="true">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-800">
                     {% for r in roles %}
                     <tr class="hover:bg-slate-50/60 transition-colors">
-                        <!-- Code / Identifier (المعرف) -->
-                        <td class="py-3.5 px-6 font-mono text-xs font-bold text-slate-800">
+                        <td data-col="code" class="py-3.5 px-6 font-mono text-xs font-bold text-slate-800">
                             {{ r.name }}
                         </td>
 
-                        <!-- Display Name (الاسم) -->
-                        <td class="py-3.5 px-6 font-medium text-slate-800">
-                            <a href="{% url 'role_edit' r.pk %}" class="hover:text-[#27bebe] hover:underline transition-colors">
+                        <td data-col="display_name" class="py-3.5 px-6 font-medium text-slate-800">
+                            <a href="{% url 'role_edit' r.pk %}" class="hover:text-brand-600 hover:underline transition-colors">
                                 {{ r.display_name }}
                             </a>
                         </td>
 
-                        <!-- Active status checkmark (مفعل) -->
-                        <td class="py-3.5 px-6 text-center">
+                        <td data-col="is_active" class="py-3.5 px-6 text-center">
                             {% if r.is_active %}
-                            <span class="material-symbols-outlined text-emerald-600 text-xl font-bold" title="مفعل">check</span>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مفعل</span>
                             {% else %}
-                            <span class="material-symbols-outlined text-slate-300 text-xl" title="معطل">close</span>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">معطل</span>
                             {% endif %}
                         </td>
 
-                        <!-- Assigned Users Count -->
-                        <td class="py-3.5 px-6 text-center">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                        <td data-col="users_count" class="py-3.5 px-6 text-center">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 font-mono">
                                 {{ r.users_count|default:0 }}
                             </span>
                         </td>
 
-                        <!-- Action Icons on left (Matching Reference ERP) -->
-                        <td class="py-3.5 px-6 text-center">
-                            <div class="flex items-center justify-center gap-2">
-                                <!-- Duplicate / Copy Icon -->
-                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'role_duplicate' r.pk %}', title: 'استنساخ الدور', itemName: '{{ r.display_name|escapejs }}', message: 'هل أنت متأكد من استنساخ إعدادات وصلاحيات الدور <span class=\'font-bold text-slate-800\'>{{ r.display_name|escapejs }}</span>؟', submitText: 'نعم، استنساخ', submitColor: 'bg-teal-600 hover:bg-teal-700', icon: 'content_copy', iconColor: 'text-teal-600 bg-teal-50' })"
-                                        class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                        title="استنساخ الدور (Copy)">
-                                    <span class="material-symbols-outlined text-lg">content_copy</span>
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                                 </button>
-
-                                <!-- Edit Pencil Icon -->
-                                <a href="{% url 'role_edit' r.pk %}"
-                                   class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-teal-50 transition-colors"
-                                   title="تعديل الدور">
-                                    <span class="material-symbols-outlined text-lg">edit</span>
-                                </a>
-
-                                {% if not r.is_system and r.users_count == 0 %}
-                                <!-- Delete Trash Icon (Custom roles with zero users) -->
-                                <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'role_delete' r.pk %}', title: 'حذف الدور الوظيفي', itemName: '{{ r.display_name|escapejs }}', message: 'هل أنت متأكد من حذف هذا الدور المخصص: <span class=\'font-bold text-slate-800\'>{{ r.display_name|escapejs }}</span>؟' })"
-                                        class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                        title="حذف الدور">
-                                    <span class="material-symbols-outlined text-lg">delete</span>
-                                </button>
-                                {% endif %}
+                                <template class="row-menu-items">
+                                    <a href="{% url 'role_edit' r.pk %}" class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                                        <span class="material-symbols-outlined text-base text-brand-600">edit</span>
+                                        <span>تعديل الدور</span>
+                                    </a>
+                                    <button type="button"
+                                            onclick="showConfirmDeleteModal({ action: '{% url 'role_duplicate' r.pk %}', title: 'استنساخ الدور', itemName: '{{ r.display_name|escapejs }}', message: 'هل أنت متأكد من استنساخ إعدادات وصلاحيات الدور {{ r.display_name|escapejs }}؟', submitText: 'نعم، استنساخ', submitColor: 'bg-brand-600 hover:bg-brand-700', icon: 'content_copy', iconColor: 'text-brand-600 bg-brand-50' })"
+                                            class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-right">
+                                        <span class="material-symbols-outlined text-base text-blue-600">content_copy</span>
+                                        <span>استنساخ الدور</span>
+                                    </button>
+                                    {% if not r.is_system and r.users_count == 0 %}
+                                    <div class="h-px bg-slate-100 my-1"></div>
+                                    <button type="button"
+                                            onclick="showConfirmDeleteModal({ action: '{% url 'role_delete' r.pk %}', title: 'حذف الدور الوظيفي', itemName: '{{ r.display_name|escapejs }}', message: 'هل أنت متأكد من حذف الدور المخصص {{ r.display_name|escapejs }}؟ لا يمكن التراجع عن هذا الإجراء.' })"
+                                            class="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-right">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                        <span>حذف الدور</span>
+                                    </button>
+                                    {% endif %}
+                                </template>
                             </div>
                         </td>
                     </tr>
@@ -133,7 +138,7 @@
                     <tr>
                         <td colspan="5" class="py-12 text-center text-slate-400">
                             <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">security</span>
-                            <p class="font-medium text-slate-600">لا يوجد أدوار مسجلة</p>
+                            <p class="font-medium text-slate-600">لا توجد أدوار مسجلة</p>
                         </td>
                     </tr>
                     {% endfor %}
@@ -141,7 +146,6 @@
             </table>
         </div>
 
-        <!-- Server-side Pagination Component -->
         {% include 'components/pagination.html' %}
     </div>
 

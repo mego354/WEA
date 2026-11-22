@@ -95,10 +95,10 @@ async function openAttachmentsModal(modelKey, objectId, titleText) {
                             uploadForm.reset();
                             openAttachmentsModal(modelKey, objectId, titleText);
                         } else {
-                            alert(upJson.error || 'فشل رفع المرفق');
+                            if (window.ERPToast) window.ERPToast.error(upJson.error || 'فشل رفع المرفق');
                         }
                     } catch (_) {
-                        alert('حدث خطأ في الاتصال بالخادم أثناء رفع المرفق.');
+                        if (window.ERPToast) window.ERPToast.error('حدث خطأ في الاتصال بالخادم أثناء رفع المرفق.');
                     } finally {
                         if (submitBtn) submitBtn.disabled = false;
                     }

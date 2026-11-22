@@ -3,6 +3,14 @@
 
 {% block title %}التخزين السحابي وحاسبة Cloudflare R2{% endblock %}
 
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">التخزين السحابي R2</span>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-5xl mx-auto space-y-6 pb-16">
     <!-- Header -->
@@ -185,7 +193,7 @@
         <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
             <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                 <span class="material-symbols-outlined text-[#27bebe]">calculate</span>
-                <span>محاكي التكلفة الشهرية (What-If Simulator)</span>
+                <span>محاكي التكلفة الشهرية</span>
             </h2>
             <form method="GET" class="space-y-3 text-xs">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -206,7 +214,10 @@
                         <input type="number" step="1" name="sim_egress_gb" value="{{ sim_inputs.sim_egress_gb }}" placeholder="0" class="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono">
                     </div>
                 </div>
-                <div class="flex justify-end">
+                <div class="flex items-center justify-end gap-2">
+                    {% if sim_estimate %}
+                    <a href="{% url 'r2_storage_settings' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-colors">إعادة تعيين</a>
+                    {% endif %}
                     <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors">
                         حساب المحاكاة
                     </button>

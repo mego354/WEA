@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load erp_tags %}
 
-{% block title %}أذونات المخزن - WEA Pharma ERP{% endblock %}
+{% block title %}أذونات المخزن{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -22,10 +22,10 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap">
             {% url 'inventory_memos_export' as memos_export_url %}
-            {% include 'components/excel_toolbar_actions.html' with export_url=memos_export_url import_entity='stock_adjustments' import_perm='inventory:memos/import' %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=memos_export_url export_perm='inventory:memos/export' import_entity='stock_adjustments' import_perm='inventory:memos/import' %}
             {% if can_stock_in %}
             <a href="{% url 'inventory_memo_create' %}?memo_type=inward"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[42px]">
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_downward</span>
                 <span>إذن إضافة جديد</span>
             </a>
@@ -33,7 +33,7 @@
 
             {% if can_stock_out %}
             <a href="{% url 'inventory_memo_create' %}?memo_type=outward"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[42px]">
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">arrow_upward</span>
                 <span>إذن صرف جديد</span>
             </a>
@@ -41,58 +41,38 @@
 
             {% if can_transfer %}
             <a href="{% url 'product_transfer_create' %}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[42px]">
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-sm transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">swap_horiz</span>
                 <span>تحويل مخزني</span>
             </a>
             {% endif %}
 
-            <a href="{% url 'inventory_stock_list' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all min-h-[42px]">
+            <a href="{% url 'inventory_stock_list' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-500">inventory_2</span>
                 <span>الأرصدة الحالية</span>
             </a>
         </div>
     </div>
 
-    <!-- Filters & Search Toolbar -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-        <form method="GET" class="flex flex-col md:flex-row gap-3">
-            <div class="flex-1 relative">
-                <span class="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+    <!-- Search & Filter Drawer Trigger Toolbar -->
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <form method="GET" class="flex-1 min-w-[220px] max-w-md relative">
+                {% if selected_warehouse_id %}<input type="hidden" name="warehouse" value="{{ selected_warehouse_id }}">{% endif %}
+                {% if selected_memo_type %}<input type="hidden" name="memo_type" value="{{ selected_memo_type }}">{% endif %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                 <input type="text" name="search" value="{{ search_query }}" placeholder="البحث برقم الإذن، البيان..."
                        data-smart-search-module="inventory_memos"
-                       class="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+                       class="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            </form>
+            <div class="flex items-center gap-2">
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+                {% include 'components/table_column_picker.html' with table_id='inventory_memos_table' %}
             </div>
-
-            <div class="w-full md:w-56">
-                <select name="warehouse" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
-                    <option value="">جميع المخازن</option>
-                    {% for wh in warehouses %}
-                    <option value="{{ wh.id }}" {% if selected_warehouse_id|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="w-full md:w-48">
-                <select name="memo_type" onchange="this.form.submit()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700">
-                    <option value="">كافة أنواع الحركات</option>
-                    <option value="inward" {% if selected_memo_type == 'inward' %}selected{% endif %}>إذن إضافة</option>
-                    <option value="outward" {% if selected_memo_type == 'outward' %}selected{% endif %}>إذن صرف / خصم</option>
-                </select>
-            </div>
-
-            {% include 'components/date_range_filter.html' with date_from=request.GET.date_from date_to=request.GET.date_to active_preset=request.GET.preset|default:'all_time' %}
-
-            <button type="submit" class="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-brand-500/20 transition-all flex items-center justify-center gap-1.5">
-                <span class="material-symbols-outlined text-base">filter_alt</span>
-                <span>تصفية</span>
-            </button>
-            {% if search_query or selected_warehouse_id or selected_memo_type %}
-            <a href="{% url 'inventory_memos_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl transition-all flex items-center justify-center">
-                إلغاء
-            </a>
-            {% endif %}
-        </form>
+        </div>
     </div>
 
     <!-- Active Filter Chips Bar -->
@@ -108,16 +88,6 @@
                     {{ total_count }} إذن
                 </span>
             </h2>
-            <div class="flex items-center gap-2">
-                {% if request.user|has_permission:'inventory:memos/export' %}
-                <a href="{% url 'inventory_memos_export' %}?search={{ search_query|urlencode }}&warehouse={{ selected_warehouse_id|default:''|urlencode }}&memo_type={{ selected_memo_type|default:''|urlencode }}&date_from={{ selected_date_from|default:''|urlencode }}&date_to={{ selected_date_to|default:''|urlencode }}"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[36px]">
-                    <span class="material-symbols-outlined text-base">download</span>
-                    <span class="hidden sm:inline">تصدير Excel</span>
-                </a>
-                {% endif %}
-                {% include 'components/table_column_picker.html' with table_id='inventory_memos_table' %}
-            </div>
         </div>
         <div class="overflow-x-auto scrollbar-thin">
             <table id="inventory_memos_table" data-col-table="inventory_memos_table" class="min-w-[850px] w-full text-right text-sm">
@@ -131,6 +101,7 @@
                         <th data-col="created_at" data-col-label="تاريخ التنفيذ" class="py-3.5 px-4">تاريخ التنفيذ</th>
                         <th data-col="created_by" data-col-label="المسئول" class="py-3.5 px-4">المسئول</th>
                         <th data-col="status" data-col-label="الحالة" data-col-required="true" class="py-3.5 px-4 text-center">الحالة</th>
+                        <th data-col="actions" data-col-label="إجراءات" data-col-required="true" class="py-3.5 px-4 text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -175,10 +146,31 @@
                                 {{ memo.get_status_display }}
                             </span>
                         </td>
+                        <td data-col="actions" class="py-3.5 px-4 text-center">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                                </button>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'inventory_memo_detail' memo.id %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                        <span>عرض التفاصيل</span>
+                                    </a>
+                                    <button type="button" onclick="openAttachmentsModal('inventorymemo', {{ memo.id }}, 'إذن مخزني {{ memo.memo_number|escapejs }}')"
+                                            class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-brand-700 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-brand-600">attach_file</span>
+                                        <span>عرض المرفقات</span>
+                                    </button>
+                                </template>
+                            </div>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="py-12 text-center text-slate-400">
+                        <td colspan="9" class="py-12 text-center text-slate-400">
                             <span class="material-symbols-outlined text-4xl block mb-2 text-slate-300">receipt_long</span>
                             <p class="font-medium text-slate-600">لا توجد أذونات مخزنية مسجلة</p>
                         </td>
@@ -193,4 +185,46 @@
     </div>
 
 </div>
+
+<!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
+<div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+<aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+            {% if active_filters|length %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
+        </div>
+        <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+        </button>
+    </div>
+    <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+        <div>
+            <label class="block font-bold text-slate-700 mb-1.5">المخزن</label>
+            <select name="warehouse" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">جميع المخازن</option>
+                {% for wh in warehouses %}
+                <option value="{{ wh.id }}" {% if selected_warehouse_id|stringformat:"s" == wh.id|stringformat:"s" %}selected{% endif %}>{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="block font-bold text-slate-700 mb-1.5">نوع الحركة</label>
+            <select name="memo_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                <option value="">كافة أنواع الحركات</option>
+                <option value="inward" {% if selected_memo_type == 'inward' %}selected{% endif %}>إذن إضافة</option>
+                <option value="outward" {% if selected_memo_type == 'outward' %}selected{% endif %}>إذن صرف / خصم</option>
+            </select>
+        </div>
+
+        {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=date_from date_to=date_to %}
+
+        <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+            <button type="submit" class="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">تطبيق</button>
+            <a href="{% url 'inventory_memos_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
+        </div>
+    </form>
+</aside>
 {% endblock %}

@@ -3,6 +3,14 @@
 
 {% block title %}استيراد Excel — {{ importer.title_ar }}{% endblock %}
 
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{{ back_url }}" class="hover:text-brand-600 transition-colors">{{ importer.title_ar }}</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">استيراد Excel</span>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-6xl mx-auto pb-20 md:pb-8 space-y-5">
     <!-- Header -->
@@ -171,19 +179,7 @@
             </table>
         </div>
 
-        {% if preview_page.paginator.num_pages > 1 %}
-        <div class="p-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span class="text-slate-500">صفحة {{ preview_page.number }} من {{ preview_page.paginator.num_pages }}</span>
-            <div class="flex items-center gap-1.5">
-                {% if preview_page.has_previous %}
-                <a href="?batch={{ batch_id }}&filter={{ filter_mode }}&page={{ preview_page.previous_page_number }}" class="px-3 py-1 bg-slate-100 rounded-lg font-bold">السابق</a>
-                {% endif %}
-                {% if preview_page.has_next %}
-                <a href="?batch={{ batch_id }}&filter={{ filter_mode }}&page={{ preview_page.next_page_number }}" class="px-3 py-1 bg-slate-100 rounded-lg font-bold">التالي</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        {% include 'components/pagination.html' with page_obj=preview_page %}
     </div>
 
     <!-- Confirmation Footer -->

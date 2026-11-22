@@ -112,7 +112,7 @@ class Notification(models.Model):
 
 class NotificationDevice(models.Model):
     """
-    Registered client devices for future Push Notification delivery
+    Registered client devices for Native Push Notification delivery
     (Capacitor Android/iOS via FCM/APNs or Web Push).
     """
     PLATFORM_CHOICES = [
@@ -137,8 +137,15 @@ class NotificationDevice(models.Model):
     device_token = models.CharField(max_length=512, unique=True, verbose_name='رمز الجهاز (Token)')
     device_name = models.CharField(max_length=150, blank=True, default='', verbose_name='اسم الجهاز')
     app_version = models.CharField(max_length=40, blank=True, default='', verbose_name='إصدار التطبيق')
+    app_id = models.CharField(max_length=120, blank=True, default='', verbose_name='معرف حزمة التطبيق')
+    permission_status = models.CharField(max_length=30, blank=True, default='granted', verbose_name='حالة الصلاحية')
     is_active = models.BooleanField(default=True, db_index=True, verbose_name='نشط')
     last_seen_at = models.DateTimeField(auto_now=True, verbose_name='آخر ظهور')
+    last_push_attempt_at = models.DateTimeField(null=True, blank=True, verbose_name='آخر محاولة إرسال')
+    last_push_success_at = models.DateTimeField(null=True, blank=True, verbose_name='آخر إرسال ناجح')
+    last_push_error = models.TextField(blank=True, default='', verbose_name='آخر خطأ من المزود')
+    failure_count = models.PositiveIntegerField(default=0, verbose_name='عدد مرات الفشل المتتالية')
+    deactivated_reason = models.CharField(max_length=150, blank=True, default='', verbose_name='سبب إلغاء التفعيل')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='تاريخ التسجيل')
 
     class Meta:
@@ -146,5 +153,62 @@ class NotificationDevice(models.Model):
         verbose_name_plural = 'أجهزة الإشعارات (Capacitor / Push)'
         ordering = ['-last_seen_at']
 
+    @property
+    def masked_token(self) -> str:
+        tok = (self.device_token or '').strip()
+        if len(tok) <= 14:
+            return f"{tok[:4]}...{tok[-2:]}" if len(tok) > 6 else "***"
+        return f"{tok[:8]}...{tok[-6:]}"
+
     def __str__(self):
-        return f"{self.user} ({self.platform}/{self.provider})"
+        return f"{self.user} ({self.platform}/{self.provider} - {self.masked_token})"
+
+
+class PushDeliveryAttempt(models.Model):
+    """
+    Audit & diagnostic log for every native push notification delivery attempt to FCM/APNs.
+    Never stores private keys or raw unmasked tokens in error logs.
+    """
+    STATUS_CHOICES = [
+        ('sent', 'تم الإرسال للمزود (Sent)'),
+        ('failed', 'فشل الإرسال (Failed)'),
+        ('invalid_token', 'رمز جهاز غير صالح أو منتهي (Invalid Token)'),
+        ('skipped', 'تم التخطي - المزود غير مفعل (Skipped)'),
+    ]
+
+    notification = models.ForeignKey(
+        Notification,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='push_attempts',
+        verbose_name='الإشعار',
+    )
+    device = models.ForeignKey(
+        NotificationDevice,
+        on_delete=models.CASCADE,
+        related_name='delivery_attempts',
+        verbose_name='الجهاز',
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='push_delivery_attempts',
+        verbose_name='المستلم',
+    )
+    provider = models.CharField(max_length=20, default='fcm', verbose_name='المزود')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, verbose_name='الحالة')
+    target_url = models.CharField(max_length=500, blank=True, default='', verbose_name='الرابط المستهدف')
+    provider_message_id = models.CharField(max_length=255, blank=True, default='', verbose_name='معرف رسالة المزود')
+    error_code = models.CharField(max_length=100, blank=True, default='', verbose_name='كود الخطأ')
+    error_message = models.TextField(blank=True, default='', verbose_name='تفاصيل الخطأ')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='وقت المحاولة')
+
+    class Meta:
+        verbose_name = 'سجل محاولة إرسال Push'
+        verbose_name_plural = 'سجلات محاولات إرسال Push'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f"PushAttempt({self.status}) -> {self.recipient} [{self.provider}]"
+

@@ -361,11 +361,16 @@ class NotificationService:
         if not to_create:
             return 0
 
-        delivered_count = 0
+        in_app_count = 0
         for channel in ACTIVE_CHANNELS:
             if channel.is_enabled:
-                delivered_count += channel.deliver(to_create)
-        return delivered_count
+                try:
+                    count = channel.deliver(to_create)
+                    if channel.channel_name == 'in_app_db':
+                        in_app_count = count
+                except Exception:
+                    logger.exception("Channel %s failed cleanly during notification delivery", channel.channel_name)
+        return in_app_count
 
     @classmethod
     def get_unread_count(cls, user) -> int:
@@ -414,15 +419,38 @@ class NotificationService:
         return qs.update(is_read=True, read_at=timezone.now())
 
     @classmethod
-    def register_device(cls, user, device_token: str, platform: str = 'android', provider: str = 'fcm', device_name: str = '', app_version: str = '') -> NotificationDevice:
+    def register_device(
+        cls,
+        user,
+        device_token: str,
+        platform: str = 'android',
+        provider: str = 'fcm',
+        device_name: str = '',
+        app_version: str = '',
+        app_id: str = '',
+        permission_status: str = 'granted',
+    ) -> NotificationDevice:
+        from .fcm_provider import is_Likely_webpush_or_invalid_native_token, mask_token
+
         token = (device_token or '').strip()
         if not token:
             raise ValueError("device_token is required.")
+
         valid_platforms = {c[0] for c in NotificationDevice.PLATFORM_CHOICES}
         valid_providers = {c[0] for c in NotificationDevice.PROVIDER_CHOICES}
+        platform = (platform or 'android').lower().strip()
+        provider = (provider or ('apns' if platform == 'ios' else 'fcm')).lower().strip()
         platform = platform if platform in valid_platforms else 'android'
-        provider = provider if provider in valid_providers else 'fcm'
-        device, _ = NotificationDevice.objects.update_or_create(
+        provider = provider if provider in valid_providers else ('apns' if platform == 'ios' else 'fcm')
+
+        if platform in ('android', 'ios') and provider == 'webpush':
+            raise ValueError("Web Push provider cannot be used for native Android/iOS device registration.")
+
+        is_bad, bad_reason = is_Likely_webpush_or_invalid_native_token(token, platform)
+        if is_bad:
+            raise ValueError(bad_reason)
+
+        device, created = NotificationDevice.objects.update_or_create(
             device_token=token,
             defaults={
                 'user': user,
@@ -430,17 +458,143 @@ class NotificationService:
                 'provider': provider,
                 'device_name': (device_name or '')[:150],
                 'app_version': (app_version or '')[:40],
+                'app_id': (app_id or '')[:120],
+                'permission_status': (permission_status or 'granted')[:30],
                 'is_active': True,
+                'deactivated_reason': '',
+                'failure_count': 0,
             },
+        )
+        logger.info(
+            "[NotificationService] Device %s: id=%s user=%s platform=%s provider=%s token=%s app_id=%s",
+            'created' if created else 'updated',
+            device.id,
+            user.pk,
+            platform,
+            provider,
+            mask_token(token),
+            app_id or '-',
         )
         return device
 
     @classmethod
     def unregister_device(cls, user, device_token: str) -> int:
+        from .fcm_provider import mask_token
+
         token = (device_token or '').strip()
         if not token:
             return 0
-        return NotificationDevice.objects.filter(user=user, device_token=token).update(is_active=False)
+        updated = NotificationDevice.objects.filter(user=user, device_token=token).update(
+            is_active=False,
+            deactivated_reason='user_logout_or_unregister',
+        )
+        logger.info(
+            "[NotificationService] Device unregistered: user=%s token=%s count=%s",
+            getattr(user, 'pk', None),
+            mask_token(token),
+            updated,
+        )
+        return updated
+
+    @classmethod
+    def send_test_push_to_user(
+        cls,
+        user,
+        title: str = '',
+        body: str = '',
+        target_url: str = '/notifications/',
+        device_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Creates an in-app test notification for the authenticated user and dispatches
+        a real native push notification via FCMProvider to the user's active registered device(s).
+        """
+        from .fcm_provider import FCMProvider
+
+        final_title = (title or 'إشعار تجريبي من نظام WEA Pharma').strip()[:200]
+        final_body = (body or 'اضغط على هذا الإشعار لفتح الصفحة المرتبطة مباشرة داخل التطبيق.').strip()[:1000]
+        final_target = (target_url or '/notifications/').strip()
+        if not final_target.startswith('/'):
+            final_target = '/notifications/'
+
+        # Persist in-app notification record so tapping it can also open or mark read
+        notif = Notification.objects.create(
+            recipient=user,
+            actor=user,
+            event_code='system.test_push',
+            module='master_data',
+            severity='info',
+            title=final_title,
+            body=final_body,
+            action_url=final_target,
+            target_model='notification',
+            metadata={'is_test_push': True, 'target_url': final_target},
+        )
+
+        qs = NotificationDevice.objects.filter(user=user, is_active=True)
+        if device_id:
+            qs = qs.filter(pk=device_id)
+        devices = list(qs.order_by('-last_seen_at'))
+
+        fcm_status = FCMProvider.get_config_status()
+        if not devices:
+            return {
+                'status': 'no_devices',
+                'success': False,
+                'notification_id': notif.id,
+                'target_url': final_target,
+                'delivered_count': 0,
+                'failed_count': 0,
+                'fcm_configured': fcm_status['fcm_configured'],
+                'firebase_project_id': fcm_status['firebase_project_id'],
+                'message': 'لا توجد أجهزة موبايل نشطة مسجلة لحسابك حالياً. افتح تطبيق الموبايل وسجل الدخول لتسجيل الجهاز تلقائياً.',
+                'attempts': [],
+            }
+
+        attempts = []
+        delivered_count = 0
+        failed_count = 0
+        for dev in devices:
+            res = FCMProvider.send_to_device(
+                device=dev,
+                title=final_title,
+                body=final_body,
+                notification_obj=notif,
+                notification_id=str(notif.id),
+                event_type='system.test_push',
+                object_type='notification',
+                object_id=str(notif.id),
+                target_url=final_target,
+                module='master_data',
+                severity='info',
+            )
+            attempts.append(res)
+            if res.get('success'):
+                delivered_count += 1
+            else:
+                failed_count += 1
+
+        overall_ok = delivered_count > 0
+        if overall_ok:
+            msg = f"تم إرسال الإشعار التجريبي بنجاح إلى {delivered_count} جهاز."
+        elif not fcm_status['fcm_configured']:
+            msg = "تم حفظ الإشعار داخلياً، ولكن لم يتم إرسال Push خارجي لأن بيانات خدمة Firebase (Service Account) غير مضبوطة على الخادم."
+        else:
+            first_err = attempts[0].get('error_message') if attempts else 'Unknown error'
+            msg = f"فشل إرسال الإشعار عبر مزود FCM: {first_err}"
+
+        return {
+            'status': 'ok' if overall_ok else 'provider_error',
+            'success': overall_ok,
+            'notification_id': notif.id,
+            'target_url': final_target,
+            'delivered_count': delivered_count,
+            'failed_count': failed_count,
+            'fcm_configured': fcm_status['fcm_configured'],
+            'firebase_project_id': fcm_status['firebase_project_id'],
+            'message': msg,
+            'attempts': attempts,
+        }
 
     @classmethod
     def prune_old_notifications(cls, days: int = 90) -> int:

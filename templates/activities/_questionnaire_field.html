@@ -51,13 +51,13 @@ Supports: boolean, yes_no, single_choice, multiple_choice, rating, number, date,
             <input type="radio" name="question_{{ q.id }}" value="Yes" class="{% if mode == 'active' %}question-input {% endif %}text-[#27bebe] focus:ring-[#27bebe]"
                    onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
                    {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'Yes' %}checked{% endif %}{% endfor %}>
-            <span class="text-xs font-bold text-slate-700">نعم (Yes)</span>
+            <span class="text-xs font-bold text-slate-700">نعم</span>
         </label>
         <label class="inline-flex items-center gap-2 cursor-pointer px-3.5 py-2 bg-white border border-slate-200 rounded-xl hover:bg-rose-50/50 transition-colors min-h-[40px]">
             <input type="radio" name="question_{{ q.id }}" value="No" class="{% if mode == 'active' %}question-input {% endif %}text-rose-500 focus:ring-rose-500"
                    onchange="{% if mode == 'active' %}handleQuestionChange({{ q.id }}){% else %}evaluateModalConditionalQuestions(){% endif %}"
                    {% for resp in questionnaire_responses %}{% if resp.question.id == q.id and resp.raw_answer == 'No' %}checked{% endif %}{% endfor %}>
-            <span class="text-xs font-bold text-slate-700">لا (No)</span>
+            <span class="text-xs font-bold text-slate-700">لا</span>
         </label>
     </div>
     {% elif q.question_type == 'single_choice' %}

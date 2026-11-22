@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}{% if memo_type == 'inward' %}إذن إضافة مخزنية جديد{% else %}إذن صرف مخزني جديد{% endif %} - WEA Pharma ERP{% endblock %}
+{% block title %}{% if memo_type == 'inward' %}إذن إضافة مخزنية جديد{% else %}إذن صرف مخزني جديد{% endif %}{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -14,20 +14,24 @@
 <div class="max-w-6xl mx-auto pb-16 space-y-6">
 
     <!-- Header -->
-    <div class="pb-4 border-b border-slate-200">
+    <div class="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-2">
             <span class="p-2 rounded-xl {% if memo_type == 'inward' %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %}">
                 <span class="material-symbols-outlined text-2xl">{% if memo_type == 'inward' %}arrow_downward{% else %}arrow_upward{% endif %}</span>
             </span>
             <div>
                 <h1 class="text-2xl font-black text-slate-900 tracking-tight">
-                    {% if memo_type == 'inward' %}إذن إضافة مخزنية جديد (Stock In){% else %}إذن صرف مخزني جديد (Stock Out){% endif %}
+                    {% if memo_type == 'inward' %}إذن إضافة مخزنية جديد{% else %}إذن صرف مخزني جديد{% endif %}
                 </h1>
                 <p class="text-xs text-slate-500 mt-1">
                     {% if memo_type == 'inward' %}إضافة كميات واردة وتحديث متوسط التكلفة والتشغيلات للمخزن{% else %}خصم وصرف كميات من المخزن مع التحقق التام من الأرصدة المتاحة{% endif %}
                 </p>
             </div>
         </div>
+        <a href="{% url 'inventory_memos_list' %}" class="self-start sm:self-auto px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 shadow-xs min-h-[40px]">
+            <span class="material-symbols-outlined text-base">arrow_forward</span>
+            <span>العودة للأذونات</span>
+        </a>
     </div>
 
     <form method="POST" id="memoForm" enctype="multipart/form-data" class="space-y-6">
@@ -352,8 +356,8 @@
 
                 <!-- Batch Number -->
                 <td class="block md:table-cell py-1 md:py-2 px-2">
-                    <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">رقم التشغيل (Batch No)</label>
-                    <input type="text" name="batch_number[]" value="${batch}" placeholder="Batch No" ${isBatchMandatory ? 'required' : ''}
+                    <label class="block md:hidden text-[10px] font-bold text-slate-600 mb-0.5">رقم التشغيل</label>
+                    <input type="text" name="batch_number[]" value="${batch}" placeholder="رقم التشغيلة" ${isBatchMandatory ? 'required' : ''}
                            class="w-full px-2 py-1.5 bg-white md:bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#27bebe]">
                 </td>
 

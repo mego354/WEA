@@ -62,6 +62,9 @@ def resolve_date_range(request, default_preset="all_time"):
         first_this = today.replace(day=1)
         last_prev = first_this - timedelta(days=1)
         s, e = last_prev.replace(day=1), last_prev
+    elif preset == "quarter":
+        q_start_month = ((today.month - 1) // 3) * 3 + 1
+        s, e = today.replace(month=q_start_month, day=1), today
     elif preset in ("this_year", "year"):
         s, e = today.replace(month=1, day=1), today
     else:

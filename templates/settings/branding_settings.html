@@ -1,21 +1,23 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}اعدادات بيانات الشركة - WEA Pharma ERP{% endblock %}
+{% block title %}إعدادات بيانات الشركة{% endblock %}
 
 {% block breadcrumb %}
-<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <span class="text-slate-500">الإعدادات</span>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">اعدادات بيانات الشركة</span>
+<span class="font-bold text-brand-600">إعدادات بيانات الشركة</span>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-4">
 
-    <!-- Title matching Reference ERP (media_1792380621017.png) -->
-    <div class="flex items-center justify-between pb-2">
-        <h1 class="text-2xl font-bold text-[#27bebe]">اعدادات بيانات الشركة</h1>
+    <div class="flex items-center gap-2.5 pb-2">
+        <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-xl">business</span>
+        </div>
+        <h1 class="text-xl sm:text-2xl font-black text-slate-900">إعدادات بيانات الشركة</h1>
     </div>
 
     <!-- Main Settings Card -->
@@ -60,29 +62,33 @@
                 </div>
             </div>
 
-            <!-- Logo Section matching Reference ERP -->
-            <div class="pt-4 flex flex-col items-center justify-center">
-                <div class="relative w-48 h-36 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden group hover:border-[#27bebe] transition-all">
+            <!-- Logo Section -->
+            <div class="pt-4 flex flex-col items-center justify-center gap-2">
+                <div class="relative w-48 h-36 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden group hover:border-brand-500 transition-all">
                     {% if profile.logo %}
-                    <img src="{{ profile.logo.url }}" alt="{{ profile.company_name }}" class="max-h-full max-w-full object-contain p-2">
+                    <img id="companyLogoPreview" src="{{ profile.logo.url }}" alt="{{ profile.company_name }}" class="max-h-full max-w-full object-contain p-2">
                     {% else %}
-                    <div class="text-center p-4">
-                        <span class="text-3xl font-extrabold text-[#27bebe]">WEA</span>
-                        <span class="block text-[11px] text-slate-500 font-bold mt-1">Pharmaceutical Company</span>
+                    <img id="companyLogoPreview" src="" alt="{{ profile.company_name }}" class="hidden max-h-full max-w-full object-contain p-2">
+                    <div id="companyLogoPlaceholder" class="text-center p-4">
+                        <span class="text-3xl font-extrabold text-brand-600">WEA</span>
+                        <span class="block text-[11px] text-slate-500 font-bold mt-1">WEA Pharma</span>
                     </div>
                     {% endif %}
-                    
-                    <label for="logo_input" class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
+                    <label for="logo_input" class="absolute inset-0 bg-slate-900/35 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
                         <span class="material-symbols-outlined text-white text-3xl">photo_camera</span>
                     </label>
-                    <input type="file" id="logo_input" name="logo" accept="image/*" class="hidden" onchange="this.form.submit()">
+                    <input type="file" id="logo_input" name="logo" accept="image/*" class="hidden" onchange="previewCompanyLogo(this)">
                 </div>
-                <span class="text-[11px] text-slate-400 mt-2">انقر على الشعار لتغيير الصورة</span>
+                <label for="logo_input" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-colors">
+                    <span class="material-symbols-outlined text-sm text-brand-600">photo_camera</span>
+                    <span>اختيار شعار جديد</span>
+                </label>
+                <span id="logoSelectedName" class="text-[11px] text-slate-400">اضغط حفظ لتطبيق الشعار الجديد</span>
             </div>
 
             <!-- Save Button -->
             <div class="pt-4 flex items-center justify-end border-t border-slate-100">
-                <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
+                <button type="submit" class="px-8 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-xl shadow-xs shadow-brand-500/20 transition-all flex items-center gap-2 min-h-[44px]">
                     <span class="material-symbols-outlined text-lg">save</span>
                     <span>حفظ</span>
                 </button>
@@ -91,4 +97,28 @@
     </div>
 
 </div>
+
+<script>
+function previewCompanyLogo(input) {
+    const file = input.files && input.files[0];
+    const nameEl = document.getElementById('logoSelectedName');
+    const imgEl = document.getElementById('companyLogoPreview');
+    const placeholder = document.getElementById('companyLogoPlaceholder');
+    if (!file) return;
+    if (nameEl) {
+        nameEl.textContent = 'الملف المختار: ' + file.name + ' (اضغط حفظ للتأكيد)';
+        nameEl.classList.remove('text-slate-400');
+        nameEl.classList.add('text-brand-600', 'font-bold');
+    }
+    if (imgEl) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            imgEl.src = e.target.result;
+            imgEl.classList.remove('hidden');
+            if (placeholder) placeholder.classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+</script>
 {% endblock %}

@@ -173,7 +173,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:returns/view', 'عرض تفاصيل وأمر مرتجع المبيعات', 'read'),
                     ('sales:returns/create', 'إنشاء أمر مرتجع مبيعات جديد', 'write'),
                     ('sales:returns/edit', 'تعديل أمر مرتجع المبيعات', 'write'),
-                    ('sales:returns/delete', 'حذف أمر مرتجع المشتريات وعكس القيود', 'delete'),
+                    ('sales:returns/delete', 'حذف أمر مرتجع المبيعات وعكس القيود', 'delete'),
                     ('sales:returns/approve', 'اعتماد أو رفض أمر مرتجع المبيعات', 'workflow'),
                     ('sales:returns/manage', 'استلام وتسوية مرتجع المبيعات', 'workflow'),
                     ('sales:returns/cancel', 'إلغاء أمر مرتجع المبيعات', 'workflow'),
@@ -434,12 +434,6 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'تخصيص الحقول الإضافية لجهات الاتصال',
                 'actions': [
                     ('settings:contactsUdf/manage', 'إدارة الحقول المخصصة لجهات الاتصال', 'admin'),
-                ]
-            },
-            'sync_data': {
-                'name_ar': 'مزامنة البيانات الخارجية (Google Sheets)',
-                'actions': [
-                    ('settings:syncData/manage', 'إدارة وتشغيل مزامنة البيانات عبر Google Sheets', 'admin'),
                 ]
             },
             'visits_templates': {

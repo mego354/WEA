@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}تعديل بيانات المستخدم: {{ target_user.name|default:target_user.username }} - WEA Pharma ERP{% endblock %}
+{% block title %}تعديل بيانات المستخدم: {{ target_user.name|default:target_user.username }}{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
@@ -9,7 +9,9 @@
 <span class="material-symbols-outlined text-xs">chevron_left</span>
 <a href="{% url 'users_list' %}" class="hover:text-[#27bebe] transition-colors">المستخدمون</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-[#27bebe]">{{ target_user.name|default:target_user.username }}</span>
+<a href="{% url 'user_detail' target_user.pk %}" class="hover:text-[#27bebe] transition-colors">{{ target_user.name|default:target_user.username }}</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-[#27bebe]">تعديل</span>
 {% endblock %}
 
 {% block content %}
@@ -79,7 +81,7 @@
                 <div class="flex items-center gap-3 pt-6">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" name="is_active" {% if target_user.is_active %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe]"></div>
+                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe]"></div>
                         <span class="mr-3 text-sm font-bold text-slate-700">حساب مفعل</span>
                     </label>
                 </div>
@@ -134,7 +136,10 @@
 
             <!-- Submit -->
             <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
-                <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2">
+                <a href="{% url 'user_detail' target_user.pk %}" class="px-5 py-2.5 text-slate-600 hover:text-slate-900 text-sm font-semibold transition-colors">
+                    إلغاء
+                </a>
+                <button type="submit" class="px-6 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-xl shadow-sm shadow-teal-500/20 transition-all flex items-center gap-2 min-h-[44px]">
                     <span class="material-symbols-outlined text-lg">save</span>
                     <span>حفظ التعديلات</span>
                 </button>

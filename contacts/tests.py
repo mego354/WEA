@@ -912,4 +912,45 @@ class SupplierActivationServiceTests(TestCase):
         self.assertEqual(res_again['activated'], [])
         self.assertEqual(res_again['already_active'], [existing_1.id])
 
+    def test_contacts_phase2_lead_status_supplier_statement_and_comm_edit_url(self):
+        """Regression test: contact_create accepts status='lead', total_leads counts status='lead', and contact_detail renders supplier statement & communications edit URL."""
+        super_role, _ = Role.objects.get_or_create(name=Role.ROLE_SUPERADMIN, defaults={'display_name': 'Super', 'is_super': True})
+        admin = User.objects.create_superuser(username='cnt_p2_reg_admin', email='cnt_p2_reg@wea.com', password='Password123!', role=super_role)
+        cairo = Area.objects.create(code='CNT-P2-CAI', name='القاهرة جهات P2', area_type='governorate')
+        self.client.force_login(admin)
+
+        # 1. Create a lead contact with status='lead'
+        post_lead = self.client.post(reverse('contact_create'), {
+            'name': 'عيادة عميل محتمل جديد',
+            'contact_type': 'organization',
+            'status': 'lead',
+            'relations': ['عميل'],
+            'area_id': cairo.id,
+        })
+        self.assertEqual(post_lead.status_code, 302)
+        lead_contact = Contact.objects.get(name='عيادة عميل محتمل جديد')
+        self.assertEqual(lead_contact.status, 'lead')
+
+        # 2. Contacts list stats.total_leads accurately reflects status='lead'
+        list_resp = self.client.get(reverse('contacts_list'))
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertGreaterEqual(list_resp.context['stats']['total_leads'], 1)
+        self.assertEqual(list_resp.context['stats']['total_leads'], list_resp.context['stats']['leads'])
+
+        # 3. Supplier contact detail shows vendor statement PDF option and /communications/ edit route
+        supplier = Contact.objects.create(
+            name='مورد اختبار كشف حساب',
+            contact_type='organization',
+            is_supplier=True,
+            status='supplier',
+            area=cairo,
+            created_by=admin,
+        )
+        detail_resp = self.client.get(reverse('contact_detail', kwargs={'pk': supplier.pk}))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, '/communications/')
+        self.assertNotContains(detail_resp, '/communication-methods/')
+        self.assertContains(detail_resp, reverse('vendor_statement_pdf', args=[supplier.pk]))
+
+
 

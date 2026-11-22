@@ -1,6 +1,14 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}أمر إرجاع مشتريات جديد - Bricks Rep{% endblock %}
+{% block title %}أمر إرجاع مشتريات جديد{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'purchase_return_orders_list' %}" class="hover:text-[#27bebe] transition-colors">مرتجعات المشتريات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">أمر إرجاع جديد</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-5xl mx-auto pb-16">
@@ -126,7 +134,7 @@
                             <th class="py-2.5 px-3 min-w-[200px]">الصنف <span class="text-red-500">*</span></th>
                             <th class="py-2.5 px-3 w-28">سعر القطعة (ج.م)</th>
                             <th class="py-2.5 px-3 w-24">الكمية <span class="text-red-500">*</span></th>
-                            <th class="py-2.5 px-3 w-32">رقم التشغيل (Batch)</th>
+                            <th class="py-2.5 px-3 w-32">رقم التشغيل</th>
                             <th class="py-2.5 px-3 w-32">تاريخ الصلاحية</th>
                             <th class="py-2.5 px-3 w-32">الإجمالي (ج.م)</th>
                             <th class="py-2.5 px-3 w-12 text-center">حذف</th>
@@ -153,7 +161,7 @@
                                        class="item-qty w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono font-bold text-slate-800">
                             </td>
                             <td class="py-2 px-3">
-                                <input type="text" name="batch_number[]" placeholder="Batch No"
+                                <input type="text" name="batch_number[]" placeholder="رقم التشغيلة"
                                        class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
                             </td>
                             <td class="py-2 px-3">
@@ -278,18 +286,19 @@ function calculateTotals() {
 }
 
 function createReturnRowHtml(itemData = null) {
+    const esc = (v) => (window.erpEscapeHtml ? window.erpEscapeHtml(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
     let options = '<option value="">-- اختر الصنف --</option>';
     availableProducts.forEach(p => {
         const selected = itemData && String(itemData.product_id || itemData.productId) === String(p.id) ? 'selected' : '';
-        options += `<option value="${p.id}" data-cost="${p.cost}" ${selected}>${p.name} (${p.sku})</option>`;
+        options += `<option value="${esc(p.id)}" data-cost="${esc(p.cost)}" ${selected}>${esc(p.name)} (${esc(p.sku)})</option>`;
     });
 
-    const price = itemData ? (itemData.unit_price || itemData.unitPrice || '0.00') : '0.00';
-    const qty = itemData ? (itemData.quantity || '1') : '1';
-    const batch = itemData ? (itemData.batch_number || '') : '';
-    const expiry = itemData ? (itemData.expiry_date || '') : '';
-    const maxAttr = itemData && itemData.remaining_returnable ? `max="${itemData.remaining_returnable}"` : '';
-    const remInfo = itemData && itemData.remaining_returnable ? `<span class="text-[10px] text-[#27bebe] font-bold block mt-0.5">المتبقي: ${itemData.remaining_returnable}</span>` : '';
+    const price = esc(itemData ? (itemData.unit_price || itemData.unitPrice || '0.00') : '0.00');
+    const qty = esc(itemData ? (itemData.quantity || '1') : '1');
+    const batch = esc(itemData ? (itemData.batch_number || '') : '');
+    const expiry = esc(itemData ? (itemData.expiry_date || '') : '');
+    const maxAttr = itemData && itemData.remaining_returnable ? `max="${esc(itemData.remaining_returnable)}"` : '';
+    const remInfo = itemData && itemData.remaining_returnable ? `<span class="text-[10px] text-[#27bebe] font-bold block mt-0.5">المتبقي: ${esc(itemData.remaining_returnable)}</span>` : '';
 
     return `
         <tr class="item-row">
@@ -310,7 +319,7 @@ function createReturnRowHtml(itemData = null) {
                 <span class="qty-max-warning hidden text-[10px] text-rose-600 font-bold block">تتجاوز المتبقي!</span>
             </td>
             <td class="py-2 px-3">
-                <input type="text" name="batch_number[]" value="${batch}" placeholder="Batch No"
+                <input type="text" name="batch_number[]" value="${batch}" placeholder="رقم التشغيلة"
                        class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-mono">
             </td>
             <td class="py-2 px-3">
@@ -340,19 +349,22 @@ function removeRow(btn) {
     if (rows.length > 1) {
         btn.closest('.item-row').remove();
         calculateTotals();
-    } else {
-        alert("يجب أن يحتوي أمر الإرجاع على صنف واحد على الأقل.");
+    } else if (window.ERPToast) {
+        window.ERPToast.warning("يجب أن يحتوي أمر الإرجاع على صنف واحد على الأقل.");
     }
 }
 
 function handlePOSelection(poId) {
     if (!poId) return;
 
-    fetch(`/purchases/api/orders/${poId}/return-details/`)
-        .then(res => res.json())
+    fetch(`/purchases/api/order-details/${encodeURIComponent(poId)}/`)
+        .then(res => {
+            if (!res.ok) throw new Error('تعذر تحميل بيانات أمر الشراء.');
+            return res.json();
+        })
         .then(data => {
             if (data.error) {
-                alert(data.error);
+                if (window.ERPToast) window.ERPToast.error(data.error);
                 return;
             }
 
@@ -396,7 +408,10 @@ function handlePOSelection(poId) {
             }
             calculateTotals();
         })
-        .catch(err => console.error("Error fetching purchase order details", err));
+        .catch(err => {
+            console.error("Error fetching purchase order details", err);
+            if (window.ERPToast) window.ERPToast.error("تعذر تحميل تفاصيل أمر الشراء.");
+        });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

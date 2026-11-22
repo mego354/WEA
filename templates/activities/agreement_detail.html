@@ -1,7 +1,15 @@
 {% extends 'layouts/base.html' %}
 {% load humanize %}
 
-{% block title %}اتفاقية #{{ agreement.serial_num }} - Bricks Rep{% endblock %}
+{% block title %}اتفاقية #{{ agreement.serial_num }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'agreements_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الاتفاقيات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">اتفاقية #{{ agreement.serial_num }}</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-6">
@@ -169,7 +177,7 @@
                     <span class="material-symbols-outlined text-lg">timeline</span>
                 </div>
                 <div>
-                    <h3 class="text-sm font-black text-slate-900">سجل الأحداث والخط الزمني للاتفاقية (Agreement Timeline)</h3>
+                    <h3 class="text-sm font-black text-slate-900">سجل الأحداث والخط الزمني للاتفاقية</h3>
                     <p class="text-[11px] text-slate-500">سجل زمني موحد لجميع مراحل الاتفاقية: الإنشاء، التعديلات، القرارات الإدارية، وتغيير الحالات</p>
                 </div>
             </div>
@@ -241,85 +249,4 @@
     </div>
 
 </div>
-
-<!-- Disapproval Modal -->
-<div id="disapprove-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDisapproveModal()"></div>
-        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
-                <h3 class="text-sm font-bold flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-base">cancel</span>
-                    <span>رفض الاتفاقية</span>
-                </h3>
-                <button type="button" onclick="closeDisapproveModal()" class="text-white/80 hover:text-white">
-                    <span class="material-symbols-outlined text-xl">close</span>
-                </button>
-            </div>
-            <form method="POST" action="{% url 'agreement_action' agreement.pk 'disapprove' %}" class="p-6 space-y-4">
-                {% csrf_token %}
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">سبب الرفض والملاحظات</label>
-                    <textarea name="reason" rows="3" required placeholder="يرجى كتابة سبب رفض الاتفاقية بوضوح..."
-                              class="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
-                </div>
-                <div class="pt-2 flex gap-2">
-                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
-                        تأكيد الرفض
-                    </button>
-                    <button type="button" onclick="closeDisapproveModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                        إلغاء
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Confirmation Modal -->
-<div id="delete-modal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeDeleteModal()"></div>
-        <div class="inline-block align-bottom bg-white rounded-2xl text-right overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-            <div class="bg-rose-600 px-6 py-4 flex items-center justify-between text-white">
-                <h3 class="text-sm font-bold flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-base">delete</span>
-                    <span>تأكيد حذف الاتفاقية</span>
-                </h3>
-                <button type="button" onclick="closeDeleteModal()" class="text-white/80 hover:text-white">
-                    <span class="material-symbols-outlined text-xl">close</span>
-                </button>
-            </div>
-            <form method="POST" action="{% url 'agreement_delete' agreement.pk %}" class="p-6 space-y-4">
-                {% csrf_token %}
-                <p class="text-xs text-slate-700 leading-relaxed">
-                    هل أنت متأكد من حذف هذه الاتفاقية رقم <span class="font-bold font-mono text-slate-900">#{{ agreement.serial_num }}</span>؟ لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
-                </p>
-                <div class="pt-2 flex gap-2">
-                    <button type="submit" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
-                        نعم، احذف الاتفاقية
-                    </button>
-                    <button type="button" onclick="closeDeleteModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
-                        إلغاء
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-function openDisapproveModal() {
-    document.getElementById('disapprove-modal').classList.remove('hidden');
-}
-function closeDisapproveModal() {
-    document.getElementById('disapprove-modal').classList.add('hidden');
-}
-function openDeleteModal() {
-    document.getElementById('delete-modal').classList.remove('hidden');
-}
-function closeDeleteModal() {
-    document.getElementById('delete-modal').classList.add('hidden');
-}
-</script>
 {% endblock %}

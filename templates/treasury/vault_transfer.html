@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}تحويل أموال بين الخزن - WEA Pharma ERP{% endblock %}
+{% block title %}تحويل أموال بين الخزن{% endblock %}
 
 {% block breadcrumb %}
     <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -45,7 +45,7 @@
                             class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all min-h-[44px]">
                         <option value="">-- اختر الخزنة المصدر --</option>
                         {% for v in source_vaults %}
-                        <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|intcomma }} ج.م" data-search="{{ v.serial_num }}">{{ v.name }} (الرصيد: {{ v.current_balance|intcomma }} ج.م)</option>
+                        <option value="{{ v.id }}" data-subtext="#{{ v.serial_num }} | {{ v.current_balance|intcomma }} ج.م" data-search="{{ v.serial_num }}" {% if selected_source_vault_id == v.id %}selected{% endif %}>{{ v.name }} (الرصيد: {{ v.current_balance|intcomma }} ج.م)</option>
                         {% endfor %}
                     </select>
                 </div>

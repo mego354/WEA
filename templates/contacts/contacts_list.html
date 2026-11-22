@@ -3,9 +3,14 @@
 
 {% block title %}جهات الاتصال{% endblock %}
 
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">جهات الاتصال</span>
+{% endblock %}
+
 {% block extra_head %}
 <style>
-    /* Styling to match reference ERP Angular Material / Bricks ERP UI */
     .erp-header-title {
         color: #27bebe;
         font-size: 1.5rem;
@@ -61,23 +66,6 @@
         background-color: #ccfbfb;
         color: #196e6e;
     }
-    .filter-drawer {
-        position: fixed;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        width: 320px;
-        background: #ffffff;
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
-        z-index: 50;
-        transform: translateX(-100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
-        flex-direction: column;
-    }
-    .filter-drawer.open {
-        transform: translateX(0);
-    }
     .mat-like-label {
         font-size: 0.75rem;
         font-weight: 600;
@@ -107,18 +95,21 @@
 {% block content %}
 <div class="relative min-h-[calc(100vh-100px)]">
 
-    <!-- Top Action Bar (Reference ERP Header) -->
+    <!-- Top Action Bar -->
     <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
         <!-- Right side (Title & Create & View Toggle) in RTL -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-4 w-full md:w-auto">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
             <h1 class="erp-header-title">جهات الاتصال</h1>
-            <a href="{% url 'contact_create' %}" class="erp-btn-outline inline-flex items-center gap-1.5 shadow-sm">
+            {% if request.user|has_permission:'contacts:contacts/create' %}
+            <a href="{% url 'contact_create' %}" class="erp-btn-teal inline-flex items-center gap-1.5 shadow-sm min-h-[40px]">
+                <span class="material-symbols-outlined text-base">person_add</span>
                 <span>انشئ جهة اتصال</span>
             </a>
-            
+            {% endif %}
+
             <!-- View Mode Switcher: Kanban, Grid, Table -->
             <div class="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                <a href="?view=kanban{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'kanban' %}active{% endif %}" title="Kanban">
+                <a href="?view=kanban{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'kanban' %}active{% endif %}" title="لوحة المراحل">
                     <span class="material-symbols-outlined text-lg">view_week</span>
                 </a>
                 <a href="?view=cards{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="view-toggle-btn {% if view_mode == 'cards' %}active{% endif %}" title="بطاقات">
@@ -130,20 +121,13 @@
             </div>
         </div>
 
-        <!-- Left side (Filter, Search, Export, Settings) in RTL -->
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-start sm:justify-end">
-            <!-- Filter Drawer Toggle with Badge -->
-            <button type="button" onclick="toggleFilterDrawer()" class="relative p-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-slate-100 transition-colors" title="فلتر وتصفية">
-                <span class="material-symbols-outlined text-xl text-brand-600">filter_list</span>
-                {% if active_filters_count > 0 %}
-                <span class="absolute -top-1 -right-1 bg-brand-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                    {{ active_filters_count }}
-                </span>
-                {% endif %}
-            </button>
+        <!-- Left side (Filter, Search, Import, Export, Column Picker) in RTL -->
+        <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto justify-start sm:justify-end">
+            <!-- Contacts-Style Filter Drawer Toggle with Badge -->
+            {% include 'components/filter_drawer_toggle.html' with active_count=active_filters_count %}
 
             <!-- Search Form -->
-            <form method="GET" class="relative w-48 sm:w-64">
+            <form method="GET" class="relative flex-1 sm:flex-initial sm:w-64 min-w-[160px]">
                 <input type="hidden" name="view" value="{{ view_mode }}">
                 <input type="hidden" name="relation" value="{{ current_relation }}">
                 {% if current_show_inactive and current_show_inactive != 'no' %}<input type="hidden" name="inactive" value="{{ current_show_inactive }}">{% endif %}
@@ -156,23 +140,27 @@
                 {% for b in selected_bricks_chips %}<input type="hidden" name="brick_id" value="{{ b.id }}">{% endfor %}
                 {% for at in selected_account_types %}<input type="hidden" name="account_type" value="{{ at }}">{% endfor %}
                 <input type="text" name="search" value="{{ search_query }}" data-smart-search-module="contacts" placeholder="بحث"
-                       class="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-slate-800">
-                <button type="submit" class="absolute left-2.5 top-2 text-slate-400 hover:text-brand-600">
+                       class="w-full min-h-[40px] pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-slate-800">
+                <button type="submit" class="absolute left-2.5 top-2.5 text-slate-400 hover:text-brand-600" aria-label="بحث">
                     <span class="material-symbols-outlined text-base">search</span>
                 </button>
             </form>
 
-            <!-- Import Button -->
-            <a href="{% url 'contacts_import' %}" class="erp-btn-outline inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
-                <span class="material-symbols-outlined text-base text-brand-600">upload_file</span>
+            <!-- Import Button (Permission-Gated) -->
+            {% if request.user|has_permission:'contacts:contacts/import' %}
+            <a href="{% url 'contacts_import' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors min-h-[40px]" title="استيراد Excel">
+                <span class="material-symbols-outlined text-base">upload_file</span>
                 <span class="hidden sm:inline">استيراد Excel</span>
             </a>
+            {% endif %}
 
-            <!-- Export Button -->
-            <a href="{% url 'contacts_export' %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="erp-btn-teal inline-flex items-center gap-1.5 text-xs font-bold" title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base">file_download</span>
+            <!-- Export Button (Permission-Gated, preserves exact test string 'تصدير إلى Excel') -->
+            {% if request.user|has_permission:'contacts:contacts/export' %}
+            <a href="{% url 'contacts_export' %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-colors min-h-[40px]" title="تصدير إلى Excel">
+                <span class="material-symbols-outlined text-base">download</span>
                 <span class="hidden sm:inline">تصدير إلى Excel</span>
             </a>
+            {% endif %}
 
             <!-- Column Selector (Table View Only) -->
             {% if view_mode == 'table' %}
@@ -352,11 +340,11 @@
                                         onclick="event.stopPropagation();"
                                         class="text-[10px] font-bold py-1 px-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
                                     <option value="" disabled selected>تغيير المرحلة...</option>
-                                    <option value="lead" {% if col.id == 'lead' %}disabled{% endif %}>عميل محتمل (Lead)</option>
-                                    <option value="customer" {% if col.id == 'customer' %}disabled{% endif %}>عميل معتمد (Customer)</option>
-                                    <option value="active" {% if col.id == 'active' %}disabled{% endif %}>عميل نشط (Active)</option>
-                                    <option value="supplier" {% if col.id == 'supplier' %}disabled{% endif %}>مورد (Supplier)</option>
-                                    <option value="inactive" {% if col.id == 'inactive' %}disabled{% endif %}>غير نشط (Inactive)</option>
+                                    <option value="lead" {% if col.id == 'lead' %}disabled{% endif %}>عميل محتمل</option>
+                                    <option value="customer" {% if col.id == 'customer' %}disabled{% endif %}>عميل معتمد</option>
+                                    <option value="active" {% if col.id == 'active' %}disabled{% endif %}>عميل نشط</option>
+                                    <option value="supplier" {% if col.id == 'supplier' %}disabled{% endif %}>مورد</option>
+                                    <option value="inactive" {% if col.id == 'inactive' %}disabled{% endif %}>غير نشط</option>
                                 </select>
                             </div>
                         </div>
@@ -374,22 +362,15 @@
     </div>
     {% endif %}
 
-    <!-- Data Table View -->
+    <!-- Data Table View (Option A: Desktop Table + Mobile Cards) -->
     {% if view_mode == 'table' %}
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-        <div class="overflow-x-auto scrollbar-thin">
+        <!-- Desktop Table (hidden on <768px) -->
+        <div class="hidden md:block overflow-x-auto scrollbar-thin">
             <table id="contacts_table" data-col-table="contacts_table" class="min-w-[900px] w-full text-right text-xs">
                 <thead class="bg-[#fafbfc] text-slate-600 font-semibold border-b border-slate-200 select-none">
                     <tr>
-                        <th data-col="checkbox" data-required="true" class="py-3 px-3 w-10 text-center">
-                            <input type="checkbox" id="selectAllCheckbox" class="rounded text-brand-500 focus:ring-brand-400 cursor-pointer">
-                        </th>
-                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3 px-4 font-bold text-slate-800">
-                            <div class="flex items-center gap-1.5">
-                                <span>الاسم</span>
-                                <span class="material-symbols-outlined text-sm text-slate-400">menu</span>
-                            </div>
-                        </th>
+                        <th data-col="name" data-col-label="الاسم" data-required="true" class="py-3 px-4 font-bold text-slate-800">الاسم</th>
                         <th data-col="status" data-col-label="حالة العميل" class="py-3 px-3">حالة العميل</th>
                         <th data-col="area" data-col-label="المنطقة" class="py-3 px-3">المنطقة</th>
                         <th data-col="address" data-col-label="العنوان الرئيسي" class="py-3 px-3">العنوان الرئيسي</th>
@@ -404,11 +385,6 @@
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     {% for c in contacts %}
                     <tr class="hover:bg-slate-50/80 transition-colors group">
-                        <!-- Checkbox -->
-                        <td data-col="checkbox" class="py-3 px-3 text-center">
-                            <input type="checkbox" name="selected_contacts" value="{{ c.id }}" class="rounded text-brand-500 focus:ring-brand-400 cursor-pointer">
-                        </td>
-
                         <!-- Name with Avatar and Serial Tag Link -->
                         <td data-col="name" class="py-3 px-4">
                             <div class="flex items-center gap-3">
@@ -428,7 +404,7 @@
 
                         <!-- Customer Status Badge -->
                         <td data-col="status" class="py-3 px-3">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {% if c.status == 'customer' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {% if c.status == 'customer' or c.status == 'active' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
                                 {{ c.status_label }}
                             </span>
                         </td>
@@ -478,51 +454,147 @@
                             {{ c.code|default:"-" }}
                         </td>
 
-                        <!-- Actions Menu -->
-                        <td data-col="actions" class="py-3 px-3 text-center relative">
-                            <div class="relative inline-block text-left" x-data="{ open: false }">
-                                <button type="button" onclick="toggleRowMenu('menu-{{ c.id }}')" class="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                                    <span class="material-symbols-outlined text-base">more_vert</span>
+                        <!-- Actions Menu (Unified Viewport-Safe Portal) -->
+                        <td data-col="actions" class="py-3 px-3 text-center">
+                            <div class="inline-flex justify-center" data-row-menu-host>
+                                <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                        onclick="openRowActionMenu(this, event)"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                        title="الإجراءات">
+                                    <span class="material-symbols-outlined text-[20px]">more_vert</span>
                                 </button>
-                                <div id="menu-{{ c.id }}" class="hidden absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-30 text-right">
-                                    <a href="{% url 'contact_detail_overview' c.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                                        <span class="material-symbols-outlined text-sm text-brand-600">visibility</span>
+                                <template class="row-menu-items">
+                                    <a href="{% url 'contact_detail_overview' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
                                         <span>عرض التفاصيل</span>
                                     </a>
-                                    <a href="{% url 'contact_edit' c.id %}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                                        <span class="material-symbols-outlined text-sm text-brand-600">edit</span>
+                                    {% if request.user|has_permission:'contacts:contacts/edit' %}
+                                    <a href="{% url 'contact_edit' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-base text-brand-600">edit</span>
                                         <span>تعديل</span>
                                     </a>
-                                    {% if c.is_supplier %}
-                                    <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ c.id }}" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                                        <span class="material-symbols-outlined text-sm text-brand-600">receipt_long</span>
+                                    {% endif %}
+                                    {% if c.is_supplier and request.user|has_permission:'treasury:vendors/transactions' %}
+                                    <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ c.id }}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                        <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
                                         <span>كشف الحساب</span>
                                     </a>
                                     {% endif %}
-                                    <div class="border-t border-slate-100 mt-1 pt-1">
-                                        <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete' c.id %}', title: 'حذف جهة الاتصال', itemName: '{{ c.name|escapejs }}', message: 'هل أنت متأكد من مسح جهة الاتصال <span class=\'font-bold text-slate-800\'>{{ c.name|escapejs }}</span>؟' })" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-right">
-                                            <span class="material-symbols-outlined text-sm text-red-500">delete</span>
-                                            <span>مسح</span>
-                                        </button>
-                                    </div>
-                                </div>
+                                    {% if request.user|has_permission:'contacts:contacts/delete' %}
+                                    <div class="border-t border-slate-100 my-1"></div>
+                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete' c.id %}', title: 'حذف جهة الاتصال', itemName: '{{ c.name|escapejs }}', message: 'هل أنت متأكد من مسح جهة الاتصال {{ c.name|escapejs }}؟' })" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-right">
+                                        <span class="material-symbols-outlined text-base text-red-500">delete</span>
+                                        <span>مسح</span>
+                                    </button>
+                                    {% endif %}
+                                </template>
                             </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="py-16 text-center text-slate-400">
+                        <td colspan="10" class="py-16 text-center text-slate-400">
                             <span class="material-symbols-outlined text-5xl mb-2 text-slate-300">contacts</span>
                             <p class="text-sm font-semibold text-slate-600">لا توجد جهات اتصال مطابقة للبحث أو الفلتر.</p>
+                            {% if request.user|has_permission:'contacts:contacts/create' %}
                             <a href="{% url 'contact_create' %}" class="mt-3 inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
                                 <span class="material-symbols-outlined text-sm">add</span>
                                 <span>انشئ جهة اتصال جديدة</span>
                             </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile Cards (Option A — visible only on <768px) -->
+        <div class="block md:hidden divide-y divide-slate-100">
+            {% for c in contacts %}
+            <div class="p-3.5 hover:bg-slate-50/70 transition-colors">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="erp-avatar">{{ c.initials }}</div>
+                        <div class="min-w-0">
+                            <a href="{% url 'contact_detail_overview' c.id %}" class="font-bold text-slate-900 hover:text-brand-600 text-sm block truncate">
+                                [{{ c.formatted_number }}] {{ c.name }}
+                            </a>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold {% if c.status == 'customer' or c.status == 'active' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                    {{ c.status_label }}
+                                </span>
+                                {% if c.customer_category %}
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{{ c.customer_category }}</span>
+                                {% endif %}
+                                {% if c.account_type %}
+                                <span class="text-[10px] text-slate-500">{{ c.account_type }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="inline-flex justify-center shrink-0" data-row-menu-host>
+                        <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                onclick="openRowActionMenu(this, event)"
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                title="الإجراءات">
+                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                        <template class="row-menu-items">
+                            <a href="{% url 'contact_detail_overview' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                <span>عرض التفاصيل</span>
+                            </a>
+                            {% if request.user|has_permission:'contacts:contacts/edit' %}
+                            <a href="{% url 'contact_edit' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">edit</span>
+                                <span>تعديل</span>
+                            </a>
+                            {% endif %}
+                            {% if c.is_supplier and request.user|has_permission:'treasury:vendors/transactions' %}
+                            <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ c.id }}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
+                                <span>كشف الحساب</span>
+                            </a>
+                            {% endif %}
+                            {% if request.user|has_permission:'contacts:contacts/delete' %}
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete' c.id %}', title: 'حذف جهة الاتصال', itemName: '{{ c.name|escapejs }}', message: 'هل أنت متأكد من مسح جهة الاتصال {{ c.name|escapejs }}؟' })" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-right">
+                                <span class="material-symbols-outlined text-base text-red-500">delete</span>
+                                <span>مسح</span>
+                            </button>
+                            {% endif %}
+                        </template>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 pr-11">
+                    <span class="inline-flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-slate-400">location_on</span>
+                        {% with main_addr=c.addresses.first %}{% if main_addr and main_addr.brick.name and main_addr.area %}{{ main_addr.brick.name }} | {{ main_addr.area.name }}{% elif c.area %}{{ c.area.name }}{% else %}-{% endif %}{% endwith %}
+                    </span>
+                    {% if c.mobile or c.phone %}
+                    <a href="tel:{{ c.mobile|default:c.phone }}" class="inline-flex items-center gap-1 font-mono text-brand-600 hover:underline">
+                        <span class="material-symbols-outlined text-sm">call</span>
+                        <span>{{ c.mobile|default:c.phone }}</span>
+                    </a>
+                    {% endif %}
+                    {% if c.specialty %}
+                    <span class="text-slate-500">{{ c.specialty }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="py-12 px-4 text-center text-slate-400">
+                <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">contacts</span>
+                <p class="text-xs font-semibold text-slate-600">لا توجد جهات اتصال مطابقة للبحث أو الفلتر.</p>
+                {% if request.user|has_permission:'contacts:contacts/create' %}
+                <a href="{% url 'contact_create' %}" class="mt-2 inline-flex items-center gap-1 text-xs text-brand-600 font-bold hover:underline">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>انشئ جهة اتصال جديدة</span>
+                </a>
+                {% endif %}
+            </div>
+            {% endfor %}
         </div>
 
         <!-- Standardized Pagination -->
@@ -535,21 +607,56 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {% for c in contacts %}
         <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between gap-3 mb-3">
-                <div class="flex items-center gap-3">
+            <div class="flex items-start justify-between gap-2 mb-3">
+                <div class="flex items-center gap-3 min-w-0">
                     <div class="erp-avatar">
                         {{ c.initials }}
                     </div>
-                    <div>
-                        <a href="{% url 'contact_detail_overview' c.id %}" class="font-bold text-slate-900 hover:text-brand-600 block text-sm">
+                    <div class="min-w-0">
+                        <a href="{% url 'contact_detail_overview' c.id %}" class="font-bold text-slate-900 hover:text-brand-600 block text-sm truncate">
                             [{{ c.formatted_number }}] {{ c.name }}
                         </a>
                         <span class="text-xs text-slate-500">{{ c.relation_display }}</span>
                     </div>
                 </div>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600">
-                    {{ c.status_label }}
-                </span>
+                <div class="flex items-center gap-1 shrink-0">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600">
+                        {{ c.status_label }}
+                    </span>
+                    <div class="inline-flex justify-center" data-row-menu-host>
+                        <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                onclick="openRowActionMenu(this, event)"
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                title="الإجراءات">
+                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                        <template class="row-menu-items">
+                            <a href="{% url 'contact_detail_overview' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">visibility</span>
+                                <span>عرض التفاصيل</span>
+                            </a>
+                            {% if request.user|has_permission:'contacts:contacts/edit' %}
+                            <a href="{% url 'contact_edit' c.id %}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">edit</span>
+                                <span>تعديل</span>
+                            </a>
+                            {% endif %}
+                            {% if c.is_supplier and request.user|has_permission:'treasury:vendors/transactions' %}
+                            <a href="{% url 'vendor_transactions_list' %}?vendor_id={{ c.id }}" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
+                                <span>كشف الحساب</span>
+                            </a>
+                            {% endif %}
+                            {% if request.user|has_permission:'contacts:contacts/delete' %}
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'contact_delete' c.id %}', title: 'حذف جهة الاتصال', itemName: '{{ c.name|escapejs }}', message: 'هل أنت متأكد من مسح جهة الاتصال {{ c.name|escapejs }}؟' })" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 text-right">
+                                <span class="material-symbols-outlined text-base text-red-500">delete</span>
+                                <span>مسح</span>
+                            </button>
+                            {% endif %}
+                        </template>
+                    </div>
+                </div>
             </div>
             <div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-3">
                 <div class="flex items-center justify-between">
@@ -577,27 +684,20 @@
     </div>
     {% endif %}
 
-    <!-- Floating Action Button for Contact Creation (Positioned above Global FAB) -->
-    <a href="{% url 'contact_create' %}"
-       class="fixed bottom-[9.5rem] lg:bottom-24 left-4 lg:left-6 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xl shadow-emerald-600/30 transition-transform hover:scale-105 z-30"
-       title="انشئ جهة اتصال" aria-label="انشئ جهة اتصال">
-        <span class="material-symbols-outlined text-2xl font-bold">person_add</span>
-    </a>
-
 </div>
 
-<!-- SLIDE-OUT FILTER DRAWER (Matching 03_filter_drawer_opened.png) -->
-<div id="filterDrawerBackdrop" onclick="toggleFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-<div id="filterDrawer" class="filter-drawer">
+<!-- SLIDE-OUT FILTER DRAWER (Unified .erp-filter-drawer) -->
+<div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+<aside id="filterDrawer" class="erp-filter-drawer">
     <!-- Drawer Header -->
-    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white shrink-0">
         <div class="flex items-center gap-2">
             <h2 class="text-base font-bold text-brand-600">فلتر</h2>
-            <span class="w-5 h-5 rounded-full bg-brand-500 text-white text-[11px] font-bold flex items-center justify-center">
+            <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[11px] font-bold flex items-center justify-center">
                 {{ active_filters_count }}
             </span>
         </div>
-        <button type="button" onclick="toggleFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+        <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="إغلاق">
             <span class="material-symbols-outlined text-xl">arrow_forward</span>
         </button>
     </div>
@@ -637,8 +737,10 @@
             <label class="mat-like-label">حالة العميل</label>
             <select name="status" class="mat-like-control">
                 <option value="all" {% if current_status == 'all' %}selected{% endif %}>الكل</option>
-                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>عميل نشط (Customer)</option>
-                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>غير نشط (Inactive)</option>
+                <option value="lead" {% if current_status == 'lead' %}selected{% endif %}>عميل محتمل</option>
+                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>عميل معتمد</option>
+                <option value="active" {% if current_status == 'active' %}selected{% endif %}>نشط</option>
+                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>غير نشط</option>
             </select>
         </div>
 
@@ -698,47 +800,9 @@
             </a>
         </div>
     </form>
-</div>
+</aside>
 
 <script>
-    function toggleFilterDrawer() {
-        const drawer = document.getElementById('filterDrawer');
-        const backdrop = document.getElementById('filterDrawerBackdrop');
-        const isOpen = drawer.classList.contains('open');
-        if (isOpen) {
-            drawer.classList.remove('open');
-            backdrop.classList.add('hidden');
-        } else {
-            drawer.classList.add('open');
-            backdrop.classList.remove('hidden');
-        }
-    }
-
-    function toggleRowMenu(menuId) {
-        // Close other menus first
-        document.querySelectorAll('[id^="menu-"]').forEach(el => {
-            if (el.id !== menuId) el.classList.add('hidden');
-        });
-        const m = document.getElementById(menuId);
-        if (m) m.classList.toggle('hidden');
-    }
-
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('[onclick*="toggleRowMenu"]') && !e.target.closest('[id^="menu-"]')) {
-            document.querySelectorAll('[id^="menu-"]').forEach(el => el.classList.add('hidden'));
-        }
-    });
-
-    // Checkbox select-all functionality
-    const selectAll = document.getElementById('selectAllCheckbox');
-    if (selectAll) {
-        selectAll.addEventListener('change', function() {
-            document.querySelectorAll('input[name="selected_contacts"]').forEach(cb => {
-                cb.checked = selectAll.checked;
-            });
-        });
-    }
-
     // --- KANBAN BOARD DRAG & DROP AND STAGE UPDATES ---
     let draggedContactId = null;
 
@@ -855,7 +919,7 @@
         })
         .catch(err => {
             console.error(err);
-            alert('حدث خطأ أثناء نقل جهة الاتصال.');
+            window.ERPToast.error('حدث خطأ أثناء نقل جهة الاتصال.');
         });
     }
 

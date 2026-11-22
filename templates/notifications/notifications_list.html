@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}مركز الإشعارات - WEA Pharma ERP{% endblock %}
+{% block title %}مركز الإشعارات{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -25,7 +25,13 @@
                 </p>
             </div>
         </div>
-        <div class="erp-hero-actions">
+        <div class="erp-hero-actions flex flex-wrap items-center gap-2">
+            <button type="button" onclick="sendInboxTestPush()"
+                    id="inboxTestPushBtn"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[42px]">
+                <span class="material-symbols-outlined text-base">send_to_mobile</span>
+                <span>إرسال إشعار تجريبي للهاتف</span>
+            </button>
             {% if unread_count > 0 %}
             <button type="button" onclick="markAllInboxRead()"
                     class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[42px]">
@@ -36,29 +42,39 @@
         </div>
     </div>
 
+    <div id="testPushResultBox" class="hidden rounded-2xl border p-3.5 text-xs font-bold"></div>
+
     <!-- Filters Bar -->
     <div class="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-wrap items-center gap-2">
-        <a href="{% url 'notifications_inbox' %}{% if filter_module %}?module={{ filter_module }}{% endif %}"
+        <a href="{% url 'notifications_inbox' %}?{% if filter_module %}module={{ filter_module }}{% endif %}{% if filter_severity %}{% if filter_module %}&{% endif %}severity={{ filter_severity }}{% endif %}"
            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'all' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
             الكل
         </a>
-        <a href="{% url 'notifications_inbox' %}?read=unread{% if filter_module %}&module={{ filter_module }}{% endif %}"
+        <a href="{% url 'notifications_inbox' %}?read=unread{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'unread' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
             غير مقروء ({{ unread_count }})
         </a>
-        <a href="{% url 'notifications_inbox' %}?read=read{% if filter_module %}&module={{ filter_module }}{% endif %}"
+        <a href="{% url 'notifications_inbox' %}?read=read{% if filter_module %}&module={{ filter_module }}{% endif %}{% if filter_severity %}&severity={{ filter_severity }}{% endif %}"
            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'read' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
             مقروء
         </a>
 
-        <form method="GET" class="mr-auto flex items-center gap-2">
+        <form method="GET" class="mr-auto flex flex-wrap items-center gap-2">
             {% if filter_read != 'all' %}<input type="hidden" name="read" value="{{ filter_read }}">{% endif %}
             <select name="module" onchange="this.form.submit()"
                     class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[36px]">
-                <option value="">جميع الموديولات</option>
+                <option value="">جميع الأقسام</option>
                 {% for mod_key, meta in modules_meta.items %}
                 <option value="{{ mod_key }}" {% if filter_module == mod_key %}selected{% endif %}>{{ meta.name_ar }}</option>
                 {% endfor %}
+            </select>
+            <select name="severity" onchange="this.form.submit()"
+                    class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[36px]">
+                <option value="">كل المستويات</option>
+                <option value="info" {% if filter_severity == 'info' %}selected{% endif %}>معلومات</option>
+                <option value="success" {% if filter_severity == 'success' %}selected{% endif %}>نجاح</option>
+                <option value="warning" {% if filter_severity == 'warning' %}selected{% endif %}>تنبيه</option>
+                <option value="danger" {% if filter_severity == 'danger' %}selected{% endif %}>عاجل</option>
             </select>
         </form>
     </div>
@@ -79,7 +95,7 @@
             <div class="flex-1 min-w-0">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <a href="{% url 'notification_open' n.id %}" class="text-sm font-bold text-slate-900 hover:text-brand-600 transition-colors flex items-center gap-2">
-                        {% if not n.is_read %}<span class="w-2 h-2 rounded-full bg-brand-500 shrink-0"></span>{% endif %}
+                        {% if not n.is_read %}<span data-unread-dot class="w-2 h-2 rounded-full bg-brand-500 shrink-0"></span>{% endif %}
                         <span>{{ n.title }}</span>
                     </a>
                     <span class="text-[11px] font-mono text-slate-400 shrink-0">{{ n.created_at|date:"Y-m-d H:i" }}</span>
@@ -88,7 +104,7 @@
                 <p class="text-xs text-slate-600 mt-1 leading-relaxed">{{ n.body }}</p>
                 {% endif %}
                 <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">{{ n.module }}</span>
+                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">{% for mk, mv in modules_meta.items %}{% if mk == n.module %}{{ mv.name_ar }}{% endif %}{% endfor %}{% if n.module not in modules_meta %}{{ n.module }}{% endif %}</span>
                     {% if n.actor %}
                     <span>بواسطة: <strong class="text-slate-600">{{ n.actor.name|default:n.actor.username }}</strong></span>
                     {% endif %}
@@ -119,7 +135,11 @@ function markSingleInboxRead(id, btn) {
     if (!window._erpNotifClient) return;
     window._erpNotifClient.markAsRead(id).then(() => {
         const row = document.querySelector('[data-notif-row="' + id + '"]');
-        if (row) row.classList.remove('bg-teal-50/40');
+        if (row) {
+            row.classList.remove('bg-teal-50/40');
+            const dot = row.querySelector('[data-unread-dot]');
+            if (dot) dot.remove();
+        }
         if (btn) btn.remove();
         const cntEl = document.getElementById('inboxUnreadCount');
         if (cntEl) cntEl.textContent = window._erpNotifClient.state.unreadCount;
@@ -130,6 +150,35 @@ function markAllInboxRead() {
     window._erpNotifClient.markAllAsRead("{{ filter_module|escapejs }}").then(() => {
         window.location.reload();
     }).catch(() => {});
+}
+function sendInboxTestPush() {
+    if (!window._erpNotifClient) return;
+    const btn = document.getElementById('inboxTestPushBtn');
+    const box = document.getElementById('testPushResultBox');
+    if (btn) btn.disabled = true;
+    if (box) {
+        box.className = 'rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 p-3.5 text-xs font-bold';
+        box.textContent = 'جاري إرسال الإشعار التجريبي إلى جهازك المسجل...';
+    }
+    window._erpNotifClient.sendTestPush({
+        title: 'إشعار تجريبي — WEA Pharma',
+        body: 'تم استلام الإشعار بنجاح! اضغط لفتح مركز الإشعارات داخل التطبيق.',
+        targetUrl: '/notifications/'
+    }).then((res) => {
+        if (!box) return;
+        if (res && res.success) {
+            box.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-800 p-3.5 text-xs font-bold';
+        } else {
+            box.className = 'rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 p-3.5 text-xs font-bold';
+        }
+        box.textContent = (res && res.message) ? res.message : 'تم تنفيذ الطلب.';
+    }).catch((err) => {
+        if (!box) return;
+        box.className = 'rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 p-3.5 text-xs font-bold';
+        box.textContent = 'تعذر إرسال الإشعار التجريبي: ' + (err.message || err);
+    }).finally(() => {
+        if (btn) btn.disabled = false;
+    });
 }
 </script>
 {% endblock %}

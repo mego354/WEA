@@ -343,7 +343,7 @@
                             <input type="checkbox" name="comm_is_primary[]" value="{{ forloop.counter0 }}" {% if comm.is_primary %}checked{% endif %} class="rounded text-brand-500">
                             <span>رئيسي</span>
                         </label>
-                        <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                        <button type="button" onclick="removeCommRow(this)" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
                             <span class="material-symbols-outlined text-base">delete</span>
                         </button>
                     </div>
@@ -375,7 +375,7 @@
                             <input type="checkbox" name="comm_is_primary[]" value="0" checked class="rounded text-brand-500">
                             <span>رئيسي</span>
                         </label>
-                        <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                        <button type="button" onclick="removeCommRow(this)" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
                             <span class="material-symbols-outlined text-base">delete</span>
                         </button>
                     </div>
@@ -552,7 +552,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
                 <div>
-                    <label class="custom-input-label">KOL (Key Opinion Leader)</label>
+                    <label class="custom-input-label">KOL</label>
                     <select name="is_kol" class="mat-like-select">
                         <option value="لا" {% if not contact.is_kol %}selected{% endif %}>لا</option>
                         <option value="نعم" {% if contact.is_kol %}selected{% endif %}>نعم</option>
@@ -721,12 +721,26 @@
                     <input type="checkbox" name="comm_is_primary[]" value="${count}" class="rounded text-brand-500">
                     <span>رئيسي</span>
                 </label>
-                <button type="button" onclick="this.closest('.comm-method-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
+                <button type="button" onclick="removeCommRow(this)" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors" title="حذف">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
         `;
         container.appendChild(row);
+        syncCommPrimaryIndices();
+    }
+
+    function removeCommRow(btn) {
+        const row = btn.closest('.comm-method-row');
+        if (row) row.remove();
+        syncCommPrimaryIndices();
+    }
+
+    function syncCommPrimaryIndices() {
+        document.querySelectorAll('#comm-methods-container .comm-method-row').forEach((row, idx) => {
+            const cb = row.querySelector('input[name="comm_is_primary[]"]');
+            if (cb) cb.value = String(idx);
+        });
     }
 
     function syncMainAddressFlags() {
@@ -735,10 +749,12 @@
             const flag = card.querySelector('input[name="address_is_main_flag[]"]');
             if (cb && flag) flag.value = cb.checked ? '1' : '0';
         });
+        syncCommPrimaryIndices();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.address-card').forEach(attachSubareaListener);
+        syncCommPrimaryIndices();
 
         const editForm = document.getElementById('contact-edit-form');
         if (editForm) {

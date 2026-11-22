@@ -1064,3 +1064,90 @@ class Phase2PurchasesIntegerAndStatsTests(TestCase):
             exp = self.client.get(reverse(url_name), {'date_from': '2026-01-01', 'total_min': '10'})
             self.assertEqual(exp.status_code, 200)
             self.assertIn('spreadsheetml.sheet', exp['Content-Type'])
+
+    def test_purchase_order_edit_renders_batch_number_and_expiry_date(self):
+        """Regression test: purchase_order_edit template binds item.product_batch_number and item.product_expiry_date."""
+        from django.urls import reverse
+        from purchases.models import PurchaseOrder, PurchaseOrderItem
+
+        po = PurchaseOrder.objects.create(
+            order_number='PO-BATCH-REG-01',
+            supplier=self.supplier,
+            target_warehouse=self.wh,
+            status='pending',
+            order_date='2026-11-18',
+            created_by=self.superadmin,
+            grand_total=Decimal('400.00'),
+        )
+        PurchaseOrderItem.objects.create(
+            order=po,
+            product=self.prod,
+            quantity=Decimal('10.00'),
+            unit_price=Decimal('40.00'),
+            product_batch_number='LOT-2026-XYZ',
+            product_expiry_date=datetime.date(2028, 6, 30),
+        )
+        self.client.force_login(self.superadmin)
+        resp = self.client.get(reverse('purchase_order_edit', args=[po.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'LOT-2026-XYZ')
+        self.assertContains(resp, '2028-06-30')
+
+    def test_purchase_return_order_create_uses_order_details_api_and_approver_perm(self):
+        """Regression test: purchase_return_order_create uses /purchases/api/order-details/ and approve action checks purchases:returns/approve."""
+        from django.urls import reverse
+        from accounts.models import Permission, Role, User
+        from purchases.models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
+
+        self.client.force_login(self.superadmin)
+        create_resp = self.client.get(reverse('purchase_return_order_create'))
+        self.assertEqual(create_resp.status_code, 200)
+        self.assertContains(create_resp, '/purchases/api/order-details/')
+        self.assertNotContains(create_resp, '/return-details/')
+
+        # Approver with purchases:returns/approve (without purchases:returns/manage) can reject/approve
+        custom_role = Role.objects.create(name='po_return_approver_only', display_name='معتمد مرتجعات فقط', is_active=True)
+        p_mod = Permission.objects.get(codename='module:purchases')
+        p_approve = Permission.objects.get(codename='purchases:returns/approve')
+        p_view = Permission.objects.get(codename='purchases:returns/view')
+        custom_role.permissions.add(p_mod, p_approve, p_view)
+        from accounts.models import RoleModuleScope
+        RoleModuleScope.objects.update_or_create(
+            role=custom_role, module='purchases', defaults={'view_scope': 'all', 'manage_scope': 'all'}
+        )
+        approver = User.objects.create_user(username='pret_approver_only', password='TestPassword123!', role=custom_role)
+
+        po = PurchaseOrder.objects.create(
+            order_number='PO-RET-PERM-01',
+            supplier=self.supplier,
+            target_warehouse=self.wh,
+            status='settled',
+            order_date='2026-11-18',
+            created_by=self.superadmin,
+            grand_total=Decimal('400.00'),
+        )
+        po_item = PurchaseOrderItem.objects.create(
+            order=po, product=self.prod, quantity=Decimal('10.00'), unit_price=Decimal('40.00')
+        )
+        ret = PurchaseReturnOrder.objects.create(
+            order_number='PRET-PERM-01',
+            purchase_order=po,
+            supplier=self.supplier,
+            warehouse=self.wh,
+            status='pending',
+            order_date='2026-11-18',
+            created_by=self.superadmin,
+            grand_total=Decimal('80.00'),
+        )
+        PurchaseReturnOrderItem.objects.create(
+            return_order=ret, original_item=po_item, product=self.prod, quantity=Decimal('2.00'), unit_price=Decimal('40.00')
+        )
+
+        self.client.force_login(approver)
+        reject_resp = self.client.post(reverse('purchase_return_order_action', args=[ret.pk, 'reject']), {
+            'rejection_reason': 'سبب رفض اختباري'
+        })
+        self.assertEqual(reject_resp.status_code, 302)
+        ret.refresh_from_db()
+        self.assertEqual(ret.status, 'rejected')
+

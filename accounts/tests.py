@@ -3300,3 +3300,44 @@ class AuditSecurityHardeningRegressionTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertContains(res, 'فاتورة المندوب 1')
         self.assertNotContains(res, 'فاتورة الزميل')
+
+    def test_user_detail_renders_vault_current_balance_and_recent_audit_logs(self):
+        """Regression test: user_detail renders assigned vault current_balance and recent_audit_logs, and 7 obsolete templates are removed."""
+        import os
+        from django.conf import settings
+        from accounts.models import SecurityAuditLog
+        from treasury.models import Vault
+
+        Vault.objects.create(
+            name='خزنة عهدة اختبار تفاصيل',
+            assigned_user=self.rep,
+            current_balance=Decimal('4321.50'),
+            is_active=True,
+        )
+        SecurityAuditLog.objects.create(
+            actor=self.rep,
+            module='sales',
+            action_type='SALES_ORDER_CREATED',
+            description='عملية تدقيق تجريبية لصفحة تفاصيل المستخدم',
+        )
+        super_role, _ = Role.objects.get_or_create(name='superadmin', defaults={'display_name': 'Super Admin', 'is_super': True})
+        super_admin = User.objects.create_superuser(username='aud_super_det@wea.com', email='aud_super_det@wea.com', password='Password123!', role=super_role)
+        self.client.force_login(super_admin)
+        resp = self.client.get(reverse('user_detail', args=[self.rep.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '4321,50')
+        self.assertContains(resp, 'عملية تدقيق تجريبية لصفحة تفاصيل المستخدم')
+
+        deleted_templates = [
+            'templates/sales/customers_list.html',
+            'templates/contacts/contacts_import.html',
+            'templates/catalog/product_import.html',
+            'templates/treasury/vault_create.html',
+            'templates/treasury/vendor_payment_request_create.html',
+            'templates/reports/report_order_deliveries_print.html',
+            'templates/settings/sync_data.html',
+        ]
+        for rel_path in deleted_templates:
+            full_path = os.path.join(settings.BASE_DIR, rel_path)
+            self.assertFalse(os.path.exists(full_path), f"Obsolete template should not exist: {rel_path}")
+

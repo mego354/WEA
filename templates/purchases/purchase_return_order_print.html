@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>إشعار إرجاع مشتريات {{ return_order.order_number }} - WEA Pharma</title>
+    <title>إشعار إرجاع مشتريات {{ return_order.order_number }}</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -18,7 +18,7 @@
 
     <div class="max-w-3xl mx-auto mb-4 no-print flex justify-end gap-3">
         <button onclick="window.print()" class="px-4 py-2 bg-teal-600 text-white font-bold text-xs rounded-lg shadow">
-            طباعة إشعار الإرجاع (Print)
+            طباعة إشعار الإرجاع
         </button>
         <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">
             إغلاق
@@ -29,16 +29,16 @@
         <!-- Header -->
         <div class="flex items-center justify-between border-b pb-4 mb-6">
             <div>
-                <h1 class="text-xl font-black text-slate-900">WEA PHARMA</h1>
-                <p class="text-slate-500">173 ز - البوابة الأولى- حدائق الأهرام</p>
-                <p class="text-slate-500">سجل تجاري: 184791 | بطاقة ضريبية: 978-339-684</p>
-                <p class="text-slate-500">هاتف: 01111787179 - 01024070412</p>
+                <h1 class="text-xl font-black text-slate-900">{{ company.company_name|default:"WEA Pharma" }}</h1>
+                <p class="text-slate-500">{{ company.address|default:"173 ز - البوابة الأولى- حدائق الأهرام" }}</p>
+                <p class="text-slate-500">{{ company.commercial_registry|default:"سجل تجاري 184791" }} | {{ company.tax_id|default:"بطاقة ضريبية 978-339-684" }}</p>
+                <p class="text-slate-500">هاتف: {{ company.phone|default:"01111787179 - 01024070412" }}</p>
             </div>
             <div class="text-left">
-                <h2 class="text-lg font-bold text-teal-700">إشعار إرجاع مشتريات (Debit Note)</h2>
+                <h2 class="text-lg font-bold text-teal-700">إشعار إرجاع مشتريات</h2>
                 <p class="font-mono font-bold text-slate-900 text-sm">{{ return_order.order_number }}</p>
                 <p class="text-slate-500">التاريخ: {{ return_order.order_date|date:"Y-m-d" }}</p>
-                <p class="text-slate-500">الحالة: {{ return_order.get_status_display }}</p>
+                <p class="text-slate-500">الحالة: {{ return_order.status_label_ar|default:return_order.get_status_display }}</p>
             </div>
         </div>
 
@@ -97,6 +97,12 @@
                     <span class="text-slate-500">إجمالي الأصناف:</span>
                     <span class="font-mono">{{ return_order.subtotal|intcomma }} ج.م</span>
                 </div>
+                {% if return_order.tax_amount > 0 %}
+                <div class="flex justify-between">
+                    <span class="text-slate-500">الضريبة:</span>
+                    <span class="font-mono">{{ return_order.tax_amount|intcomma }} ج.م</span>
+                </div>
+                {% endif %}
                 <div class="flex justify-between font-bold text-slate-900 border-t pt-1.5 text-sm">
                     <span>إجمالي قيمة المرتجع:</span>
                     <span class="font-mono text-teal-700">{{ return_order.grand_total|intcomma }} ج.م</span>

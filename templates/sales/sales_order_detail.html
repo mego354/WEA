@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}أمر بيع {{ order.order_number }} - WEA Pharma ERP{% endblock %}
+{% block title %}أمر بيع {{ order.order_number }}{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -58,10 +58,12 @@
             </form>
             {% endif %}
 
+            {% if request.user|has_permission:'sales:collections/create' %}
             <a href="{% url 'collection_create' %}?customer_id={{ order.customer.id }}&order_id={{ order.id }}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">payments</span>
                 <span>تسجيل تحصيل</span>
             </a>
+            {% endif %}
 
             <!-- Secondary Actions Dropdown -->
             <div class="relative inline-block text-right" data-detail-action-menu>
@@ -89,13 +91,13 @@
                         <span>تحديث حالة السداد</span>
                     </button>
                     {% endif %}
-                    {% if order.status != 'cancelled' %}
+                    {% if order.status != 'cancelled' and request.user|has_permission:'sales:returns/create' %}
                     <a href="{% url 'sales_return_order_create' %}?order_id={{ order.pk }}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base text-slate-500">assignment_return</span>
                         <span>إنشاء مرتجع بيع</span>
                     </a>
                     {% endif %}
-                    {% if order.status not in 'invoiced,cancelled' %}
+                    {% if order.status not in 'invoiced,cancelled' and request.user|has_permission:'sales:orders/cancel' %}
                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_order_action' order.pk 'cancel' %}', title: 'إلغاء أمر البيع', itemName: '{{ order.order_number|escapejs }}', message: 'هل أنت متأكد من إلغاء أمر البيع؟', submitText: 'تأكيد الإلغاء', icon: 'cancel' })"
                             class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                         <span class="material-symbols-outlined text-base">cancel</span>
@@ -113,8 +115,9 @@
                 </div>
             </div>
 
-            <a href="{% url 'sales_orders_list' %}" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[40px] inline-flex items-center justify-center">
-                رجوع
+            <a href="{% url 'sales_orders_list' %}" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[40px] inline-flex items-center justify-center gap-1.5" title="العودة للقائمة">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                <span>رجوع</span>
             </a>
         </div>
     </div>
@@ -176,10 +179,10 @@
         </div>
 
         <!-- Due Date Card -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+        <div class="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
             <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base text-brand-600">calendar_clock</span>
-                <span>استحقاق السداد (Due Date)</span>
+                <span>استحقاق السداد</span>
             </h3>
             {% if order.due_date %}
             <p class="text-base font-bold font-mono {% if order.is_overdue %}text-rose-600{% else %}text-slate-900{% endif %}">
@@ -196,7 +199,7 @@
         </div>
 
         <!-- Financial Summary -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-1.5">
+        <div class="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-sm space-y-1.5 min-w-0 overflow-hidden">
             <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base text-brand-600">payments</span>
                 <span>الحسابات والموقف المالي</span>
@@ -380,16 +383,21 @@
 
 <!-- PAYMENT STATUS MODAL -->
 {% if can_manage_payment %}
-<div id="paymentStatusModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs hidden">
+<div id="paymentStatusModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs hidden" role="dialog" aria-modal="true" onclick="if (event.target === this) closePaymentStatusModal()">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                <span class="material-symbols-outlined text-2xl">paid</span>
+        <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl">paid</span>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">تحديث حالة السداد لأمر البيع</h3>
+                    <p class="text-xs text-slate-500 font-medium font-mono">{{ order.order_number }}</p>
+                </div>
             </div>
-            <div>
-                <h3 class="text-base font-bold text-slate-900">تحديث حالة السداد لأمر البيع</h3>
-                <p class="text-xs text-slate-500 font-medium font-mono">{{ order.order_number }}</p>
-            </div>
+            <button type="button" onclick="closePaymentStatusModal()" class="p-1 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="إغلاق">
+                <span class="material-symbols-outlined">close</span>
+            </button>
         </div>
 
         <form method="POST" action="{% url 'sales_order_update_payment_status' order.pk %}" class="space-y-4">
@@ -433,5 +441,10 @@ function closePaymentStatusModal() {
     const m = document.getElementById('paymentStatusModal');
     if (m) m.classList.add('hidden');
 }
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closePaymentStatusModal();
+    }
+});
 </script>
 {% endblock %}

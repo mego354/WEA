@@ -97,7 +97,6 @@ class SettingsViewsTests(TestCase):
             'sales_settings',
             'purchase_settings',
             'inventory_settings',
-            'sync_data',
         ]
         for ep in endpoints:
             response = self.client.get(reverse(ep))
@@ -116,7 +115,6 @@ class SettingsViewsTests(TestCase):
             ('sales_settings', 'settings/sales_settings.html'),
             ('purchase_settings', 'settings/purchase_settings.html'),
             ('inventory_settings', 'settings/inventory_settings.html'),
-            ('sync_data', 'settings/sync_data.html'),
         ]
         for ep, tpl in endpoints:
             response = self.client.get(reverse(ep))
@@ -304,28 +302,11 @@ class SettingsViewsTests(TestCase):
         response = self.client.get('/settings/contacts-udf/')
         self.assertEqual(response.status_code, 404)
 
-    def test_sync_data_views(self):
+    def test_sync_data_url_removed(self):
+        """Verify that obsolete /settings/sync-data/ endpoints have been removed and return HTTP 404."""
         self.client.login(username='admin@example.com', password='AdminPassword123!')
-        cfg = DataSyncConfig.objects.create(
-            sync_type='contacts',
-            title='إستيراد جهات الاتصال',
-            google_sheet_url='https://docs.google.com/spreadsheets/d/test1'
-        )
-        # Update URL
-        response = self.client.post(reverse('sync_data'), {
-            'sync_type': 'contacts',
-            'google_sheet_url': 'https://docs.google.com/spreadsheets/d/test2'
-        })
-        self.assertEqual(response.status_code, 302)
-        cfg.refresh_from_db()
-        self.assertEqual(cfg.google_sheet_url, 'https://docs.google.com/spreadsheets/d/test2')
-
-        # Trigger sync
-        response = self.client.get(reverse('sync_data_trigger', args=['contacts']))
-        self.assertEqual(response.status_code, 302)
-        cfg.refresh_from_db()
-        self.assertEqual(cfg.status, 'success')
-        self.assertIsNotNone(cfg.last_synced_at)
+        self.assertEqual(self.client.get('/settings/sync-data/').status_code, 404)
+        self.assertEqual(self.client.get('/settings/sync-data/contacts/sync/').status_code, 404)
 
 
 class SettingsServiceAndCacheTests(TestCase):

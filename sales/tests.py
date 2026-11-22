@@ -509,8 +509,12 @@ class SalesCollectionAndTerritoryScopingTests(TestCase):
         self.assertEqual(res_col_filt.context['stats']['total_amount'], Decimal('0.00'))
 
         res_cust_filt = self.client.get(reverse('sales_customers_list') + '?search=NOT_FOUND_XYZ')
-        self.assertEqual(res_cust_filt.status_code, 200)
-        self.assertEqual(res_cust_filt.context['stats']['total_customers'], 0)
+        self.assertEqual(res_cust_filt.status_code, 302)
+        self.assertIn('relation=customer', res_cust_filt['Location'])
+        self.assertIn('search=NOT_FOUND_XYZ', res_cust_filt['Location'])
+        res_cust_followed = self.client.get(res_cust_filt['Location'])
+        self.assertEqual(res_cust_followed.status_code, 200)
+        self.assertEqual(res_cust_followed.context['stats']['total_customers'], 0)
 
 
 class SalesReturnOrderWorkflowTests(TestCase):
@@ -1464,12 +1468,56 @@ class Phase2SalesListAndIntegerQtyTests(TestCase):
         self.assertContains(resp, 'col-picker-dropdown')
 
         cust_resp = self.client.get(reverse('sales_customers_list'), {'area_id': self.cairo.id, 'status': 'active'})
-        self.assertEqual(cust_resp.status_code, 200)
-        self.assertIn('selected_area_id', cust_resp.context)
-        self.assertIn('customer_categories', cust_resp.context)
-        self.assertIn('selected_category', cust_resp.context)
-        self.assertIn('selected_status', cust_resp.context)
+        self.assertEqual(cust_resp.status_code, 302)
+        self.assertIn('relation=customer', cust_resp['Location'])
+        self.assertIn(f'area_id={self.cairo.id}', cust_resp['Location'])
+        followed = self.client.get(cust_resp['Location'])
+        self.assertEqual(followed.status_code, 200)
+        self.assertEqual(followed.context['current_relation'], 'customer')
+        self.assertEqual(followed.context['current_status'], 'active')
 
         exp_resp = self.client.get(reverse('customer_transactions_export'))
         self.assertEqual(exp_resp.status_code, 200)
         self.assertIn('spreadsheetml.sheet', exp_resp['Content-Type'])
+
+    def test_sales_return_order_detail_and_print_show_sku_code_and_reject_modal(self):
+        """Regression test: sales_return_order_detail and print render product.sku_code and rejection modal posts rejection_reason."""
+        from django.urls import reverse
+        from sales.models import SalesOrder, SalesOrderItem, SalesReturnOrder, SalesReturnOrderItem
+
+        so = SalesOrder.objects.create(
+            order_number='SO-RET-REG-01',
+            customer=self.customer,
+            source_warehouse=self.wh,
+            status='invoiced',
+            order_date='2026-11-18',
+            grand_total=Decimal('200.00'),
+            created_by=self.superadmin,
+        )
+        so_item = SalesOrderItem.objects.create(
+            order=so, product=self.prod, quantity=Decimal('2.00'), unit_price=Decimal('100.00')
+        )
+        sret = SalesReturnOrder.objects.create(
+            order_number='SRET-REG-01',
+            sales_order=so,
+            customer=self.customer,
+            target_warehouse=self.wh,
+            status='pending',
+            order_date='2026-11-18',
+            grand_total=Decimal('100.00'),
+            created_by=self.superadmin,
+        )
+        SalesReturnOrderItem.objects.create(
+            order=sret, original_item=so_item, product=self.prod, quantity=Decimal('1.00'), unit_price=Decimal('100.00')
+        )
+
+        self.client.force_login(self.superadmin)
+        detail_resp = self.client.get(reverse('sales_return_order_detail', args=[sret.pk]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, self.prod.sku_code)
+        self.assertContains(detail_resp, 'id="reject-modal"')
+
+        print_resp = self.client.get(reverse('sales_return_order_print', args=[sret.pk]))
+        self.assertEqual(print_resp.status_code, 200)
+        self.assertContains(print_resp, self.prod.sku_code)
+

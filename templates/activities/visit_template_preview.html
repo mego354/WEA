@@ -1,20 +1,21 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 
-{% block title %}معاينة: {{ template.display_name_ar }} - قوالب الزيارات{% endblock %}
+{% block title %}معاينة: {{ template.display_name_ar }}{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'visit_templates_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">قوالب الزيارات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">معاينة الاستبيان</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6 max-w-4xl mx-auto">
-    <!-- Breadcrumb & Top Bar -->
+    <!-- Top Bar -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
-                <span class="material-symbols-outlined text-xs">chevron_left</span>
-                <a href="{% url 'visit_templates_list' %}" class="hover:text-brand-600 transition-colors">قوالب الزيارات</a>
-                <span class="material-symbols-outlined text-xs">chevron_left</span>
-                <span class="text-brand-600 font-bold">معاينة الاستبيان</span>
-            </div>
             <div class="flex items-center gap-3">
                 <h1 class="text-xl sm:text-2xl font-bold text-slate-900">{{ template.display_name_ar }}</h1>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-bold {% if template.active %}bg-emerald-50 text-emerald-700 border border-emerald-200{% else %}bg-slate-100 text-slate-600{% endif %}">
@@ -32,6 +33,7 @@
                 <span>تعديل القالب</span>
             </a>
             <a href="{% url 'visit_templates_list' %}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors min-h-[40px]">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
                 <span>رجوع للقائمة</span>
             </a>
         </div>
@@ -79,7 +81,7 @@
             <div class="space-y-4 p-4 rounded-2xl bg-sky-50/50 border border-sky-100">
                 <div class="flex items-center gap-2 text-sky-800 pb-2 border-b border-sky-100">
                     <span class="material-symbols-outlined text-lg">play_circle</span>
-                    <h3 class="text-sm font-bold">أسئلة بداية الزيارة (تسجيل الحضور / Check-in)</h3>
+                    <h3 class="text-sm font-bold">أسئلة بداية الزيارة</h3>
                 </div>
 
                 <div class="space-y-4">
@@ -123,7 +125,7 @@
             <div class="space-y-4">
                 <div class="flex items-center gap-2 text-slate-800 pb-2 border-b border-slate-100">
                     <span class="material-symbols-outlined text-brand-600 text-lg">fact_check</span>
-                    <h3 class="text-sm font-bold">استبيان تفاصيل ونتائج الزيارة (Check-out)</h3>
+                    <h3 class="text-sm font-bold">استبيان تفاصيل ونتائج الزيارة</h3>
                 </div>
 
                 <div class="space-y-4" id="completionQuestionsContainer">
@@ -159,7 +161,7 @@
             <div class="space-y-3 p-4 rounded-2xl bg-teal-50/50 border border-teal-100">
                 <div class="flex items-center gap-2 text-teal-900 pb-2 border-b border-teal-100">
                     <span class="material-symbols-outlined text-lg">medication</span>
-                    <h3 class="text-sm font-bold">المنتجات المشروحة في الزيارة (Product Detailing)</h3>
+                    <h3 class="text-sm font-bold">المنتجات المشروحة في الزيارة</h3>
                 </div>
                 <p class="text-xs text-slate-600">
                     حدد المنتجات والأصناف التي قام المندوب بشرحها ومناقشتها مع الطبيب أو الصيدلي:

@@ -1,13 +1,18 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}الزيارات - Bricks Rep{% endblock %}
+{% block title %}الزيارات{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">الزيارات</span>
+{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
-    <!-- Top Action Bar -->
-    <!-- 1. Page Header Section (Clean: Title, Actions - No crowded statistics or search bars) -->
+    <!-- 1. Page Header Section -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
             <h1 class="text-2xl font-black text-[#27bebe] tracking-tight flex items-center gap-2.5">
@@ -18,37 +23,35 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- View Toggle: Table / Cards -->
-            <div class="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
-                <a href="?view=table&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}"
+            <!-- View Toggle: Table / Cards (preserves all active filters) -->
+            <div class="inline-flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                <a href="{% url_replace view='table' %}"
                    class="p-2 {% if view_mode == 'table' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض جدولي">
                     <span class="material-symbols-outlined text-base">table_chart</span>
                 </a>
-                <a href="?view=cards&q={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}"
+                <a href="{% url_replace view='cards' %}"
                    class="p-2 {% if view_mode == 'cards' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض بطاقات">
                     <span class="material-symbols-outlined text-base">view_agenda</span>
                 </a>
             </div>
 
-            <!-- Export to Excel -->
-            <a href="{% url 'visits_export' %}?search={{ selected_q }}&status={{ selected_status|default:'' }}&approval_status={{ selected_approval_status|default:'' }}&plan_type={{ selected_plan_type|default:'' }}&distance_ignored={{ selected_distance_ignored|default:'' }}&edited_by_creator={{ selected_edited_by_creator|default:'' }}&owner={{ selected_owner|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}{% if can_view_gps_suspicion and selected_gps_integrity %}&gps_integrity={{ selected_gps_integrity }}{% endif %}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-               title="تصدير البيانات">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span class="hidden sm:inline">تصدير البيانات</span>
-            </a>
+            <!-- Export via Unified Excel Toolbar -->
+            {% url 'visits_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='activities:visits/export' %}
 
             <!-- Column Picker (Table View Only) -->
             {% if view_mode == 'table' %}
             {% include 'components/table_column_picker.html' with table_id='visits_table' %}
             {% endif %}
 
-            <!-- Create Visit Button -->
+            <!-- Create Visit Button (Permission-Gated) -->
+            {% if request.user|has_permission:'activities:visits/create' %}
             <a href="{% url 'visit_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-sm transition-colors min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>تسجيل زيارة</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -67,7 +70,7 @@
         </div>
 
         <!-- Card 2: Planned Visits -->
-        <a href="?plan_type=planned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+        <a href="{% url_replace plan_type='planned' page=1 %}"
            class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden block">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">الزيارات المخططة</span>
@@ -80,7 +83,7 @@
         </a>
 
         <!-- Card 3: Free / Unplanned Visits -->
-        <a href="?plan_type=unplanned{% if selected_q %}&q={{ selected_q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+        <a href="{% url_replace plan_type='unplanned' page=1 %}"
            class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3 sm:p-4 flex flex-col justify-between hover:shadow-sm transition-all min-w-0 overflow-hidden block">
             <div class="flex items-start justify-between gap-1.5 min-w-0">
                 <span class="text-[11px] sm:text-xs font-bold text-slate-500 leading-tight">الزيارات الحرة</span>
@@ -113,8 +116,9 @@
 
     <!-- 3. Dedicated Search & Filters Toolbar -->
     <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <form method="GET" class="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
+        <div class="flex items-center justify-between gap-3">
+            <form method="GET" class="flex items-center gap-2 flex-1 min-w-0">
+                <input type="hidden" name="view" value="{{ view_mode }}">
                 {% for s in selected_statuses %}<input type="hidden" name="status" value="{{ s }}">{% endfor %}
                 {% for a in selected_approval_statuses %}<input type="hidden" name="approval_status" value="{{ a }}">{% endfor %}
                 {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
@@ -123,44 +127,43 @@
                 {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
                 {% for at in selected_account_types %}<input type="hidden" name="account_type" value="{{ at }}">{% endfor %}
                 {% for tp in selected_templates %}<input type="hidden" name="template" value="{{ tp }}">{% endfor %}
-                {% if selected_date_from %}<input type="hidden" name="date_from" value="{{ selected_date_from }}">{% endif %}
-                {% if selected_date_to %}<input type="hidden" name="date_to" value="{{ selected_date_to }}">{% endif %}
+                {% if active_preset %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
                 {% if selected_distance_ignored %}<input type="hidden" name="distance_ignored" value="{{ selected_distance_ignored }}">{% endif %}
                 {% if selected_edited_by_creator %}<input type="hidden" name="edited_by_creator" value="{{ selected_edited_by_creator }}">{% endif %}
                 {% if can_view_gps_suspicion and selected_gps_integrity %}<input type="hidden" name="gps_integrity" value="{{ selected_gps_integrity }}">{% endif %}
 
-                <div class="relative flex-1 w-full sm:w-auto">
+                <div class="relative flex-1 min-w-0">
                     <input type="text" name="search" value="{{ selected_q }}" data-smart-search-module="visits" placeholder="بحث بالعميل أو المسؤول أو رقم الزيارة..."
-                           class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
+                           class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] focus:bg-white min-h-[40px]">
                     <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-lg">search</span>
                 </div>
 
-                <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] flex items-center justify-center gap-1">
+                <button type="submit" class="px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-sm transition-colors min-h-[40px] flex items-center justify-center gap-1 shrink-0">
                     <span class="material-symbols-outlined text-base">search</span>
-                    <span>بحث</span>
+                    <span class="hidden sm:inline">بحث</span>
                 </button>
                 {% if selected_q or selected_status or selected_plan_type %}
-                <a href="{% url 'visits_list' %}" class="w-full sm:w-auto px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-colors min-h-[40px] flex items-center justify-center">
+                <a href="{% url 'visits_list' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors min-h-[40px] flex items-center justify-center shrink-0">
                     إلغاء
                 </a>
                 {% endif %}
             </form>
 
-            <button type="button" onclick="openFilterDrawer()"
-                    class="relative inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px] w-full sm:w-auto justify-center">
-                <span class="material-symbols-outlined text-base">tune</span>
-                <span>فلاتر متقدمة</span>
-            </button>
+            <!-- Contacts-Style Filter Drawer Toggle with Badge -->
+            {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
         </div>
     </div>
 
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
 
-    <!-- TABLE VIEW -->
+    <!-- TABLE VIEW (Option A: Desktop Table + Mobile Cards) -->
     {% if view_mode == 'table' %}
     <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        <div class="overflow-x-auto scrollbar-thin">
+        <!-- Desktop Table (hidden on <768px) -->
+        <div class="hidden md:block overflow-x-auto scrollbar-thin">
             <table id="visits_table" data-col-table="visits_table" class="min-w-[1000px] w-full text-right border-collapse">
                 <thead>
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-xs font-bold">
@@ -179,7 +182,7 @@
                         <th data-col="approval" data-col-label="الاعتماد" class="py-3.5 px-4 text-center">الاعتماد</th>
                         <th data-col="distance_status" data-col-label="تجاوز المسافة" class="py-3.5 px-4 text-center">تجاوز المسافة</th>
                         {% if can_view_gps_suspicion %}
-                        <th data-col="gps_integrity" data-col-label="نزاهة الموقع (GBS)" class="py-3.5 px-4 text-center">نزاهة الموقع</th>
+                        <th data-col="gps_integrity" data-col-label="نزاهة الموقع (GPS)" class="py-3.5 px-4 text-center">نزاهة الموقع</th>
                         {% endif %}
                         <th data-col="actions" data-col-label="إجراءات" data-required="true" class="py-3.5 px-4 text-center w-20">إجراءات</th>
                     </tr>
@@ -357,7 +360,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="15" class="py-12 text-center text-slate-400">
+                        <td colspan="{% if can_view_gps_suspicion %}16{% else %}15{% endif %}" class="py-12 text-center text-slate-400">
                             <div class="flex flex-col items-center justify-center gap-2">
                                 <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
                                 <p class="text-sm font-medium">لا توجد زيارات مسجلة تطابق معايير البحث.</p>
@@ -367,6 +370,83 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile Cards (Option A — visible only on <768px) -->
+        <div class="block md:hidden divide-y divide-slate-100">
+            {% for v in visits %}
+            <div class="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <a href="{% url 'visit_detail' v.pk %}" class="font-mono font-bold text-slate-900 hover:text-[#27bebe] text-sm">#{{ v.serial_num }}</a>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">{{ v.plan_type_display_ar }}</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.status_badge_class }}">{{ v.status_display_ar }}</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.approval_badge_class }}">{{ v.approval_display_ar }}</span>
+                        </div>
+                        <a href="{% url 'visit_detail' v.pk %}" class="font-bold text-slate-900 hover:text-[#27bebe] text-sm block truncate mt-1">
+                            {{ v.contact.name }}
+                        </a>
+                    </div>
+                    <div class="inline-flex justify-center shrink-0" data-row-menu-host>
+                        <button type="button" data-row-menu-trigger aria-haspopup="true" aria-expanded="false"
+                                onclick="openRowActionMenu(this, event)"
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                title="الإجراءات">
+                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                        <template class="row-menu-items">
+                            <a href="{% url 'visit_detail' v.pk %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
+                                <span>عرض التفاصيل</span>
+                            </a>
+                            {% if v.qa_display_list %}
+                            <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                <span class="material-symbols-outlined text-base text-[#27bebe]">quiz</span>
+                                <span>عرض إجابات الاستبيان</span>
+                            </button>
+                            {% endif %}
+                            {% if v.user_can_approve and v.approval_status != 'approved' %}
+                            <div class="h-px bg-slate-100 my-1"></div>
+                            <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="w-full text-right px-3.5 py-2 text-emerald-700 hover:bg-emerald-50 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base">check_circle</span>
+                                    <span>اعتماد الزيارة</span>
+                                </button>
+                            </form>
+                            <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-base">cancel</span>
+                                <span>رفض الزيارة</span>
+                            </button>
+                            {% endif %}
+                            {% if v.user_can_delete %}
+                            <div class="h-px bg-slate-100 my-1"></div>
+                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-base">delete</span>
+                                <span>حذف الزيارة</span>
+                            </button>
+                            {% endif %}
+                        </template>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                    <span class="font-mono font-bold text-slate-800">{{ v.date|date:"d/m/Y" }}</span>
+                    <span>• {{ v.owner.get_full_name|default:v.owner.username }}</span>
+                    {% if v.contact.area %}<span>• {{ v.contact.area.name }}</span>{% endif %}
+                    {% if v.duration_formatted %}<span class="font-mono">• {{ v.duration_formatted }}</span>{% endif %}
+                    {% if can_view_gps_suspicion %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border {{ v.gps_integrity_badge_class }}">{{ v.gps_integrity_status_display_ar }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="py-12 px-4 text-center text-slate-400">
+                <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
+                <p class="text-xs font-medium mt-2">لا توجد زيارات مسجلة تطابق معايير البحث.</p>
+            </div>
+            {% endfor %}
         </div>
     </div>
     {% else %}
@@ -522,27 +602,27 @@
 
 </div>
 
-<!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-<div id="filterDrawerBackdrop" onclick="closeFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-<div id="filter-drawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+<!-- Slide-out Filter Drawer (Unified .erp-filter-drawer) -->
+<div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+<aside id="filterDrawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white shrink-0">
         <div class="flex items-center gap-2">
             <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-            <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+            <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
         </div>
-        <button type="button" onclick="closeFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+        <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="إغلاق">
             <span class="material-symbols-outlined text-xl">arrow_forward</span>
         </button>
     </div>
     <form method="GET" class="p-5 space-y-4 flex-1 overflow-y-auto">
-                {% if selected_q %}<input type="hidden" name="q" value="{{ selected_q }}">{% endif %}
+                {% if selected_q %}<input type="hidden" name="search" value="{{ selected_q }}">{% endif %}
                 <input type="hidden" name="view" value="{{ view_mode }}">
 
                 {% if can_filter_owner %}
                 {% include 'components/choice_multiselect.html' with component_id='visits_owner' field_name='owner' label='المسؤول (اختيار متعدد)' options=owner_options selected_items=selected_owner_items selected_values=selected_owners placeholder='اختر المسؤول...' %}
                 {% endif %}
 
-                {% include 'components/account_type_multiselect.html' with component_id='visits' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types label='نوع العميل / Account Type (اختيار متعدد)' %}
+                {% include 'components/account_type_multiselect.html' with component_id='visits' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types label='نوع العميل (اختيار متعدد)' %}
 
                 {% url 'planned_visits_search_areas_api' as visits_areas_url %}
                 {% url 'planned_visits_search_bricks_api' as visits_bricks_url %}
@@ -554,8 +634,8 @@
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">تصنيف التخطيط (النوع)</label>
                     <select name="plan_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                         <option value="">جميع التصنيفات</option>
-                        <option value="planned" {% if selected_plan_type == 'planned' %}selected{% endif %}>زيارة مخططة (Planned)</option>
-                        <option value="unplanned" {% if selected_plan_type == 'unplanned' %}selected{% endif %}>زيارة خارج الخطة (Unplanned)</option>
+                        <option value="planned" {% if selected_plan_type == 'planned' %}selected{% endif %}>زيارة مخططة</option>
+                        <option value="unplanned" {% if selected_plan_type == 'unplanned' %}selected{% endif %}>زيارة خارج الخطة</option>
                     </select>
                 </div>
 
@@ -576,7 +656,7 @@
 
                 {% if can_view_gps_suspicion %}
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">نزاهة الموقع (GBS)</label>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">نزاهة الموقع (GPS)</label>
                     <select name="gps_integrity" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                         <option value="">الكل</option>
                         {% for val, label in gps_integrity_choices %}
@@ -596,8 +676,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">الفترة الزمنية</label>
-                    {% include 'components/date_range_filter.html' %}
+                    {% include 'components/date_range_filter.html' with active_preset=active_preset|default:'all_time' date_from=date_from date_to=date_to %}
                 </div>
 
                 <div class="pt-4 flex gap-2">
@@ -609,19 +688,9 @@
                     </a>
                 </div>
             </form>
-</div>
+</aside>
 
 <script>
-function openFilterDrawer() {
-    document.getElementById('filter-drawer').classList.add('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.remove('hidden');
-}
-function closeFilterDrawer() {
-    document.getElementById('filter-drawer').classList.remove('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.add('hidden');
-}
 function openVisitListRejectModal(visitId, serialNum) {
     const modal = document.getElementById('visit-list-reject-modal');
     const form = document.getElementById('visit-list-reject-form');

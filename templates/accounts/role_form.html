@@ -1,6 +1,6 @@
 {% extends 'layouts/base.html' %}
 
-{% block title %}{% if is_create %}إنشاء دور جديد{% else %}تعديل دور المستخدم: {{ role.display_name }}{% endif %} - WEA Pharma ERP{% endblock %}
+{% block title %}{% if is_create %}إنشاء دور جديد{% else %}تعديل دور المستخدم: {{ role.display_name }}{% endif %}{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-[#27bebe] transition-colors">الرئيسية</a>
@@ -99,7 +99,7 @@
                                 <span class="text-[10px] text-slate-400">تجاوز كامل لكافة قيود الصلاحيات</span>
                             </div>
                             <input type="checkbox" name="is_super" {% if role.is_super %}checked{% endif %} {% if role and role.is_super %}disabled checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                             <div>
@@ -107,7 +107,7 @@
                                 <span class="text-[10px] text-slate-400">تنفيذ الزيارات والطلبات الميدانية</span>
                             </div>
                             <input type="checkbox" name="is_rep" {% if role.is_rep %}checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                             <div>
@@ -115,7 +115,7 @@
                                 <span class="text-[10px] text-slate-400">حالة الدور بالنظام</span>
                             </div>
                             <input type="checkbox" name="is_active" {% if is_create or role.is_active %}checked{% endif %} {% if role and role.is_super %}disabled checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                     </div>
                     <div class="space-y-2.5">
@@ -125,7 +125,7 @@
                                 <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى المحافظة</span>
                             </div>
                             <input type="checkbox" name="is_area_manager" {% if role.is_area_manager %}checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                             <div>
@@ -133,7 +133,7 @@
                                 <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى القطاع</span>
                             </div>
                             <input type="checkbox" name="is_sub_area_manager" {% if role.is_sub_area_manager %}checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
                             <div>
@@ -141,7 +141,7 @@
                                 <span class="text-[10px] text-slate-400">ربط خزنة نقدية شخصية للمندوب</span>
                             </div>
                             <input type="checkbox" name="can_hold_vault" {% if role.can_hold_vault %}checked{% endif %} class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
                         </label>
                     </div>
                 </div>

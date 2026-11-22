@@ -1,0 +1,24 @@
+{% comment %}
+Standardized Contacts-Style Filter Drawer Toggle Button with Active Count Badge
+Source of truth: templates/contacts/contacts_list.html
+Usage:
+  {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+Optional params:
+  drawer_id: default 'filterDrawer'
+  backdrop_id: default 'filterDrawerBackdrop'
+  onclick_fn: custom JS onclick handler (defaults to toggleErpFilterDrawer)
+  title: tooltip/aria-label (default 'فلتر وتصفية')
+{% endcomment %}
+<button type="button"
+        onclick="{% if onclick_fn %}{{ onclick_fn }}{% else %}toggleErpFilterDrawer('{{ drawer_id|default:'filterDrawer' }}', '{{ backdrop_id|default:'filterDrawerBackdrop' }}'){% endif %}"
+        class="relative p-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-slate-100 transition-colors min-w-[38px] min-h-[38px] inline-flex items-center justify-center shrink-0 border border-transparent hover:border-slate-200"
+        title="{{ title|default:'فلتر وتصفية' }}"
+        aria-label="{{ title|default:'فلتر وتصفية' }}"
+        data-filter-drawer-toggle="{{ drawer_id|default:'filterDrawer' }}">
+    <span class="material-symbols-outlined text-xl text-brand-600">filter_list</span>
+    {% if active_count and active_count > 0 %}
+    <span data-filter-badge class="absolute -top-1 -right-1 bg-brand-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs leading-none">
+        {{ active_count }}
+    </span>
+    {% endif %}
+</button>

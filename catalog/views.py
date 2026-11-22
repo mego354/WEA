@@ -248,12 +248,24 @@ def product_edit(request, pk):
             if category:
                 product.category = category
 
+        try:
+            retail_dec = Decimal(retail_price)
+            cost_dec = Decimal(default_purchase_cost)
+            tax_dec = Decimal(tax_percentage)
+            if retail_dec < 0 or cost_dec < 0 or tax_dec < 0 or tax_dec > 100:
+                messages.error(request, "الأسعار والتكاليف يجب أن تكون موجبة والضريبة بين 0% و 100%.")
+                return redirect('product_edit', pk=product.pk)
+        except Exception:
+            messages.error(request, "يرجى إدخال قيم رقمية صحيحة للسعر والتكلفة والضريبة.")
+            return redirect('product_edit', pk=product.pk)
+
         product.barcode = barcode
-        product.retail_price = Decimal(retail_price)
-        product.default_purchase_cost = Decimal(default_purchase_cost)
-        product.tax_percentage = Decimal(tax_percentage)
+        product.retail_price = retail_dec
+        product.default_purchase_cost = cost_dec
+        product.tax_percentage = tax_dec
         product.unit = unit
-        product.description = description
+        if 'description' in request.POST:
+            product.description = description
         product.sellable = sellable
         product.has_volume_discounts = has_volume_discounts
         product.packing_boxes = packing_boxes
@@ -274,6 +286,16 @@ def product_edit(request, pk):
                 return redirect('product_edit', pk=product.pk)
 
         product.save()
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action_type='PRODUCT_UPDATED',
+            module='catalog',
+            actor=request.user,
+            record_id=product.id,
+            record_name=product.name,
+            description=f"تحديث بيانات المنتج: {product.name} ({product.sku_code})",
+            request=request,
+        )
 
         # Update volume discount tiers
         product.volume_discounts.all().delete()
@@ -437,198 +459,6 @@ def product_import(request):
     return excel_import_view(request, entity='products')
 
 
-def _legacy_product_import_unused(request):
-    if request.method == 'POST':
-        action = request.POST.get('action')
-
-        if action == 'preview':
-            excel_file = request.FILES.get('excel_file')
-            if not excel_file:
-                messages.error(request, "يرجى اختيار ملف Excel للرفع.")
-                return render(request, 'catalog/product_import.html', {'preview_mode': False})
-
-            column_mapping = {
-                'sku_code': ['كود المنتج (sku)', 'كود المنتج', 'sku', 'sku_code', 'الكود', 'كود'],
-                'name': ['اسم المنتج', 'الاسم', 'name', 'product_name'],
-                'category': ['التصنيف', 'القسم', 'category', 'category_name'],
-                'retail_price': ['سعر البيع للجمهور', 'سعر البيع', 'السعر', 'retail_price', 'price'],
-                'default_purchase_cost': ['سعر تكلفة الشراء', 'تكلفة الشراء', 'سعر الشراء', 'purchase_cost', 'cost'],
-                'tax_percentage': ['نسبة الضريبة', 'الضريبة', 'tax', 'tax_percentage'],
-                'sellable': ['متاح للبيع', 'قابل للبيع', 'sellable', 'active'],
-                'barcode': ['الباركود', 'باركود', 'barcode'],
-                'unit': ['الوحدة', 'unit'],
-                'description': ['الوصف', 'ملاحظات', 'description'],
-            }
-
-            parser = ExcelImportParser(excel_file, column_mapping)
-            if not parser.parse():
-                for err in parser.errors:
-                    messages.error(request, err)
-                return render(request, 'catalog/product_import.html', {'preview_mode': False})
-
-            existing_skus = set(Product.objects.values_list('sku_code', flat=True))
-
-            preview_rows = []
-            seen_skus = set()
-            new_count = 0
-            update_count = 0
-            invalid_count = 0
-
-            for r in parser.rows_data:
-                row_errors = []
-                sku = str(r.get('sku_code') or '').strip()
-                name = str(r.get('name') or '').strip()
-
-                if not sku:
-                    row_errors.append("كود المنتج (SKU) مطلوب")
-                if not name:
-                    row_errors.append("اسم المنتج مطلوب")
-
-                if sku:
-                    if sku in seen_skus:
-                        row_errors.append("كود مكرر داخل نفس الملف")
-                    else:
-                        seen_skus.add(sku)
-
-                is_existing = bool(sku and sku in existing_skus)
-                is_valid = len(row_errors) == 0
-
-                if not is_valid:
-                    invalid_count += 1
-                elif is_existing:
-                    update_count += 1
-                else:
-                    new_count += 1
-
-                preview_rows.append({
-                    'row_num': r.get('__row_num__'),
-                    'sku_code': sku,
-                    'name': name,
-                    'category': r.get('category') or '',
-                    'retail_price': str(r.get('retail_price') or '0.00'),
-                    'default_purchase_cost': str(r.get('default_purchase_cost') or '0.00'),
-                    'tax_percentage': str(r.get('tax_percentage') or '0'),
-                    'sellable': str(r.get('sellable') or 'نعم'),
-                    'barcode': str(r.get('barcode') or ''),
-                    'unit': str(r.get('unit') or 'علبة'),
-                    'description': str(r.get('description') or ''),
-                    'is_valid': is_valid,
-                    'is_existing': is_existing,
-                    'errors': row_errors,
-                })
-
-            valid_count = len(preview_rows) - invalid_count
-            request.session['product_import_data'] = preview_rows
-
-            context = {
-                'preview_mode': True,
-                'total_rows': len(preview_rows),
-                'valid_count': valid_count,
-                'invalid_count': invalid_count,
-                'new_count': new_count,
-                'update_count': update_count,
-                'preview_rows': preview_rows[:100],
-                'total_preview_count': min(len(preview_rows), 100),
-            }
-            return render(request, 'catalog/product_import.html', context)
-
-        elif action == 'execute':
-            import_mode = request.POST.get('import_mode', 'create_and_update')
-            rows_data = request.session.get('product_import_data', [])
-
-            if not rows_data:
-                messages.error(request, "انتهت صلاحية جلسة الاستيراد أو لا توجد بيانات. يرجى إعادة رفع الملف.")
-                return redirect('product_import')
-
-            created_count = 0
-            updated_count = 0
-            skipped_count = 0
-
-            cats_map = {c.name.strip().lower(): c for c in ProductCategory.objects.all()}
-
-            try:
-                with transaction.atomic():
-                    for r in rows_data:
-                        if not r.get('is_valid'):
-                            skipped_count += 1
-                            continue
-
-                        sku = r['sku_code']
-                        name = r['name']
-                        cat_name = r.get('category', '').strip()
-                        cat_obj = None
-
-                        if cat_name:
-                            cat_key = cat_name.lower()
-                            if cat_key in cats_map:
-                                cat_obj = cats_map[cat_key]
-                            else:
-                                code_slug = cat_name[:10].upper().replace(' ', '-')
-                                cat_obj = ProductCategory.objects.create(name=cat_name, code=f"CAT-{code_slug}")
-                                cats_map[cat_key] = cat_obj
-
-                        retail_price = parse_decimal_safe(r.get('retail_price'), Decimal('0.00'))
-                        cost = parse_decimal_safe(r.get('default_purchase_cost'), Decimal('0.00'))
-                        tax_pct = parse_decimal_safe(r.get('tax_percentage'), Decimal('0.00'))
-                        sellable = parse_boolean_safe(r.get('sellable'), True)
-                        barcode = r.get('barcode', '').strip()
-                        unit = r.get('unit', '').strip() or 'علبة'
-                        desc = r.get('description', '').strip()
-
-                        prod = Product.objects.filter(sku_code=sku).first()
-
-                        if prod:
-                            if import_mode in ['create_and_update', 'update_only']:
-                                prod.name = name
-                                if cat_obj:
-                                    prod.category = cat_obj
-                                prod.retail_price = retail_price
-                                prod.default_purchase_cost = cost
-                                prod.tax_percentage = tax_pct
-                                prod.sellable = sellable
-                                if barcode:
-                                    prod.barcode = barcode
-                                if unit:
-                                    prod.unit = unit
-                                if desc:
-                                    prod.description = desc
-                                prod.save()
-                                updated_count += 1
-                            else:
-                                skipped_count += 1
-                        else:
-                            if import_mode in ['create_and_update', 'create_only']:
-                                Product.objects.create(
-                                    sku_code=sku,
-                                    name=name,
-                                    category=cat_obj,
-                                    retail_price=retail_price,
-                                    default_purchase_cost=cost,
-                                    tax_percentage=tax_pct,
-                                    sellable=sellable,
-                                    barcode=barcode,
-                                    unit=unit,
-                                    description=desc,
-                                )
-                                created_count += 1
-                            else:
-                                skipped_count += 1
-
-                request.session.pop('product_import_data', None)
-                messages.success(
-                    request,
-                    f"اكتملت عملية الاستيراد بنجاح! تم إنشاء {created_count} منتج جديد، "
-                    f"وتحديث {updated_count} منتج، وتخطي {skipped_count} سجل."
-                )
-                return redirect('products_list')
-
-            except Exception as e:
-                messages.error(request, f"حدث خطأ أثناء حفظ البيانات وتم التراجع عن كافة العمليات: {str(e)}")
-                return redirect('product_import')
-
-    return render(request, 'catalog/product_import.html', {'preview_mode': False})
-
-
 @require_permission('catalog:categories/list')
 def categories_list(request):
     search = request.GET.get('search', '').strip()
@@ -636,11 +466,7 @@ def categories_list(request):
 
     active_filters = []
     if search:
-        categories = categories.filter(
-            Q(name__icontains=search) |
-            Q(code__icontains=search) |
-            Q(description__icontains=search)
-        )
+        categories = filter_by_arabic_search(categories, search, ['name', 'code', 'description'])
         active_filters.append({'label': 'بحث', 'value': search, 'param': 'search'})
 
     if request.method == 'POST':

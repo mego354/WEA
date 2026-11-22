@@ -1,20 +1,21 @@
 {% extends 'layouts/base.html' %}
 {% load static erp_tags %}
 
-{% block title %}قوالب الزيارات - الإعدادات{% endblock %}
+{% block title %}قوالب الزيارات{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="text-slate-400">الإعدادات</span>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">قوالب الزيارات</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
-    <!-- Breadcrumb & Top Bar -->
+    <!-- Top Bar -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
-                <span class="material-symbols-outlined text-xs">chevron_left</span>
-                <span class="text-slate-400">الإعدادات</span>
-                <span class="material-symbols-outlined text-xs">chevron_left</span>
-                <span class="text-brand-600 font-bold">قوالب الزيارات</span>
-            </div>
             <div class="flex items-center gap-3">
                 <h1 class="text-xl sm:text-2xl font-bold text-slate-900">قوالب الزيارات</h1>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-brand-700 border border-teal-200">
@@ -28,12 +29,10 @@
 
         {% if can_manage %}
         <div class="flex flex-wrap items-center gap-2">
-            <a href="{% url 'visit_templates_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير Excel</span>
-            </a>
-            <a href="{% url 'visit_template_create' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-bold shadow-md shadow-teal-500/20 transition-all min-h-[44px]">
-                <span class="material-symbols-outlined text-lg">add_circle</span>
+            {% url 'visit_templates_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='settings:visitsTemplates/manage' %}
+            <a href="{% url 'visit_template_create' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-teal-500/20 transition-all min-h-[40px]">
+                <span class="material-symbols-outlined text-base">add_circle</span>
                 <span>إضافة قالب جديد</span>
             </a>
         </div>
@@ -171,7 +170,7 @@
                         </button>
                     </form>
 
-                    <button type="button" onclick="confirmDeleteTemplate('{{ tmpl.pk }}', '{{ tmpl.display_name_ar }}', '{{ tmpl.usage_count }}')" class="p-1.5 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف القالب">
+                    <button type="button" onclick="confirmDeleteTemplate('{% url 'visit_template_delete' tmpl.pk %}', '{{ tmpl.display_name_ar|escapejs }}', '{{ tmpl.usage_count }}')" class="p-1.5 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center" title="حذف القالب">
                         <span class="material-symbols-outlined text-base">delete</span>
                     </button>
                 </div>
@@ -206,48 +205,19 @@
     {% endif %}
 </div>
 
-<!-- Delete Confirmation Modal -->
-<div id="deleteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-        <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-            <span class="material-symbols-outlined text-2xl">warning</span>
-        </div>
-        <div class="text-center">
-            <h3 class="text-lg font-bold text-slate-900">حذف / تعطيل قالب الزيارة</h3>
-            <p id="deleteModalText" class="text-xs sm:text-sm text-slate-500 mt-2">
-                هل أنت متأكد من رغبتك في حذف القالب؟
-            </p>
-        </div>
-        <div class="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 min-h-[40px]">
-                إلغاء
-            </button>
-            <form id="deleteModalForm" method="POST" action="">
-                {% csrf_token %}
-                <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-xs min-h-[40px]">
-                    تأكيد الحذف
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script>
-function confirmDeleteTemplate(id, name, usageCount) {
-    const modal = document.getElementById('deleteModal');
-    const form = document.getElementById('deleteModalForm');
-    const text = document.getElementById('deleteModalText');
-    form.action = `/settings/visits/templates/${id}/delete/`;
-    if (parseInt(usageCount) > 0) {
-        text.innerHTML = `القالب <strong class="text-slate-800">"${name}"</strong> مرتبط بـ <strong>${usageCount}</strong> زيارة تاريخية.<br>سيتم <span class="text-amber-600 font-bold">إلغاء تفعيله</span> لحماية سلامة السجلات التاريخية للزيارات.`;
-    } else {
-        text.innerHTML = `هل أنت متأكد من حذف القالب <strong class="text-slate-800">"${name}"</strong> نهائياً؟`;
-    }
-    modal.classList.remove('hidden');
-}
-
-function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.add('hidden');
+function confirmDeleteTemplate(actionUrl, name, usageCount) {
+    const count = parseInt(usageCount, 10) || 0;
+    const message = count > 0
+        ? `القالب "${name}" مرتبط بـ ${count} زيارة تاريخية. سيتم إلغاء تفعيله لحماية سلامة السجلات التاريخية للزيارات.`
+        : `هل أنت متأكد من حذف القالب "${name}" نهائياً؟`;
+    showConfirmDeleteModal({
+        action: actionUrl,
+        title: count > 0 ? 'تعطيل قالب الزيارة' : 'حذف قالب الزيارة',
+        itemName: name,
+        message: message,
+        submitText: count > 0 ? 'تأكيد التعطيل' : 'نعم، حذف'
+    });
 }
 </script>
 {% endblock %}

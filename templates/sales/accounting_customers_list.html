@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}حسابات وأرصدة العملاء - WEA Pharma ERP{% endblock %}
+{% block title %}حسابات وأرصدة العملاء{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
@@ -17,18 +17,15 @@
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight">حسابات وأرصدة العملاء (Accounts Receivable)</h1>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">account_balance_wallet</span>
+                <span>حسابات وأرصدة العملاء</span>
+            </h1>
             <p class="text-sm text-slate-500 mt-0.5">متابعة مديونيات العملاء، فترات الائتمان، وسجلات الدفعات والتحصيلات</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            {% if request.user|has_permission:'sales:customers/accounting_export' %}
-            <a href="{% url 'accounting_customers_export' %}?{{ request.GET.urlencode }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all min-h-[40px]"
-               title="تصدير إلى Excel">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير Excel</span>
-            </a>
-            {% endif %}
+            {% url 'accounting_customers_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='sales:customers/accounting_export' %}
             {% if request.user|has_permission:'sales:customers/transactions' %}
             <a href="{% url 'customer_transactions_list' %}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base text-slate-500">list_alt</span>
@@ -107,27 +104,23 @@
                        data-smart-search-module="customers"
                        class="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white transition-all">
             </form>
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')"
-                    class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[38px]">
-                <span class="material-symbols-outlined text-base text-[#27bebe]">filter_alt</span>
-                <span>فلتر</span>
-                {% if active_filters|length > 0 %}
-                <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">{{ active_filters|length }}</span>
-                {% endif %}
-            </button>
+            <div class="flex items-center gap-2">
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
+                {% include 'components/table_column_picker.html' with table_id='accounting_customers_table' %}
+            </div>
         </div>
     </div>
 
     <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-    <div id="filterDrawer" class="erp-filter-drawer">
-        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+                {% if active_filters %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
             </div>
-            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
         </div>
         <form method="GET" class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
@@ -149,7 +142,7 @@
                 <a href="{% url 'accounting_customers_list' %}" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors">إعادة تعيين</a>
             </div>
         </form>
-    </div>
+    </aside>
 
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
@@ -164,7 +157,6 @@
                     {{ total_count }} عميل
                 </span>
             </h2>
-            {% include 'components/table_column_picker.html' with table_id='accounting_customers_table' %}
         </div>
         <div class="overflow-x-auto scrollbar-thin">
             <table id="accounting_customers_table" data-col-table="accounting_customers_table" class="min-w-[850px] w-full text-right text-sm">
@@ -311,5 +303,13 @@ function openZeroBalanceModal(actionUrl, name, balance) {
 function closeZeroBalanceModal() {
     document.getElementById('zeroBalanceModal').classList.add('hidden');
 }
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('zeroBalanceModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            closeZeroBalanceModal();
+        }
+    }
+});
 </script>
 {% endblock %}

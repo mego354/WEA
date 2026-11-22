@@ -1,7 +1,13 @@
 {% extends 'layouts/base.html' %}
-{% load humanize %}
+{% load humanize erp_tags %}
 
-{% block title %}خطة الزيارات - WEA Pharma ERP{% endblock %}
+{% block title %}خطة الزيارات{% endblock %}
+
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">خطة الزيارات</span>
+{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)] space-y-6">
@@ -13,20 +19,20 @@
             <span class="text-xs px-2.5 py-1 bg-teal-50 text-[#27bebe] font-bold rounded-full border border-teal-200">
                 {{ days_list|length }} يوم في الخطة
             </span>
-            <button type="button" onclick="activateBulkPlanningForDate('{% if start_date >= today_str %}{{ start_date }}{% else %}{{ today_str }}{% endif %}')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+            <button type="button" onclick="activateBulkPlanningForDate('{% if start_date >= today_str %}{{ start_date }}{% else %}{{ today_str }}{% endif %}')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[40px]">
                 <span class="material-symbols-outlined text-base">playlist_add_check</span>
                 <span>تخطيط يومي مجمع لعدة عملاء</span>
             </button>
             {% url 'planned_visits_export' as pv_export_url %}
-            {% include 'components/excel_toolbar_actions.html' with export_url=pv_export_url import_entity='planned_visits' import_perm='activities:planned/import' %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=pv_export_url export_perm='activities:planned/export' import_entity='planned_visits' import_perm='activities:planned/import' %}
         </div>
 
         <!-- Rep & Date Controls Form -->
-        <form method="GET" class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+        <form method="GET" class="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
             <!-- Rep Selector -->
             <div class="flex items-center gap-2 w-full sm:w-auto">
                 <span class="text-xs font-bold text-slate-600 whitespace-nowrap">المسئول *:</span>
-                <select name="assignee" onchange="this.form.submit()" class="flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
+                <select name="assignee" onchange="this.form.submit()" class="flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] min-h-[38px]">
                     {% if can_view_others %}
                     <option value="all" {% if is_all_reps_view %}selected{% endif %}>الكل (جميع المندوبين بالنطاق)</option>
                     {% endif %}
@@ -41,26 +47,13 @@
             <!-- Date Range -->
             <div class="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full sm:w-auto">
                 <span class="text-xs font-bold text-slate-600 whitespace-nowrap">المدة:</span>
-                <input type="date" name="date_from" value="{{ start_date }}" onchange="this.form.submit()" class="w-[115px] sm:w-auto rounded-xl border border-slate-200 px-1.5 py-1 text-[11px] sm:text-xs font-medium">
+                <input type="date" name="date_from" value="{{ start_date }}" onchange="this.form.submit()" class="w-[120px] sm:w-auto rounded-xl border border-slate-200 px-2 py-1.5 text-[11px] sm:text-xs font-medium min-h-[38px]">
                 <span class="text-slate-400 text-xs">-</span>
-                <input type="date" name="date_to" value="{{ end_date }}" onchange="this.form.submit()" class="w-[115px] sm:w-auto rounded-xl border border-slate-200 px-1.5 py-1 text-[11px] sm:text-xs font-medium">
+                <input type="date" name="date_to" value="{{ end_date }}" onchange="this.form.submit()" class="w-[120px] sm:w-auto rounded-xl border border-slate-200 px-2 py-1.5 text-[11px] sm:text-xs font-medium min-h-[38px]">
             </div>
 
-            <!-- Customer Filter Drawer Toggle -->
-            <button type="button" onclick="toggleDrawer()" id="drawer-toggle-btn" class="inline-flex items-center gap-1.5 px-3 py-2 {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30{% else %}bg-slate-100 hover:bg-slate-200 text-slate-700{% endif %} text-xs font-bold rounded-xl transition-all shadow-xs relative">
-                <span id="drawer-toggle-icon" class="material-symbols-outlined text-base {% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}text-[#27bebe]{% endif %}">filter_list</span>
-                <span>تنقية العملاء</span>
-                <span id="drawer-active-filter-badge" class="{% if selected_contact_search or selected_account_type or selected_main_area or selected_area or selected_customer_category or selected_main_areas or selected_bricks %}{% else %}hidden{% endif %} flex items-center gap-1">
-                    <span class="w-2 h-2 rounded-full bg-[#27bebe] animate-pulse"></span>
-                    <span id="drawer-active-filter-text" class="text-[10px] bg-[#27bebe] text-white px-1.5 py-0.5 rounded-full font-bold">نشط</span>
-                </span>
-            </button>
-
-            <!-- Export -->
-            <a href="{% url 'planned_visits_export' %}?assignee={% if selected_rep %}{{ selected_rep.id }}{% else %}all{% endif %}&date_from={{ start_date }}&date_to={{ end_date }}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير</span>
-            </a>
+            <!-- Contacts-Style Filter Drawer Toggle with Active Count Badge -->
+            {% include 'components/filter_drawer_toggle.html' with drawer_id='customer-drawer' onclick_fn='toggleDrawer()' title='تنقية العملاء' active_count=0 %}
         </form>
     </div>
 
@@ -188,7 +181,7 @@
                                                 <span>زيارة #{{ it.visit.serial_num }}</span>
                                             </a>
                                             {% if it.visit.status == 'planned' %}
-                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }}؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
                                                 <span class="material-symbols-outlined text-base">delete</span>
                                             </button>
                                             {% endif %}
@@ -197,7 +190,7 @@
                                                 <span class="material-symbols-outlined text-sm">directions_walk</span>
                                                 <span>تنفيذ الزيارة</span>
                                             </a>
-                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل <span class=\'font-bold text-slate-800\'>{{ it.contact.name|escapejs }}</span>؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }}؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
                                                 <span class="material-symbols-outlined text-base">delete</span>
                                             </button>
                                         {% endif %}
@@ -261,15 +254,15 @@
                            class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]">
                 </div>
 
-                <!-- نوع العميل / Account Type (اختيار متعدد) -->
-                {% include 'components/account_type_multiselect.html' with component_id='planned' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types on_change_callback='applyDrawerFilterAjax' label='نوع العميل / Account Type (اختيار متعدد)' %}
+                <!-- نوع العميل (اختيار متعدد) -->
+                {% include 'components/account_type_multiselect.html' with component_id='planned' field_name='account_type' available_account_types=account_types selected_account_types=selected_account_types on_change_callback='applyDrawerFilterAjax' label='نوع العميل (اختيار متعدد)' %}
 
                 {% url 'planned_visits_search_areas_api' as planned_areas_url %}
                 {% url 'planned_visits_search_bricks_api' as planned_bricks_url %}
                 {% include 'components/area_brick_multiselect.html' with component_id='planned' area_field_name='main_area' brick_field_name='area' areas_api_url=planned_areas_url bricks_api_url=planned_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips on_change_callback='applyDrawerFilterAjax' %}
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">تصنيف العميل (Classification)</label>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">تصنيف العميل</label>
                     <select name="customer_category" id="filter_customer_category" onchange="applyDrawerFilterAjax(event)" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">الكل (A+, A, B, C)</option>
                         {% for cat in customer_categories %}
@@ -485,7 +478,7 @@ function toggleDrawer() {
 // Requirement 2: Activate bulk planning directly using existing left-side drawer
 function activateBulkPlanningForDate(dateStr) {
     if (dateStr < todayStr) {
-        alert('لا يمكن جدولة خطة زيارات في تاريخ سابق.');
+        window.ERPToast.warning('لا يمكن جدولة خطة زيارات في تاريخ سابق.');
         return;
     }
 
@@ -535,7 +528,7 @@ function activateBulkPlanningForDate(dateStr) {
 function onBulkDateChange() {
     const dateInput = document.getElementById('drawer-bulk-date');
     if (dateInput && dateInput.value < todayStr) {
-        alert('لا يمكن اختيار تاريخ سابق. تم ضبط التاريخ على تاريخ اليوم.');
+        window.ERPToast.warning('لا يمكن اختيار تاريخ سابق. تم ضبط التاريخ على تاريخ اليوم.');
         dateInput.value = todayStr;
     }
     if (dateInput) {
@@ -583,7 +576,7 @@ async function selectAllMatchingResults() {
         }
     } catch (e) {
         console.error('Error selecting all matching results:', e);
-        alert('تعذر تحديد جميع النتائج المطابقة. حاول مرة أخرى.');
+        window.ERPToast.error('تعذر تحديد جميع النتائج المطابقة. حاول مرة أخرى.');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -697,16 +690,18 @@ async function updateDrawerSelectionState() {
                 const templates = data.templates || [];
                 totalAvailableTemplates += templates.length;
 
+                const esc = window.erpEscapeHtml || (s => String(s ?? ''));
+                const safeAccType = esc(accType);
                 const prevVal = prevSelectedByType[accType] || '';
                 let optionsHtml = '';
                 if (templates.length === 0) {
                     allTypesValid = false;
-                    optionsHtml = `<option value="">-- لا يوجد قوالب مؤهلة لنوع (${accType}) --</option>`;
+                    optionsHtml = `<option value="">-- لا يوجد قوالب مؤهلة لنوع (${safeAccType}) --</option>`;
                 } else {
-                    optionsHtml = `<option value="">-- اختر قالب الزيارة (${accType}) * --</option>`;
+                    optionsHtml = `<option value="">-- اختر قالب الزيارة (${safeAccType}) * --</option>`;
                     templates.forEach(t => {
                         const isSel = (String(t.id) === String(prevVal)) ? 'selected' : '';
-                        optionsHtml += `<option value="${t.id}" ${isSel}>${t.display_name_ar || t.name}</option>`;
+                        optionsHtml += `<option value="${esc(t.id)}" ${isSel}>${esc(t.display_name_ar || t.name)}</option>`;
                     });
                 }
 
@@ -715,14 +710,14 @@ async function updateDrawerSelectionState() {
                         <div class="flex items-center justify-between text-xs font-bold text-teal-900">
                             <span class="flex items-center gap-1">
                                 <span class="material-symbols-outlined text-sm text-[#27bebe]">local_hospital</span>
-                                <span>نوع الحساب: <span class="text-teal-700">${accType}</span></span>
+                                <span>نوع الحساب: <span class="text-teal-700">${safeAccType}</span></span>
                             </span>
                             <span class="text-[10px] bg-teal-50 text-teal-700 font-mono px-2 py-0.5 rounded-full border border-teal-200 font-bold">
                                 ${clientIds.length} عميل
                             </span>
                         </div>
                         <select class="bulk-type-template-select w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]"
-                                data-type="${accType}" required onchange="validateDrawerBulkSubmit()">
+                                data-type="${safeAccType}" required onchange="validateDrawerBulkSubmit()">
                             ${optionsHtml}
                         </select>
                     </div>
@@ -796,37 +791,34 @@ function getActiveFilterParams() {
 }
 
 function updateActiveFilterBadge() {
-    const toggleBtn = document.getElementById('drawer-toggle-btn');
-    const toggleIcon = document.getElementById('drawer-toggle-icon');
-    const badge = document.getElementById('drawer-active-filter-badge');
-    const badgeText = document.getElementById('drawer-active-filter-text');
-
+    const toggleBtn = document.querySelector('[data-filter-drawer-toggle="customer-drawer"]');
     const search = document.getElementById('filter_contact_search')?.value?.trim();
-    const accType = document.getElementById('filter_account_type')?.value?.trim();
+    const accTypesCount = document.querySelectorAll('#drawer-filter-form input[name="account_type"]').length;
     const cat = document.getElementById('filter_customer_category')?.value?.trim();
     const mainAreasCount = document.querySelectorAll('#planned_selected_main_areas_chips input[name="main_area"]').length;
     const areasCount = document.querySelectorAll('#planned_selected_bricks_chips input[name="area"]').length;
 
     let activeCount = 0;
     if (search) activeCount++;
-    if (accType) activeCount++;
+    if (accTypesCount > 0) activeCount += accTypesCount;
     if (cat) activeCount++;
     if (mainAreasCount > 0) activeCount += mainAreasCount;
     if (areasCount > 0) activeCount += areasCount;
 
-    if (activeCount > 0) {
-        if (toggleBtn) {
-            toggleBtn.className = "inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 text-[#1a8b8b] border border-[#27bebe]/60 ring-1 ring-[#27bebe]/30 text-xs font-bold rounded-xl transition-all shadow-xs relative";
+    if (toggleBtn) {
+        let badgeEl = toggleBtn.querySelector('[data-filter-badge]');
+        if (activeCount > 0) {
+            if (!badgeEl) {
+                badgeEl = document.createElement('span');
+                badgeEl.setAttribute('data-filter-badge', '');
+                badgeEl.className = 'absolute -top-1 -right-1 bg-brand-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs leading-none';
+                toggleBtn.appendChild(badgeEl);
+            }
+            badgeEl.textContent = String(activeCount);
+            badgeEl.classList.remove('hidden');
+        } else if (badgeEl) {
+            badgeEl.remove();
         }
-        if (toggleIcon) toggleIcon.classList.add('text-[#27bebe]');
-        if (badge) badge.classList.remove('hidden');
-        if (badgeText) badgeText.textContent = `نشط (${activeCount})`;
-    } else {
-        if (toggleBtn) {
-            toggleBtn.className = "inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-xs relative";
-        }
-        if (toggleIcon) toggleIcon.classList.remove('text-[#27bebe]');
-        if (badge) badge.classList.add('hidden');
     }
 }
 
@@ -933,6 +925,7 @@ function renderDrawerClientsList(contacts, replace = false) {
 
     const targetDate = document.getElementById('drawer-bulk-date')?.value || todayStr;
 
+    const esc = window.erpEscapeHtml || (s => String(s ?? ''));
     contacts.forEach(c => {
         if (loadedContactIds.has(c.id)) return;
         loadedContactIds.add(c.id);
@@ -944,16 +937,16 @@ function renderDrawerClientsList(contacts, replace = false) {
         card.setAttribute('data-contact-id', c.id);
         card.setAttribute('data-account-type', c.account_type || '');
         card.innerHTML = `
-            <input type="checkbox" value="${c.id}" ${isChecked ? 'checked' : ''} onchange="handleClientCheckboxToggle(this)"
+            <input type="checkbox" value="${esc(c.id)}" ${isChecked ? 'checked' : ''} onchange="handleClientCheckboxToggle(this)"
                    class="drawer-client-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
             <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-1">
-                    <p class="font-bold text-slate-800 truncate" title="${c.name}">${c.name}</p>
-                    ${c.customer_category ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة ${c.customer_category}</span>` : ''}
+                    <p class="font-bold text-slate-800 truncate" title="${esc(c.name)}">${esc(c.name)}</p>
+                    ${c.customer_category ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">فئة ${esc(c.customer_category)}</span>` : ''}
                 </div>
                 <div class="text-[10px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
-                    <span>${c.account_type || 'عميل'}</span>
-                    ${c.location_label ? `<span>• ${c.location_label}</span>` : (c.area_name ? `<span>• ${c.area_name}</span>` : '')}
+                    <span>${esc(c.account_type || 'عميل')}</span>
+                    ${c.location_label ? `<span>• ${esc(c.location_label)}</span>` : (c.area_name ? `<span>• ${esc(c.area_name)}</span>` : '')}
                 </div>
             </div>
         `;
@@ -987,7 +980,7 @@ async function loadAllMatchingClients() {
         }
     } catch (e) {
         console.error('Error loading all eligible clients:', e);
-        alert('تعذر تحميل باقي العملاء. يرجى المحاولة مرة أخرى.');
+        window.ERPToast.error('تعذر تحميل باقي العملاء. يرجى المحاولة مرة أخرى.');
     } finally {
         btn.disabled = false;
         btn.innerHTML = `<span class="material-symbols-outlined text-sm">unfold_more</span> <span>عرض جميع العملاء المؤهلين</span>`;
@@ -1005,12 +998,12 @@ async function submitBulkPlanFromDrawer() {
     const dateVal = dateInput ? dateInput.value : '';
 
     if (!dateVal || dateVal < todayStr) {
-        alert('لا يمكن جدولة زيارات في تاريخ سابق. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.');
+        window.ERPToast.warning('لا يمكن جدولة زيارات في تاريخ سابق. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.');
         return;
     }
 
     if (selectedContactIds.size === 0) {
-        alert('يرجى اختيار عميل واحد على الأقل.');
+        window.ERPToast.warning('يرجى اختيار عميل واحد على الأقل.');
         return;
     }
 
@@ -1026,7 +1019,7 @@ async function submitBulkPlanFromDrawer() {
     });
 
     if (missingType) {
-        alert(`يرجى اختيار قالب الزيارة للعملاء من نوع (${missingType}).`);
+        window.ERPToast.warning(`يرجى اختيار قالب الزيارة للعملاء من نوع (${missingType}).`);
         return;
     }
 
@@ -1064,10 +1057,10 @@ async function submitBulkPlanFromDrawer() {
             window.location.reload();
             return;
         }
-        alert(data.message || 'تعذر إنشاء الزيارات المخططة. يرجى التحقق من البيانات.');
+        window.ERPToast.error(data.message || 'تعذر إنشاء الزيارات المخططة. يرجى التحقق من البيانات.');
     } catch (e) {
         console.error('Error submitting bulk plan:', e);
-        alert('حدث خطأ أثناء الاتصال بالخادم. لم يتم حفظ الخطة — يرجى المحاولة مرة أخرى.');
+        window.ERPToast.error('حدث خطأ أثناء الاتصال بالخادم. لم يتم حفظ الخطة — يرجى المحاولة مرة أخرى.');
     } finally {
         isBulkSubmitting = false;
         if (submitBtn) {
@@ -1079,6 +1072,7 @@ async function submitBulkPlanFromDrawer() {
 
 // Auto-scroll, restore drawer state, and highlight target day card when page loads
 window.addEventListener('DOMContentLoaded', () => {
+    updateActiveFilterBadge();
     // 1. Restore bulk date from sessionStorage if valid
     const savedBulkDate = sessionStorage.getItem('wea_planned_bulk_date');
     if (savedBulkDate && savedBulkDate >= todayStr) {

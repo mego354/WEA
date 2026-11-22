@@ -1,35 +1,43 @@
 {% extends 'layouts/base.html' %}
 {% load humanize erp_tags %}
 
-{% block title %}مرتجعات المبيعات - Bricks Rep{% endblock %}
+{% block title %}مرتجعات المبيعات{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'sales_orders_list' %}" class="hover:text-brand-600 transition-colors">المبيعات</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">مرتجعات المبيعات</span>
+{% endblock %}
 
 {% block content %}
 <div class="relative min-h-[calc(100vh-5rem)]">
 
     <!-- 1. Header Section -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-black text-[#27bebe] tracking-tight">مرتجعات المبيعات</h1>
+        <div class="flex items-center gap-3 flex-wrap">
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-brand-600 text-2xl">assignment_return</span>
+                <span>مرتجعات المبيعات</span>
+            </h1>
             <a href="{% url 'sales_orders_list' %}" class="text-xs px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-[#27bebe] font-bold rounded-full border border-teal-200 transition-colors">
                 أوامر البيع
             </a>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- Export to Excel -->
-            <a href="{% url 'sales_return_orders_export' %}?customer={{ selected_customer|default:'' }}&search={{ search_query }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-colors min-h-[40px]"
-               title="تصدير إلى Excel (.xlsx)">
-                <span class="material-symbols-outlined text-base text-emerald-600">file_download</span>
-                <span>تصدير إلى Excel</span>
-            </a>
+            {% url 'sales_return_orders_export' as export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='sales:returns/export' %}
 
             <!-- New Return Order Button -->
+            {% if request.user|has_permission:'sales:returns/create' %}
             <a href="{% url 'sales_return_order_create' %}"
-               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-xl shadow-md shadow-[#27bebe]/20 transition-all min-h-[40px]">
                 <span class="material-symbols-outlined text-base">add</span>
                 <span>أمر إرجاع مبيعات جديد</span>
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -65,6 +73,14 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <form method="GET" class="flex-1 max-w-md relative">
                 {% if selected_customer %}<input type="hidden" name="customer" value="{{ selected_customer }}">{% endif %}
+                {% for st in selected_statuses %}<input type="hidden" name="status" value="{{ st }}">{% endfor %}
+                {% for ma in selected_main_areas_chips %}<input type="hidden" name="main_area" value="{{ ma.id }}">{% endfor %}
+                {% for br in selected_bricks_chips %}<input type="hidden" name="brick" value="{{ br.id }}">{% endfor %}
+                {% if active_preset and active_preset != 'all_time' %}<input type="hidden" name="preset" value="{{ active_preset }}">{% endif %}
+                {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
+                {% if selected_total_min %}<input type="hidden" name="total_min" value="{{ selected_total_min }}">{% endif %}
+                {% if selected_total_max %}<input type="hidden" name="total_max" value="{{ selected_total_max }}">{% endif %}
                 <input type="text" name="search" value="{{ search_query }}" placeholder="بحث بالرقم أو العميل أو أمر البيع..."
                        data-smart-search-module="sales_returns"
                        class="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe] transition-all">
@@ -73,16 +89,7 @@
 
             <div class="flex items-center gap-2">
                 <!-- Slide-out Filter Drawer Button -->
-                <button type="button" onclick="openFilterDrawer()"
-                        class="relative inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>فلترة متقدمة</span>
-                    {% if active_filters_count > 0 %}
-                    <span class="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-[#27bebe] rounded-full">
-                        {{ active_filters_count }}
-                    </span>
-                    {% endif %}
-                </button>
+                {% include 'components/filter_drawer_toggle.html' with active_count=active_filters|length %}
 
                 <!-- Column Visibility Picker -->
                 {% include 'components/table_column_picker.html' with table_id='sales_returns_table' %}
@@ -165,7 +172,7 @@
                                         <span>تصدير PDF</span>
                                     </button>
                                     {% endif %}
-                                    {% if perms.sales.delete_salesreturnorder or user.is_superuser %}
+                                    {% if request.user|has_permission:'sales:returns/delete' %}
                                     <div class="h-px bg-slate-100 my-1"></div>
                                     <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'sales_return_order_delete' r.id %}', title: 'حذف مرتجع المبيعات', itemName: '{{ r.order_number|escapejs }}', message: 'هل أنت متأكد من حذف أمر مرتجع المبيعات {{ r.order_number|escapejs }}؟ سيتم عكس حركات المخزن وتعديل رصيد العميل.', submitText: 'تأكيد الحذف' })"
                                             class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
@@ -189,43 +196,25 @@
             </table>
         </div>
 
-        <!-- Bounded Pagination -->
-        {% if paginator.num_pages > 1 %}
-        <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-xs text-slate-500 font-medium">
-                عرض {{ page_obj.start_index }} إلى {{ page_obj.end_index }} من إجمالي {{ total_count }} مرتجع
-            </span>
-            <div class="flex items-center gap-1">
-                {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}&customer={{ selected_customer|default:'' }}&search={{ search_query }}&total_min={{ selected_total_min|default:'' }}&total_max={{ selected_total_max|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
-                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">السابق</a>
-                {% endif %}
-                <span class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-[#27bebe] font-mono">
-                    {{ page_obj.number }} / {{ paginator.num_pages }}
-                </span>
-                {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}&customer={{ selected_customer|default:'' }}&search={{ search_query }}&total_min={{ selected_total_min|default:'' }}&total_max={{ selected_total_max|default:'' }}&date_from={{ selected_date_from|default:'' }}&date_to={{ selected_date_to|default:'' }}"
-                   class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors">التالي</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        <!-- Standardized Pagination -->
+        {% include 'components/pagination.html' %}
     </div>
 
     <!-- Slide-out Filter Drawer (Contacts Style & Motion) -->
-    <div id="filterDrawerBackdrop" onclick="closeFilterDrawer()" class="fixed inset-0 bg-black/25 z-40 hidden transition-opacity"></div>
-    <div id="filter-drawer" class="erp-filter-drawer" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-        <div class="h-16 border-b border-slate-100 px-5 flex items-center justify-between bg-white">
+    <div id="filterDrawerBackdrop" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+    <aside id="filterDrawer" class="erp-filter-drawer" role="dialog" aria-modal="true">
+        <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-[#27bebe]">فلتر</h2>
-                <span class="w-5 h-5 rounded-full bg-[#27bebe] text-white text-[11px] font-bold flex items-center justify-center">{{ active_filters|length }}</span>
+                <h2 class="text-sm font-bold text-slate-900">فلتر</h2>
+                {% if active_filters %}<span class="bg-brand-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ active_filters|length }}</span>{% endif %}
             </div>
-            <button type="button" onclick="closeFilterDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                <span class="material-symbols-outlined text-xl">arrow_forward</span>
+            <button type="button" onclick="toggleErpFilterDrawer('filterDrawer', 'filterDrawerBackdrop')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
             </button>
         </div>
 
         <form method="GET" class="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
+                    {% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
                     <div>
                         <label class="block font-bold text-slate-700 mb-2">العميل</label>
                         <select name="customer"
@@ -258,33 +247,19 @@
                     {% include 'components/area_brick_multiselect.html' with component_id='sales_returns' area_field_name='main_area' brick_field_name='brick' areas_api_url=sret_areas_url bricks_api_url=sret_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips %}
 
                     <div>
-                        <label class="block font-bold text-slate-700 mb-2">الفترة الزمنية</label>
                         {% include 'components/date_range_filter.html' with date_from=date_from date_to=date_to active_preset=active_preset|default:'all_time' %}
                     </div>
 
-                    <div class="pt-6 border-t border-slate-100 flex items-center justify-end gap-2">
-                        <a href="{% url 'sales_return_orders_list' %}" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50">
+                    <div class="pt-4 border-t border-slate-100 flex items-center gap-2">
+                        <a href="{% url 'sales_return_orders_list' %}" class="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 text-center flex-1">
                             مسح الفلاتر
                         </a>
-                        <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-lg shadow-sm">
+                        <button type="submit" class="px-5 py-2.5 bg-[#27bebe] hover:bg-[#20a3a3] text-white font-bold rounded-xl shadow-sm flex-1">
                             تطبيق
                         </button>
                     </div>
         </form>
-    </div>
+    </aside>
 
 </div>
-
-<script>
-function openFilterDrawer() {
-    document.getElementById('filter-drawer').classList.add('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.remove('hidden');
-}
-function closeFilterDrawer() {
-    document.getElementById('filter-drawer').classList.remove('open');
-    const bd = document.getElementById('filterDrawerBackdrop');
-    if (bd) bd.classList.add('hidden');
-}
-</script>
 {% endblock %}

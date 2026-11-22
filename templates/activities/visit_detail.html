@@ -3,6 +3,14 @@
 
 {% block title %}زيارة #{{ visit.serial_num }}{% endblock %}
 
+{% block breadcrumb %}
+    <a href="{% url 'home' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الرئيسية</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <a href="{% url 'visits_list' %}" class="text-slate-400 hover:text-slate-600 transition-colors">الزيارات</a>
+    <span class="material-symbols-outlined text-sm text-slate-300">chevron_left</span>
+    <span class="font-bold text-slate-800">زيارة #{{ visit.serial_num }}</span>
+{% endblock %}
+
 {% block extra_head %}
 <style>
     .gps-pulse {
@@ -110,7 +118,7 @@
             </button>
             {% endif %}
 
-            {% if visit.status == 'planned' %}
+            {% if visit.status == 'planned' and request.user|has_permission:'activities:visits/edit' %}
             <a href="{% url 'visit_edit' visit.pk %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                 <span class="material-symbols-outlined text-base">edit</span>
                 <span>تعديل بيانات الزيارة</span>
@@ -363,7 +371,7 @@
                     <div class="flex items-center justify-between border-b border-sky-200/80 pb-2">
                         <div class="flex items-center gap-2">
                             <span class="material-symbols-outlined text-sky-600 text-lg">check_circle</span>
-                            <h3 class="text-xs font-bold text-sky-950">بيانات وإجابات بداية الزيارة (Check-in)</h3>
+                            <h3 class="text-xs font-bold text-sky-950">بيانات وإجابات بداية الزيارة</h3>
                         </div>
                         <span class="text-[10px] font-bold bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full border border-sky-200">تم التوثيق عند البدء</span>
                     </div>
@@ -439,7 +447,7 @@
                         <div class="flex items-center gap-2">
                             <span class="material-symbols-outlined text-[#27bebe]">medication</span>
                             <div>
-                                <h2 class="text-sm font-bold text-slate-900">المنتجات المشروحة (Product Detailing)</h2>
+                                <h2 class="text-sm font-bold text-slate-900">المنتجات المشروحة</h2>
                                 <p class="text-[11px] text-teal-700">حدد المنتجات التي تم شرحها للعميل خلال هذه الزيارة</p>
                             </div>
                         </div>
@@ -859,7 +867,7 @@
                 <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
                     <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span class="material-symbols-outlined text-sm text-[#27bebe]">security</span>
-                        <span>نزاهة الموقع (GBS)</span>
+                        <span>نزاهة الموقع (GPS)</span>
                     </h3>
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ visit.gps_integrity_badge_class }}">
                         {{ visit.gps_integrity_status_display_ar }}
@@ -945,7 +953,7 @@
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
                         <span class="text-slate-400">زيارة مزدوجة:</span>
                         <span class="font-bold {% if visit.doubled %}text-purple-600{% else %}text-slate-400{% endif %}">
-                            {% if visit.doubled %}نعم (Double){% else %}فردية{% endif %}
+                            {% if visit.doubled %}نعم{% else %}فردية{% endif %}
                         </span>
                     </div>
                     <div class="flex justify-between items-center py-1 border-b border-slate-50">
@@ -1036,7 +1044,7 @@
                     <span class="material-symbols-outlined text-lg">timeline</span>
                 </div>
                 <div>
-                    <h3 class="text-sm font-black text-slate-900">الخط الزمني الكامل للزيارة (Complete Visit Timeline)</h3>
+                    <h3 class="text-sm font-black text-slate-900">الخط الزمني الكامل للزيارة</h3>
                     <p class="text-[11px] text-slate-500">سجل زمني موحد لجميع مراحل الزيارة: الإنشاء، البدء، التحقق من المسافة، التجاوزات، الإجابات، التعديلات، والاعتمادات</p>
                 </div>
             </div>
@@ -1211,18 +1219,6 @@ function captureLiveCoordinates() {
 function toggleBypassReason() {
     const chk = document.getElementById('force-bypass-chk');
     const reasonBox = document.getElementById('bypass-reason-box');
-    if (chk && reasonBox) {
-        if (chk.checked) {
-            reasonBox.classList.remove('hidden');
-        } else {
-            reasonBox.classList.add('hidden');
-        }
-    }
-}
-
-function toggleExceptionReason() {
-    const chk = document.getElementById('request-exception-chk');
-    const reasonBox = document.getElementById('exception-reason-box');
     if (chk && reasonBox) {
         if (chk.checked) {
             reasonBox.classList.remove('hidden');
@@ -1565,7 +1561,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <label class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-sm text-[#27bebe]">medication</span>
-                            <span>المنتجات المشروحة (Product Detailing)</span>
+                            <span>المنتجات المشروحة</span>
                         </label>
                         <span data-sp-count class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#1a8b8b] border border-teal-200">
                             {{ selected_detailed_product_ids|length }} محدد
@@ -1617,7 +1613,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="flex items-center gap-2.5 text-[#27bebe]">
                 <span class="material-symbols-outlined text-2xl">play_circle</span>
                 <div>
-                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور (Check-in)</h3>
+                    <h3 class="font-black text-slate-900 text-sm">بدء الزيارة وتسجيل الحضور</h3>
                     <p class="text-[11px] text-slate-500">التحقق من الموقع واستكمال أسئلة الحضور لتفعيل الزيارة</p>
                 </div>
             </div>

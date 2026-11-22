@@ -282,6 +282,13 @@
             border-radius: 6px;
             padding: 0 0.75rem;
             font-size: 0.8125rem;
+            color: #1e293b;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .mat-like-control:focus {
+            border-color: #27bebe;
+            box-shadow: 0 0 0 2px rgba(39, 190, 190, 0.2);
         }
     </style>
 
@@ -299,6 +306,16 @@
                 if (backdrop) backdrop.classList.remove('hidden');
             }
         };
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.erp-filter-drawer.open, .filter-drawer.open').forEach(function(d) {
+                    d.classList.remove('open');
+                });
+                document.querySelectorAll('#filterDrawerBackdrop, #filter-backdrop').forEach(function(b) {
+                    b.classList.add('hidden');
+                });
+            }
+        });
     </script>
     <!-- Leaflet Maps CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -492,7 +509,7 @@
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-purchases')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-purchases' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-purchases' %}text-brand-600 material-symbols-fill{% endif %}">storefront</span>
+                        <span class="material-symbols-outlined text-xl {% if active_nav.section == 'submenu-purchases' %}text-brand-600 material-symbols-fill{% endif %}">shopping_cart</span>
                         <span>المشتريات</span>
                     </div>
                     <span id="arrow-purchases" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-purchases' %}rotate-180{% endif %}">expand_more</span>
@@ -551,13 +568,22 @@
                 </button>
                 <div id="submenu-inventory" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-inventory' %}hidden{% endif %}">
                     {% if request.user|has_permission:'inventory:stocks/view' %}
-                    <a href="{% url 'inventory_stock_list' %}" data-erp-nav-item="inventory_stock" {% if active_nav.item == 'inventory_stock' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_stock' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">أرصدة المخزون والتشغيلات</a>
+                    <a href="{% url 'inventory_stock_list' %}" data-erp-nav-item="inventory_stock" {% if active_nav.item == 'inventory_stock' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_stock' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'inventory_stock' %}text-[#27bebe] material-symbols-fill{% endif %}">inventory_2</span>
+                        <span>أرصدة المخزون والتشغيلات</span>
+                    </a>
                     {% endif %}
-                    {% if request.user|has_permission:'inventory:warehouses/manage' %}
-                    <a href="{% url 'warehouses_list' %}" data-erp-nav-item="warehouses" {% if active_nav.item == 'warehouses' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'warehouses' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">المخازن</a>
+                    {% if request.user|has_permission:'inventory:warehouses/manage' or request.user|has_permission:'inventory:stocks/view' %}
+                    <a href="{% url 'warehouses_list' %}" data-erp-nav-item="warehouses" {% if active_nav.item == 'warehouses' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'warehouses' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'warehouses' %}text-[#27bebe] material-symbols-fill{% endif %}">warehouse</span>
+                        <span>المخازن</span>
+                    </a>
                     {% endif %}
                     {% if request.user|has_permission:'inventory:memos/manage' %}
-                    <a href="{% url 'inventory_memos_list' %}" data-erp-nav-item="inventory_memos" {% if active_nav.item == 'inventory_memos' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_memos' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">أذونات المخزن (إضافة وصرف)</a>
+                    <a href="{% url 'inventory_memos_list' %}" data-erp-nav-item="inventory_memos" {% if active_nav.item == 'inventory_memos' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'inventory_memos' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'inventory_memos' %}text-[#27bebe] material-symbols-fill{% endif %}">swap_vert</span>
+                        <span>أذونات المخزن (إضافة وصرف)</span>
+                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -575,10 +601,16 @@
                 </button>
                 <div id="submenu-treasury" class="pr-9 pl-2 space-y-1 {% if active_nav.section != 'submenu-treasury' %}hidden{% endif %}">
                     {% if request.user|has_permission:'treasury:vaults/view' %}
-                    <a href="{% url 'vaults_list' %}" data-erp-nav-item="vaults" {% if active_nav.item == 'vaults' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vaults' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">الخزن النقدية والحسابات</a>
+                    <a href="{% url 'vaults_list' %}" data-erp-nav-item="vaults" {% if active_nav.item == 'vaults' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vaults' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'vaults' %}text-[#27bebe] material-symbols-fill{% endif %}">account_balance</span>
+                        <span>الخزن النقدية والحسابات</span>
+                    </a>
                     {% endif %}
                     {% if request.user|has_permission:'treasury:transactions/list' %}
-                    <a href="{% url 'vault_transactions_list' %}" data-erp-nav-item="vault_transactions" {% if active_nav.item == 'vault_transactions' %}data-erp-active-link="1"{% endif %} class="block px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vault_transactions' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">حركات النقدية</a>
+                    <a href="{% url 'vault_transactions_list' %}" data-erp-nav-item="vault_transactions" {% if active_nav.item == 'vault_transactions' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-2 text-xs rounded-lg min-h-[38px] transition-colors {% if active_nav.item == 'vault_transactions' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-brand-600 hover:bg-slate-50{% endif %}">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'vault_transactions' %}text-[#27bebe] material-symbols-fill{% endif %}">sync_alt</span>
+                        <span>حركات النقدية</span>
+                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -685,7 +717,7 @@
             {% endif %}
 
             <!-- Settings -->
-            {% if request.user|can_access_module:'settings' or request.user|is_super_admin %}
+            {% if request.user|can_access_module:'settings' or request.user|has_permission:'users:users/list' or request.user|is_super_admin %}
             <div class="space-y-1 pt-1">
                 <button type="button" onclick="toggleSubmenu('submenu-settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium {% if active_nav.section == 'submenu-settings' %}bg-brand-50 text-brand-700 font-bold{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %} transition-colors min-h-[44px]">
                     <div class="flex items-center gap-3">
@@ -695,15 +727,19 @@
                     <span id="arrow-settings" class="material-symbols-outlined text-base transition-transform {% if active_nav.section == 'submenu-settings' %}rotate-180{% endif %}">expand_more</span>
                 </button>
                 <div id="submenu-settings" class="pr-6 pl-2 space-y-0.5 {% if active_nav.section == 'submenu-settings' %}block{% else %}hidden{% endif %}">
-                    {% if request.user|is_super_admin %}
+                    {% if request.user|is_super_admin or request.user|has_permission:'users:users/list' %}
                     <a href="{% url 'users_list' %}" data-erp-nav-item="users" {% if active_nav.item == 'users' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'users' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base {% if active_nav.item == 'users' %}text-[#27bebe] material-symbols-fill{% endif %}">group</span>
                         <span>المستخدمون</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|is_super_admin %}
                     <a href="{% url 'roles_list' %}" data-erp-nav-item="roles" {% if active_nav.item == 'roles' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'roles' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base {% if active_nav.item == 'roles' %}text-[#27bebe] material-symbols-fill{% endif %}">shield_person</span>
                         <span>الأدوار والصلاحيات</span>
                     </a>
+                    {% endif %}
+                    {% if request.user|is_super_admin or request.user|has_permission:'settings:auditLogs/view' %}
                     <a href="{% url 'audit_logs_list' %}" data-erp-nav-item="audit_logs" {% if active_nav.item == 'audit_logs' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'audit_logs' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base {% if active_nav.item == 'audit_logs' %}text-[#27bebe] material-symbols-fill{% endif %}">history</span>
                         <span>سجل التدقيق الأمني</span>
@@ -742,7 +778,25 @@
                     {% if request.user|has_permission:'settings:agreements/manage' %}
                     <a href="{% url 'agreements_settings' %}" data-erp-nav-item="agreements_settings" {% if active_nav.item == 'agreements_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'agreements_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
                         <span class="material-symbols-outlined text-base {% if active_nav.item == 'agreements_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">handshake</span>
-                        <span>انواع الاتفاقيات</span>
+                        <span>أنواع الاتفاقيات</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:expenses/manage' %}
+                    <a href="{% url 'expenses_settings' %}" data-erp-nav-item="expenses_settings" {% if active_nav.item == 'expenses_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'expenses_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'expenses_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">receipt_long</span>
+                        <span>أنواع المصروفات</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:tickets/manage' %}
+                    <a href="{% url 'tickets_settings' %}" data-erp-nav-item="tickets_settings" {% if active_nav.item == 'tickets_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'tickets_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'tickets_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">task_alt</span>
+                        <span>أنواع المهام</span>
+                    </a>
+                    {% endif %}
+                    {% if request.user|has_permission:'settings:requests/manage' %}
+                    <a href="{% url 'requests_settings' %}" data-erp-nav-item="requests_settings" {% if active_nav.item == 'requests_settings' %}data-erp-active-link="1"{% endif %} class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-colors {% if active_nav.item == 'requests_settings' %}bg-teal-50 text-[#27bebe] font-bold border-r-2 border-[#27bebe]{% else %}text-slate-600 hover:text-[#27bebe] hover:bg-slate-50{% endif %} min-h-[34px]">
+                        <span class="material-symbols-outlined text-base {% if active_nav.item == 'requests_settings' %}text-[#27bebe] material-symbols-fill{% endif %}">approval</span>
+                        <span>أنواع الطلبات والموافقات</span>
                     </a>
                     {% endif %}
                     {% if request.user|has_permission:'settings:sales/manage' %}
@@ -946,23 +1000,31 @@
             </a>
             {% endif %}
 
-            <!-- 2. امر بيع جديد -->
+            <!-- 2. أمر بيع جديد -->
             {% if request.user|has_permission:'sales:orders/create' %}
             <a href="{% url 'sales_order_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
-                <span class="material-symbols-outlined text-2xl text-slate-600">shopping_cart</span>
-                <span class="text-sm font-bold text-slate-800">امر بيع جديد</span>
+                <span class="material-symbols-outlined text-2xl text-slate-600">shopping_bag</span>
+                <span class="text-sm font-bold text-slate-800">أمر بيع جديد</span>
             </a>
             {% endif %}
 
-            <!-- 3. مرتجع جديد -->
+            <!-- 3. مرتجع مبيعات جديد -->
+            {% if request.user|has_permission:'sales:returns/create' %}
+            <a href="{% url 'sales_return_order_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
+                <span class="material-symbols-outlined text-2xl text-slate-600">assignment_return</span>
+                <span class="text-sm font-bold text-slate-800">مرتجع مبيعات جديد</span>
+            </a>
+            {% endif %}
+
+            <!-- 4. مرتجع مشتريات جديد -->
             {% if request.user|has_permission:'purchases:returns/create' %}
             <a href="{% url 'purchase_return_order_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-slate-600">refresh</span>
-                <span class="text-sm font-bold text-slate-800">مرتجع جديد</span>
+                <span class="text-sm font-bold text-slate-800">مرتجع مشتريات جديد</span>
             </a>
             {% endif %}
 
-            <!-- 4. تحصيل جديد -->
+            <!-- 5. تحصيل جديد -->
             {% if request.user|has_permission:'sales:collections/create' %}
             <a href="{% url 'collection_create' %}" class="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-right transition-colors block">
                 <span class="material-symbols-outlined text-2xl text-slate-600">receipt</span>
@@ -970,9 +1032,9 @@
             </a>
             {% endif %}
 
-            <!-- 5. الغاء -->
+            <!-- 6. إلغاء -->
             <button type="button" onclick="closeQuickAddBottomSheet()" class="w-full py-4 text-center text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors">
-                الغاء
+                إلغاء
             </button>
         </div>
     </div>
@@ -985,6 +1047,7 @@
     {% include 'components/attachments_modal.html' %}
     {% include 'components/pdf_export_modal.html' %}
     {% include 'components/row_action_menu.html' %}
+    {% include 'components/toast_container.html' %}
 
     <!-- Script for sidebar toggle, bottom sheet, submenus, and mobile refresh -->
     <script>
@@ -1439,6 +1502,8 @@
     <script src="{% static 'js/list_smart_search.js' %}"></script>
     <!-- Reusable Table Column Manager -->
     <script src="{% static 'js/table_column_manager.js' %}"></script>
+    <!-- Unified Compact Date Range Filter -->
+    <script src="{% static 'js/date_range_filter.js' %}"></script>
     {% if request.user.is_authenticated %}
     <!-- Capacitor-ready Notifications Client + Header Bell UI -->
     <script src="{% static 'js/notifications_client.js' %}"></script>

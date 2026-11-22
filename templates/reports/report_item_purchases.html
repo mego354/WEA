@@ -1,35 +1,36 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}مشتريات الأصناف وتحليلات الموردين — WEA Pharma ERP{% endblock %}
+{% block title %}مشتريات الأصناف وتحليلات الموردين{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'reports_hub' %}" class="hover:text-brand-600 transition-colors">بوابة التقارير</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">مشتريات الأصناف والموردين</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-            <div class="flex items-center gap-2 mb-1">
-                <a href="{% url 'reports_hub' %}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
-                    <span>العودة لبوابة التقارير</span>
-                </a>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">shopping_cart_checkout</span>
             </div>
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-3xl">shopping_cart_checkout</span>
-                <span>مشتريات الأصناف وتحليلات الموردين (Item Purchases & Spend)</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                تحليل المشتريات ومصروفات الشراء ومتوسط سعر التكلفة للوحدة حسب الموردين والمخزون.
-            </p>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">مشتريات الأصناف وتحليلات الموردين</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    تحليل المشتريات ومصروفات الشراء ومتوسط سعر التكلفة للوحدة حسب الموردين والمخزون.
+                </p>
+            </div>
         </div>
 
-        <div class="flex items-center gap-2 self-start sm:self-auto">
+        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             {% include 'components/table_column_picker.html' with table_id='report_item_purchases_table' %}
-            {% if request.user|has_permission:'reports:inventory/export' %}
-            <a href="{% url 'report_item_purchases_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير Excel</span>
-            </a>
-            {% endif %}
+            {% url 'report_item_purchases_export' as ip_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=ip_export_url export_perm='reports:inventory/export' %}
         </div>
     </div>
 
@@ -37,42 +38,27 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">إجمالي المنصرف على المشتريات</span>
-            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ summary.total_spend|floatformat:2 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
+            <span class="text-2xl font-black text-slate-900 mt-1 block font-mono">{{ summary.total_spend|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
         </div>
 
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">عدد بنود الأصناف المشتراة</span>
-            <span class="text-2xl font-black text-brand-600 mt-1 block">{{ summary.items_count }}</span>
+            <span class="text-2xl font-black text-brand-600 mt-1 block font-mono">{{ summary.items_count }}</span>
         </div>
     </div>
 
     <!-- Filters Bar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-        <form method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">الفترة الزمنية</label>
-                <select name="period" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
-                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي</option>
-                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
-                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
-                    <option value="year" {% if period == 'year' %}selected{% endif %}>العام الحالي</option>
-                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة</option>
-                </select>
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+            <div class="md:col-span-2">
+                {% include 'components/date_range_filter.html' with preset_name='period' from_name='start_date' to_name='end_date' active_preset=period|default:'this_month' date_from=start_date date_to=end_date allow_all_time=False include_quarter=True year_value='year' %}
             </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
-                <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
-                <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
-            </div>
-
-            <div>
-                <button type="submit" class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_alt</span>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
                     <span>تصفية</span>
                 </button>
+                <a href="{% url 'report_item_purchases' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold min-h-[40px] inline-flex items-center">إعادة تعيين</a>
             </div>
         </form>
     </div>
@@ -83,25 +69,25 @@
             <table id="report_item_purchases_table" data-col-table="report_item_purchases_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <tr>
-                        <th class="py-3 px-3" data-col="code">كود الصنف</th>
-                        <th class="py-3 px-3" data-col="name" data-col-required="true">اسم المنتج / الصنف</th>
-                        <th class="py-3 px-3" data-col="supplier">المورد</th>
-                        <th class="py-3 px-3 text-center" data-col="quantity" data-col-required="true">الكمية المشتراة</th>
-                        <th class="py-3 px-3 text-left font-bold text-slate-900" data-col="spend">إجمالي المنصرف (ج.م)</th>
-                        <th class="py-3 px-3 text-left" data-col="avg_cost">متوسط تكلفة الشراء للوحدة</th>
-                        <th class="py-3 px-3 text-center font-bold text-emerald-600" data-col="current_stock">الرصيد الحالي بالمخزن</th>
+                        <th class="py-3 px-3" data-col="code" data-col-label="كود الصنف">كود الصنف</th>
+                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-10" data-col="name" data-col-label="اسم المنتج" data-required="true">اسم المنتج / الصنف</th>
+                        <th class="py-3 px-3" data-col="supplier" data-col-label="المورد">المورد</th>
+                        <th class="py-3 px-3 text-center" data-col="quantity" data-col-label="الكمية المشتراة" data-required="true">الكمية المشتراة</th>
+                        <th class="py-3 px-3 text-left font-bold text-slate-900" data-col="spend" data-col-label="إجمالي المنصرف">إجمالي المنصرف (ج.م)</th>
+                        <th class="py-3 px-3 text-left" data-col="avg_cost" data-col-label="متوسط التكلفة">متوسط تكلفة الشراء للوحدة</th>
+                        <th class="py-3 px-3 text-center font-bold text-emerald-600" data-col="current_stock" data-col-label="الرصيد بالمخزن">الرصيد الحالي بالمخزن</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     {% for r in rows %}
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="py-3 px-3 font-mono text-slate-500">{{ r.code }}</td>
-                        <td class="py-3 px-3 font-bold text-slate-900">{{ r.name }}</td>
-                        <td class="py-3 px-3 text-slate-700">{{ r.supplier_name }}</td>
-                        <td class="py-3 px-3 text-center font-mono font-bold text-brand-600">{{ r.quantity }}</td>
-                        <td class="py-3 px-3 text-left font-mono font-black text-slate-900">{{ r.spend|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono text-slate-600">{{ r.avg_cost|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-center font-mono font-bold text-emerald-700">{{ r.current_stock }}</td>
+                        <td data-col="code" class="py-3 px-3 font-mono text-slate-500">{{ r.code }}</td>
+                        <td data-col="name" class="py-3 px-3 font-bold text-slate-900 sticky right-0 bg-white z-10">{{ r.name }}</td>
+                        <td data-col="supplier" class="py-3 px-3 text-slate-700">{{ r.supplier_name }}</td>
+                        <td data-col="quantity" class="py-3 px-3 text-center font-mono font-bold text-brand-600">{{ r.quantity }}</td>
+                        <td data-col="spend" class="py-3 px-3 text-left font-mono font-black text-slate-900">{{ r.spend|floatformat:2 }}</td>
+                        <td data-col="avg_cost" class="py-3 px-3 text-left font-mono text-slate-600">{{ r.avg_cost|floatformat:2 }}</td>
+                        <td data-col="current_stock" class="py-3 px-3 text-center font-mono font-bold text-emerald-700">{{ r.current_stock }}</td>
                     </tr>
                     {% empty %}
                     <tr>

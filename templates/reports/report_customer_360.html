@@ -1,35 +1,36 @@
 {% extends 'layouts/base.html' %}
+{% load erp_tags %}
 
-{% block title %}ملخص العملاء 360 الشامل — WEA Pharma ERP{% endblock %}
+{% block title %}ملخص العملاء 360{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<a href="{% url 'reports_hub' %}" class="hover:text-brand-600 transition-colors">بوابة التقارير</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">ملخص العملاء 360</span>
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-            <div class="flex items-center gap-2 mb-1">
-                <a href="{% url 'reports_hub' %}" class="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
-                    <span>العودة لبوابة التقارير</span>
-                </a>
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">person_search</span>
             </div>
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span class="material-symbols-outlined text-brand-600 text-3xl">person_search</span>
-                <span>ملخص العملاء 360 الشامل (Customer 360 Matrix)</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                كشف تفصيلي من 22 عموداً يدمج الزيارات، المبيعات، الخصومات، المرتجعات، والتحصيلات والمديونيات.
-            </p>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">ملخص العملاء 360 الشامل</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    كشف تفصيلي من 18 عموداً يدمج الزيارات والمبيعات والخصومات والمرتجعات والتحصيلات والمديونيات.
+                </p>
+            </div>
         </div>
 
-        <div class="flex items-center gap-2 self-start sm:self-auto">
+        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             {% include 'components/table_column_picker.html' with table_id='report_customer_360_table' %}
-            {% if request.user|has_permission:'reports:sales/export' %}
-            <a href="{% url 'report_customer_360_export' %}?period={{ period }}&start_date={{ start_date }}&end_date={{ end_date }}&area={{ selected_area }}" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs">
-                <span class="material-symbols-outlined text-base">download</span>
-                <span>تصدير Excel</span>
-            </a>
-            {% endif %}
+            {% url 'report_customer_360_export' as c360_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=c360_export_url export_perm='reports:sales/export' %}
         </div>
     </div>
 
@@ -37,50 +38,35 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">إجمالي العملاء المشمولين</span>
-            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ summary.total_customers }}</span>
+            <span class="text-2xl font-black text-slate-900 mt-1 block font-mono">{{ summary.total_customers }}</span>
         </div>
 
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">صافي المبيعات المحققة</span>
-            <span class="text-2xl font-black text-brand-600 mt-1 block">{{ summary.total_net_sales|floatformat:2 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
+            <span class="text-2xl font-black text-brand-600 mt-1 block font-mono">{{ summary.total_net_sales|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
         </div>
 
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">إجمالي التحصيلات</span>
-            <span class="text-2xl font-black text-emerald-600 mt-1 block">{{ summary.total_collections|floatformat:2 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
+            <span class="text-2xl font-black text-emerald-600 mt-1 block font-mono">{{ summary.total_collections|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
         </div>
 
         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <span class="text-xs font-bold text-slate-500 block">إجمالي المديونية القائمة</span>
-            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ summary.total_debt|floatformat:2 }} <span class="text-xs font-bold text-slate-400">ج.م</span></span>
+            <span class="text-2xl font-black text-slate-900 mt-1 block font-mono">{{ summary.total_debt|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span></span>
         </div>
     </div>
 
     <!-- Filters Bar -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-        <form method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
             <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">الفترة الزمنية</label>
-                <select name="period" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
-                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>الشهر الحالي</option>
-                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
-                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>آخر 90 يوماً</option>
-                    <option value="year" {% if period == 'year' %}selected{% endif %}>العام الحالي</option>
-                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>فترة مخصصة</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">من تاريخ</label>
-                <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">إلى تاريخ</label>
-                <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="w-full text-xs font-mono border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 min-h-[38px]">
+                {% include 'components/date_range_filter.html' with preset_name='period' from_name='start_date' to_name='end_date' active_preset=period|default:'this_month' date_from=start_date date_to=end_date allow_all_time=False include_quarter=True year_value='year' %}
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">المحافظة / المنطقة</label>
-                <select name="area" onchange="this.form.submit();" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[38px]">
+                <select name="area" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
                     <option value="">كافة المناطق</option>
                     {% for a in areas %}
                     <option value="{{ a.id }}" {% if selected_area == a.id %}selected{% endif %}>{{ a.name }}</option>
@@ -88,65 +74,66 @@
                 </select>
             </div>
 
-            <div>
-                <button type="submit" class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-colors min-h-[38px]">
-                    <span class="material-symbols-outlined text-base">filter_alt</span>
+            <div class="md:pt-5 flex items-center gap-2">
+                <button type="submit" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold transition-colors min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">filter_list</span>
                     <span>تصفية</span>
                 </button>
+                <a href="{% url 'report_customer_360' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold min-h-[40px] inline-flex items-center">إعادة تعيين</a>
             </div>
         </form>
     </div>
 
-    <!-- 22-Column Data Table -->
+    <!-- 18-Column Data Table -->
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table id="report_customer_360_table" data-col-table="report_customer_360_table" class="w-full text-right text-xs whitespace-nowrap">
                 <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs" data-col="customer" data-col-required="true">العميل</th>
-                        <th class="py-3 px-3" data-col="type">النوع</th>
-                        <th class="py-3 px-3 text-center" data-col="category">التصنيف</th>
-                        <th class="py-3 px-3" data-col="area">المحافظة</th>
-                        <th class="py-3 px-3" data-col="brick">المربع</th>
-                        <th class="py-3 px-3" data-col="rep">المندوب</th>
-                        <th class="py-3 px-3 text-center" data-col="visits">الزيارات</th>
-                        <th class="py-3 px-3 text-center" data-col="last_visit">آخر زيارة</th>
-                        <th class="py-3 px-3 text-center" data-col="orders">أوامر البيع</th>
-                        <th class="py-3 px-3 text-left" data-col="gross_sales">إجمالي المبيعات</th>
-                        <th class="py-3 px-3 text-left" data-col="discounts">الخصومات</th>
-                        <th class="py-3 px-3 text-left" data-col="net_sales" data-col-required="true">صافي المبيعات</th>
-                        <th class="py-3 px-3 text-left" data-col="returns">المرتجعات</th>
-                        <th class="py-3 px-3 text-left" data-col="collections">التحصيلات</th>
-                        <th class="py-3 px-3 text-left font-bold text-slate-900" data-col="debit_balance">الرصيد المدين</th>
-                        <th class="py-3 px-3 text-left text-rose-600 font-bold" data-col="overdue">المتأخرات</th>
-                        <th class="py-3 px-3 text-left" data-col="credit_limit">الحد الائتماني</th>
-                        <th class="py-3 px-3 text-center" data-col="limit_usage">استهلاك الحد %</th>
+                        <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs" data-col="customer" data-col-label="العميل" data-required="true">العميل</th>
+                        <th class="py-3 px-3" data-col="type" data-col-label="النوع">النوع</th>
+                        <th class="py-3 px-3 text-center" data-col="category" data-col-label="التصنيف">التصنيف</th>
+                        <th class="py-3 px-3" data-col="area" data-col-label="المحافظة">المحافظة</th>
+                        <th class="py-3 px-3" data-col="brick" data-col-label="المربع">المربع</th>
+                        <th class="py-3 px-3" data-col="rep" data-col-label="المندوب">المندوب</th>
+                        <th class="py-3 px-3 text-center" data-col="visits" data-col-label="الزيارات">الزيارات</th>
+                        <th class="py-3 px-3 text-center" data-col="last_visit" data-col-label="آخر زيارة">آخر زيارة</th>
+                        <th class="py-3 px-3 text-center" data-col="orders" data-col-label="أوامر البيع">أوامر البيع</th>
+                        <th class="py-3 px-3 text-left" data-col="gross_sales" data-col-label="إجمالي المبيعات">إجمالي المبيعات</th>
+                        <th class="py-3 px-3 text-left" data-col="discounts" data-col-label="الخصومات">الخصومات</th>
+                        <th class="py-3 px-3 text-left" data-col="net_sales" data-col-label="صافي المبيعات" data-required="true">صافي المبيعات</th>
+                        <th class="py-3 px-3 text-left" data-col="returns" data-col-label="المرتجعات">المرتجعات</th>
+                        <th class="py-3 px-3 text-left" data-col="collections" data-col-label="التحصيلات">التحصيلات</th>
+                        <th class="py-3 px-3 text-left font-bold text-slate-900" data-col="debit_balance" data-col-label="الرصيد المدين">الرصيد المدين</th>
+                        <th class="py-3 px-3 text-left text-rose-600 font-bold" data-col="overdue" data-col-label="المتأخرات">المتأخرات</th>
+                        <th class="py-3 px-3 text-left" data-col="credit_limit" data-col-label="الحد الائتماني">الحد الائتماني</th>
+                        <th class="py-3 px-3 text-center" data-col="limit_usage" data-col-label="استهلاك الحد %">استهلاك الحد %</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     {% for r in rows %}
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="py-3 px-3 font-bold text-slate-900 sticky right-0 bg-white hover:bg-slate-50 z-10 shadow-xs">
+                        <td data-col="customer" class="py-3 px-3 font-bold text-slate-900 sticky right-0 bg-white hover:bg-slate-50 z-10 shadow-xs">
                             {{ r.name }}
                             <span class="block text-[10px] text-slate-400 font-normal">#{{ r.code }}</span>
                         </td>
-                        <td class="py-3 px-3 text-slate-600">{{ r.account_type }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-slate-700">{{ r.category }}</td>
-                        <td class="py-3 px-3 text-slate-600">{{ r.governorate }}</td>
-                        <td class="py-3 px-3 text-slate-600">{{ r.brick }}</td>
-                        <td class="py-3 px-3 text-slate-700 font-medium">{{ r.rep_name }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-brand-600">{{ r.visits_cnt }}</td>
-                        <td class="py-3 px-3 text-center font-mono text-slate-500">{{ r.last_v_date|default:'–' }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-slate-900">{{ r.orders_cnt }}</td>
-                        <td class="py-3 px-3 text-left font-mono text-slate-700">{{ r.gross_sales|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono text-rose-600">{{ r.items_disc|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono font-bold text-brand-600">{{ r.net_sales|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono text-slate-600">{{ r.returns_total|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono font-bold text-emerald-600">{{ r.collections_total|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono font-bold text-slate-900">{{ r.balance|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono font-bold text-rose-600">{{ r.overdue|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-left font-mono text-slate-500">{{ r.credit_limit|floatformat:2 }}</td>
-                        <td class="py-3 px-3 text-center font-bold text-slate-700">{{ r.util_pct }}%</td>
+                        <td data-col="type" class="py-3 px-3 text-slate-600">{{ r.account_type }}</td>
+                        <td data-col="category" class="py-3 px-3 text-center font-bold text-slate-700">{{ r.category }}</td>
+                        <td data-col="area" class="py-3 px-3 text-slate-600">{{ r.governorate }}</td>
+                        <td data-col="brick" class="py-3 px-3 text-slate-600">{{ r.brick }}</td>
+                        <td data-col="rep" class="py-3 px-3 text-slate-700 font-medium">{{ r.rep_name }}</td>
+                        <td data-col="visits" class="py-3 px-3 text-center font-bold text-brand-600">{{ r.visits_cnt }}</td>
+                        <td data-col="last_visit" class="py-3 px-3 text-center font-mono text-slate-500">{{ r.last_v_date|default:'–' }}</td>
+                        <td data-col="orders" class="py-3 px-3 text-center font-bold text-slate-900">{{ r.orders_cnt }}</td>
+                        <td data-col="gross_sales" class="py-3 px-3 text-left font-mono text-slate-700">{{ r.gross_sales|floatformat:2 }}</td>
+                        <td data-col="discounts" class="py-3 px-3 text-left font-mono text-rose-600">{{ r.items_disc|floatformat:2 }}</td>
+                        <td data-col="net_sales" class="py-3 px-3 text-left font-mono font-bold text-brand-600">{{ r.net_sales|floatformat:2 }}</td>
+                        <td data-col="returns" class="py-3 px-3 text-left font-mono text-slate-600">{{ r.returns_total|floatformat:2 }}</td>
+                        <td data-col="collections" class="py-3 px-3 text-left font-mono font-bold text-emerald-600">{{ r.collections_total|floatformat:2 }}</td>
+                        <td data-col="debit_balance" class="py-3 px-3 text-left font-mono font-bold text-slate-900">{{ r.balance|floatformat:2 }}</td>
+                        <td data-col="overdue" class="py-3 px-3 text-left font-mono font-bold text-rose-600">{{ r.overdue|floatformat:2 }}</td>
+                        <td data-col="credit_limit" class="py-3 px-3 text-left font-mono text-slate-500">{{ r.credit_limit|floatformat:2 }}</td>
+                        <td data-col="limit_usage" class="py-3 px-3 text-center font-bold text-slate-700">{{ r.util_pct }}%</td>
                     </tr>
                     {% empty %}
                     <tr>
