@@ -17,6 +17,7 @@ ERP/
 ├── purchases/              # Purchase orders, stock receiving, supplier invoice settlement, return orders
 ├── sales/                  # Sales orders, collections, customer ledgers, payment terms, returns
 ├── treasury/               # Cash vaults, deposits, withdrawals, internal transfers, vendor payments
+├── notifications/          # Centralized Capacitor-ready notifications (60 events, RoleNotificationRule, /api/v1/notifications/, device registry)
 ├── config/                 # Django settings, root URL routing, WSGI/ASGI handlers
 ├── templates/              # Server-rendered HTML templates (Tailwind RTL, components, layouts)
 ├── static/                 # Static assets (JS table column manager, styles)
@@ -58,7 +59,7 @@ flowchart TD
 erDiagram
     User ||--o{ Area : "assigned_areas (M2M)"
     Area ||--o{ Area : "parent (governorate -> subarea)"
-    User }|--|| Role : "assigned_role"
+    User }|--|| Role : "role"
     Role ||--o{ RoleModuleScope : "base_scopes"
     User ||--o{ UserModuleScope : "custom_scopes"
     Contact }|--|| Area : "area (governorate)"
@@ -96,7 +97,7 @@ erDiagram
    - Custom user model extending `AbstractUser`.
    - Single canonical `Role` (`superadmin`, `manager`, `accountant`, `rep`, `medical_rep`).
    - Many-to-Many `assigned_areas` representing authorized territorial boundaries.
-   - `has_custom_permissions` boolean determining whether permissions are inherited from `Role` or directly from `user_permissions`.
+   - Permissions and module scopes are inherited strictly from the assigned `Role` (managed via the 3-tab Role Settings UI: Basic & Scopes, Permissions Matrix, and Notification Rules). Individual per-user permission override screens have been removed.
    - Automatically provisions dedicated warehouse and cash vault for representatives on user creation or role assignment (`ensure_representative_resources`).
 
 2. **Area (`master_data.Area`)**:

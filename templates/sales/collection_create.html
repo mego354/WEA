@@ -11,22 +11,48 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-6">
+<div class="max-w-2xl mx-auto space-y-5">
 
     <!-- Header -->
     <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">تسجيل سند تحصيل نقدية</h1>
-        <p class="text-sm text-slate-500 mt-0.5">إيداع مبالغ محصلة في الخزنة وإثبات سداد العميل في كشف الحساب</p>
+        <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">تسجيل سند تحصيل نقدية</h1>
+        <p class="text-xs sm:text-sm text-slate-500 mt-0.5">إيداع مبالغ محصلة في الخزنة وإثبات سداد العميل في كشف الحساب</p>
+    </div>
+
+    <!-- A. Overall Customer Account Balance Card (Strictly Separate from Order Remaining Balance) -->
+    <div id="customerAccountBalanceCard" class="{% if selected_customer_balance is None %}hidden{% endif %} bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-10 h-10 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
+                </div>
+                <div class="min-w-0">
+                    <span class="text-[11px] font-bold text-slate-500 block">إجمالي رصيد حساب العميل الكلي</span>
+                    <span id="customerAccountBalanceName" class="text-xs font-bold text-slate-800 truncate block">{{ selected_customer_name }}</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                <div class="text-left">
+                    <span id="customerAccountBalanceVal" class="text-lg sm:text-xl font-black font-mono {% if selected_customer_balance and selected_customer_balance > 0 %}text-rose-600{% elif selected_customer_balance and selected_customer_balance < 0 %}text-emerald-600{% else %}text-slate-700{% endif %}">
+                        {% if selected_customer_balance is not None %}{{ selected_customer_balance|stringformat:".2f" }}{% else %}0.00{% endif %}
+                    </span>
+                    <span class="text-xs font-bold text-slate-500 mr-0.5">ج.م</span>
+                    <span id="customerAccountBalanceTag" class="block text-[10px] font-bold text-slate-400">
+                        {% if selected_customer_balance and selected_customer_balance > 0 %}رصيد مدين مستحق على العميل{% elif selected_customer_balance and selected_customer_balance < 0 %}رصيد دائن لصالح العميل{% else %}الحساب متوازن{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Form Card -->
-    <div class="bg-white rounded-3xl border border-slate-200/80 p-6 md:p-8 shadow-sm">
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-7 shadow-sm">
         <form method="POST" enctype="multipart/form-data" action="{% url 'collection_create' %}" class="space-y-5">
             {% csrf_token %}
 
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">العميل <span class="text-rose-500">*</span></label>
-                <select name="customer" id="customerSelect" required onchange="filterSalesOrders()"
+                <select name="customer" id="customerSelect" required onchange="onCustomerChanged()"
                         data-smart-select="true"
                         data-search-url="{% url 'sales_customers_search_api' %}"
                         data-search-placeholder="ابحث باسم العميل أو الرقم أو المنطقة..."
@@ -50,16 +76,28 @@
                     <option value="">-- تحصيل حر / بدون ربط بأمر محدد --</option>
                     {% for o in orders %}
                     {% with bal=o.outstanding_balance %}
-                    <option value="{{ o.id }}" data-customer="{{ o.customer_id }}" data-outstanding="{{ bal }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
+                    <option value="{{ o.id }}"
+                            data-customer="{{ o.customer_id }}"
+                            data-outstanding="{{ bal|stringformat:'.2f' }}"
+                            data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
+                            data-payment-status="{{ o.payment_status }}"
                             {% if selected_order_id == o.id %}selected{% endif %}>
-                        أمر بيع #{{ o.order_number }} - الإجمالي: {{ o.grand_total }} ج.م - المتبقي: {{ bal }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
+                        أمر بيع {{ o.order_number }} - الإجمالي: {{ o.grand_total|floatformat:2 }} ج.م - المتبقي: {{ bal|floatformat:2 }} ج.م{% if o.due_date %} (استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
                     </option>
                     {% endwith %}
                     {% endfor %}
                 </select>
-                <div id="orderBalanceNotice" class="hidden mt-1.5 text-xs font-bold text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100 flex items-center justify-between">
-                    <span>المبلغ المتبقي على هذا الطلب: <span id="orderBalanceVal">0.00</span> ج.م</span>
-                    <button type="button" onclick="fillFullBalance()" class="text-[11px] underline text-brand-800 hover:text-brand-900">سداد المبلغ بالكامل</button>
+
+                <!-- B. Selected Order Remaining Balance Indicator (Strictly Separate from Overall Customer Account Balance) -->
+                <div id="orderBalanceNotice" class="hidden mt-2 text-xs font-bold text-brand-800 bg-brand-50 px-3.5 py-2.5 rounded-xl border border-brand-200/80 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-base text-brand-600">receipt_long</span>
+                        <span>المبلغ المتبقي على هذا الطلب: <span id="orderBalanceVal" class="font-mono font-black">0.00</span> ج.م</span>
+                    </div>
+                    <button type="button" id="fillOrderBalanceBtn" onclick="fillFullBalance()"
+                            class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-brand-200 text-brand-700 hover:bg-brand-100 transition-colors min-h-[32px]">
+                        سداد المبلغ بالكامل
+                    </button>
                 </div>
             </div>
 
@@ -81,7 +119,7 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">تاريخ التحصيل</label>
                     <input type="date" name="collection_date" value="{% now 'Y-m-d' %}" required
-                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[44px]">
                 </div>
             </div>
 
@@ -89,12 +127,12 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">المبلغ المحصل (ج.م) <span class="text-rose-500">*</span></label>
                     <input type="number" step="0.01" min="0.01" name="amount" id="amountInput" required placeholder="0.00"
-                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[44px]">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">طريقة الدفع</label>
-                    <select name="payment_method" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                    <select name="payment_method" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium min-h-[44px]">
                         <option value="cash">نقدي (Cash)</option>
                         <option value="cheque">شيك (Cheque)</option>
                         <option value="bank_transfer">تحويل بنكي (Bank Transfer)</option>
@@ -111,10 +149,10 @@
             {% include 'components/attachments_uploader.html' with title='مرفقات سند التحصيل (إيصال / شيك / PDF)' %}
 
             <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
-                <a href="{% url 'collections_list' %}" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+                <a href="{% url 'collections_list' %}" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all min-h-[44px] inline-flex items-center">
                     إلغاء
                 </a>
-                <button type="submit" class="inline-flex items-center gap-1.5 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all">
+                <button type="submit" class="inline-flex items-center gap-1.5 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all min-h-[44px]">
                     <span class="material-symbols-outlined text-base">check_circle</span>
                     <span>تأكيد وتسجيل السند</span>
                 </button>
@@ -127,11 +165,47 @@
 <script>
 let _colOrderFetchCtrl = null;
 const _salesOrdersSearchUrl = "{% url 'sales_orders_search_api' %}";
+const _customerBalanceUrlBase = "{% url 'sales_customer_balance_api' 0 %}";
+const _initialOrderId = "{{ selected_order_id|default:'' }}";
+
+function renderCustomerAccountBalance(accountInfo) {
+    const card = document.getElementById('customerAccountBalanceCard');
+    const nameEl = document.getElementById('customerAccountBalanceName');
+    const valEl = document.getElementById('customerAccountBalanceVal');
+    const tagEl = document.getElementById('customerAccountBalanceTag');
+    if (!card || !valEl || !tagEl) return;
+
+    if (!accountInfo) {
+        card.classList.add('hidden');
+        return;
+    }
+    const bal = window.erpParseMoney(accountInfo.current_balance);
+    const safeBal = bal === null ? 0 : bal;
+    if (nameEl) nameEl.textContent = accountInfo.customer_name || '';
+    valEl.textContent = window.erpFormatMoney(safeBal, '0.00');
+    valEl.classList.remove('text-rose-600', 'text-emerald-600', 'text-slate-700');
+    if (safeBal > 0) {
+        valEl.classList.add('text-rose-600');
+        tagEl.textContent = 'رصيد مدين مستحق على العميل';
+    } else if (safeBal < 0) {
+        valEl.classList.add('text-emerald-600');
+        tagEl.textContent = 'رصيد دائن لصالح العميل';
+    } else {
+        valEl.classList.add('text-slate-700');
+        tagEl.textContent = 'الحساب متوازن';
+    }
+    card.classList.remove('hidden');
+}
+
+function onCustomerChanged() {
+    filterSalesOrders();
+}
 
 function filterSalesOrders() {
-    const custId = document.getElementById('customerSelect').value;
+    const custSelect = document.getElementById('customerSelect');
+    const custId = custSelect ? custSelect.value : '';
     const orderSelect = document.getElementById('salesOrderSelect');
-    const prevOrderId = orderSelect.value;
+    const prevOrderId = orderSelect.value || _initialOrderId;
 
     if (!custId) {
         if (_colOrderFetchCtrl) {
@@ -145,52 +219,50 @@ function filterSalesOrders() {
         if (window.ERPSmartSelect) {
             window.ERPSmartSelect.refresh(orderSelect);
         }
+        renderCustomerAccountBalance(null);
         onOrderSelected();
         return;
     }
-
-    let currentValStillValid = false;
-    Array.from(orderSelect.options).forEach(opt => {
-        if (!opt.value) {
-            opt.style.display = '';
-            return;
-        }
-        const optCust = opt.getAttribute('data-customer');
-        if (optCust === custId) {
-            opt.style.display = '';
-            if (opt.value === prevOrderId) currentValStillValid = true;
-        } else {
-            opt.style.display = 'none';
-        }
-    });
-    if (!currentValStillValid && prevOrderId) {
-        orderSelect.value = '';
-    }
-    if (window.ERPSmartSelect) {
-        window.ERPSmartSelect.refresh(orderSelect);
-    }
-    onOrderSelected();
 
     if (_colOrderFetchCtrl) {
         _colOrderFetchCtrl.abort();
     }
     _colOrderFetchCtrl = new AbortController();
+    const signal = _colOrderFetchCtrl.signal;
+
     const url = new URL(_salesOrdersSearchUrl, window.location.origin);
     url.searchParams.set('customer', custId);
+    url.searchParams.set('unpaid_only', '1');
     url.searchParams.set('limit', '50');
+    if (prevOrderId) {
+        url.searchParams.set('include_order_id', prevOrderId);
+    }
 
-    fetch(url.toString(), {
+    const fetchOpts = {
         method: 'GET',
-        signal: _colOrderFetchCtrl.signal,
+        signal,
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'X-Skip-Global-Loader': '1',
             'Accept': 'application/json',
         },
-    })
+    };
+
+    const balanceUrl = _customerBalanceUrlBase.replace('/0/', '/' + encodeURIComponent(custId) + '/');
+
+    fetch(url.toString(), fetchOpts)
     .then(res => res.ok ? res.json() : null)
     .then(data => {
         if (!data || !Array.isArray(data.results)) return;
+        if (data.customer_account) {
+            renderCustomerAccountBalance(data.customer_account);
+        } else {
+            fetch(balanceUrl, fetchOpts)
+                .then(r => r.ok ? r.json() : null)
+                .then(bData => { if (bData) renderCustomerAccountBalance(bData); })
+                .catch(() => {});
+        }
+
         const selectedVal = orderSelect.value || prevOrderId;
         orderSelect.innerHTML = '';
         const defaultOpt = new Option('-- تحصيل حر / بدون ربط بأمر محدد --', '');
@@ -198,10 +270,13 @@ function filterSalesOrders() {
 
         let restored = false;
         data.results.forEach(item => {
+            const parsedBal = window.erpParseMoney(item.outstanding_balance);
+            const safeBalStr = parsedBal !== null ? parsedBal.toFixed(2) : '0.00';
             const opt = new Option(item.text, String(item.id));
             opt.setAttribute('data-customer', String(item.customer_id));
-            opt.setAttribute('data-outstanding', item.outstanding_balance);
+            opt.setAttribute('data-outstanding', safeBalStr);
             opt.setAttribute('data-due', item.due_date || '');
+            opt.setAttribute('data-payment-status', item.payment_status || '');
             if (item.subtext) opt.setAttribute('data-subtext', item.subtext);
             if (String(item.id) === String(selectedVal)) {
                 opt.selected = true;
@@ -224,13 +299,23 @@ function filterSalesOrders() {
 
 function onOrderSelected() {
     const orderSelect = document.getElementById('salesOrderSelect');
-    const selectedOpt = orderSelect.selectedOptions[0];
+    const selectedOpt = orderSelect ? orderSelect.selectedOptions[0] : null;
     const notice = document.getElementById('orderBalanceNotice');
     const balanceSpan = document.getElementById('orderBalanceVal');
+    const fillBtn = document.getElementById('fillOrderBalanceBtn');
 
     if (selectedOpt && selectedOpt.value) {
-        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
-        balanceSpan.textContent = parseFloat(outstanding).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const rawVal = selectedOpt.getAttribute('data-outstanding');
+        const parsed = window.erpParseMoney(rawVal);
+        const safeNum = parsed !== null ? Math.max(0, parsed) : 0;
+        balanceSpan.textContent = window.erpFormatMoney(safeNum, '0.00');
+        if (fillBtn) {
+            if (safeNum > 0) {
+                fillBtn.classList.remove('hidden');
+            } else {
+                fillBtn.classList.add('hidden');
+            }
+        }
         notice.classList.remove('hidden');
     } else {
         notice.classList.add('hidden');
@@ -239,15 +324,26 @@ function onOrderSelected() {
 
 function fillFullBalance() {
     const orderSelect = document.getElementById('salesOrderSelect');
-    const selectedOpt = orderSelect.selectedOptions[0];
+    const selectedOpt = orderSelect ? orderSelect.selectedOptions[0] : null;
     if (selectedOpt && selectedOpt.value) {
-        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
-        document.getElementById('amountInput').value = parseFloat(outstanding).toFixed(2);
+        const parsed = window.erpParseMoney(selectedOpt.getAttribute('data-outstanding'));
+        if (parsed !== null && parsed > 0) {
+            document.getElementById('amountInput').value = parsed.toFixed(2);
+        }
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    filterSalesOrders();
+    const initBalEl = document.getElementById('customerAccountBalanceVal');
+    if (initBalEl && initBalEl.textContent.trim()) {
+        initBalEl.textContent = window.erpFormatMoney(initBalEl.textContent, '0.00');
+    }
+    const custSelect = document.getElementById('customerSelect');
+    if (custSelect && custSelect.value) {
+        filterSalesOrders();
+    } else {
+        onOrderSelected();
+    }
 });
 </script>
 {% endblock %}

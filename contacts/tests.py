@@ -246,35 +246,41 @@ class ContactViewAndCRUDTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         wb = openpyxl.load_workbook(io.BytesIO(response.content))
-        ws = wb.active
-        self.assertEqual(ws.cell(row=1, column=1).value, 'المسلسل')
+        self.assertIn('البيانات', wb.sheetnames)
+        self.assertIn('التعليمات', wb.sheetnames)
+        ws = wb['البيانات']
+        self.assertEqual(ws.cell(row=1, column=1).value, 'الاسم *')
 
     def test_contacts_import_workflow(self):
         get_resp = self.client.get(reverse('contacts_import'))
         self.assertEqual(get_resp.status_code, 200)
-        self.assertContains(get_resp, 'استيراد جهات الاتصال')
+        self.assertContains(get_resp, 'استيراد Excel: جهات الاتصال')
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.append(['المسلسل', 'الاسم', 'علاقة العمل (عميل / مورد / كلاهما)', 'الموبايل', 'الهاتف', 'المنطقة', 'العنوان التفصيلي', 'حد الائتمان'])
-        ws.append([9999, 'صيدلية الأمل الكبرى', 'عميل', '01011122233', '0233445566', 'مدينة نصر', 'شارع الطيران', 50000.00])
+        ws.title = 'البيانات'
+        ws.append(['الاسم', 'النوع', 'الموبايل', 'المنطقة الرئيسية', 'الحد الائتماني'])
+        ws.append(['صيدلية الأمل الكبرى', 'عميل', '01011122233', self.area.name, 50000.00])
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
 
         excel_file = SimpleUploadedFile('contacts_test.xlsx', out.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-        preview_resp = self.client.post(reverse('contacts_import'), {
-            'action': 'preview',
+        upload_resp = self.client.post(reverse('contacts_import'), {
+            'action': 'upload',
             'excel_file': excel_file,
         })
+        self.assertEqual(upload_resp.status_code, 302)
+        batch_id = upload_resp['Location'].split('batch=')[1]
+        preview_resp = self.client.get(upload_resp['Location'])
         self.assertEqual(preview_resp.status_code, 200)
         self.assertContains(preview_resp, 'صيدلية الأمل الكبرى')
 
         import_resp = self.client.post(reverse('contacts_import'), {
-            'action': 'execute',
-            'import_mode': 'create_and_update',
-        }, follow=True)
+            'action': 'confirm',
+            'batch_id': batch_id,
+        })
         self.assertEqual(import_resp.status_code, 200)
         self.assertTrue(Contact.objects.filter(name='صيدلية الأمل الكبرى').exists())
         c = Contact.objects.get(name='صيدلية الأمل الكبرى')
@@ -787,9 +793,7 @@ class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
         p_edit = Permission.objects.get(codename='contacts:contacts/edit')
         p_view = Permission.objects.get(codename='contacts:contacts/view')
         p_mod = Permission.objects.get(codename='module:contacts')
-        self.rep_nasr.has_custom_permissions = True
-        self.rep_nasr.user_permissions.add(p_edit, p_view, p_mod)
-        self.rep_nasr.save()
+        self.rep_nasr.role.permissions.add(p_edit, p_view, p_mod)
         self.rep_nasr.clear_perm_cache()
 
         contact = Contact.objects.create(

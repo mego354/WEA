@@ -27,7 +27,11 @@
         </div>
 
         {% if can_manage %}
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'visit_templates_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-all min-h-[44px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير Excel</span>
+            </a>
             <a href="{% url 'visit_template_create' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white text-sm font-bold shadow-md shadow-teal-500/20 transition-all min-h-[44px]">
                 <span class="material-symbols-outlined text-lg">add_circle</span>
                 <span>إضافة قالب جديد</span>

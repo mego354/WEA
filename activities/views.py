@@ -3942,6 +3942,48 @@ def visits_export(request):
 # -----------------------------------------------------------------------------
 
 @require_permission('settings:visitsTemplates/manage')
+def visit_templates_export(request):
+    """Export visit templates to Excel honoring active filters."""
+    from master_data.excel_utils import export_to_excel_response
+
+    qs = VisitTemplate.objects.prefetch_related('questions').annotate(
+        usage_count=Count('visits'),
+        q_count=Count('questions', distinct=True),
+    ).order_by('id')
+
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q) |
+            Q(display_name_ar__icontains=q) |
+            Q(display_name_en__icontains=q)
+        )
+    status = request.GET.get('status')
+    if status == 'active':
+        qs = qs.filter(active=True)
+    elif status == 'inactive':
+        qs = qs.filter(active=False)
+
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'اسم القالب', 'key': lambda t: t.display_name_ar or t.name, 'width': 32, 'align': 'right'},
+        {'header': 'الاسم بالإنجليزية', 'key': lambda t: t.display_name_en or '', 'width': 25, 'align': 'left'},
+        {'header': 'النمط', 'key': lambda t: t.mode or '', 'width': 16, 'align': 'center'},
+        {'header': 'عدد الأسئلة', 'key': 'q_count', 'width': 14, 'align': 'center'},
+        {'header': 'مرات الاستخدام', 'key': 'usage_count', 'width': 16, 'align': 'center'},
+        {'header': 'الحالة', 'key': lambda t: 'مفعل' if t.active else 'معطل', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename='visit_templates_export',
+        sheet_title='قوالب الزيارات',
+        report_title='تقرير قوالب الزيارات الميدانية',
+        user=request.user,
+    )
+
+
+@require_permission('settings:visitsTemplates/manage')
 def visit_templates_list(request):
     """
     List visit templates with status badges, questions count, mode, and target accounts.

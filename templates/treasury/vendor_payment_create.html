@@ -45,9 +45,9 @@
                         class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-500 text-slate-900">
                     <option value="">-- سداد حر على الحساب العام / بدون ربط بأمر محدد --</option>
                     {% for o in orders %}
-                    <option value="{{ o.id }}" data-supplier="{{ o.supplier_id }}" data-outstanding="{{ o.outstanding_balance }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
+                    <option value="{{ o.id }}" data-supplier="{{ o.supplier_id }}" data-outstanding="{{ o.outstanding_balance|stringformat:'.2f' }}" data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
                             {% if selected_order_id == o.id %}selected{% endif %}>
-                        أمر شراء #{{ o.order_number }} - الإجمالي: {{ o.grand_total }} ج.م - المتبقي: {{ o.outstanding_balance }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
+                        أمر شراء #{{ o.order_number }} - الإجمالي: {{ o.grand_total|floatformat:2 }} ج.م - المتبقي: {{ o.outstanding_balance|floatformat:2 }} ج.م {% if o.due_date %}(استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
                     </option>
                     {% endfor %}
                 </select>
@@ -157,8 +157,9 @@ function onOrderSelected() {
     const balanceSpan = document.getElementById('orderBalanceVal');
 
     if (selectedOpt && selectedOpt.value) {
-        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
-        balanceSpan.textContent = parseFloat(outstanding).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const parsed = window.erpParseMoney(selectedOpt.getAttribute('data-outstanding'));
+        const safeNum = parsed !== null ? Math.max(0, parsed) : 0;
+        balanceSpan.textContent = window.erpFormatMoney(safeNum, '0.00');
         notice.classList.remove('hidden');
     } else {
         notice.classList.add('hidden');
@@ -169,8 +170,10 @@ function fillFullBalance() {
     const orderSelect = document.getElementById('purchaseOrderSelect');
     const selectedOpt = orderSelect.selectedOptions[0];
     if (selectedOpt && selectedOpt.value) {
-        const outstanding = selectedOpt.getAttribute('data-outstanding') || '0.00';
-        document.getElementById('amountInput').value = parseFloat(outstanding).toFixed(2);
+        const parsed = window.erpParseMoney(selectedOpt.getAttribute('data-outstanding'));
+        if (parsed !== null && parsed > 0) {
+            document.getElementById('amountInput').value = parsed.toFixed(2);
+        }
     }
 }
 

@@ -203,7 +203,7 @@ class LocationSettings(models.Model):
         from accounts.permissions import has_perm_or_admin
         if has_perm_or_admin(user, 'activities:visits/bypass_gps'):
             return True
-        if not getattr(user, 'has_custom_permissions', False) and role and role.is_active:
+        if role and role.is_active:
             if stage in ('create', 'start'):
                 if self.roles_can_bypass_distance_creation.filter(pk=role.pk).exists():
                     return True

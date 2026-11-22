@@ -1,6 +1,11 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Warehouse, InventoryStock, InventoryLot, InventoryMemo, InventoryMemoItem
+from master_data.admin_mixins import (
+    ProtectedMasterAdminMixin,
+    ControlledServiceDeleteAdminMixin,
+    ImmutableAdminMixin,
+)
 
 
 class InventoryLotInline(admin.TabularInline):
@@ -14,7 +19,13 @@ class InventoryMemoItemInline(admin.TabularInline):
 
 
 @admin.register(Warehouse)
-class WarehouseAdmin(admin.ModelAdmin):
+class WarehouseAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
+    def get_custom_delete_blocker(self, request, obj):
+        if obj.stocks.filter(qty_on_hand__gt=0).exists():
+            return f"لا يمكن حذف المخزن '{obj.name}' لوجود رصيد فعلي موجب بالمخزن."
+        if obj.memos.exists():
+            return f"لا يمكن حذف المخزن '{obj.name}' لوجود أذون مخزنية مسجلة عليه."
+        return ''
     list_display = ('code', 'name', 'is_main_badge', 'manager', 'is_active_badge', 'stocks_count', 'created_at')
     list_filter = ('is_main', 'is_active')
     search_fields = ('name', 'code', 'address')
@@ -37,7 +48,7 @@ class WarehouseAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryStock)
-class InventoryStockAdmin(admin.ModelAdmin):
+class InventoryStockAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = (
         'product', 'warehouse', 'qty_on_hand', 'qty_reserved',
         'qty_available_display', 'product_cost_display', 'total_cost_display', 'updated_at'
@@ -60,15 +71,16 @@ class InventoryStockAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryLot)
-class InventoryLotAdmin(admin.ModelAdmin):
+class InventoryLotAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('stock', 'batch_number', 'expiry_date', 'quantity')
     list_filter = ('expiry_date', 'stock__warehouse')
     search_fields = ('batch_number', 'stock__product__name')
 
 
 @admin.register(InventoryMemo)
-class InventoryMemoAdmin(admin.ModelAdmin):
+class InventoryMemoAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('memo_number', 'memo_type_badge', 'warehouse', 'statement', 'status_badge', 'applied_at', 'created_by')
+    list_select_related = ('warehouse', 'created_by')
     list_filter = ('memo_type', 'status', 'warehouse')
     search_fields = ('memo_number', 'statement', 'notes')
     inlines = [InventoryMemoItemInline]
@@ -92,7 +104,7 @@ class InventoryMemoAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryMemoItem)
-class InventoryMemoItemAdmin(admin.ModelAdmin):
+class InventoryMemoItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('memo', 'product', 'quantity', 'unit_cost', 'batch_number', 'expiry_date')
     list_filter = ('memo__memo_type', 'memo__warehouse')
     search_fields = ('product__name', 'memo__memo_number', 'batch_number')
@@ -107,7 +119,12 @@ class ProductTransferRequestItemInline(admin.TabularInline):
 
 
 @admin.register(ProductTransferRequest)
-class ProductTransferRequestAdmin(admin.ModelAdmin):
+class ProductTransferRequestAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from django.core.exceptions import ValidationError
+        if obj.status == 'executed':
+            raise ValidationError("لا يمكن حذف طلب تحويل مخزني تم تنفيذه ونقل بضاعته بالفعل.")
+        obj.delete()
     list_display = (
         'reference_number', 'requesting_user', 'source_warehouse',
         'destination_warehouse', 'status_badge', 'created_at', 'approved_by', 'executed_by'
@@ -132,7 +149,7 @@ class ProductTransferRequestAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductTransferRequestItem)
-class ProductTransferRequestItemAdmin(admin.ModelAdmin):
+class ProductTransferRequestItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('request', 'product', 'requested_quantity', 'approved_quantity', 'transferred_quantity')
     list_filter = ('request__status',)
     search_fields = ('product__name', 'request__reference_number')

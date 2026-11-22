@@ -22,6 +22,7 @@ urlpatterns = [
     path('customers/<int:pk>/edit/', views.sales_customer_edit, name='sales_customer_edit'),
     path('customers/accounts/', views.accounting_customers_list, name='accounting_customers_list'),
     path('customers/accounts/export/', views.accounting_customers_export, name='accounting_customers_export'),
+    path('customers/accounts/<int:pk>/zero/', views.accounting_customer_zero_balance, name='accounting_customer_zero_balance'),
     path('accounting/customers/', views.accounting_customers_list),
     path('customer-transactions/', views.customer_transactions_list, name='customer_transactions_list'),
     path('customer-transactions/export/', views.customer_transactions_export, name='customer_transactions_export'),
@@ -37,6 +38,7 @@ urlpatterns = [
     path('api/order-details/<int:order_id>/', views.sales_order_return_details_api, name='sales_order_return_details_api'),
     path('api/search/customers/', views.sales_customers_search_api, name='sales_customers_search_api'),
     path('api/search/orders/', views.sales_orders_search_api, name='sales_orders_search_api'),
+    path('api/customer-balance/<int:pk>/', views.sales_customer_balance_api, name='sales_customer_balance_api'),
     path('api/search/warehouses/', views.sales_warehouses_search_api, name='sales_warehouses_search_api'),
     path('api/search/vaults/', views.sales_vaults_search_api, name='sales_vaults_search_api'),
 ]

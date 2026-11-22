@@ -46,6 +46,8 @@ urlpatterns = [
     path('activities/', include('activities.urls')),
     path('performance/', include('reports.urls_performance')),
     path('reports/', include('reports.urls_reports')),
+    path('notifications/', include('notifications.urls')),
+    path('api/v1/notifications/', include('notifications.api_urls')),
     path('', include('activities.urls')),
 
     # Reference ERP URL Parity Aliases

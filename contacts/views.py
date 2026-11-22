@@ -1899,29 +1899,17 @@ def contacts_export(request):
 
 @require_permission('contacts:contacts/import')
 def contacts_import_template(request):
-    columns = [
-        {'header': 'المسلسل', 'width': 14},
-        {'header': 'الاسم', 'width': 35},
-        {'header': 'علاقة العمل (عميل / مورد / كلاهما)', 'width': 24},
-        {'header': 'الموبايل', 'width': 18},
-        {'header': 'الهاتف', 'width': 18},
-        {'header': 'المنطقة', 'width': 20},
-        {'header': 'العنوان التفصيلي', 'width': 35},
-        {'header': 'حد الائتمان', 'width': 16},
-        {'header': 'تصنيف العميل', 'width': 18},
-        {'header': 'التخصص', 'width': 18},
-        {'header': 'الرقم الضريبي', 'width': 18},
-        {'header': 'الكود', 'width': 16},
-    ]
-    sample_rows = [
-        [1001, 'صيدلية النور والشفاء', 'عميل', '01012345678', '0223456789', 'مدينة نصر', '15 شارع الطيران، بجوار مسجد رابعة', 50000.00, 'A', 'صيدلية مجتمعية', '123-456-789', 'CLI-1001'],
-        [1002, 'شركة النيل للتوزيع الدوائي', 'مورد', '01198765432', '0233445566', 'الدقي', '40 شارع مصدق، الجيزة', 0.00, '', '', '987-654-321', 'SUP-1002'],
-    ]
-    return generate_excel_template_response(columns, sample_rows=sample_rows, filename="contacts_import_template", sheet_title="نموذج جهات الاتصال")
+    from master_data.excel_views import excel_import_template_view
+    return excel_import_template_view(request, entity='contacts')
 
 
 @require_permission('contacts:contacts/import')
 def contacts_import(request):
+    from master_data.excel_views import excel_import_view
+    return excel_import_view(request, entity='contacts')
+
+
+def _legacy_contacts_import_unused(request):
     if request.method == 'POST':
         action = request.POST.get('action')
 

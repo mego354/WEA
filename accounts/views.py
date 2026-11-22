@@ -8,7 +8,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
-from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope, UserModuleScope
+from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope
 from django.db import transaction
 
 MODULE_INFO = [
@@ -851,125 +851,6 @@ def user_delete(request, pk):
     return redirect('users_list')
 
 
-@login_required
-@require_super_admin()
-def user_effective_permissions(request, pk):
-    """
-    SuperAdmin interface to inspect and customize a user's permissions,
-    allowing 100% granular control over feature availability directly for this user.
-    """
-    target_user = get_object_or_404(
-        User.objects.select_related('role').prefetch_related('assigned_areas', 'role__tags', 'user_permissions'),
-        pk=pk
-    )
-
-    if request.method == 'POST':
-        action = request.POST.get('action', 'save')
-
-        # Action: Reset to Role Defaults
-        if action == 'reset_to_role':
-            target_user.has_custom_permissions = False
-            target_user.user_permissions.clear()
-            target_user.custom_module_scopes.all().delete()
-            target_user.save(update_fields=['has_custom_permissions'])
-            target_user.clear_perm_cache()
-
-            AuditLogService.log(
-                action='update',
-                action_type='USER_PERMISSIONS_RESET',
-                module='accounts',
-                actor=request.user,
-                target_user=target_user,
-                target_role=target_user.role,
-                record_id=target_user.id,
-                record_name=target_user.name,
-                description=f"استعادة صلاحيات الدور الافتراضية للمستخدم: {target_user.name} ({target_user.role.display_name if target_user.role else 'بدون دور'})",
-                status='SUCCESS',
-                request=request,
-            )
-            messages.success(request, f"تمت استعادة صلاحيات الدور الافتراضية للمستخدم '{target_user.name}' بنجاح.")
-            return redirect('user_effective_permissions', pk=pk)
-
-        # Action: Save Permissions
-        has_custom = request.POST.get('has_custom_permissions') in ['on', '1', 'true', 'True']
-        submitted_codenames = request.POST.getlist('permissions')
-
-        # Retrieve corresponding Permission objects from database
-        perms_to_set = list(Permission.objects.filter(codename__in=submitted_codenames))
-
-        new_mode = 'مخصصة' if has_custom else 'وراثة'
-
-        target_user.has_custom_permissions = has_custom
-        target_user.user_permissions.set(perms_to_set)
-        if has_custom:
-            for m_info in MODULE_INFO:
-                m = m_info['key']
-                v_scope = request.POST.get(f"view_scope_{m}", 'own')
-                m_scope = request.POST.get(f"manage_scope_{m}", 'own')
-                UserModuleScope.objects.update_or_create(
-                    user=target_user,
-                    module=m,
-                    defaults={'view_scope': v_scope, 'manage_scope': m_scope}
-                )
-        else:
-            target_user.custom_module_scopes.all().delete()
-
-        target_user.save(update_fields=['has_custom_permissions'])
-        target_user.clear_perm_cache()
-
-        effective_count = len(target_user.get_effective_permission_codenames())
-
-        AuditLogService.log(
-            action='update',
-            action_type='USER_PERMISSIONS_UPDATED',
-            module='accounts',
-            actor=request.user,
-            target_user=target_user,
-            target_role=target_user.role,
-            record_id=target_user.id,
-            record_name=target_user.name,
-            description=f"تحديث مصفوفة صلاحيات المستخدم: {target_user.name} (النمط: {new_mode}، تم تحديد {len(perms_to_set)} صلاحية مباشرة، الإجمالي الفعال: {effective_count}).",
-            status='SUCCESS',
-            request=request,
-        )
-
-        if has_custom:
-            messages.success(request, f"تم تفعيل الصلاحيات المخصصة للمستخدم '{target_user.name}' بنجاح ({effective_count} صلاحية فعالة).")
-        else:
-            messages.success(request, f"تم تحديث صلاحيات المستخدم '{target_user.name}' (الوراثة التلقائية من الدور مفعلة).")
-
-        return redirect('user_effective_permissions', pk=pk)
-
-    effective_codenames = target_user.get_effective_permission_codenames()
-    role_codenames = set(target_user.role.permissions.values_list('codename', flat=True)) if target_user.role else set()
-    direct_codenames = set(target_user.user_permissions.values_list('codename', flat=True))
-
-    modules_tree = get_grouped_permissions()
-
-    user_scopes_map = {ums.module: (ums.view_scope, ums.manage_scope) for ums in target_user.custom_module_scopes.all()}
-    role_scopes = {rms.module: (rms.view_scope, rms.manage_scope) for rms in target_user.role.module_scopes.all()} if target_user.role else {}
-    user_module_scopes = []
-    for m in MODULE_INFO:
-        v_s, m_s = user_scopes_map.get(m['key'], role_scopes.get(m['key'], ('own', 'own')))
-        user_module_scopes.append({
-            'key': m['key'],
-            'name': m['name'],
-            'icon': m['icon'],
-            'view_scope': v_s,
-            'manage_scope': m_s,
-        })
-
-    return render(request, 'accounts/effective_permissions.html', {
-        'target_user': target_user,
-        'effective_codenames': effective_codenames,
-        'role_codenames': role_codenames,
-        'direct_codenames': direct_codenames,
-        'modules_tree': modules_tree,
-        'module_scopes': user_module_scopes,
-        'scope_options': SCOPE_OPTIONS,
-    })
-
-
 # ==========================================
 # ROLES & PERMISSIONS MANAGEMENT (SUPERADMIN ONLY)
 # ==========================================
@@ -1077,6 +958,48 @@ def roles_list(request):
 
 @login_required
 @require_super_admin()
+def roles_export(request):
+    """Export roles & permission counts to Excel (SuperAdmin only)."""
+    from master_data.excel_utils import export_to_excel_response
+    query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', '').strip()
+
+    roles = Role.objects.annotate(
+        users_count=models.Count('users', distinct=True),
+        perms_count=models.Count('permissions', distinct=True),
+    ).order_by('id')
+    if query:
+        roles = roles.filter(
+            Q(name__icontains=query) |
+            Q(display_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+    if status_filter == 'active':
+        roles = roles.filter(is_active=True)
+    elif status_filter == 'inactive':
+        roles = roles.filter(is_active=False)
+
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'الاسم البرمجي', 'key': 'name', 'width': 20, 'align': 'center'},
+        {'header': 'الاسم المعروض', 'key': 'display_name', 'width': 28, 'align': 'right'},
+        {'header': 'الوصف', 'key': 'description', 'width': 35, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda r: 'مفعل' if r.is_active else 'معطل', 'width': 14, 'align': 'center'},
+        {'header': 'عدد المستخدمين', 'key': 'users_count', 'width': 16, 'align': 'center'},
+        {'header': 'عدد الصلاحيات', 'key': 'perms_count', 'width': 16, 'align': 'center'},
+    ]
+    return export_to_excel_response(
+        roles,
+        columns,
+        filename='roles_export',
+        sheet_title='الأدوار والصلاحيات',
+        report_title='تقرير الأدوار والصلاحيات',
+        user=request.user,
+    )
+
+
+@login_required
+@require_super_admin()
 def role_create(request):
     """
     Create a new role with attributes, tags, and hierarchical permissions (SuperAdmin only).
@@ -1137,6 +1060,9 @@ def role_create(request):
                 defaults={'view_scope': v_scope, 'manage_scope': m_scope}
             )
 
+        # Notification Rules (if submitted from Role Settings Tab 3)
+        _save_role_notification_rules(role, request)
+
         # Record Security Audit Log
         SecurityAuditLog.objects.create(
             actor=request.user,
@@ -1169,8 +1095,90 @@ def role_create(request):
         'modules_tree': modules_tree,
         'module_scopes': module_scopes_display,
         'scope_options': SCOPE_OPTIONS,
+        'notification_groups': _build_role_notification_context(None),
+        'notification_total_events': _get_notif_total_events(),
+        'delivery_mode_choices': _get_notif_delivery_choices(),
+        'active_users_for_rules': User.objects.filter(is_active=True).order_by('name'),
         'is_create': True,
     })
+
+
+def _get_notif_delivery_choices():
+    from notifications.models import RoleNotificationRule
+    return RoleNotificationRule.DELIVERY_MODE_CHOICES
+
+
+def _get_notif_total_events():
+    from notifications.registry import NOTIFICATION_EVENTS_CATALOG
+    return len(NOTIFICATION_EVENTS_CATALOG)
+
+
+def _build_role_notification_context(role):
+    from notifications.registry import get_grouped_notification_events
+    from notifications.models import RoleNotificationRule
+
+    existing = {}
+    if role:
+        for r in RoleNotificationRule.objects.filter(role=role).prefetch_related('specific_users'):
+            existing[r.event_code] = r
+
+    groups = []
+    for grp in get_grouped_notification_events():
+        rows = []
+        for ev in grp['events']:
+            rule = existing.get(ev['code'])
+            rows.append({
+                'code': ev['code'],
+                'name_ar': ev['name_ar'],
+                'severity': ev.get('default_severity', 'info'),
+                'is_enabled': rule.is_enabled if rule else False,
+                'delivery_mode': rule.delivery_mode if rule else ev.get('default_delivery_mode', 'all_in_scope'),
+                'same_area_only': rule.same_area_only if rule else True,
+                'include_record_owner': rule.include_record_owner if rule else (ev.get('default_delivery_mode') == 'record_owner_only'),
+                'include_actor': rule.include_actor if rule else False,
+                'specific_user_ids': set(rule.specific_users.values_list('id', flat=True)) if rule else set(),
+            })
+        groups.append({
+            'code': grp['code'],
+            'name_ar': grp['name_ar'],
+            'icon': grp['icon'],
+            'events': rows,
+        })
+    return groups
+
+
+def _save_role_notification_rules(role, request):
+    if request.POST.get('notification_rules_submitted') != '1':
+        return
+    from notifications.registry import NOTIFICATION_EVENTS_CATALOG
+    from notifications.models import RoleNotificationRule
+
+    valid_modes = {c[0] for c in RoleNotificationRule.DELIVERY_MODE_CHOICES}
+    for ev in NOTIFICATION_EVENTS_CATALOG:
+        code = ev['code']
+        enabled = request.POST.get(f"notif_enabled__{code}") in ('on', '1', 'true')
+        mode = request.POST.get(f"notif_mode__{code}", ev.get('default_delivery_mode', 'all_in_scope'))
+        if mode not in valid_modes:
+            mode = 'all_in_scope'
+        same_area = request.POST.get(f"notif_same_area__{code}") in ('on', '1', 'true')
+        inc_owner = request.POST.get(f"notif_inc_owner__{code}") in ('on', '1', 'true')
+        inc_actor = request.POST.get(f"notif_inc_actor__{code}") in ('on', '1', 'true')
+        rule, _ = RoleNotificationRule.objects.update_or_create(
+            role=role,
+            event_code=code,
+            defaults={
+                'is_enabled': enabled,
+                'delivery_mode': mode,
+                'same_area_only': same_area,
+                'include_record_owner': inc_owner,
+                'include_actor': inc_actor,
+            },
+        )
+        if mode == 'specific_users':
+            raw_uids = [int(x) for x in request.POST.getlist(f"notif_users__{code}") if str(x).isdigit()]
+            rule.specific_users.set(raw_uids)
+        else:
+            rule.specific_users.clear()
 
 
 @login_required
@@ -1232,6 +1240,9 @@ def role_edit(request, pk):
                 defaults={'view_scope': v_scope, 'manage_scope': m_scope}
             )
 
+        # Update Notification Rules (Tab 3)
+        _save_role_notification_rules(role, request)
+
         # Invalidate cached permissions across existing sessions/users for this role
         for u in role.users.all():
             u.clear_perm_cache()
@@ -1274,6 +1285,10 @@ def role_edit(request, pk):
         'modules_tree': modules_tree,
         'module_scopes': module_scopes_display,
         'scope_options': SCOPE_OPTIONS,
+        'notification_groups': _build_role_notification_context(role),
+        'notification_total_events': _get_notif_total_events(),
+        'delivery_mode_choices': _get_notif_delivery_choices(),
+        'active_users_for_rules': User.objects.filter(is_active=True).order_by('name'),
         'is_create': False,
     })
 
@@ -1322,6 +1337,19 @@ def role_duplicate(request, pk):
             view_scope=scope_row.view_scope,
             manage_scope=scope_row.manage_scope,
         )
+
+    from notifications.models import RoleNotificationRule
+    for rule in RoleNotificationRule.objects.filter(role=original).prefetch_related('specific_users'):
+        cloned_rule = RoleNotificationRule.objects.create(
+            role=clone,
+            event_code=rule.event_code,
+            is_enabled=rule.is_enabled,
+            delivery_mode=rule.delivery_mode,
+            same_area_only=rule.same_area_only,
+            include_record_owner=rule.include_record_owner,
+            include_actor=rule.include_actor,
+        )
+        cloned_rule.specific_users.set(rule.specific_users.all())
 
     SecurityAuditLog.objects.create(
         actor=request.user,

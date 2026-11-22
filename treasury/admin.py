@@ -4,6 +4,11 @@ from .models import (
     Vault, VendorAccount, VendorTransaction, VendorInstallment,
     VendorPayment, Settlement, VaultTransaction, VendorPaymentRequest
 )
+from master_data.admin_mixins import (
+    ProtectedMasterAdminMixin,
+    ControlledServiceDeleteAdminMixin,
+    ImmutableAdminMixin,
+)
 
 
 class VaultTransactionInline(admin.TabularInline):
@@ -20,7 +25,13 @@ class VendorInstallmentInline(admin.TabularInline):
 
 
 @admin.register(Vault)
-class VaultAdmin(admin.ModelAdmin):
+class VaultAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
+    def get_custom_delete_blocker(self, request, obj):
+        if obj.current_balance and obj.current_balance != 0:
+            return f"لا يمكن حذف الخزنة '{obj.name}' لأن رصيدها غير صفري ({obj.current_balance:,.2f} ج.م)."
+        if obj.transactions.exists():
+            return f"لا يمكن حذف الخزنة '{obj.name}' لوجود حركات مالية مسجلة عليها."
+        return ''
     list_display = (
         'serial_num', 'name', 'vault_type_badge', 'assigned_user',
         'current_balance_display', 'is_active_badge', 'created_at'
@@ -47,7 +58,7 @@ class VaultAdmin(admin.ModelAdmin):
 
 
 @admin.register(VendorAccount)
-class VendorAccountAdmin(admin.ModelAdmin):
+class VendorAccountAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('supplier', 'credit_limit_display', 'current_balance_display', 'overdue_balance_display', 'last_transaction_date')
     search_fields = ('supplier__name',)
     inlines = []
@@ -66,7 +77,7 @@ class VendorAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(VendorTransaction)
-class VendorTransactionAdmin(admin.ModelAdmin):
+class VendorTransactionAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = (
         'serial', 'account', 'transaction_type_badge', 'reason',
         'transaction_date', 'credit_display', 'debit_display', 'running_balance_display'
@@ -96,7 +107,7 @@ class VendorTransactionAdmin(admin.ModelAdmin):
 
 
 @admin.register(VendorInstallment)
-class VendorInstallmentAdmin(admin.ModelAdmin):
+class VendorInstallmentAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('transaction', 'total_amount', 'closed_amount', 'open_amount', 'due_date', 'is_settled_badge')
     list_filter = ('is_settled', 'due_date')
     search_fields = ('transaction__account__supplier__name', 'transaction__serial')
@@ -109,7 +120,7 @@ class VendorInstallmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(VendorPayment)
-class VendorPaymentAdmin(admin.ModelAdmin):
+class VendorPaymentAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = (
         'serial_num', 'supplier', 'vault', 'amount_display',
         'payment_date', 'payment_method_badge', 'status_badge', 'created_by'
@@ -140,16 +151,17 @@ class VendorPaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Settlement)
-class SettlementAdmin(admin.ModelAdmin):
+class SettlementAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('payment_transaction', 'target_installment', 'amount', 'settled_at', 'created_by')
     date_hierarchy = 'settled_at'
 
 
 @admin.register(VaultTransaction)
-class VaultTransactionAdmin(admin.ModelAdmin):
-    list_display = ('vault', 'transaction_type_badge', 'amount_display', 'running_balance_display', 'reference_type', 'description', 'created_at')
-    list_filter = ('transaction_type', 'vault', 'created_at')
-    search_fields = ('description', 'vault__name')
+class VaultTransactionAdmin(ImmutableAdminMixin, admin.ModelAdmin):
+    list_display = ('vault', 'transaction_type_badge', 'amount_display', 'running_balance_display', 'reference_type', 'reference_id', 'description', 'created_by', 'created_at')
+    list_select_related = ('vault', 'created_by')
+    list_filter = ('transaction_type', 'reference_type', 'vault', 'created_at')
+    search_fields = ('description', 'vault__name', 'reference_id')
     date_hierarchy = 'created_at'
 
     def transaction_type_badge(self, obj):
@@ -168,7 +180,12 @@ class VaultTransactionAdmin(admin.ModelAdmin):
 
 
 @admin.register(VendorPaymentRequest)
-class VendorPaymentRequestAdmin(admin.ModelAdmin):
+class VendorPaymentRequestAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from django.core.exceptions import ValidationError
+        if obj.status == 'executed':
+            raise ValidationError("لا يمكن حذف طلب سداد تم صرفه وتنفيذه بالفعل.")
+        obj.delete()
     list_display = ('request_number', 'supplier', 'amount_display', 'preferred_vault', 'request_date', 'status_badge', 'created_by')
     list_filter = ('status', 'request_date')
     search_fields = ('request_number', 'supplier__name', 'purchase_order__order_number')

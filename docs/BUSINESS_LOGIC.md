@@ -124,7 +124,7 @@ stateDiagram-v2
 - **Direct Automation on Creation (`create_order`)**: To eliminate multi-step status machine overhead and support rapid ERP commercial operations:
   1. Validates available warehouse stock for all line items atomically with row-level locks (`select_for_update()`). If stock is insufficient, creation is rejected immediately with a descriptive validation error.
   2. Posts an inward/outward balanced `InventoryMemo` (`memo_type='out'`, `status='posted'`), directly reducing `qty_on_hand` and updating batch lots.
-  3. Records the financial debit entry in the customer ledger (`CustomerAccount`) via `CustomerTransaction` (`reason='sales_invoice'`), increasing customer receivables.
+  3. Records the financial debit entry in the customer ledger (`CustomerAccount`) via `CustomerTransaction` (`reason='sales'`), increasing customer receivables.
   4. Directly sets the order status to `invoiced` (`status='invoiced'`) and payment status to `credit` (`payment_status='credit'`).
 - **Safe Delta Reconciliation on Edit (`update_order`)**:
   - Modifications to quantities or items compute stock and financial deltas atomically.
@@ -178,7 +178,7 @@ stateDiagram-v2
   - Recalculates product weighted average unit cost:
     $$\text{New Cost} = \frac{(\text{Current Qty} \times \text{Current Cost}) + (\text{Received Qty} \times \text{Purchase Price})}{\text{Current Qty} + \text{Received Qty}}$$
 - **Immediate Financial Recording**:
-  - Creates a credit transaction on `VendorAccount` (`VendorTransaction` with `reason='purchase_invoice'`), increasing accounts payable.
+  - Creates a credit transaction on `VendorAccount` (`VendorTransaction` with `reason='purchase'`), increasing accounts payable.
   - Automatically creates a open `VendorInstallment` for the net total.
   - Sets order status directly to `settled` (`status='settled'`).
 - **Operational Payment Status (`payment_status`)**:
@@ -329,5 +329,51 @@ To protect data entry against accidental loss during server-side validation fail
 - **Integer-Only Quantities (`master_data.validation_utils.parse_positive_integer_quantity`)**: All Sales, Purchases, Inventory Memos, and Product Transfer quantities must be positive whole integers (`>= 1`, or `>= 0` where zero-qty return rows are skipped). Both HTML inputs (`step="1" min="1"`) and backend services enforce integer-only values.
 - **Visit Template Questions (`end_only`)**: New and edited `VisitTemplateQuestion` records enforce `stage='end_only'` so questionnaire answers are collected during visit completion; historical `start_only` answers remain accepted if already recorded on in-progress visits. `Visit.get_qa_display_list()` maps stored option keys (`yes`/`no`, `successful`/`unsuccessful`, and choice `value`s) to Arabic labels.
 - **Safe User Deletion (`accounts.services.delete_user_safely`)**: Protected by `users:users/delete`. Blocks self-deletion, SuperAdmin deletion, and deletion of users holding active warehouse stock or non-zero vault balances. Revokes active sessions, reassigns `PROTECT`-ed historical records (`Visit`, `VisitPlan`, `PlannedVisitDay`, `SalesTarget`, `CustomerCall`, `CoachingEvaluation`) to the inactive `historical_archive@wea.com` archive account, and records `USER_DELETED` in `SecurityAuditLog`.
+
+---
+
+## 13. WEA ERP Historical Data Integration (`master_data.wea_integration_service`)
+
+Historical and operational ERP records from the Bricks-Rep WEA exports (`wea data/*.xlsx` and `data_folder/users.xlsx`) are integrated via the idempotent management command `python manage.py integrate_wea_data` (supporting `--dry-run`, `--wea-dir`, and `--data-dir`) **without modifying the database schema**:
+
+- **Matching & Idempotency**:
+  - `Contact` matched by `serial_num` (primary) and `code` (secondary); literal `code='nan'` cleaned to `''`; pure suppliers set to `is_customer=False`.
+  - `Product` matched by `sku_code`; `Warehouse` and `Vault` matched via canonical name maps (`WH-REP-0095` renamed to `عهدة د. أحمد عبد العظيم`; `خزنة الحسابات` provisioned).
+  - Transactional models (`PurchaseOrder`, `PurchaseReturnOrder`, `SalesOrder`, `SalesReturnOrder`, `Collection`, `VendorPayment`, `InventoryMemo`, `CustomerTransaction`, `VendorTransaction`) are idempotently keyed by their unique `serial_num` / `serial` / `memo_number`.
+  - `customers accounts.xlsx` pagination duplicates (`299` exact duplicate `AccountID` rows) are deduplicated, and the `299` dropped accounts present in `customer transactions 1 & 2` are recovered automatically.
+- **Historical Warehouse & Vault Resolution**:
+  - `memos.xlsx` (`9,107` memos) provides exact historical warehouses for `5,447` Sales Orders, `279` Sales Returns, and `9` Purchase Orders. Unmatched orders fall back to the creator's rep custody warehouse (for rep-created SOs/SROs) or `المخزن الرئيسي بضاعه` / `مخزن المستلزمات` (for admin/POs).
+  - Current `InventoryStock` and `InventoryLot` balances are loaded authoritatively from `inventory stock.xlsx` without replaying historical order stock deductions.
+  - `vaults transactions.xlsx` (`3,758` entries from `2026-01-10` onward) provides exact vaults for `35/35` vendor payments and `1,592` collections; earlier collections map to the creator's rep vault or `الخزينة الرئيسية - المقر الرئيسي` without altering reconciled vault closing balances.
+- **Historical Archive Users**: `17` former/system users referenced in Excel are stored as inactive archive accounts (`is_active=False`, `role=None`, unusable password) so attribution is preserved without granting access or triggering rep warehouse/vault provisioning.
+- **Documented Source Exceptions & Schema Limitations**:
+  - Customer `[W0047] مخزن ميجا فارم العياط` uses the approved `customers accounts.xlsx` balance (`1,988.20 EGP`) while preserving all 69 source transactions (net `-846.80 EGP`, documented discrepancy `2,835.00 EGP`).
+  - `VendorPayment #10000` (`6,500.00 EGP`, `مصنع البطل للبخاخات دمياط`) is imported as `status='cleared'` linked to `خزنة WEA` with `debit_transaction=None` because no corresponding row exists in `vendor transactions.xlsx`.
+  - Because the existing schema is preserved without migrations, Bricks-Rep collection status/cheque metadata is preserved inside `Collection.notes`, and historical timestamps on `VaultTransaction` and `InventoryMemo` are preserved on `created_at`.
+
+---
+
+## 14. Automatic Posting, Account Zeroing, Global Excel Engine, Notifications & Admin Deletion Policy
+
+- **Automatic Accounting & Inventory Posting (Zero Manual Invoicing)**:
+  - Manual `فوترة وترحيل للحسابات` / `ترحيل للحسابات` UI actions have been removed from Sales Orders, Sales Returns, Purchase Orders, and Purchase Returns.
+  - When `SalesSettings.require_manager_approval` / `PurchaseSettings.require_manager_approval` is enabled (and actor is non-SuperAdmin), orders start as `pending` and automatically post stock + customer/vendor ledger entries immediately upon manager approval (`invoiced` / `settled`). When disabled, posting executes atomically upon creation.
+  - All posting paths (`_post_order_stock_and_ledger`, `_post_return_stock_and_ledger`) are idempotent under `select_for_update()` and prevent double-posting.
+  - Safe historical reconciliation command: `python manage.py backfill_accounting_postings [--apply] [--report-json=...]` links existing ledger transactions to non-invoiced/delivered orders with zero balance drift and zero stock replay while preserving unresolved pending orders for manual review.
+- **Account Zeroing (`تصفير الحساب`)**:
+  - `CustomerAccountService.zero_balance()` (`/sales/customers/accounts/<pk>/zero/`, permission `sales:customers/zero_balance`) and `TreasuryService.zero_vendor_balance()` (`/treasury/vendors/<pk>/zero/`, permission `treasury:vendors/zero_balance`).
+  - Posts a non-cash accounting adjustment (`reason='adjustment'`) setting `current_balance = 0.00` and `overdue_balance = 0.00`.
+  - **Strict Invariants**: Never alters vault balances, never creates fake `Collection` or `VendorPayment` records, never modifies individual `SalesOrder`/`PurchaseOrder` `payment_status`, preserves complete transaction history, enforces `ScopeResolutionService`, writes `SecurityAuditLog`, and emits centralized notifications.
+- **Global Reusable Excel Import/Export Engine (`master_data/excel_import_engine.py`, `excel_importers.py`)**:
+  - File-backed temporary staging under `MEDIA_ROOT/tmp_imports/` (24h TTL, zero session bloat, zero DB migrations).
+  - Supports 2-sheet `.xlsx` templates (`البيانات` + `التعليمات`), pre-commit validation (types, duplicates, FKs, `ScopeResolutionService`), paginated filterable preview, downloadable `.xlsx` error reports with formula-injection protection, explicit confirmation (never silently skips invalid rows), atomic commit, `SecurityAuditLog`, and `catalog.excel_import_completed` notification.
+  - Covers 10 approved first-wave entities (`contacts`, `products`, `categories`, `areas`, `warehouses`, `planned_visits`, `stock_adjustments`, `collections`, `vendor_payments`, `inventory_stock`); `users` is strictly excluded.
+- **Centralized Notifications System (`notifications` App — Capacitor-Ready)**:
+  - 60 registered business events across all 10 ERP apps (`notifications/registry.py`), configurable per-role via the 3-tab Role Settings UI (`البيانات والنطاقات` | `الصلاحيات` | `قواعد الإشعارات`).
+  - Delivered via `transaction.on_commit()` with strict 4-layer `ScopeResolutionService` + RBAC filtering, actor exclusion, anti-self-approval, deduplication, 45s visibility-aware polling, 90-day retention (`prune_old_notifications`), and extensible push channel stub + device registration (`NotificationDevice`).
+- **4-Category Django Admin Deletion Policy (`master_data/admin_mixins.py`)**:
+  - All registered ERP models preserve database `PROTECT` constraints and explicitly inherit one of: Category 1 (`SafeCascadeAdminMixin`), Category 2 (`ProtectedMasterAdminMixin`), Category 3 (`ControlledServiceDeleteAdminMixin`), or Category 4 (`ImmutableAdminMixin` / `SingletonSettingsAdminMixin`).
+
+
 
 

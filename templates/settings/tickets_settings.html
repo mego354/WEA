@@ -20,11 +20,15 @@
     </div>
 
     <!-- Action Button: اضف نوع جديد -->
-    <div class="flex justify-start pt-2">
+    <div class="flex items-center justify-between gap-2 pt-2">
         <button type="button" onclick="openNewTicketModal()"
                 class="px-5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-sm shadow-teal-500/20 transition-all flex items-center gap-1.5">
             <span>اضف نوع جديد</span>
         </button>
+        <a href="{% url 'tickets_export' %}" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold min-h-[38px]">
+            <span class="material-symbols-outlined text-base">download</span>
+            <span>تصدير Excel</span>
+        </a>
     </div>
 
     <!-- Task Types List matching Reference ERP Light Teal Cards -->

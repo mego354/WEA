@@ -523,3 +523,31 @@ All smart-search endpoints enforce `@require_permission([...])`, use `ScopeResol
 - `GET /purchases/<int:pk>/pdf/` — Customizable Purchase Order PDF (`purchase_order_pdf`).
 - `GET /purchases/returns/<int:pk>/pdf/` — Customizable Purchase Return PDF (`purchase_return_order_pdf`).
 - `GET /purchases/vendors/<int:pk>/statement/pdf/` — Supplier Account Statement PDF (`vendor_statement_pdf`).
+
+---
+
+## 9. Collections Balance, Account Zeroing, Excel Import & Capacitor Notifications APIs
+
+### 9.1 Collections Remaining Balance APIs
+- `GET /sales/api/customer-balance/<int:pk>/` (`sales_customer_balance_api`) — DataScope-enforced customer account summary (`current_balance`, `overdue_balance`, `credit_limit`).
+- `GET /sales/api/search/orders/?customer_id=<id>&unpaid_only=1` (`sales_orders_search_api`) — Returns scoped orders with accurate `outstanding_balance`, `paid_amount`, `returned_amount`, `payment_status`, `due_date`, and `customer_account` balance object (excludes paid/cancelled/rejected orders when `unpaid_only=1`).
+
+### 9.2 Account Zeroing Endpoints (`POST` only)
+- `POST /sales/customers/accounts/<int:pk>/zero/` (`accounting_customer_zero_balance`, permission `sales:customers/zero_balance`)
+- `POST /treasury/vendors/<int:pk>/zero/` (`accounting_vendor_zero_balance`, permission `treasury:vendors/zero_balance`)
+
+### 9.3 Global Excel Import & Additional Export Endpoints
+- `GET/POST /excel/import/<entity>/` (`excel_import`), `GET /excel/import/<entity>/template/` (`excel_import_template`), `GET /excel/import/<entity>/errors/<batch_id>/` (`excel_import_errors`) — Supported entities: `contacts`, `products`, `categories`, `areas`, `warehouses`, `planned_visits`, `stock_adjustments`, `collections`, `vendor_payments`, `inventory_stock` (`users` strictly excluded with 404).
+- Additional Excel Exports: `GET /accounts/roles/export/` (`roles_export`), `GET /settings/areas/export/` (`areas_export`), `GET /settings/expenses/export/` (`expenses_export`), `GET /settings/tickets/export/` (`tickets_export`), `GET /settings/requests/export/` (`requests_export`), `GET /settings/agreements/export/` (`agreements_types_export`), `GET /activities/settings/visits/templates/export/` (`visit_templates_export`), `GET /performance/overview/export/` (`performance_overview_export`).
+
+### 9.4 Centralized Notifications APIs (Web & Capacitor Mobile Ready)
+Base paths: `/api/v1/notifications/` (versioned mobile/Capacitor API) and `/notifications/api/` (web UI alias):
+- `GET /api/v1/notifications/?is_read=0|1&module=<key>&page=1&per_page=25` — Paginated scoped inbox.
+- `GET /api/v1/notifications/unread-count/` — Lightweight unread badge counter for 45s visibility-aware polling.
+- `GET /api/v1/notifications/recent/?limit=12` — Latest popover/drawer notifications.
+- `GET /api/v1/notifications/<int:pk>/` — Single notification detail (recipient-isolated, 404 on IDOR).
+- `POST /api/v1/notifications/<int:pk>/read/` — Mark single notification read.
+- `POST /api/v1/notifications/mark-all-read/` — Mark all (or module/IDs subset) read.
+- `POST /api/v1/notifications/devices/register/` — Register Capacitor FCM/APNs/Web Push device token (`platform`, `provider`, `device_token`, `device_name`, `app_version`).
+- `POST /api/v1/notifications/devices/unregister/` — Deactivate device token on logout.
+

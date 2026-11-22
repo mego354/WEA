@@ -1008,6 +1008,79 @@ def agreement_delete(request, pk):
 
 
 # ==========================================
+# SETTINGS EXCEL EXPORTS (Areas, Expenses, Tickets, Requests, Agreements)
+# ==========================================
+
+@login_required
+@require_permission('settings:areas/manage')
+def areas_export(request):
+    from .excel_utils import export_to_excel_response
+    qs = Area.objects.select_related('parent').order_by('parent__name', 'name')
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(parent__name__icontains=q))
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'اسم المنطقة / البريك', 'key': 'name', 'width': 30, 'align': 'right'},
+        {'header': 'النوع', 'key': lambda a: 'منطقة فرعية (بريك)' if a.parent_id else 'منطقة رئيسية (محافظة)', 'width': 24, 'align': 'center'},
+        {'header': 'المنطقة الرئيسية', 'key': lambda a: a.parent.name if a.parent else '-', 'width': 26, 'align': 'right'},
+    ]
+    return export_to_excel_response(qs, columns, filename='areas_export', sheet_title='المناطق والبريكات', report_title='دليل المناطق والبريكات', user=request.user)
+
+
+@login_required
+@require_permission('settings:expenses/manage')
+def expenses_export(request):
+    from .excel_utils import export_to_excel_response
+    qs = ExpenseType.objects.all().order_by('id')
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'نوع المصروف', 'key': 'name', 'width': 32, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda x: 'مفعل' if getattr(x, 'is_active', True) else 'معطل', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(qs, columns, filename='expense_types_export', sheet_title='أنواع المصروفات', report_title='دليل أنواع المصروفات', user=request.user)
+
+
+@login_required
+@require_permission('settings:tickets/manage')
+def tickets_export(request):
+    from .excel_utils import export_to_excel_response
+    qs = TicketType.objects.all().order_by('id')
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'نوع التذكرة', 'key': 'name', 'width': 32, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda x: 'مفعل' if getattr(x, 'is_active', True) else 'معطل', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(qs, columns, filename='ticket_types_export', sheet_title='أنواع التذاكر', report_title='دليل أنواع التذاكر', user=request.user)
+
+
+@login_required
+@require_permission('settings:requests/manage')
+def requests_export(request):
+    from .excel_utils import export_to_excel_response
+    qs = ApprovalRequestType.objects.all().order_by('id')
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'نوع الطلب', 'key': 'name', 'width': 32, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda x: 'مفعل' if getattr(x, 'is_active', True) else 'معطل', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(qs, columns, filename='request_types_export', sheet_title='أنواع الطلبات', report_title='دليل أنواع طلبات الموافقة', user=request.user)
+
+
+@login_required
+@require_permission('settings:agreements/manage')
+def agreements_types_export(request):
+    from .excel_utils import export_to_excel_response
+    qs = AgreementType.objects.all().order_by('id')
+    columns = [
+        {'header': 'المعرف', 'key': 'id', 'width': 10, 'align': 'center'},
+        {'header': 'نوع الاتفاقية', 'key': 'name', 'width': 32, 'align': 'right'},
+        {'header': 'الحالة', 'key': lambda x: 'مفعل' if getattr(x, 'is_active', True) else 'معطل', 'width': 14, 'align': 'center'},
+    ]
+    return export_to_excel_response(qs, columns, filename='agreement_types_export', sheet_title='أنواع الاتفاقيات', report_title='دليل أنواع الاتفاقيات', user=request.user)
+
+
+# ==========================================
 # 8. SALES SETTINGS (/settings/sales)
 # ==========================================
 

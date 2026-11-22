@@ -153,6 +153,10 @@ class RepresentativeSalesWarehouseTests(TestCase):
         settings.save()
 
     def test_sales_enforces_representative_warehouse(self):
+        from master_data.models import SalesSettings
+        ss = SalesSettings.get_settings()
+        ss.require_manager_approval = False
+        ss.save()
         items_data = [{'product': self.product, 'quantity': Decimal('5.00'), 'unit_price': Decimal('25.00')}]
         order = SalesOrderService.create_order(
             customer=self.customer,
@@ -640,9 +644,9 @@ class SalesReturnOrderWorkflowTests(TestCase):
         with self.assertRaises(ValidationError):
             SalesReturnOrderService.approve_return_order(ret_order, user=self.rep)
 
-        # Manager approves -> success
+        # Manager approves -> automatically settles stock & ledger
         approved_order = SalesReturnOrderService.approve_return_order(ret_order, user=self.manager)
-        self.assertEqual(approved_order.status, 'approved')
+        self.assertEqual(approved_order.status, 'settled')
 
     def test_sales_return_delivery_and_restocking(self):
         """Creating sales return immediately restocks resalable items, damaged does not."""
@@ -700,11 +704,11 @@ class SalesReturnOrderWorkflowTests(TestCase):
         ret_order.refresh_from_db()
         self.assertEqual(ret_order.status, 'pending')
 
-        # POST request succeeds
+        # POST request succeeds -> automatically settles return
         post_resp = self.client.post(reverse('sales_return_order_action', args=[ret_order.pk, 'approve']))
         self.assertEqual(post_resp.status_code, 302)
         ret_order.refresh_from_db()
-        self.assertEqual(ret_order.status, 'approved')
+        self.assertEqual(ret_order.status, 'settled')
 
 
 class SalesCustomerScopingAndSmartSearchTests(TestCase):
@@ -1050,12 +1054,10 @@ class CustomerAccountsTransactionsScopeAndCollectionsPerfTests(TestCase):
             resp = self.client.get(route)
             self.assertEqual(resp.status_code, 403, f"Expected 403 for {unprivileged.username} on {route}")
 
-        # 2. Custom user permissions separate page view from Excel export, and enforce OWN sales scope
-        self.rep_nasr.has_custom_permissions = True
-        self.rep_nasr.user_permissions.set(self.Permission.objects.filter(codename__in=[
+        # 2. Role permissions separate page view from Excel export, and enforce OWN sales scope
+        self.rep_nasr.role.permissions.set(self.Permission.objects.filter(codename__in=[
             'module:sales', 'sales:customers/accounting', 'sales:customers/transactions'
         ]))
-        self.rep_nasr.save()
         self.rep_nasr.clear_perm_cache()
 
         self.client.force_login(self.rep_nasr)
@@ -1279,9 +1281,13 @@ class SalesPhase2ImprovementsTests(TestCase):
         )
 
     def test_automated_order_fulfillment_upon_creation(self):
-        """Creating a sales order atomically dispatches stock, debits customer ledger, and marks it invoiced."""
+        """Creating a sales order with manager approval disabled atomically dispatches stock, debits customer ledger, and marks it invoiced."""
         from inventory.models import InventoryMemo
+        from master_data.models import SalesSettings
         from sales.models import CustomerTransaction
+        ss = SalesSettings.get_settings()
+        ss.require_manager_approval = False
+        ss.save()
         order = SalesOrderService.create_order(
             customer=self.customer,
             source_warehouse=self.wh_rep,

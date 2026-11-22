@@ -4,6 +4,7 @@ from .models import (
     Contact, ContactAddress, ContactComment,
     ContactAttachment, ContactTodo, ContactActivity, ContactCommunicationMethod
 )
+from master_data.admin_mixins import ProtectedMasterAdminMixin, SafeCascadeAdminMixin
 
 
 class ContactCommunicationMethodInline(admin.TabularInline):
@@ -32,7 +33,7 @@ class ContactTodoInline(admin.TabularInline):
 
 
 @admin.register(Contact)
-class ContactAdmin(admin.ModelAdmin):
+class ContactAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = (
         'serial_num', 'name', 'contact_type_badge', 'business_relation_badges',
         'account_type', 'area', 'brick', 'mobile', 'credit_limit_display',
@@ -112,14 +113,14 @@ class ContactAdmin(admin.ModelAdmin):
 
 
 @admin.register(ContactAddress)
-class ContactAddressAdmin(admin.ModelAdmin):
+class ContactAddressAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('title', 'contact', 'is_main', 'area', 'brick', 'sub_area', 'latitude', 'longitude')
     list_filter = ('is_main', 'area', 'brick')
     search_fields = ('title', 'contact__name', 'street_address')
 
 
 @admin.register(ContactComment)
-class ContactCommentAdmin(admin.ModelAdmin):
+class ContactCommentAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('contact', 'author', 'text_short', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('text', 'contact__name', 'author__username')
@@ -130,13 +131,13 @@ class ContactCommentAdmin(admin.ModelAdmin):
 
 
 @admin.register(ContactAttachment)
-class ContactAttachmentAdmin(admin.ModelAdmin):
+class ContactAttachmentAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('filename', 'contact', 'uploaded_by', 'created_at')
     search_fields = ('filename', 'contact__name')
 
 
 @admin.register(ContactTodo)
-class ContactTodoAdmin(admin.ModelAdmin):
+class ContactTodoAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('title', 'contact', 'is_completed_badge', 'due_date', 'created_by')
     list_filter = ('is_completed', 'due_date')
     search_fields = ('title', 'contact__name')
@@ -149,14 +150,14 @@ class ContactTodoAdmin(admin.ModelAdmin):
 
 
 @admin.register(ContactActivity)
-class ContactActivityAdmin(admin.ModelAdmin):
+class ContactActivityAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('title', 'contact', 'activity_type', 'performed_by', 'start_time', 'created_at')
     list_filter = ('activity_type', 'created_at')
     search_fields = ('title', 'contact__name', 'notes')
 
 
 @admin.register(ContactCommunicationMethod)
-class ContactCommunicationMethodAdmin(admin.ModelAdmin):
+class ContactCommunicationMethodAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('contact', 'method_type', 'value', 'label', 'is_primary', 'created_at')
     list_filter = ('method_type', 'is_primary')
     search_fields = ('value', 'label', 'contact__name')

@@ -32,6 +32,13 @@
                 <span class="hidden sm:inline">تصدير Excel</span>
             </a>
             {% endif %}
+            {% if request.user|has_permission:'catalog:categories/import' %}
+            <a href="{% url 'excel_import' entity='categories' %}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold rounded-lg transition-colors min-h-[38px]">
+                <span class="material-symbols-outlined text-base">upload_file</span>
+                <span class="hidden sm:inline">استيراد Excel</span>
+            </a>
+            {% endif %}
 
             <button onclick="openModal('create-cat-modal')"
                     class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#27bebe] hover:bg-[#20a3a3] text-white text-xs font-bold rounded-lg shadow-md shadow-[#27bebe]/20 transition-all min-h-[38px]">

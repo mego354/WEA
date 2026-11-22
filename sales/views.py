@@ -901,16 +901,50 @@ def collection_create(request):
     )
     vaults = ScopeResolutionService.get_scoped_choices(request.user, 'vaults', 'sales')
 
-    # Open sales orders for dropdown linking
-    orders_qs = SalesOrder.objects.exclude(status='cancelled').select_related('customer').prefetch_related('collections').order_by('-order_date')
-    orders_qs = get_scoped_queryset(orders_qs, request.user, 'salesorder')
+    # Never dump thousands of SalesOrders into the HTML DOM.
+    # Only preload bounded orders for the initially selected customer (or selected_order_id);
+    # customer switching fetches scoped orders dynamically via sales_orders_search_api.
+    selected_customer_id = int(initial_customer) if initial_customer and str(initial_customer).isdigit() else None
+    selected_order_id = int(initial_order) if initial_order and str(initial_order).isdigit() else None
+
+    selected_customer_account = None
+    if selected_customer_id:
+        cust_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=selected_customer_id).first()
+        if cust_obj:
+            selected_customer_account = CustomerAccount.get_or_create_for_customer(cust_obj)
+            orders_qs = SalesOrder.with_payment_totals(
+                SalesOrder.objects.filter(customer_id=selected_customer_id)
+                .exclude(status__in=['cancelled', 'rejected'])
+                .select_related('customer')
+                .order_by('-order_date', '-id')
+            )
+            orders_qs = get_scoped_queryset(orders_qs, request.user, 'salesorder')
+            preloaded_orders = []
+            for o in orders_qs[:50]:
+                if o.outstanding_balance > Decimal('0.00') or (selected_order_id and o.id == selected_order_id):
+                    preloaded_orders.append(o)
+            if selected_order_id and not any(o.id == selected_order_id for o in preloaded_orders):
+                sel_o = get_scoped_queryset(
+                    SalesOrder.with_payment_totals(SalesOrder.objects.filter(id=selected_order_id).select_related('customer')),
+                    request.user,
+                    'salesorder'
+                ).first()
+                if sel_o:
+                    preloaded_orders.insert(0, sel_o)
+        else:
+            preloaded_orders = []
+    else:
+        preloaded_orders = []
 
     context = {
         'customers': customers,
         'vaults': vaults,
-        'orders': orders_qs,
-        'selected_customer_id': int(initial_customer) if initial_customer and str(initial_customer).isdigit() else None,
-        'selected_order_id': int(initial_order) if initial_order and str(initial_order).isdigit() else None,
+        'orders': preloaded_orders,
+        'selected_customer_id': selected_customer_id,
+        'selected_order_id': selected_order_id,
+        'selected_customer_balance': selected_customer_account.current_balance if selected_customer_account else None,
+        'selected_customer_overdue': selected_customer_account.overdue_balance if selected_customer_account else None,
+        'selected_customer_name': selected_customer_account.customer.name if selected_customer_account else '',
     }
     return render(request, 'sales/collection_create.html', context)
 
@@ -1126,14 +1160,29 @@ def accounting_customers_list(request):
 
 @require_permission('sales:customers/accounting_export')
 def accounting_customers_export(request):
-    """Export Customer Statements & Balances to Excel."""
+    """Export Customer Statements & Balances to Excel (respecting all active filters & DataScope)."""
+    from master_data.filter_utils import (
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
     search = request.GET.get('search', '').strip()
-    customer_id = request.GET.get('customer') or request.GET.get('customer_id')
-    qs = CustomerAccount.objects.select_related('customer', 'customer__area').order_by('-current_balance')
+    customer_id_int = parse_single_int(request.GET, 'customer_id', 'customer')
+    main_area_ids, brick_ids, _, _ = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id'),
+    )
+    qs = CustomerAccount.objects.select_related('customer', 'customer__area', 'customer__brick').order_by('-current_balance')
     qs = get_scoped_queryset(qs, request.user, 'customeraccount')
 
-    if customer_id:
-        qs = qs.filter(customer_id=customer_id)
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
     if search:
         qs = filter_by_arabic_search(qs, search, ['customer__name', 'customer__code'])
 
@@ -1148,6 +1197,40 @@ def accounting_customers_export(request):
         {'header': 'تاريخ آخر معاملة', 'key': lambda a: a.last_transaction_date.strftime('%Y-%m-%d') if a.last_transaction_date else '', 'width': 18, 'align': 'center'},
     ]
     return export_to_excel_response(qs, columns, filename="customer_accounts_export", sheet_title="حسابات العملاء")
+
+
+@require_permission('sales:customers/zero_balance')
+def accounting_customer_zero_balance(request, pk):
+    """Non-cash account zeroing (تصفير الحساب) for CustomerAccount — zero vault impact, preserves order payment_status."""
+    if request.method != 'POST':
+        return redirect('accounting_customers_list')
+
+    account = get_object_or_404(CustomerAccount.objects.select_related('customer'), pk=pk)
+    if not can_user_access_object(request.user, account, 'manage'):
+        return render_forbidden_response(request, "غير مصرح لك بتصفير رصيد حساب عميل خارج نطاق اختصاصك.")
+
+    reason_note = (request.POST.get('reason') or '').strip()
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    from .services import CustomerAccountService
+    try:
+        tx, prev_bal = CustomerAccountService.zero_balance(
+            customer=account.customer,
+            user=request.user,
+            reason_note=reason_note,
+            request=request,
+        )
+        msg = f"تم تصفير رصيد حساب العميل {account.customer.name} (من {prev_bal:,.2f} ج.م إلى 0.00 ج.م) بدون التأثير على أي خزنة."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg, 'new_balance': '0.00', 'transaction_serial': tx.serial})
+        messages.success(request, msg)
+    except ValidationError as e:
+        err_msg = str(e.message if hasattr(e, 'message') else e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+
+    return redirect('accounting_customers_list')
 
 
 @require_permission('sales:customers/transactions')
@@ -1263,12 +1346,15 @@ def customer_transactions_export(request):
     """Export Customer Ledger Transactions to Excel."""
     customer_id = request.GET.get('customer_id') or request.GET.get('customer')
     tx_type = request.GET.get('type')
+    reason_filter = request.GET.get('reason', '').strip()
+    main_area = request.GET.get('main_area', '').strip()
+    brick = request.GET.get('brick', '').strip()
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     search = request.GET.get('search', '').strip()
 
     qs = get_scoped_queryset(
-        CustomerTransaction.objects.select_related('account', 'account__customer', 'created_by').order_by('-serial'),
+        CustomerTransaction.objects.select_related('account', 'account__customer', 'account__customer__area', 'account__customer__brick', 'created_by').order_by('-serial'),
         request.user,
         'customertransaction',
     )
@@ -1277,6 +1363,16 @@ def customer_transactions_export(request):
         qs = qs.filter(account__customer_id=customer_id)
     if tx_type in ['debit', 'credit']:
         qs = qs.filter(transaction_type=tx_type)
+    if reason_filter and reason_filter != 'all':
+        qs = qs.filter(reason=reason_filter)
+    if main_area and main_area.isdigit():
+        qs = qs.filter(
+            Q(account__customer__area_id=int(main_area))
+            | Q(account__customer__area__parent_id=int(main_area))
+            | Q(account__customer__brick__parent_id=int(main_area))
+        )
+    if brick and brick.isdigit():
+        qs = qs.filter(Q(account__customer__brick_id=int(brick)) | Q(account__customer__area_id=int(brick)))
     if date_from:
         qs = qs.filter(transaction_date__gte=date_from)
     if date_to:
@@ -1299,8 +1395,11 @@ def customer_transactions_export(request):
 
 @require_permission('sales:orders/export')
 def sales_orders_export(request):
+    status_filter = request.GET.get('status', 'all')
     payment_status_filter = request.GET.get('payment_status', 'all')
     customer_filter = request.GET.get('customer')
+    main_area = request.GET.get('main_area', '').strip()
+    brick = request.GET.get('brick', '').strip()
     search = request.GET.get('search', '').strip()
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
@@ -1309,14 +1408,24 @@ def sales_orders_export(request):
     remaining_min = request.GET.get('remaining_min', '').strip()
     remaining_max = request.GET.get('remaining_max', '').strip()
 
-    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
+    qs = SalesOrder.objects.select_related('customer', 'customer__area', 'customer__brick', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
     qs = get_scoped_queryset(qs, request.user, 'salesorder')
     qs = SalesOrder.with_payment_totals(qs)
 
+    if status_filter and status_filter != 'all':
+        qs = qs.filter(status=status_filter)
     if payment_status_filter != 'all' and payment_status_filter in dict(SalesOrder.PAYMENT_STATUS_CHOICES):
         qs = qs.filter(payment_status=payment_status_filter)
     if customer_filter:
         qs = qs.filter(customer_id=customer_filter)
+    if main_area and main_area.isdigit():
+        qs = qs.filter(
+            Q(customer__area_id=int(main_area))
+            | Q(customer__area__parent_id=int(main_area))
+            | Q(customer__brick__parent_id=int(main_area))
+        )
+    if brick and brick.isdigit():
+        qs = qs.filter(Q(customer__brick_id=int(brick)) | Q(customer__area_id=int(brick)))
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
     if date_to:
@@ -1846,16 +1955,26 @@ def sales_return_orders_export(request):
 
     status_filter = request.GET.get('status', 'all')
     customer_filter = request.GET.get('customer')
+    main_area = request.GET.get('main_area', '').strip()
+    brick = request.GET.get('brick', '').strip()
     search = request.GET.get('search', '').strip()
     date_from, date_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
 
-    qs = SalesReturnOrder.objects.select_related('customer', 'customer__area', 'sales_order', 'target_warehouse', 'created_by').order_by('-serial_num')
+    qs = SalesReturnOrder.objects.select_related('customer', 'customer__area', 'customer__brick', 'sales_order', 'target_warehouse', 'created_by').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'salesreturnorder')
 
     if status_filter != 'all':
         qs = qs.filter(status=status_filter)
     if customer_filter:
         qs = qs.filter(customer_id=customer_filter)
+    if main_area and main_area.isdigit():
+        qs = qs.filter(
+            Q(customer__area_id=int(main_area))
+            | Q(customer__area__parent_id=int(main_area))
+            | Q(customer__brick__parent_id=int(main_area))
+        )
+    if brick and brick.isdigit():
+        qs = qs.filter(Q(customer__brick_id=int(brick)) | Q(customer__area_id=int(brick)))
     if date_from:
         qs = qs.filter(order_date__gte=date_from)
     if date_to:
@@ -1994,16 +2113,24 @@ def sales_customers_search_api(request):
     'sales:orders/list',
     'sales:returns/list',
     'sales:returns/create',
+    'sales:collections/list',
+    'sales:collections/create',
 ])
 def sales_orders_search_api(request):
     """Scoped Arabic-normalized smart-search API for Sales Order selectors."""
     q = (request.GET.get('q') or request.GET.get('search') or '').strip()
     customer_id = request.GET.get('customer_id') or request.GET.get('customer')
     for_return = request.GET.get('for_return')
+    unpaid_only = str(request.GET.get('unpaid_only', '')).strip().lower() in ('1', 'true', 'yes', 'on')
+    include_order_id = request.GET.get('include_order_id') or request.GET.get('selected_order_id')
     limit = parse_search_limit(request)
 
     qs = get_scoped_queryset(
-        SalesOrder.objects.select_related('customer', 'source_warehouse', 'created_by').order_by('-order_date', '-id'),
+        SalesOrder.with_payment_totals(
+            SalesOrder.objects.exclude(status__in=['cancelled', 'rejected'])
+            .select_related('customer', 'source_warehouse', 'created_by')
+            .order_by('-order_date', '-id')
+        ),
         request.user,
         'salesorder'
     )
@@ -2011,6 +2138,8 @@ def sales_orders_search_api(request):
         qs = qs.filter(status__in=['delivered', 'invoiced'])
     if customer_id and str(customer_id).isdigit():
         qs = qs.filter(customer_id=int(customer_id))
+    if unpaid_only:
+        qs = qs.exclude(payment_status__in=['paid', 'returned'])
     if q:
         qs = filter_by_arabic_search(
             qs,
@@ -2020,24 +2149,96 @@ def sales_orders_search_api(request):
             numeric_id_field='serial_num',
         )
 
-    total_count = qs.count()
-    results = []
-    for o in qs[:limit]:
-        status_name = o.get_status_display()
-        subtext = f"{o.customer.name} • {o.order_date} • {status_name} • {o.grand_total} ج.م"
-        results.append({
+    customer_balance_payload = None
+    if customer_id and str(customer_id).isdigit():
+        cust_obj = get_scoped_queryset(Contact.objects.filter(id=int(customer_id), is_customer=True), request.user, 'contact').first()
+        if cust_obj:
+            acc = CustomerAccount.get_or_create_for_customer(cust_obj)
+            customer_balance_payload = {
+                'customer_id': cust_obj.id,
+                'customer_name': cust_obj.name,
+                'current_balance': f"{(acc.current_balance or Decimal('0.00')):.2f}",
+                'overdue_balance': f"{(acc.overdue_balance or Decimal('0.00')):.2f}",
+                'credit_limit': f"{(acc.credit_limit or Decimal('0.00')):.2f}",
+            }
+
+    def _serialize_order(o):
+        bal = o.outstanding_balance
+        paid = o.total_paid
+        returned = o.total_returned
+        due_str = o.due_date.isoformat() if o.due_date else ''
+        due_part = f" • استحقاق: {due_str}" if due_str else ''
+        return {
             'id': o.id,
             'name': f"{o.order_number} ({o.customer.name})",
-            'text': f"{o.order_number} ({o.customer.name})",
-            'subtext': subtext,
+            'text': f"أمر بيع {o.order_number} - الإجمالي: {o.grand_total:,.2f} ج.م - المتبقي: {bal:,.2f} ج.م{due_part}",
+            'subtext': f"{o.customer.name} • {o.order_date} • {o.status_display_ar} • المتبقي: {bal:,.2f} ج.م",
             'order_number': o.order_number,
             'customer_id': o.customer_id,
             'customer_name': o.customer.name,
             'warehouse_id': o.source_warehouse_id,
-            'grand_total': str(o.grand_total),
-        })
+            'grand_total': f"{(o.grand_total or Decimal('0.00')):.2f}",
+            'paid_amount': f"{paid:.2f}",
+            'returned_amount': f"{returned:.2f}",
+            'outstanding_balance': f"{bal:.2f}",
+            'payment_status': o.payment_status,
+            'payment_status_display': o.payment_status_display_ar,
+            'due_date': due_str,
+        }
 
-    return JsonResponse({'results': results, 'count': len(results), 'total_count': total_count})
+    results = []
+    seen_ids = set()
+    fetch_cap = max(limit * 2, 100) if unpaid_only else limit
+    for o in qs[:fetch_cap]:
+        if unpaid_only and o.outstanding_balance <= Decimal('0.00'):
+            continue
+        results.append(_serialize_order(o))
+        seen_ids.add(o.id)
+        if len(results) >= limit:
+            break
+
+    if include_order_id and str(include_order_id).isdigit():
+        inc_id = int(include_order_id)
+        if inc_id not in seen_ids:
+            inc_obj = get_scoped_queryset(
+                SalesOrder.with_payment_totals(
+                    SalesOrder.objects.filter(id=inc_id).select_related('customer', 'source_warehouse')
+                ),
+                request.user,
+                'salesorder',
+            ).first()
+            if inc_obj and (not customer_id or str(inc_obj.customer_id) == str(customer_id)):
+                results.insert(0, _serialize_order(inc_obj))
+
+    total_count = qs.count()
+    return JsonResponse({
+        'results': results,
+        'count': len(results),
+        'total_count': total_count,
+        'customer_account': customer_balance_payload,
+    })
+
+
+@require_permission([
+    'sales:collections/create',
+    'sales:collections/list',
+    'sales:customers/accounting',
+    'sales:orders/list',
+])
+def sales_customer_balance_api(request, pk):
+    """Returns authoritative overall CustomerAccount balance for a scoped customer."""
+    customer = get_object_or_404(Contact, pk=pk, is_customer=True)
+    if not can_user_access_object(request.user, customer, 'view'):
+        return JsonResponse({'error': 'غير مصرح لك بعرض رصيد هذا العميل.'}, status=403)
+    acc = CustomerAccount.get_or_create_for_customer(customer)
+    return JsonResponse({
+        'customer_id': customer.id,
+        'customer_name': customer.name,
+        'current_balance': f"{(acc.current_balance or Decimal('0.00')):.2f}",
+        'overdue_balance': f"{(acc.overdue_balance or Decimal('0.00')):.2f}",
+        'credit_limit': f"{(acc.credit_limit or Decimal('0.00')):.2f}",
+        'last_transaction_date': acc.last_transaction_date.isoformat() if acc.last_transaction_date else '',
+    })
 
 
 @require_permission([

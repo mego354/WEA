@@ -322,6 +322,18 @@
                 return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
             });
         };
+        window.erpParseMoney = function(val) {
+            if (val === null || val === undefined || val === '') return null;
+            const cleaned = String(val).replace(/,/g, '').replace(/[^\d.\-]/g, '').trim();
+            if (!cleaned) return null;
+            const num = Number(cleaned);
+            return Number.isFinite(num) ? num : null;
+        };
+        window.erpFormatMoney = function(val, fallback = '0.00') {
+            const num = window.erpParseMoney(val);
+            if (num === null) return fallback;
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
     </script>
 
     <!-- SIDEBAR BACKDROP OVERLAY -->
@@ -797,7 +809,50 @@
             </div>
 
             <!-- Top Actions -->
-            <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div class="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                <!-- Notification Bell (Desktop Popover & Mobile Bottom-Sheet Drawer) -->
+                {% if request.user.is_authenticated %}
+                <div class="relative" id="erpNotifWrapper">
+                    <button type="button" id="erpNotifBellBtn" onclick="toggleNotificationsPanel()"
+                            class="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 rounded-xl transition-all active:scale-95"
+                            title="الإشعارات" aria-label="الإشعارات" aria-haspopup="true" aria-expanded="false">
+                        <span class="material-symbols-outlined text-xl">notifications</span>
+                        <span id="erpNotifBadge" class="hidden absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black leading-[18px] text-center shadow-xs">0</span>
+                    </button>
+
+                    <!-- Desktop Popover / Mobile Drawer Panel -->
+                    <div id="erpNotifBackdrop" onclick="closeNotificationsPanel()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 sm:hidden"></div>
+                    <div id="erpNotifPanel"
+                         class="hidden fixed inset-x-0 bottom-0 sm:inset-auto sm:absolute sm:left-0 sm:top-full sm:mt-2 w-full sm:w-96 max-h-[82vh] sm:max-h-[520px] bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl z-50 flex flex-col overflow-hidden">
+                        <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 sm:hidden"></div>
+                        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 bg-white">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-[#27bebe] text-lg">notifications</span>
+                                <h3 class="text-xs font-black text-slate-900">الإشعارات</h3>
+                                <span id="erpNotifPanelCount" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-[#27bebe]">0</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="markAllHeaderNotificationsRead()" class="text-[11px] font-bold text-slate-500 hover:text-[#27bebe] transition-colors">
+                                    قراءة الكل
+                                </button>
+                                <button type="button" onclick="closeNotificationsPanel()" class="sm:hidden p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                                    <span class="material-symbols-outlined text-lg">close</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="erpNotifListContainer" class="flex-1 overflow-y-auto divide-y divide-slate-100 text-right">
+                            <div class="py-10 text-center text-xs text-slate-400">جاري التحميل...</div>
+                        </div>
+                        <div class="px-4 py-2.5 border-t border-slate-100 bg-slate-50/80 text-center">
+                            <a href="{% url 'notifications_inbox' %}" class="text-xs font-bold text-[#27bebe] hover:underline inline-flex items-center gap-1">
+                                <span>عرض جميع الإشعارات</span>
+                                <span class="material-symbols-outlined text-sm">chevron_left</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Mobile Header Refresh Button -->
                 <button type="button" onclick="handleMobileRefresh(this)" class="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 rounded-xl transition-all active:scale-95" title="تحديث الصفحة" aria-label="تحديث الصفحة">
                     <span class="material-symbols-outlined text-xl transition-transform duration-300">refresh</span>
@@ -1384,6 +1439,137 @@
     <script src="{% static 'js/list_smart_search.js' %}"></script>
     <!-- Reusable Table Column Manager -->
     <script src="{% static 'js/table_column_manager.js' %}"></script>
+    {% if request.user.is_authenticated %}
+    <!-- Capacitor-ready Notifications Client + Header Bell UI -->
+    <script src="{% static 'js/notifications_client.js' %}"></script>
+    <script>
+        (function() {
+            const client = new window.ERPNotificationsClient({
+                apiBase: '/api/v1/notifications',
+                pollIntervalMs: 45000,
+            });
+            window._erpNotifClient = client;
+
+            function severityMeta(sev) {
+                if (sev === 'danger') return { cls: 'bg-rose-50 text-rose-600', icon: 'error' };
+                if (sev === 'warning') return { cls: 'bg-amber-50 text-amber-600', icon: 'warning' };
+                if (sev === 'success') return { cls: 'bg-emerald-50 text-emerald-600', icon: 'check_circle' };
+                return { cls: 'bg-teal-50 text-[#27bebe]', icon: 'notifications' };
+            }
+
+            function formatNotifTime(iso) {
+                if (!iso) return '';
+                try {
+                    const d = new Date(iso);
+                    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+                    if (diffMin < 1) return 'الآن';
+                    if (diffMin < 60) return `منذ ${diffMin} د`;
+                    const diffHr = Math.floor(diffMin / 60);
+                    if (diffHr < 24) return `منذ ${diffHr} س`;
+                    return d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+                } catch (e) { return ''; }
+            }
+
+            function renderBadge(count) {
+                const badge = document.getElementById('erpNotifBadge');
+                const panelCount = document.getElementById('erpNotifPanelCount');
+                if (panelCount) panelCount.textContent = String(count);
+                if (!badge) return;
+                if (count > 0) {
+                    badge.textContent = count > 99 ? '99+' : String(count);
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+
+            function renderItems(state) {
+                const box = document.getElementById('erpNotifListContainer');
+                if (!box) return;
+                if (state.loading && (!state.items || state.items.length === 0)) {
+                    box.innerHTML = '<div class="py-10 text-center text-xs text-slate-400">جاري تحميل الإشعارات...</div>';
+                    return;
+                }
+                if (state.error) {
+                    box.innerHTML = '<div class="py-8 px-4 text-center text-xs text-rose-600">' + window.erpEscapeHtml(state.error) + '</div>';
+                    return;
+                }
+                if (!state.items || state.items.length === 0) {
+                    box.innerHTML = '<div class="py-10 text-center text-xs text-slate-400"><span class="material-symbols-outlined text-3xl block mb-1 text-slate-300">notifications_off</span>لا توجد إشعارات حالياً</div>';
+                    return;
+                }
+                box.innerHTML = state.items.map(function(n) {
+                    const m = severityMeta(n.severity);
+                    const bg = n.is_read ? 'bg-white hover:bg-slate-50' : 'bg-teal-50/40 hover:bg-teal-50/70';
+                    const dot = n.is_read ? '' : '<span class="w-2 h-2 rounded-full bg-[#27bebe] shrink-0"></span>';
+                    return (
+                        '<a href="' + window.erpEscapeHtml(n.open_url || '/notifications/') + '" class="flex items-start gap-3 px-4 py-3 transition-colors min-h-[56px] ' + bg + '">' +
+                            '<div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ' + m.cls + '">' +
+                                '<span class="material-symbols-outlined text-base">' + m.icon + '</span>' +
+                            '</div>' +
+                            '<div class="flex-1 min-w-0">' +
+                                '<div class="flex items-center justify-between gap-2">' +
+                                    '<span class="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">' + dot + window.erpEscapeHtml(n.title) + '</span>' +
+                                    '<span class="text-[10px] text-slate-400 shrink-0">' + window.erpEscapeHtml(formatNotifTime(n.created_at)) + '</span>' +
+                                '</div>' +
+                                (n.body ? '<p class="text-[11px] text-slate-500 mt-0.5 line-clamp-2">' + window.erpEscapeHtml(n.body) + '</p>' : '') +
+                            '</div>' +
+                        '</a>'
+                    );
+                }).join('');
+            }
+
+            client.subscribe(function(state) {
+                renderBadge(state.unreadCount);
+                const panel = document.getElementById('erpNotifPanel');
+                if (panel && !panel.classList.contains('hidden')) {
+                    renderItems(state);
+                }
+            });
+
+            window.toggleNotificationsPanel = function() {
+                const panel = document.getElementById('erpNotifPanel');
+                const backdrop = document.getElementById('erpNotifBackdrop');
+                const btn = document.getElementById('erpNotifBellBtn');
+                if (!panel) return;
+                const willOpen = panel.classList.contains('hidden');
+                if (willOpen) {
+                    panel.classList.remove('hidden');
+                    if (backdrop) backdrop.classList.remove('hidden');
+                    if (btn) btn.setAttribute('aria-expanded', 'true');
+                    client.fetchSummary(12).catch(() => {});
+                } else {
+                    window.closeNotificationsPanel();
+                }
+            };
+
+            window.closeNotificationsPanel = function() {
+                const panel = document.getElementById('erpNotifPanel');
+                const backdrop = document.getElementById('erpNotifBackdrop');
+                const btn = document.getElementById('erpNotifBellBtn');
+                if (panel) panel.classList.add('hidden');
+                if (backdrop) backdrop.classList.add('hidden');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            };
+
+            window.markAllHeaderNotificationsRead = function() {
+                client.markAllAsRead().catch(() => {});
+            };
+
+            document.addEventListener('click', function(e) {
+                const wrapper = document.getElementById('erpNotifWrapper');
+                const panel = document.getElementById('erpNotifPanel');
+                if (wrapper && panel && !panel.classList.contains('hidden') && !wrapper.contains(e.target)) {
+                    window.closeNotificationsPanel();
+                }
+            });
+
+            document.addEventListener('DOMContentLoaded', function() {
+                client.startPolling();
+            });
+        })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

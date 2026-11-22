@@ -139,7 +139,7 @@ class User(AbstractUser):
             return True
         if self.has_permission('activities:visits/bypass_gps'):
             return True
-        if not getattr(self, 'has_custom_permissions', False) and self.role and self.role.tags.filter(tag='customers:customers/bypassLocation').exists():
+        if self.role and self.role.is_active and self.role.tags.filter(tag='customers:customers/bypassLocation').exists():
             return True
         return False
 
@@ -205,14 +205,12 @@ class User(AbstractUser):
             self._cached_perm_codenames = all_codenames
             return self._cached_perm_codenames
 
-        # If user has custom direct permissions enabled, use user_permissions explicitly
-        if getattr(self, 'has_custom_permissions', False):
-            all_assigned = set(self.user_permissions.values_list('codename', flat=True))
-        else:
-            # Get all permissions assigned to the role plus any direct user permissions
-            role_perms = set(self.role.permissions.values_list('codename', flat=True)) if (self.role and self.role.is_active) else set()
-            user_perms = set(self.user_permissions.values_list('codename', flat=True))
-            all_assigned = role_perms | user_perms
+        # Permissions are governed exclusively by the user's active Role (Role Settings)
+        all_assigned = (
+            set(self.role.permissions.values_list('codename', flat=True))
+            if (self.role and self.role.is_active)
+            else set()
+        )
         
         # Enforce Module-Level Inheritance:
         # A child permission is effective IF AND ONLY IF its parent module root permission is enabled!

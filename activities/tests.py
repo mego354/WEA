@@ -444,10 +444,10 @@ class VisitAndLocationParityTestCase(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.status, 'planned')
 
-        # 3. With bypass permission and force_bypass -> starts visit, does NOT make visit need approval
+        # 3. With bypass permission on role and force_bypass -> starts visit, does NOT make visit need approval
         from django.contrib.auth.models import Permission
         bypass_perm = Permission.objects.filter(codename='activities:visits/bypass_gps').first()
-        self.rep.user_permissions.add(bypass_perm)
+        self.rep.role.permissions.add(bypass_perm)
         self.rep.clear_perm_cache()
 
         res_bypass = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
@@ -2281,10 +2281,10 @@ class VisitManagementImprovementsTestCase(TestCase):
         v_rep.refresh_from_db()
         self.assertEqual(v_rep.status, 'started')
 
-        # 2. Grant rep bypass permission
+        # 2. Grant rep role bypass permission
         from django.contrib.auth.models import Permission
         bypass_perm = Permission.objects.filter(codename='activities:visits/bypass_gps').first()
-        self.nasr_rep.user_permissions.add(bypass_perm)
+        self.nasr_rep.role.permissions.add(bypass_perm)
         self.nasr_rep.clear_perm_cache()
 
         # 3. Rep bypasses distance with permission -> visit ends, preserves answers, approval_status remains 'approved'
@@ -3940,17 +3940,12 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         self.assertEqual(po.rejection_reason, "")
         self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='resubmitted').exists())
 
-        # 6. Authorized approval by manager
+        # 6. Authorized approval by manager -> automatically posts stock & ledger -> settled
         PurchaseOrderService.approve_order(po, self.manager_a, notes="معتمد للشراء")
         po.refresh_from_db()
-        self.assertEqual(po.status, 'approved')
+        self.assertEqual(po.status, 'settled')
         self.assertEqual(po.approved_by, self.manager_a)
         self.assertTrue(ApprovalAuditLog.objects.filter(purchase_order=po, action='approved').exists())
-
-        # 7. Downstream stocking unlocked after approval
-        PurchaseOrderService.stock_order(po, self.manager_a)
-        po.refresh_from_db()
-        self.assertEqual(po.status, 'picked')
 
     def test_item_detail_pages_approval_actions_and_list_filters(self):
         """Verify approval actions directly on Visit, SalesOrder, and PurchaseOrder detail pages, and list filters."""
@@ -4022,16 +4017,16 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         self.assertEqual(res_po_detail.status_code, 200)
         self.assertTrue(res_po_detail.context['can_approve'])
 
-        # Approve purchase order via detail action
+        # Approve purchase order via detail action -> auto-posts to settled
         res_po_act = self.client.post(reverse('purchase_order_action', args=[po.pk, 'approve']), {
             'approval_notes': 'معتمد من مدير المشتريات'
         })
         self.assertEqual(res_po_act.status_code, 302)
         po.refresh_from_db()
-        self.assertEqual(po.status, 'approved')
+        self.assertEqual(po.status, 'settled')
 
-        # Purchase orders list filter by status=approved
-        res_po_list = self.client.get(reverse('purchase_orders_list') + '?status=approved')
+        # Purchase orders list filter by status=settled
+        res_po_list = self.client.get(reverse('purchase_orders_list') + '?status=settled')
         self.assertEqual(res_po_list.status_code, 200)
         self.assertContains(res_po_list, po.order_number)
 
@@ -4634,7 +4629,9 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         - Purchase Orders
         - Agreements
         """
-        # A. Sales Orders (Direct execution: orders execute immediately to invoiced)
+        # A. Sales Orders (Direct execution when manager approval is disabled: orders execute immediately to invoiced)
+        self.sales_settings.require_manager_approval = False
+        self.sales_settings.save()
         from accounts.services import get_representative_warehouse
         rep_wh = get_representative_warehouse(self.rep_cairo)
         from inventory.models import InventoryStock
@@ -4679,7 +4676,9 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         self.assertIsNotNone(so_mgr)
         self.assertEqual(so_mgr.status, 'invoiced')
 
-        # B. Purchase Orders (Direct execution: orders execute immediately to settled)
+        # B. Purchase Orders (Direct execution when manager approval is disabled: orders execute immediately to settled)
+        self.purchase_settings.require_manager_approval = False
+        self.purchase_settings.save()
         # 1. Accountant creates Purchase Order -> Settled
         self.client.logout()
         self.client.login(username='acc_user', password='Password123!')
@@ -5919,11 +5918,11 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
             if p:
                 self.rep_role.permissions.add(p)
 
-        # Grant rep erroneous visits/approve bit to prove Requirement G blocks unauthorized auto-approval
+        # Verify individual user_permissions no longer grant approval bits (strictly Role-based)
         approve_perm = Permission.objects.filter(codename='activities:visits/approve').first()
         if approve_perm:
-            self.rep_nasr.user_permissions.add(approve_perm)
-            self.rep_nasr.has_custom_permissions = False
+            self.rep_role.permissions.remove(approve_perm)
+            self.rep_nasr.clear_perm_cache()
 
         self.mgr_cairo = User.objects.create_user(
             username='mgr_cairo_req', email='mgr_cairo_req@wea.com', password='TestPassword123!', role=self.manager_role

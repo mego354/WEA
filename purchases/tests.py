@@ -169,9 +169,9 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = json.loads(resp.content)
         self.assertEqual(data.get('status'), 'ok')
-        self.assertEqual(data.get('new_status'), 'approved')
+        self.assertEqual(data.get('new_status'), 'settled')
         self.order.refresh_from_db()
-        self.assertEqual(self.order.status, 'approved')
+        self.assertEqual(self.order.status, 'settled')
 
     def test_purchase_order_add_comment(self):
         comment_url = reverse('purchase_order_add_comment', args=[self.order.id])
@@ -268,7 +268,7 @@ class PurchasesModelsAndViewsTestCase(TestCase):
 
         vendor_acc.refresh_from_db()
         self.assertEqual(vendor_acc.current_balance, Decimal('9624.00'))
-        tx = VendorTransaction.objects.filter(reason='purchase_return').first()
+        tx = VendorTransaction.objects.filter(reason='purchase_returns').first()
         self.assertIsNotNone(tx)
         self.assertEqual(tx.debit, Decimal('376.00'))
 
@@ -357,7 +357,7 @@ class PurchasesModelsAndViewsTestCase(TestCase):
         act_resp = self.client.post(reverse('purchase_return_order_action', args=[ret.id, 'approve']), follow=True)
         self.assertEqual(act_resp.status_code, 200)
         ret.refresh_from_db()
-        self.assertEqual(ret.status, 'approved')
+        self.assertEqual(ret.status, 'settled')
 
         # 5. GET print
         print_resp = self.client.get(reverse('purchase_return_order_print', args=[ret.id]))
@@ -477,7 +477,7 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
         order.save()
         PurchaseOrderService.approve_order(order, self.superadmin)
         order.refresh_from_db()
-        self.assertEqual(order.status, 'approved')
+        self.assertEqual(order.status, 'settled')
 
         approve_audit = SecurityAuditLog.objects.filter(
             module='purchases', action_type='PURCHASE_ORDER_APPROVED', record_id=order.id
@@ -485,20 +485,10 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
         self.assertIsNotNone(approve_audit)
         self.assertEqual(approve_audit.actor, self.superadmin)
 
-        # Stock Order in warehouse
-        PurchaseOrderService.stock_order(order, self.superadmin)
-        order.refresh_from_db()
-        self.assertEqual(order.status, 'picked')
-
-        # Invoice / Settle Order
+        # Idempotent downstream calls keep order safely settled without double-posting
         PurchaseOrderService.invoice_order(order, self.accountant)
         order.refresh_from_db()
         self.assertEqual(order.status, 'settled')
-
-        settle_audit = SecurityAuditLog.objects.filter(
-            module='purchases', action_type='PURCHASE_ORDER_SETTLED', record_id=order.id
-        ).first()
-        self.assertIsNotNone(settle_audit)
 
     def test_vendor_payment_linked_to_purchase_order(self):
         """Vendor payment linked to a specific purchase order reduces its outstanding balance."""
@@ -625,6 +615,11 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             warehouse=self.wh, product=self.product, qty_on_hand=Decimal('100.00'), product_cost=Decimal('30.00')
         )
 
+        from master_data.models import PurchaseSettings
+        ps = PurchaseSettings.get_settings()
+        ps.require_manager_approval = False
+        ps.save()
+
         # Create original purchase order (immediately settled, stocked, and invoiced)
         self.orig_po = PurchaseOrderService.create_order(
             supplier=self.supplier,
@@ -710,9 +705,9 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
             PurchaseReturnOrderService.approve_return_order(ret, self.accountant)
         self.assertIn('منع الاعتماد الذاتي', str(ctx.exception))
 
-        # Approval by manager succeeds
+        # Approval by manager succeeds and auto-settles return
         approved = PurchaseReturnOrderService.approve_return_order(ret, self.manager)
-        self.assertEqual(approved.status, 'approved')
+        self.assertEqual(approved.status, 'settled')
 
     def test_purchase_return_rejection_workflow(self):
         """Rejecting purchase return requires manager approval and saves rejection reason."""
@@ -785,11 +780,11 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
         self.assertEqual(ret.status, 'pending')
         self.assertEqual(ret.status, 'pending')
 
-        # POST request on approve endpoint executes action
+        # POST request on approve endpoint executes action and auto-settles return
         post_resp = self.client.post(reverse('purchase_return_order_action', args=[ret.pk, 'approve']))
         self.assertEqual(post_resp.status_code, 302)
         ret.refresh_from_db()
-        self.assertEqual(ret.status, 'approved')
+        self.assertEqual(ret.status, 'settled')
 
 
 class PurchasesSupplierScopingAndSmartSearchTests(TestCase):

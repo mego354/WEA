@@ -7,10 +7,15 @@ from .models import (
     VisitPlan, Visit, VisitSampleItem, VisitExpense,
     ApprovalAuditLog, AgendaTodo
 )
+from master_data.admin_mixins import (
+    SafeCascadeAdminMixin,
+    ProtectedMasterAdminMixin,
+    ImmutableAdminMixin,
+)
 
 
 @admin.register(AgreementType)
-class AgreementTypeAdmin(admin.ModelAdmin):
+class AgreementTypeAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'display_name_ar', 'agreements_count', 'is_active_badge')
     list_filter = ('is_active',)
     search_fields = ('name', 'display_name_ar')
@@ -27,7 +32,7 @@ class AgreementTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(Agreement)
-class AgreementAdmin(admin.ModelAdmin):
+class AgreementAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('serial_num', 'title', 'type', 'customer', 'amount_display', 'status_badge', 'date', 'created_by')
     list_filter = ('status', 'type', 'date')
     search_fields = ('title', 'serial_num', 'customer__name', 'customer__code')
@@ -71,7 +76,7 @@ class VisitTemplateQuestionInline(admin.TabularInline):
 
 
 @admin.register(VisitTemplate)
-class VisitTemplateAdmin(admin.ModelAdmin):
+class VisitTemplateAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = (
         'name', 'display_name_ar', 'questions_count', 'allow_unplanned',
         'has_special_location_settings', 'special_tolerance', 'active_badge'
@@ -93,7 +98,7 @@ class VisitTemplateAdmin(admin.ModelAdmin):
 
 
 @admin.register(VisitTemplateQuestion)
-class VisitTemplateQuestionAdmin(admin.ModelAdmin):
+class VisitTemplateQuestionAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('template', 'order', 'text_ar', 'question_type', 'stage', 'is_required', 'is_conditional', 'is_active')
     list_filter = ('template', 'question_type', 'stage', 'is_required', 'is_active')
     search_fields = ('text_ar', 'text_en', 'template__name', 'template__display_name_ar')
@@ -108,7 +113,7 @@ class PlannedVisitItemInline(admin.TabularInline):
 
 
 @admin.register(PlannedVisitDay)
-class PlannedVisitDayAdmin(admin.ModelAdmin):
+class PlannedVisitDayAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('assignee', 'date', 'status_badge', 'items_count', 'created_by', 'created_at')
     list_filter = ('status', 'date', 'assignee')
     search_fields = ('assignee__username', 'assignee__first_name', 'assignee__last_name')
@@ -134,7 +139,7 @@ class PlannedVisitDayAdmin(admin.ModelAdmin):
 
 
 @admin.register(PlannedVisitItem)
-class PlannedVisitItemAdmin(admin.ModelAdmin):
+class PlannedVisitItemAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('plan_day', 'order', 'contact', 'template', 'is_executed_badge', 'visit')
     list_filter = ('is_executed', 'plan_day__date', 'template')
     search_fields = ('contact__name', 'contact__code', 'plan_day__assignee__username')
@@ -159,7 +164,7 @@ class VisitExpenseInline(admin.TabularInline):
 
 
 @admin.register(Visit)
-class VisitAdmin(admin.ModelAdmin):
+class VisitAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = (
         'serial_num', 'contact', 'owner', 'template', 'date', 'time',
         'status_badge', 'approval_badge', 'location_status_badge',
@@ -304,7 +309,7 @@ class VisitAdmin(admin.ModelAdmin):
 
 
 @admin.register(VisitPlan)
-class VisitPlanAdmin(admin.ModelAdmin):
+class VisitPlanAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('plan_id', 'assignee', 'date', 'approval_status_badge', 'created_by', 'created_at')
     list_filter = ('approval_status', 'date')
     search_fields = ('plan_id', 'assignee__username', 'assignee__first_name', 'comment')
@@ -325,7 +330,7 @@ class VisitPlanAdmin(admin.ModelAdmin):
 
 
 @admin.register(ApprovalAuditLog)
-class ApprovalAuditLogAdmin(admin.ModelAdmin):
+class ApprovalAuditLogAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('created_at', 'record_type_badge', 'action_badge', 'actor', 'target_object', 'status_before', 'status_after', 'ip_address')
     list_filter = ('record_type', 'action', 'created_at')
     search_fields = ('actor__username', 'reason', 'ip_address', 'status_before', 'status_after')
@@ -387,7 +392,7 @@ class ApprovalAuditLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(AgendaTodo)
-class AgendaTodoAdmin(admin.ModelAdmin):
+class AgendaTodoAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('title', 'user', 'date', 'is_completed_badge', 'created_at')
     list_filter = ('is_completed', 'date', 'user')
     search_fields = ('title', 'user__username', 'user__first_name')

@@ -36,9 +36,8 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
     """
     Checks if a user has a specific permission codename,
     with SuperAdmin automatic override and module inheritance.
-    When a user has custom permissions (has_custom_permissions=True),
-    their user-level permissions strictly and exclusively govern access
-    without settings-level bypasses (100% user-level authority).
+    Permissions are strictly managed via Role Settings (plus explicit system-level
+    feature flags where configured).
     """
     if not user or not user.is_authenticated or not user.is_active:
         return False
@@ -61,18 +60,11 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
     }
     perm_codename = perm_aliases.get(perm_codename, perm_codename)
 
-    # 1. If user has custom permissions configured directly,
-    # those direct user permissions are 100% authoritative (no settings bypass).
-    if getattr(user, 'has_custom_permissions', False):
-        if hasattr(user, 'has_permission'):
-            return user.has_permission(perm_codename)
-        return False
-
-    # 2. Check user's effective permissions (enforces module-level inheritance)
+    # 1. Check user's role-based effective permissions (enforces module-level inheritance)
     if hasattr(user, 'has_permission') and user.has_permission(perm_codename):
         return True
 
-    # 3. Dynamic settings flags apply only to non-custom role users when enabled
+    # 2. Dynamic settings flags when enabled in system settings
     if perm_codename in ('activities:visits/create', 'activities:visits/view'):
         from master_data.models import LocationSettings
         loc_settings = LocationSettings.get_settings()
@@ -103,30 +95,29 @@ def has_perm_or_admin(user, perm_codename: str) -> bool:
 def can_user_access_module(user, module_key: str) -> bool:
     """
     Checks if a user has access to a top-level module (e.g. 'purchases', 'sales').
-    Strictly enforced via module root permission (e.g. 'module:sales').
-    Settings-level shortcuts only apply to default role-based users when enabled.
+    Strictly enforced via Role module root permission (e.g. 'module:sales')
+    plus enabled system settings flags.
     """
     if has_perm_or_admin(user, f"module:{module_key}"):
         return True
 
-    if not getattr(user, 'has_custom_permissions', False):
-        if module_key == 'activities':
-            from master_data.models import LocationSettings
-            loc_settings = LocationSettings.get_settings()
-            if getattr(loc_settings, 'allow_all_users_to_create_visits', False) or getattr(loc_settings, 'allow_all_users_to_create_agreements', False):
-                return True
+    if module_key == 'activities':
+        from master_data.models import LocationSettings
+        loc_settings = LocationSettings.get_settings()
+        if getattr(loc_settings, 'allow_all_users_to_create_visits', False) or getattr(loc_settings, 'allow_all_users_to_create_agreements', False):
+            return True
 
-        if module_key == 'sales':
-            from master_data.models import SalesSettings
-            sales_settings = SalesSettings.get_settings()
-            if getattr(sales_settings, 'allow_all_users_to_create', False):
-                return True
+    if module_key == 'sales':
+        from master_data.models import SalesSettings
+        sales_settings = SalesSettings.get_settings()
+        if getattr(sales_settings, 'allow_all_users_to_create', False):
+            return True
 
-        if module_key == 'purchases':
-            from master_data.models import PurchaseSettings
-            pur_settings = PurchaseSettings.get_settings()
-            if getattr(pur_settings, 'allow_all_users_to_create', False):
-                return True
+    if module_key == 'purchases':
+        from master_data.models import PurchaseSettings
+        pur_settings = PurchaseSettings.get_settings()
+        if getattr(pur_settings, 'allow_all_users_to_create', False):
+            return True
 
     return False
 

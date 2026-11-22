@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
@@ -8,6 +9,40 @@ from treasury.models import VendorAccount, VendorTransaction, VendorInstallment
 from accounts.services import AuditLogService
 from master_data.validation_utils import parse_positive_integer_quantity
 
+
+def find_existing_purchase_order_transaction(order: PurchaseOrder, account: VendorAccount = None):
+    """Finds an already-posted VendorTransaction(reason='purchase') for this PurchaseOrder."""
+    tx = VendorTransaction.objects.filter(purchase_order=order, reason='purchase', transaction_type='credit').order_by('id').first()
+    if tx:
+        return tx
+    if account is None:
+        account = VendorAccount.objects.filter(supplier=order.supplier).first()
+    if not account or not order.order_number:
+        return None
+    raw_key = order.order_number.lstrip('#').strip()
+    pat = re.compile(r'(^|[^\dA-Za-z])(#?' + re.escape(raw_key) + r')($|[^\dA-Za-z])')
+    for cand in VendorTransaction.objects.filter(account=account, reason='purchase', description__icontains=raw_key).order_by('id'):
+        if pat.search(cand.description or ''):
+            return cand
+    return None
+
+
+def find_existing_purchase_return_transaction(return_order: PurchaseReturnOrder, account: VendorAccount = None):
+    """Finds an already-posted VendorTransaction(reason in purchase_return/purchase_returns) for this PurchaseReturnOrder."""
+    if account is None:
+        account = VendorAccount.objects.filter(supplier=return_order.supplier).first()
+    if not account or not return_order.order_number:
+        return None
+    raw_key = return_order.order_number.lstrip('#').strip()
+    pat = re.compile(r'(^|[^\dA-Za-z])(#?' + re.escape(raw_key) + r')($|[^\dA-Za-z])')
+    for cand in VendorTransaction.objects.filter(
+        account=account,
+        reason__in=['purchase_returns', 'purchase_return'],
+        description__icontains=raw_key,
+    ).order_by('id'):
+        if pat.search(cand.description or ''):
+            return cand
+    return None
 
 
 class PurchaseOrderService:
@@ -77,7 +112,13 @@ class PurchaseOrderService:
                     f"الرصيد الحالي: {account.current_balance:,.2f} ج.م، وقيمة الطلب: {est_grand_total:,.2f} ج.م."
                 )
 
-        # Immediate order execution: set status to settled and approved directly (Requirement B2)
+        from master_data.models import PurchaseSettings
+        from accounts.permissions import has_perm_or_admin
+        pur_settings = PurchaseSettings.get_settings()
+        is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
+        is_approver = is_super or has_perm_or_admin(user, 'purchases:orders/approve')
+        needs_approval = bool(getattr(pur_settings, 'require_manager_approval', False)) and not is_approver
+
         now_dt = timezone.now()
         order = PurchaseOrder.objects.create(
             supplier=supplier,
@@ -91,12 +132,12 @@ class PurchaseOrderService:
             notes=notes,
             created_by=user,
             updated_by=user,
-            status='settled',
+            status='pending' if needs_approval else 'settled',
             payment_status='credit',
-            approved_by=user,
-            approved_at=now_dt,
-            stocked_at=now_dt,
-            invoiced_at=now_dt,
+            approved_by=None if needs_approval else user,
+            approved_at=None if needs_approval else now_dt,
+            stocked_at=None if needs_approval else now_dt,
+            invoiced_at=None if needs_approval else now_dt,
         )
 
         for idx, itm in enumerate(items_data, start=1):
@@ -114,91 +155,8 @@ class PurchaseOrderService:
 
         order.recalculate_totals()
 
-        # Immediate warehouse stocking: generate inward InventoryMemo and increment stock (Requirement B2)
-        memo_number = f"MEMO-IN-{order.serial_num}"
-        memo = InventoryMemo.objects.create(
-            memo_number=memo_number,
-            memo_type='inward',
-            warehouse=order.target_warehouse,
-            statement=f"إذن إضافة استلام أمر مشتريات #{order.order_number}",
-            status='applied',
-            applied_at=now_dt,
-            created_by=user
-        )
-
-        for item in order.items.select_related('product'):
-            InventoryMemoItem.objects.create(
-                memo=memo,
-                product=item.product,
-                quantity=item.quantity,
-                unit_cost=item.unit_price,
-                batch_number=item.product_batch_number,
-                expiry_date=item.product_expiry_date
-            )
-
-            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
-                warehouse=order.target_warehouse,
-                product=item.product,
-                defaults={'product_cost': item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
-            )
-
-            stock_qty = Decimal(str(stock.qty_on_hand or '0'))
-            stock_cost = Decimal(str(stock.product_cost or '0'))
-            item_qty = Decimal(str(item.quantity))
-            item_price = Decimal(str(item.unit_price))
-
-            old_total_cost = stock_qty * stock_cost
-            new_item_cost = item_qty * item_price
-            new_total_qty = stock_qty + item_qty
-
-            if new_total_qty > 0:
-                weighted_avg_cost = (old_total_cost + new_item_cost) / new_total_qty
-                stock.product_cost = weighted_avg_cost.quantize(Decimal('0.01'))
-
-            stock.qty_on_hand = new_total_qty
-            stock.save(update_fields=['qty_on_hand', 'product_cost', 'updated_at'])
-
-            if item.product_batch_number or item.product_expiry_date:
-                lot, _ = InventoryLot.objects.get_or_create(
-                    stock=stock,
-                    batch_number=item.product_batch_number or "DEFAULT",
-                    expiry_date=item.product_expiry_date,
-                    defaults={'quantity': Decimal('0.00')}
-                )
-                lot.quantity += item.quantity
-                lot.save(update_fields=['quantity'])
-
-        order.memo = memo
-        order.save(update_fields=['memo'])
-
-        # Immediate financial execution: post credit to VendorTransaction & update VendorAccount (Requirement B2)
-        new_balance = account.current_balance + order.grand_total
-        tx = VendorTransaction.objects.create(
-            account=account,
-            purchase_order=order,
-            transaction_type='credit',
-            reason='purchase',
-            transaction_date=order.order_date or now_dt.date(),
-            due_date=order.due_date or (now_dt.date() + timezone.timedelta(days=account.credit_period_days)),
-            credit=order.grand_total,
-            debit=Decimal('0.00'),
-            running_balance=new_balance,
-            description=f"فاتورة مشتريات لأمر توريد #{order.order_number}",
-            created_by=user
-        )
-
-        VendorInstallment.objects.create(
-            transaction=tx,
-            total_amount=order.grand_total,
-            closed_amount=Decimal('0.00'),
-            open_amount=order.grand_total,
-            due_date=tx.due_date,
-            is_settled=False
-        )
-
-        account.current_balance = new_balance
-        account.last_transaction_date = tx.transaction_date
-        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        if not needs_approval:
+            PurchaseOrderService._post_order_stock_and_ledger(order, user)
 
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
@@ -207,8 +165,8 @@ class PurchaseOrderService:
             action='submitted',
             actor=user,
             status_before='',
-            status_after='settled',
-            reason="إنشاء وتنفيذ أمر الشراء مباشرة في المخزن والحسابات"
+            status_after=order.status,
+            reason="إنشاء أمر شراء بانتظار اعتماد الإدارة" if needs_approval else "إنشاء وتنفيذ أمر الشراء تلقائياً في المخزن والحسابات"
         )
 
         # Audit Logging
@@ -598,9 +556,106 @@ class PurchaseOrderService:
         return order
 
     @staticmethod
+    def _post_order_stock_and_ledger(order: PurchaseOrder, user):
+        """
+        Centralized, idempotent automatic posting for PurchaseOrder:
+        1. Receives stock & creates inward InventoryMemo ONLY if order.memo is None.
+        2. Posts VendorTransaction(reason='purchase') + VendorInstallment ONLY if not already posted.
+        """
+        now_dt = timezone.now()
+        if not order.memo_id:
+            memo_number = f"MEMO-IN-{order.serial_num}"
+            memo, created_memo = InventoryMemo.objects.get_or_create(
+                memo_number=memo_number,
+                defaults={
+                    'memo_type': 'inward',
+                    'warehouse': order.target_warehouse,
+                    'statement': f"إذن إضافة استلام أمر مشتريات #{order.order_number}",
+                    'status': 'applied',
+                    'applied_at': now_dt,
+                    'created_by': user,
+                }
+            )
+            if created_memo:
+                for item in order.items.select_related('product'):
+                    InventoryMemoItem.objects.create(
+                        memo=memo,
+                        product=item.product,
+                        quantity=item.quantity,
+                        unit_cost=item.unit_price,
+                        batch_number=item.product_batch_number,
+                        expiry_date=item.product_expiry_date,
+                    )
+                    stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                        warehouse=order.target_warehouse,
+                        product=item.product,
+                        defaults={'product_cost': item.unit_price, 'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+                    )
+                    stock_qty = Decimal(str(stock.qty_on_hand or '0'))
+                    stock_cost = Decimal(str(stock.product_cost or '0'))
+                    item_qty = Decimal(str(item.quantity))
+                    item_price = Decimal(str(item.unit_price))
+                    new_total_qty = stock_qty + item_qty
+                    if new_total_qty > 0:
+                        weighted_avg_cost = (stock_qty * stock_cost + item_qty * item_price) / new_total_qty
+                        stock.product_cost = weighted_avg_cost.quantize(Decimal('0.01'))
+                    stock.qty_on_hand = new_total_qty
+                    stock.save(update_fields=['qty_on_hand', 'product_cost', 'updated_at'])
+                    if item.product_batch_number or item.product_expiry_date:
+                        lot, _ = InventoryLot.objects.get_or_create(
+                            stock=stock,
+                            batch_number=item.product_batch_number or "DEFAULT",
+                            expiry_date=item.product_expiry_date,
+                            defaults={'quantity': Decimal('0.00')}
+                        )
+                        lot.quantity += item.quantity
+                        lot.save(update_fields=['quantity'])
+            order.memo = memo
+            order.stocked_at = order.stocked_at or now_dt
+            order.save(update_fields=['memo', 'stocked_at'])
+
+        account = VendorAccount.get_or_create_for_supplier(order.supplier)
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_purchase_order_transaction(order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance + order.grand_total
+            tx = VendorTransaction.objects.create(
+                account=account,
+                purchase_order=order,
+                transaction_type='credit',
+                reason='purchase',
+                transaction_date=order.order_date or now_dt.date(),
+                due_date=order.due_date or (now_dt.date() + timezone.timedelta(days=account.credit_period_days)),
+                credit=order.grand_total,
+                debit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"فاتورة مشتريات لأمر توريد #{order.order_number}",
+                created_by=user,
+            )
+            VendorInstallment.objects.create(
+                transaction=tx,
+                total_amount=order.grand_total,
+                closed_amount=Decimal('0.00'),
+                open_amount=order.grand_total,
+                due_date=tx.due_date,
+                is_settled=False,
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            tx = existing_tx
+        order.invoiced_at = order.invoiced_at or now_dt
+        return tx
+
+    @staticmethod
     @transaction.atomic
     def approve_order(order: PurchaseOrder, user, notes=""):
-        """Transitions status to approved with self-approval check and audit trail."""
+        """
+        Approves purchase order with anti-self-approval and automatically executes
+        warehouse stock receipt and supplier ledger posting directly to 'settled'.
+        """
+        order = PurchaseOrder.objects.select_for_update().get(pk=order.pk)
         if order.status not in ['pending', 'rejected']:
             raise ValidationError(f"لا يمكن اعتماد طلب بحالة: {order.status_label_ar}")
 
@@ -609,12 +664,13 @@ class PurchaseOrderService:
             raise ValidationError("لا يمكن لمنشئ أمر الشراء اعتماده بنفسه (مبدأ الرقابة الثنائية).")
 
         status_before = order.status
-        order.status = 'approved'
+        tx = PurchaseOrderService._post_order_stock_and_ledger(order, user)
+        order.status = 'settled'
         order.approved_by = user
         order.approved_at = timezone.now()
         order.rejection_reason = ""
         order.updated_by = user
-        order.save(update_fields=['status', 'approved_by', 'approved_at', 'rejection_reason', 'updated_by', 'updated_at'])
+        order.save(update_fields=['status', 'approved_by', 'approved_at', 'invoiced_at', 'rejection_reason', 'updated_by', 'updated_at'])
 
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
@@ -623,8 +679,8 @@ class PurchaseOrderService:
             action='approved',
             actor=user,
             status_before=status_before,
-            status_after='approved',
-            reason=notes or 'تم اعتماد أمر الشراء'
+            status_after='settled',
+            reason=notes or 'اعتماد واستلام وترحيل تلقائي لأمر الشراء'
         )
 
         AuditLogService.log(
@@ -633,9 +689,9 @@ class PurchaseOrderService:
             actor=user,
             record_id=order.id,
             record_name=f"{order.order_number} ({order.supplier.name})",
-            description=f"اعتماد أمر مشتريات {order.order_number} للمورد {order.supplier.name}",
+            description=f"اعتماد وترحيل تلقائي لأمر مشتريات {order.order_number} للمورد {order.supplier.name}",
             previous_values={'status': status_before},
-            new_values={'status': 'approved', 'approved_by': user.username},
+            new_values={'status': 'settled', 'approved_by': user.username, 'transaction_serial': tx.serial if tx else None},
             reason=notes or ''
         )
         return order
@@ -810,47 +866,48 @@ class PurchaseOrderService:
     @transaction.atomic
     def invoice_order(order: PurchaseOrder, user):
         """
-        Financial Invoicing:
-        1. Ensures order is picked (goods physically received).
-        2. Posts a credit transaction to the supplier's double-entry ledger.
-        3. Updates supplier account balance.
-        4. Creates an installment for payment tracking.
-        5. Transitions status to settled.
+        Idempotent financial posting for PurchaseOrder (prevents duplicate posting).
         """
-        if order.status != 'picked':
-            raise ValidationError("يجب استلام البضاعة في المخزن أولاً (Picked) قبل الفوترة في الحسابات.")
+        order = PurchaseOrder.objects.select_for_update().get(pk=order.pk)
+        if order.status == 'settled':
+            return order
+        if order.status not in ['picked', 'approved']:
+            raise ValidationError("يجب اعتماد أو استلام البضاعة في المخزن قبل الفوترة في الحسابات.")
 
         account = VendorAccount.get_or_create_for_supplier(order.supplier)
-        new_balance = account.current_balance + order.grand_total
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_purchase_order_transaction(order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance + order.grand_total
+            tx = VendorTransaction.objects.create(
+                account=account,
+                purchase_order=order,
+                transaction_type='credit',
+                reason='purchase',
+                transaction_date=timezone.now().date(),
+                due_date=order.due_date or (timezone.now().date() + timezone.timedelta(days=account.credit_period_days)),
+                credit=order.grand_total,
+                debit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"فاتورة مشتريات {order.order_number} ({order.supplier.name})",
+                created_by=user
+            )
+            VendorInstallment.objects.create(
+                transaction=tx,
+                total_amount=order.grand_total,
+                closed_amount=Decimal('0.00'),
+                open_amount=order.grand_total,
+                due_date=tx.due_date,
+                is_settled=False
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            tx = existing_tx
+            new_balance = account.current_balance
 
-        tx = VendorTransaction.objects.create(
-            account=account,
-            purchase_order=order,
-            transaction_type='credit',
-            reason='purchase',
-            transaction_date=timezone.now().date(),
-            due_date=order.due_date or (timezone.now().date() + timezone.timedelta(days=account.credit_period_days)),
-            credit=order.grand_total,
-            debit=Decimal('0.00'),
-            running_balance=new_balance,
-            description=f"فاتورة مشتريات {order.order_number} ({order.supplier.name})",
-            created_by=user
-        )
-
-        VendorInstallment.objects.create(
-            transaction=tx,
-            total_amount=order.grand_total,
-            closed_amount=Decimal('0.00'),
-            open_amount=order.grand_total,
-            due_date=tx.due_date,
-            is_settled=False
-        )
-
-        account.current_balance = new_balance
-        account.last_transaction_date = tx.transaction_date
-        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
-
-        order.invoiced_at = timezone.now()
+        order.invoiced_at = order.invoiced_at or timezone.now()
         order.status = 'settled'
         order.updated_by = user
         order.save(update_fields=['invoiced_at', 'status', 'updated_by', 'updated_at'])
@@ -863,7 +920,7 @@ class PurchaseOrderService:
             record_name=f"{order.order_number} ({order.supplier.name})",
             description=f"ترحيل أمر مشتريات {order.order_number} للحسابات (قيد رقم #{tx.serial} بمبلغ {order.grand_total:,.2f} ج.م)",
             previous_values={'status': 'picked'},
-            new_values={'status': 'settled', 'transaction_serial': tx.serial, 'supplier_balance': str(new_balance), 'due_date': str(tx.due_date)}
+            new_values={'status': 'settled', 'transaction_serial': tx.serial, 'supplier_balance': str(new_balance), 'reused_existing_tx': bool(existing_tx)}
         )
         return order
 
@@ -1170,7 +1227,7 @@ class PurchaseReturnOrderService:
             account=account,
             purchase_order=parent_order,
             transaction_type='debit',
-            reason='purchase_return',
+            reason='purchase_returns',
             transaction_date=return_order.order_date or now_dt.date(),
             credit=Decimal('0.00'),
             debit=return_order.grand_total,
@@ -1230,7 +1287,10 @@ class PurchaseReturnOrderService:
     @staticmethod
     @transaction.atomic
     def approve_return_order(return_order: PurchaseReturnOrder, user):
-        """Transitions status from pending to approved with anti-self-approval."""
+        """
+        Approves a pending PurchaseReturnOrder with anti-self-approval and
+        automatically executes stock dispatch and supplier debit posting ('settled').
+        """
         from accounts.permissions import can_user_access_object
         from activities.models import ApprovalAuditLog
 
@@ -1242,11 +1302,94 @@ class PurchaseReturnOrderService:
             raise ValidationError("لا يمكنك اعتماد أمر إرجاع قمت بإنشائه بنفسك (منع الاعتماد الذاتي).")
 
         status_before = locked_order.status
-        locked_order.status = 'approved'
+        now_dt = timezone.now()
+
+        if not locked_order.memo_id:
+            for item in locked_order.items.select_related('product'):
+                stock = InventoryStock.objects.select_for_update().filter(warehouse=locked_order.warehouse, product=item.product).first()
+                available = stock.qty_available if stock else Decimal('0.00')
+                if available < item.quantity:
+                    raise ValidationError(
+                        f"الرصيد المتاح من الصنف '{item.product.name}' في مخزن '{locked_order.warehouse.name}' غير كافٍ للإرجاع ({available:,.2f} متاح / {item.quantity:,.2f} مطلوب)."
+                    )
+            memo_number = f"MEMO-OUT-RO-{locked_order.serial_num}"
+            memo, created_memo = InventoryMemo.objects.get_or_create(
+                memo_number=memo_number,
+                defaults={
+                    'memo_type': 'outward',
+                    'warehouse': locked_order.warehouse,
+                    'statement': f"إذن صرف إرجاع مشتريات {locked_order.order_number} للمورد {locked_order.supplier.name}",
+                    'status': 'applied',
+                    'applied_at': now_dt,
+                    'created_by': user,
+                }
+            )
+            if created_memo:
+                for item in locked_order.items.select_related('product'):
+                    InventoryMemoItem.objects.create(
+                        memo=memo,
+                        product=item.product,
+                        quantity=item.quantity,
+                        unit_cost=item.unit_price,
+                        batch_number=item.product_batch_number,
+                        expiry_date=item.product_expiry_date,
+                    )
+                    stock = InventoryStock.objects.select_for_update().get(warehouse=locked_order.warehouse, product=item.product)
+                    stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+                    stock.save(update_fields=['qty_on_hand', 'updated_at'])
+                    if item.product_batch_number:
+                        lot = InventoryLot.objects.filter(stock=stock, batch_number=item.product_batch_number).first()
+                        if lot:
+                            lot.quantity = max(Decimal('0.00'), lot.quantity - item.quantity)
+                            lot.save(update_fields=['quantity'])
+            locked_order.memo = memo
+            locked_order.dispatched_at = now_dt
+
+        account = VendorAccount.get_or_create_for_supplier(locked_order.supplier)
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_purchase_return_transaction(locked_order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance - locked_order.grand_total
+            tx = VendorTransaction.objects.create(
+                account=account,
+                purchase_order=locked_order.purchase_order,
+                transaction_type='debit',
+                reason='purchase_returns',
+                transaction_date=now_dt.date(),
+                credit=Decimal('0.00'),
+                debit=locked_order.grand_total,
+                running_balance=new_balance,
+                description=f"إشعار خصم مرتجع مشتريات {locked_order.order_number} ({locked_order.supplier.name})",
+                created_by=user,
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+            if locked_order.purchase_order:
+                remaining_to_deduct = locked_order.grand_total
+                for inst in VendorInstallment.objects.filter(transaction__purchase_order=locked_order.purchase_order, is_settled=False).order_by('due_date'):
+                    if remaining_to_deduct <= Decimal('0.00'):
+                        break
+                    inst_rem = inst.open_amount
+                    if remaining_to_deduct >= inst_rem:
+                        inst.closed_amount = inst.total_amount
+                        inst.open_amount = Decimal('0.00')
+                        inst.is_settled = True
+                        remaining_to_deduct -= inst_rem
+                    else:
+                        inst.closed_amount += remaining_to_deduct
+                        inst.open_amount -= remaining_to_deduct
+                        remaining_to_deduct = Decimal('0.00')
+                    inst.save(update_fields=['closed_amount', 'open_amount', 'is_settled'])
+        else:
+            tx = existing_tx
+
+        locked_order.status = 'settled'
         locked_order.approved_by = user
-        locked_order.approved_at = timezone.now()
+        locked_order.approved_at = now_dt
+        locked_order.settled_at = now_dt
         locked_order.updated_by = user
-        locked_order.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_by', 'updated_at'])
+        locked_order.save(update_fields=['status', 'memo', 'dispatched_at', 'approved_by', 'approved_at', 'settled_at', 'updated_by', 'updated_at'])
 
         ApprovalAuditLog.objects.create(
             record_type='purchase_return',
@@ -1254,9 +1397,9 @@ class PurchaseReturnOrderService:
             action='approved',
             actor=user,
             status_before=status_before,
-            status_after='approved',
-            reason="اعتماد أمر إرجاع المشتريات من قبل الإدارة",
-            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'معتمد'}],
+            status_after='settled',
+            reason="اعتماد وصرف وترحيل تلقائي لمرتجع المشتريات",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'تم الترحيل للحسابات'}],
         )
 
         AuditLogService.log(
@@ -1265,9 +1408,9 @@ class PurchaseReturnOrderService:
             actor=user,
             record_id=locked_order.id,
             record_name=f"{locked_order.order_number} ({locked_order.supplier.name})",
-            description=f"اعتماد أمر إرجاع مشتريات {locked_order.order_number}",
+            description=f"اعتماد وترحيل تلقائي لأمر إرجاع مشتريات {locked_order.order_number}",
             previous_values={'status': status_before},
-            new_values={'status': 'approved'}
+            new_values={'status': 'settled', 'transaction_serial': tx.serial if tx else None}
         )
         return locked_order
 
@@ -1408,27 +1551,34 @@ class PurchaseReturnOrderService:
         4. Reconciles open vendor installments if parent order is linked.
         5. Transitions status to settled.
         """
+        if return_order.status == 'settled':
+            return return_order
         if return_order.status != 'delivered':
             raise ValidationError("يجب صرف البضاعة من المخزن أولاً (Delivered) قبل الترحيل للحسابات.")
 
         account = VendorAccount.get_or_create_for_supplier(return_order.supplier)
-        new_balance = account.current_balance - return_order.grand_total
-
-        tx = VendorTransaction.objects.create(
-            account=account,
-            transaction_type='debit',
-            reason='purchase_return',
-            transaction_date=timezone.now().date(),
-            credit=Decimal('0.00'),
-            debit=return_order.grand_total,
-            running_balance=new_balance,
-            description=f"إشعار خصم مرتجع مشتريات {return_order.order_number} ({return_order.supplier.name})",
-            created_by=user
-        )
-
-        account.current_balance = new_balance
-        account.last_transaction_date = tx.transaction_date
-        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_purchase_return_transaction(return_order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance - return_order.grand_total
+            tx = VendorTransaction.objects.create(
+                account=account,
+                purchase_order=return_order.purchase_order,
+                transaction_type='debit',
+                reason='purchase_returns',
+                transaction_date=timezone.now().date(),
+                credit=Decimal('0.00'),
+                debit=return_order.grand_total,
+                running_balance=new_balance,
+                description=f"إشعار خصم مرتجع مشتريات {return_order.order_number} ({return_order.supplier.name})",
+                created_by=user
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            tx = existing_tx
+            new_balance = account.current_balance
 
         # Reconcile unpaid installments FIFO if purchase_order is linked
         if return_order.purchase_order:

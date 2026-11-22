@@ -427,27 +427,17 @@ def products_export(request):
 
 @require_permission('catalog:products/import')
 def product_import_template(request):
-    columns = [
-        {'header': 'كود المنتج (SKU)', 'width': 18},
-        {'header': 'اسم المنتج', 'width': 35},
-        {'header': 'التصنيف', 'width': 20},
-        {'header': 'سعر البيع للجمهور', 'width': 18},
-        {'header': 'سعر تكلفة الشراء', 'width': 18},
-        {'header': 'نسبة الضريبة', 'width': 15},
-        {'header': 'متاح للبيع', 'width': 12},
-        {'header': 'الباركود', 'width': 20},
-        {'header': 'الوحدة', 'width': 12},
-        {'header': 'الوصف', 'width': 30},
-    ]
-    sample_rows = [
-        ['MED-001', 'أوجمنتين 1 جم أقراص', 'مضادات حيوية', 110.00, 85.00, 14.0, 'نعم', '6221234567890', 'علبة', 'مضاد حيوي واسع المجال'],
-        ['MED-002', 'بانادول إكسترا 500 مجم', 'مسكنات', 45.00, 32.50, 0.0, 'نعم', '6221234567891', 'شريط', 'مسكن للآلام وخافض للحرارة'],
-    ]
-    return generate_excel_template_response(columns, sample_rows=sample_rows, filename="products_import_template", sheet_title="نموذج المنتجات")
+    from master_data.excel_views import excel_import_template_view
+    return excel_import_template_view(request, entity='products')
 
 
 @require_permission('catalog:products/import')
 def product_import(request):
+    from master_data.excel_views import excel_import_view
+    return excel_import_view(request, entity='products')
+
+
+def _legacy_product_import_unused(request):
     if request.method == 'POST':
         action = request.POST.get('action')
 

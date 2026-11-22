@@ -420,8 +420,9 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(res_blocked.status_code, 400)
 
-        # Grant bypass permission
-        user_no_gps.user_permissions.add(perm)
+        # Grant bypass permission via Role Settings
+        self.rep_role.permissions.add(perm)
+        user_no_gps.clear_perm_cache()
         res_allowed = self.client.post(reverse('visit_action', args=[visit_far.pk, 'start']), {
             'latitude': '29.9000',
             'longitude': '31.1000',

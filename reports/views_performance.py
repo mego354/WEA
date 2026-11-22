@@ -67,6 +67,60 @@ def performance_overview(request):
 
 
 @login_required
+@require_permission('performance:overview/export')
+def performance_overview_export(request):
+    """Export Performance Overview KPIs and Top Detailed Products to Excel."""
+    period = request.GET.get('period', 'this_month')
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
+    rep_id = request.GET.get('rep')
+    area_id = request.GET.get('area')
+    account_type = request.GET.get('account_type')
+
+    start_date, end_date, prior_start, prior_end, period_label = parse_date_range(period, start_str, end_str)
+    filters = {
+        'rep_id': rep_id,
+        'area_id': area_id,
+        'account_type': account_type,
+    }
+    data = get_performance_overview_data(request.user, start_date, end_date, prior_start, prior_end, filters)
+
+    headers = ["المؤشر", "الفترة الحالية", "الفترة السابقة", "نسبة التغير %"]
+    rows = []
+    kpis = data.get('kpis') or {}
+    if isinstance(kpis, dict):
+        for k, v in kpis.items():
+            if isinstance(v, dict):
+                rows.append([
+                    v.get('label') or k,
+                    v.get('value', v.get('current', '')),
+                    v.get('prior', ''),
+                    f"{v.get('change_pct', 0)}%",
+                ])
+            else:
+                rows.append([str(k), v, '', ''])
+    elif isinstance(kpis, list):
+        for v in kpis:
+            rows.append([
+                v.get('label', ''),
+                v.get('value', v.get('current', '')),
+                v.get('prior', ''),
+                f"{v.get('change_pct', 0)}%",
+            ])
+
+    for p in data.get('top_detailed_products') or []:
+        rows.append([
+            f"منتج: {p.get('product__name') or p.get('name', '')}",
+            p.get('count', p.get('total', 0)),
+            '',
+            '',
+        ])
+
+    filename = f"Performance_Overview_{start_date}_{end_date}"
+    return export_to_excel_response(filename, "ملخص الأداء العام", headers, rows, None)
+
+
+@login_required
 @require_permission('performance:analysis/view')
 def performance_analysis(request):
     """

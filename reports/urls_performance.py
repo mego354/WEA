@@ -4,6 +4,7 @@ from . import views_performance
 urlpatterns = [
     path('', views_performance.performance_overview, name='performance_root'),
     path('overview/', views_performance.performance_overview, name='performance_overview'),
+    path('overview/export/', views_performance.performance_overview_export, name='performance_overview_export'),
     path('analysis/', views_performance.performance_analysis, name='performance_analysis'),
     path('analysis/export/', views_performance.performance_analysis_export, name='performance_analysis_export'),
     path('daily/', views_performance.performance_daily, name='performance_daily'),

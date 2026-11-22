@@ -1,0 +1,245 @@
+{% extends "layouts/base.html" %}
+{% load erp_tags %}
+
+{% block title %}استيراد Excel — {{ importer.title_ar }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto pb-20 md:pb-8 space-y-5">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+            <a href="{{ back_url }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#27bebe] mb-1">
+                <span class="material-symbols-outlined text-base">arrow_forward</span>
+                <span>العودة إلى {{ importer.title_ar }}</span>
+            </a>
+            <h1 class="text-xl sm:text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe]">upload_file</span>
+                <span>استيراد Excel: {{ importer.title_ar }}</span>
+            </h1>
+        </div>
+        <a href="{% url 'excel_import_template' entity=importer.entity_key %}"
+           class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold min-h-[42px]">
+            <span class="material-symbols-outlined text-base">download</span>
+            <span>تحميل قالب Excel الرسمي (.xlsx)</span>
+        </a>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="grid grid-cols-3 gap-2 bg-white border border-slate-200 rounded-xl p-2.5">
+        <div class="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold {% if step == 'upload' %}bg-[#27bebe] text-white{% else %}bg-slate-50 text-slate-500{% endif %}">
+            <span class="material-symbols-outlined text-base">cloud_upload</span>
+            <span>1. رفع الملف</span>
+        </div>
+        <div class="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold {% if step == 'preview' %}bg-[#27bebe] text-white{% else %}bg-slate-50 text-slate-500{% endif %}">
+            <span class="material-symbols-outlined text-base">fact_check</span>
+            <span>2. المعاينة والتحقق</span>
+        </div>
+        <div class="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold {% if step == 'done' %}bg-emerald-600 text-white{% else %}bg-slate-50 text-slate-500{% endif %}">
+            <span class="material-symbols-outlined text-base">task_alt</span>
+            <span>3. التنفيذ</span>
+        </div>
+    </div>
+
+    {% if step == 'upload' %}
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
+        <form method="POST" enctype="multipart/form-data" class="space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="upload">
+
+            <label class="block border-2 border-dashed border-slate-300 hover:border-[#27bebe] rounded-2xl p-8 text-center cursor-pointer bg-slate-50/70 transition-colors">
+                <span class="material-symbols-outlined text-4xl text-[#27bebe] block mb-2">table_view</span>
+                <span class="block text-sm font-bold text-slate-800 mb-1">اختر ملف Excel (.xlsx) للفحص والمعاينة</span>
+                <span class="block text-xs text-slate-500 mb-3">الحد الأقصى 10 ميجابايت / 5,000 صف — لن يتم حفظ أي بيانات قبل تأكيدك في الخطوة التالية</span>
+                <input type="file" name="excel_file" accept=".xlsx" required
+                       class="block mx-auto text-xs text-slate-600 file:ml-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#27bebe] file:text-white hover:file:bg-[#20a3a3]">
+            </label>
+
+            <div class="flex justify-end">
+                <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-[#27bebe] hover:bg-[#20a3a3] text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]">
+                    <span class="material-symbols-outlined text-lg">fact_check</span>
+                    <span>فحص ومعاينة البيانات</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Columns Reference -->
+        <div class="border-t border-slate-100 pt-4">
+            <h2 class="text-xs font-extrabold text-slate-700 mb-2.5 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">view_column</span>
+                <span>الأعمدة المعتمدة في القالب</span>
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {% for col in columns %}
+                <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold text-slate-800">{{ col.header_ar }}</p>
+                        {% if col.rules_ar %}<p class="text-[11px] text-slate-500 mt-0.5">{{ col.rules_ar }}</p>{% endif %}
+                    </div>
+                    {% if col.required %}
+                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">إلزامي</span>
+                    {% else %}
+                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">اختياري</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {% elif step == 'preview' and batch %}
+    <!-- Summary KPI Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 text-center">
+            <span class="block text-[11px] font-bold text-slate-500">إجمالي الصفوف</span>
+            <span class="block text-xl font-extrabold text-slate-800 mt-0.5">{{ batch.total_rows }}</span>
+        </div>
+        <div class="bg-emerald-50/70 rounded-xl border border-emerald-200 p-3.5 text-center">
+            <span class="block text-[11px] font-bold text-emerald-700">صفوف سليمة</span>
+            <span class="block text-xl font-extrabold text-emerald-700 mt-0.5">{{ batch.valid_count }}</span>
+            <span class="block text-[10px] text-emerald-600">جديد: {{ batch.create_count }} | تحديث: {{ batch.update_count }}</span>
+        </div>
+        <div class="bg-rose-50/70 rounded-xl border border-rose-200 p-3.5 text-center">
+            <span class="block text-[11px] font-bold text-rose-700">صفوف بها أخطاء</span>
+            <span class="block text-xl font-extrabold text-rose-700 mt-0.5">{{ batch.invalid_count }}</span>
+        </div>
+        <div class="bg-slate-50 rounded-xl border border-slate-200 p-3.5 flex flex-col items-center justify-center gap-1.5">
+            {% if batch.invalid_count > 0 %}
+            <a href="{% url 'excel_import_errors' entity=importer.entity_key batch_id=batch_id %}"
+               class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold min-h-[38px]">
+                <span class="material-symbols-outlined text-base">file_download</span>
+                <span>تحميل تقرير الأخطاء</span>
+            </a>
+            {% else %}
+            <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                <span class="material-symbols-outlined text-base">verified</span>
+                <span>الملف سليم 100%</span>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+            <a href="?batch={{ batch_id }}&filter=all" class="px-3 py-1.5 rounded-lg text-xs font-bold {% if filter_mode == 'all' %}bg-[#27bebe] text-white{% else %}bg-white border border-slate-200 text-slate-600{% endif %}">الكل ({{ batch.total_rows }})</a>
+            <a href="?batch={{ batch_id }}&filter=valid" class="px-3 py-1.5 rounded-lg text-xs font-bold {% if filter_mode == 'valid' %}bg-emerald-600 text-white{% else %}bg-white border border-slate-200 text-slate-600{% endif %}">سليمة ({{ batch.valid_count }})</a>
+            <a href="?batch={{ batch_id }}&filter=invalid" class="px-3 py-1.5 rounded-lg text-xs font-bold {% if filter_mode == 'invalid' %}bg-rose-600 text-white{% else %}bg-white border border-slate-200 text-slate-600{% endif %}">أخطاء ({{ batch.invalid_count }})</a>
+        </div>
+        <span class="text-xs font-semibold text-slate-500">الملف: {{ batch.filename }}</span>
+    </div>
+
+    <!-- Preview Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200 text-slate-600">
+                    <tr>
+                        <th class="py-2.5 px-3 font-bold">الصف</th>
+                        <th class="py-2.5 px-3 font-bold">الحالة</th>
+                        {% for col in columns %}
+                        <th class="py-2.5 px-3 font-bold whitespace-nowrap">{{ col.header_ar }}</th>
+                        {% endfor %}
+                        <th class="py-2.5 px-3 font-bold">الملاحظات / الأخطاء</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for r in preview_page %}
+                    <tr class="{% if not r.is_valid %}bg-rose-50/40{% else %}hover:bg-slate-50/70{% endif %}">
+                        <td class="py-2.5 px-3 font-mono font-bold text-slate-500">{{ r.row_num }}</td>
+                        <td class="py-2.5 px-3 whitespace-nowrap">
+                            {% if r.is_valid %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold {% if r.action == 'update' %}bg-sky-50 text-sky-700 border border-sky-200{% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+                                {% if r.action == 'update' %}تحديث{% else %}جديد{% endif %}
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">خطأ</span>
+                            {% endif %}
+                        </td>
+                        {% for col in columns %}
+                        <td class="py-2.5 px-3 text-slate-700 max-w-[180px] truncate">{{ r.display|get_item:col.key }}</td>
+                        {% endfor %}
+                        <td class="py-2.5 px-3 text-[11px] {% if r.errors %}text-rose-700 font-bold{% else %}text-emerald-600{% endif %}">
+                            {% if r.errors %}{{ r.errors|join:" • " }}{% else %}جاهز للاستيراد{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="20" class="py-8 text-center text-slate-400">لا توجد صفوف مطابقة للتصفية المحددة.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if preview_page.paginator.num_pages > 1 %}
+        <div class="p-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">صفحة {{ preview_page.number }} من {{ preview_page.paginator.num_pages }}</span>
+            <div class="flex items-center gap-1.5">
+                {% if preview_page.has_previous %}
+                <a href="?batch={{ batch_id }}&filter={{ filter_mode }}&page={{ preview_page.previous_page_number }}" class="px-3 py-1 bg-slate-100 rounded-lg font-bold">السابق</a>
+                {% endif %}
+                {% if preview_page.has_next %}
+                <a href="?batch={{ batch_id }}&filter={{ filter_mode }}&page={{ preview_page.next_page_number }}" class="px-3 py-1 bg-slate-100 rounded-lg font-bold">التالي</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Confirmation Footer -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <form method="POST" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="cancel">
+            <input type="hidden" name="batch_id" value="{{ batch_id }}">
+            <button type="submit" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold min-h-[42px]">إلغاء ورفع ملف آخر</button>
+        </form>
+
+        {% if batch.valid_count > 0 %}
+        <form method="POST" class="flex flex-col sm:flex-row sm:items-center gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirm">
+            <input type="hidden" name="batch_id" value="{{ batch_id }}">
+
+            {% if batch.invalid_count > 0 %}
+            <label class="flex items-center gap-2 text-xs font-bold text-amber-800 bg-amber-50 px-3 py-2 rounded-xl border border-amber-200 cursor-pointer">
+                <input type="checkbox" name="allow_partial" value="1" required class="w-4 h-4 rounded text-amber-600">
+                <span>أوافق صراحةً على استيراد {{ batch.valid_count }} صف سليم فقط وتجاهل {{ batch.invalid_count }} صف خطأ</span>
+            </label>
+            {% endif %}
+
+            <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]">
+                <span class="material-symbols-outlined text-lg">check_circle</span>
+                <span>تأكيد وتنفيذ الاستيراد ({{ batch.valid_count }})</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% elif step == 'done' and commit_result %}
+    <div class="bg-white rounded-2xl border border-emerald-200 p-8 text-center space-y-4">
+        <div class="w-14 h-14 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span class="material-symbols-outlined text-3xl">task_alt</span>
+        </div>
+        <h2 class="text-lg font-extrabold text-slate-800">تم تنفيذ الاستيراد بنجاح</h2>
+        <div class="flex flex-wrap items-center justify-center gap-3 text-xs font-bold">
+            <span class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700">تم إنشاء: {{ commit_result.created }}</span>
+            <span class="px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700">تم تحديث: {{ commit_result.updated }}</span>
+            {% if commit_result.skipped %}
+            <span class="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700">تم تجاهل (أخطاء): {{ commit_result.skipped }}</span>
+            {% endif %}
+        </div>
+        <div class="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+            <a href="{{ back_url }}" class="px-5 py-2.5 bg-[#27bebe] text-white rounded-xl text-xs font-bold min-h-[42px] inline-flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">list</span>
+                <span>العودة إلى {{ importer.title_ar }}</span>
+            </a>
+            <a href="{% url 'excel_import' entity=importer.entity_key %}" class="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold min-h-[42px] inline-flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">upload_file</span>
+                <span>استيراد ملف آخر</span>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

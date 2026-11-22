@@ -172,8 +172,10 @@ class CatalogModelsAndViewsTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         wb = openpyxl.load_workbook(io.BytesIO(response.content))
-        ws = wb.active
-        self.assertEqual(ws.cell(row=1, column=1).value, 'كود المنتج (SKU)')
+        self.assertIn('البيانات', wb.sheetnames)
+        self.assertIn('التعليمات', wb.sheetnames)
+        ws = wb['البيانات']
+        self.assertEqual(ws.cell(row=1, column=1).value, 'اسم المنتج *')
 
     def test_product_import_workflow(self):
         import io
@@ -182,13 +184,14 @@ class CatalogModelsAndViewsTestCase(TestCase):
         # 1. GET page
         get_resp = self.client.get(reverse('product_import'))
         self.assertEqual(get_resp.status_code, 200)
-        self.assertContains(get_resp, 'استيراد المنتجات')
+        self.assertContains(get_resp, 'استيراد Excel: دليل المنتجات')
 
         # 2. Create workbook in memory matching product columns
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.append(['كود المنتج (SKU)', 'اسم المنتج', 'التصنيف', 'سعر البيع للجمهور', 'سعر تكلفة الشراء', 'نسبة الضريبة', 'متاح للبيع', 'الباركود', 'الوحدة', 'الوصف'])
-        ws.append(['PAN-COLD-01', 'بانادول كولد', 'مكملات غذائية', 45.0, 32.5, 0.0, 'نعم', '6221234567890', 'علبة', 'مضاد نزلات البرد'])
+        ws.title = 'البيانات'
+        ws.append(['اسم المنتج', 'كود الصنف (SKU)', 'التصنيف', 'سعر البيع', 'سعر التكلفة', 'الضريبة %', 'الوحدة', 'قابل للبيع'])
+        ws.append(['بانادول كولد', 'PAN-COLD-01', 'مكملات غذائية', 45.0, 32.5, 0.0, 'علبة', 'نعم'])
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
@@ -199,20 +202,22 @@ class CatalogModelsAndViewsTestCase(TestCase):
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
 
-        # 3. POST preview
-        preview_resp = self.client.post(reverse('product_import'), {
-            'action': 'preview',
+        # 3. POST upload -> redirects to staged preview
+        upload_resp = self.client.post(reverse('product_import'), {
+            'action': 'upload',
             'excel_file': excel_file,
         })
+        self.assertEqual(upload_resp.status_code, 302)
+        batch_id = upload_resp['Location'].split('batch=')[1]
+        preview_resp = self.client.get(upload_resp['Location'])
         self.assertEqual(preview_resp.status_code, 200)
         self.assertContains(preview_resp, 'PAN-COLD-01')
-        self.assertContains(preview_resp, 'اختر طريقة تنفيذ الاستيراد')
 
-        # 4. POST execute import
+        # 4. POST confirm import
         execute_resp = self.client.post(reverse('product_import'), {
-            'action': 'execute',
-            'import_mode': 'create_and_update',
-        }, follow=True)
+            'action': 'confirm',
+            'batch_id': batch_id,
+        })
         self.assertEqual(execute_resp.status_code, 200)
         self.assertTrue(Product.objects.filter(sku_code='PAN-COLD-01').exists())
         imported_p = Product.objects.get(sku_code='PAN-COLD-01')

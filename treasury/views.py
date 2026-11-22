@@ -124,7 +124,7 @@ def vendor_payments_list(request):
 @require_permission('treasury:payments/export')
 def vendor_payments_export(request):
     supplier_id = request.GET.get('supplier')
-    vault_id = request.GET.get('vault_id')
+    vault_id = request.GET.get('vault') or request.GET.get('vault_id')
     payment_method = request.GET.get('payment_method')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -322,6 +322,39 @@ def accounting_vendors_export(request):
         report_title="كشف أرصدة وحسابات الموردين",
         user=request.user,
     )
+
+
+@require_permission('treasury:vendors/zero_balance')
+def accounting_vendor_zero_balance(request, pk):
+    """Non-cash account zeroing (تصفير الحساب) for VendorAccount — zero vault impact, preserves order payment_status."""
+    if request.method != 'POST':
+        return redirect('accounting_vendors_list')
+
+    account = get_object_or_404(VendorAccount.objects.select_related('supplier'), pk=pk)
+    if not (can_user_access_object(request.user, account, 'manage') or ScopeResolutionService.can_user_access_supplier(request.user, account.supplier)):
+        return render_forbidden_response(request, "غير مصرح لك بتصفير رصيد حساب مورد خارج نطاق اختصاصك.")
+
+    reason_note = (request.POST.get('reason') or '').strip()
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    try:
+        tx, prev_bal = TreasuryService.zero_vendor_balance(
+            supplier=account.supplier,
+            user=request.user,
+            reason_note=reason_note,
+            request=request,
+        )
+        msg = f"تم تصفير رصيد حساب المورد {account.supplier.name} (من {prev_bal:,.2f} ج.م إلى 0.00 ج.م) بدون التأثير على أي خزنة."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg, 'new_balance': '0.00', 'transaction_serial': tx.serial})
+        messages.success(request, msg)
+    except ValidationError as e:
+        err_msg = str(e.message if hasattr(e, 'message') else e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+
+    return redirect('accounting_vendors_list')
 
 
 @require_permission('treasury:vendors/transactions')

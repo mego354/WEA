@@ -520,25 +520,25 @@ def purchase_order_update_status_ajax(request, pk):
 
             try:
                 if new_status == 'approved' and order.status == 'pending':
-                    PurchaseOrderService.approve_order(order, request.user)
+                    order = PurchaseOrderService.approve_order(order, request.user)
                 elif new_status == 'picked' and order.status in ['pending', 'approved']:
                     if order.status == 'pending':
                         if not has_perm_or_admin(request.user, 'purchases:orders/approve'):
                             return render_forbidden_response(request, "ليس لديك صلاحية اعتماد أمر الشراء.", perm_codename='purchases:orders/approve')
-                        PurchaseOrderService.approve_order(order, request.user)
-                    PurchaseOrderService.stock_order(order, request.user)
+                        order = PurchaseOrderService.approve_order(order, request.user)
+                    order = PurchaseOrderService.stock_order(order, request.user)
                 elif new_status == 'settled' and order.status != 'settled':
                     if order.status in ['pending', 'approved']:
                         if order.status == 'pending':
                             if not has_perm_or_admin(request.user, 'purchases:orders/approve'):
                                 return render_forbidden_response(request, "ليس لديك صلاحية اعتماد أمر الشراء.", perm_codename='purchases:orders/approve')
-                            PurchaseOrderService.approve_order(order, request.user)
+                            order = PurchaseOrderService.approve_order(order, request.user)
                         if not has_perm_or_admin(request.user, 'purchases:orders/stock'):
                             return render_forbidden_response(request, "ليس لديك صلاحية استلام المخزون.", perm_codename='purchases:orders/stock')
-                        PurchaseOrderService.stock_order(order, request.user)
-                    PurchaseOrderService.invoice_order(order, request.user)
+                        order = PurchaseOrderService.stock_order(order, request.user)
+                    order = PurchaseOrderService.invoice_order(order, request.user)
                 elif new_status == 'cancelled':
-                    PurchaseOrderService.cancel_order(order, request.user)
+                    order = PurchaseOrderService.cancel_order(order, request.user)
                 else:
                     raise ValidationError(f"لا يمكن الانتقال من الحالة الحالية ({order.status_label_ar}) إلى ({new_status}) بشكل مباشر.")
 
@@ -689,6 +689,7 @@ def purchase_order_print(request, pk):
 
 @require_permission('purchases:orders/export')
 def purchase_orders_export(request):
+    status_filter = request.GET.get('status', 'all')
     payment_status_filter = request.GET.get('payment_status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
@@ -705,6 +706,8 @@ def purchase_orders_export(request):
     qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
     qs = PurchaseOrder.with_payment_totals(qs)
 
+    if status_filter and status_filter != 'all':
+        qs = qs.filter(status=status_filter)
     if payment_status_filter != 'all' and payment_status_filter in dict(PurchaseOrder.PAYMENT_STATUS_CHOICES):
         qs = qs.filter(payment_status=payment_status_filter)
     if supplier_filter:
@@ -1162,6 +1165,7 @@ def purchase_return_order_print(request, pk):
 
 @require_permission('purchases:returns/export')
 def purchase_return_orders_export(request):
+    status_filter = request.GET.get('status', 'all')
     supplier_filter = request.GET.get('supplier')
     search = request.GET.get('search', '').strip()
     date_from = request.GET.get('date_from', '').strip()
@@ -1174,6 +1178,8 @@ def purchase_return_orders_export(request):
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchasereturnorder')
 
+    if status_filter and status_filter != 'all':
+        qs = qs.filter(status=status_filter)
     if supplier_filter:
         qs = qs.filter(supplier_id=supplier_filter)
     if date_from:

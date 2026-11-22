@@ -15,6 +15,90 @@ class TreasuryService:
 
     @staticmethod
     @transaction.atomic
+    def zero_vendor_balance(supplier: Contact, user, reason_note: str, adjustment_date=None, request=None):
+        """
+        Zeros a supplier's VendorAccount balance via a non-cash adjustment transaction.
+        STRICT INVARIANTS:
+        - Does NOT touch any Vault or create VaultTransaction / VendorPayment records.
+        - Does NOT modify any individual PurchaseOrder.payment_status.
+        - Preserves full VendorTransaction history and statements.
+        - Writes SecurityAuditLog and emits notification on commit.
+        """
+        clean_reason = (reason_note or '').strip()
+        if not clean_reason:
+            raise ValidationError("يرجى إدخال سبب تصفير حساب المورد للتوثيق المحاسبي.")
+
+        account = VendorAccount.get_or_create_for_supplier(supplier)
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        previous_balance = account.current_balance or Decimal('0.00')
+        if previous_balance == Decimal('0.00'):
+            raise ValidationError("رصيد حساب المورد صفر بالفعل ولا يحتاج إلى تصفير.")
+
+        tx_date = adjustment_date or timezone.now().date()
+        if previous_balance > Decimal('0.00'):
+            tx_type = 'debit'
+            debit_amt = previous_balance
+            credit_amt = Decimal('0.00')
+        else:
+            tx_type = 'credit'
+            debit_amt = Decimal('0.00')
+            credit_amt = abs(previous_balance)
+
+        tx = VendorTransaction.objects.create(
+            account=account,
+            purchase_order=None,
+            transaction_type=tx_type,
+            reason='adjustment',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=Decimal('0.00'),
+            description=f"تصفير رصيد حساب المورد (تسوية غير نقدية) - {clean_reason}"[:255],
+            notes=clean_reason,
+            created_by=user,
+        )
+
+        account.current_balance = Decimal('0.00')
+        account.overdue_balance = Decimal('0.00')
+        account.last_transaction_date = tx_date
+        account.save(update_fields=['current_balance', 'overdue_balance', 'last_transaction_date', 'updated_at'])
+
+        AuditLogService.log(
+            action='update',
+            action_type='VENDOR_BALANCE_ZEROED',
+            module='treasury',
+            actor=user,
+            record_id=account.id,
+            record_name=f"حساب المورد: {supplier.name}",
+            description=(
+                f"تصفير رصيد حساب المورد {supplier.name} من {previous_balance:,.2f} ج.م إلى 0.00 ج.م "
+                f"(قيد تسوية #{tx.serial} - بدون تأثير على الخزن) - السبب: {clean_reason}"
+            ),
+            previous_values={'current_balance': str(previous_balance)},
+            new_values={'current_balance': '0.00', 'transaction_serial': tx.serial, 'reason': clean_reason},
+            reason=clean_reason,
+            request=request,
+        )
+
+        try:
+            from notifications.services import NotificationService
+            from django.urls import reverse
+            NotificationService.emit(
+                event_code='treasury.vendor_balance_zeroed',
+                target_obj=account,
+                actor=user,
+                title=f"تصفير رصيد حساب المورد {supplier.name}",
+                body=f"تم تصفير الرصيد من {previous_balance:,.2f} ج.م إلى 0.00 ج.م (تسوية غير نقدية) - {clean_reason}",
+                action_url=f"{reverse('vendor_transactions_list')}?vendor_id={supplier.id}",
+                dedupe_key=f"treasury.vendor_balance_zeroed:{tx.serial}",
+            )
+        except Exception:
+            pass
+
+        return tx, previous_balance
+
+    @staticmethod
+    @transaction.atomic
     def record_vendor_payment(supplier: Contact, vault: Vault, amount: Decimal, user,
                               purchase_order: PurchaseOrder = None, payment_date=None,
                               payment_method='cash', reference_number='', notes=''):

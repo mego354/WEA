@@ -22,7 +22,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('users:users/edit', 'تعديل بيانات المستخدم وكلمة المرور', 'write'),
                     ('users:users/delete', 'تعطيل أو حذف حساب المستخدم', 'delete'),
                     ('users:users/export', 'تصدير بيانات المستخدمين (Excel/CSV)', 'export'),
-                    ('users:users/view', 'فحص الصلاحيات الفعلية للمستخدم', 'read'),
+                    ('users:users/view', 'عرض ملف وتفاصيل المستخدم', 'read'),
                 ]
             },
             'roles': {
@@ -30,6 +30,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('system:rbac/manage', 'إنشاء وتعديل وتكرار وحذف أدوار الصلاحيات', 'admin'),
                     ('settings:rbac/view', 'عرض واستعراض أدوار ومصفوفة الصلاحيات', 'read'),
+                    ('settings:rbac/export', 'تصدير الأدوار والصلاحيات إلى Excel', 'export'),
                 ]
             },
             'audit': {
@@ -68,6 +69,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('catalog:categories/edit', 'تعديل بيانات التصنيف', 'write'),
                     ('catalog:categories/delete', 'حذف تصنيف منتجات', 'delete'),
                     ('catalog:categories/export', 'تصدير تصنيفات المنتجات إلى Excel', 'export'),
+                    ('catalog:categories/import', 'استيراد تصنيفات المنتجات من Excel', 'write'),
                 ]
             }
         }
@@ -185,6 +187,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('sales:collections/list', 'عرض قائمة تحصيلات العملاء', 'read'),
                     ('sales:collections/create', 'تسجيل تحصيل نقدي جديد من عميل', 'financial'),
                     ('sales:collections/export', 'تصدير سجل التحصيلات إلى Excel', 'export'),
+                    ('sales:collections/import', 'استيراد التحصيلات من Excel', 'financial'),
                 ]
             },
             'customer_accounts': {
@@ -192,6 +195,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('sales:customers/accounting', 'عرض صفحة كشف حسابات وأرصدة العملاء', 'read'),
                     ('sales:customers/accounting_export', 'تصدير كشف حسابات وأرصدة العملاء إلى Excel', 'export'),
+                    ('sales:customers/zero_balance', 'تصفير رصيد حساب عميل (تسوية غير نقدية)', 'financial'),
                     ('sales:statements/pdf', 'إصدار كشف حساب عميل PDF', 'export'),
                 ]
             },
@@ -216,6 +220,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('inventory:stocks/view', 'عرض أرصدة المخزون والتشغيلات وتواريخ الصلاحية', 'read'),
                     ('inventory:stocks/export', 'تصدير كشف أرصدة المخزون إلى Excel', 'export'),
+                    ('inventory:stocks/import', 'استيراد أرصدة وتسويات المخزون من Excel', 'workflow'),
                 ]
             },
             'warehouses': {
@@ -224,6 +229,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('inventory:warehouses/manage', 'إدارة وإضافة وتعديل بيانات المخازن', 'write'),
                     ('inventory:warehouses/delete', 'حذف المخازن الخالية من الحركات والأرصدة', 'admin'),
                     ('inventory:warehouses/export', 'تصدير دليل المخازن إلى Excel', 'export'),
+                    ('inventory:warehouses/import', 'استيراد دليل المخازن من Excel', 'write'),
                 ]
             },
             'memos': {
@@ -231,6 +237,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('inventory:memos/manage', 'إنشاء واعتماد أذونات الإضافة والصرف المخزني', 'workflow'),
                     ('inventory:memos/export', 'تصدير أذونات المخزن إلى Excel', 'export'),
+                    ('inventory:memos/import', 'استيراد تسويات المخزون من Excel', 'workflow'),
                 ]
             },
             'transfers': {
@@ -293,6 +300,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('treasury:payment_requests/execute', 'تنفيذ وصرف طلبات سداد الموردين المعتمدة', 'financial'),
                     ('treasury:payment_requests/export', 'تصدير طلبات سداد الموردين إلى Excel', 'export'),
                     ('treasury:payments/export', 'تصدير مدفوعات الموردين إلى Excel', 'export'),
+                    ('treasury:payments/import', 'استيراد مدفوعات الموردين من Excel', 'financial'),
                 ]
             },
             'vendor_accounting': {
@@ -300,6 +308,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('treasury:vendors/accounting', 'عرض أرصدة وكشوفات حسابات الموردين', 'read'),
                     ('treasury:vendors/accounting_export', 'تصدير أرصدة حسابات الموردين إلى Excel', 'export'),
+                    ('treasury:vendors/zero_balance', 'تصفير رصيد حساب مورد (تسوية غير نقدية)', 'financial'),
                     ('treasury:vendors/transactions', 'عرض دفتر قيود وعمليات الموردين التفصيلية', 'read'),
                     ('treasury:vendors/transactions_export', 'تصدير دفتر قيود الموردين إلى Excel', 'export'),
                 ]
@@ -335,6 +344,7 @@ ERP_PERMISSIONS_CATALOG = {
                     ('activities:planned/list', 'عرض خطط الزيارات المجدولة للمناديب', 'read'),
                     ('activities:planned/manage', 'إنشاء وإضافة وحذف مواعيد خطة الزيارات', 'write'),
                     ('activities:planned/export', 'تصدير خطة الزيارات إلى Excel', 'export'),
+                    ('activities:planned/import', 'استيراد خطط الزيارات من Excel', 'write'),
                 ]
             },
             'agreements': {
@@ -374,6 +384,8 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'المناطق والمحافظات الجغرافية',
                 'actions': [
                     ('settings:areas/manage', 'إضافة وتعديل وحذف المحافظات والمناطق التوزيعية', 'admin'),
+                    ('settings:areas/export', 'تصدير المناطق والخطوط الجغرافية إلى Excel', 'export'),
+                    ('settings:areas/import', 'استيراد المناطق والخطوط الجغرافية من Excel', 'admin'),
                 ]
             },
             'expenses': {
@@ -519,6 +531,22 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('reports:activities/view', 'عرض تقارير تحقيق الاتفاقيات والمكالمات وتتبع العينات الطبية', 'read'),
                     ('reports:activities/export', 'تصدير تقارير الأنشطة والعينات إلى Excel', 'export'),
+                ]
+            }
+        }
+    },
+    'notifications': {
+        'code': 'notifications',
+        'name_ar': 'الإشعارات والتنبيهات المركزية',
+        'name_en': 'Notifications Center',
+        'icon': 'notifications',
+        'root_perm': 'module:notifications',
+        'pages': {
+            'inbox': {
+                'name_ar': 'صندوق الإشعارات والتنبيهات',
+                'actions': [
+                    ('notifications:notifications/view', 'عرض وقراءة الإشعارات الواردة', 'read'),
+                    ('notifications:rules/manage', 'إدارة وضبط قواعد الإشعارات في إعدادات الأدوار', 'admin'),
                 ]
             }
         }

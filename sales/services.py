@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
@@ -9,6 +10,147 @@ from catalog.models import Product
 from inventory.models import Warehouse, InventoryStock, InventoryMemo, InventoryMemoItem
 from treasury.models import Vault, VaultTransaction
 from master_data.validation_utils import parse_positive_integer_quantity
+
+
+def _build_order_token_regex(order_number: str, serial_num=None):
+    tokens = []
+    if order_number:
+        clean = str(order_number).strip()
+        tokens.append(re.escape(clean))
+        if clean.startswith('#'):
+            tokens.append(re.escape(clean.lstrip('#')))
+    if serial_num is not None and str(serial_num).strip():
+        s = str(serial_num).strip()
+        if re.escape(s) not in tokens:
+            tokens.append(re.escape(f"#{s}"))
+    if not tokens:
+        return None
+    return re.compile(r'(^|[^\dA-Za-z])(' + '|'.join(tokens) + r')($|[^\dA-Za-z])')
+
+
+def find_existing_sales_order_transaction(order: SalesOrder, account: CustomerAccount = None):
+    """Finds an already-posted CustomerTransaction(reason='sales') matching this SalesOrder."""
+    if account is None:
+        account = CustomerAccount.objects.filter(customer=order.customer).first()
+    if not account:
+        return None
+    pat = _build_order_token_regex(order.order_number, order.serial_num)
+    if not pat:
+        return None
+    raw_key = (order.order_number or '').lstrip('#').strip()
+    qs = CustomerTransaction.objects.filter(account=account, reason='sales')
+    if raw_key:
+        qs = qs.filter(description__icontains=raw_key)
+    for tx in qs.order_by('id'):
+        if pat.search(tx.description or ''):
+            return tx
+    return None
+
+
+def find_existing_sales_return_transaction(return_order, account: CustomerAccount = None):
+    """Finds an already-posted CustomerTransaction(reason='sales_return') matching this SalesReturnOrder."""
+    if account is None:
+        account = CustomerAccount.objects.filter(customer=return_order.customer).first()
+    if not account:
+        return None
+    pat = _build_order_token_regex(return_order.order_number, return_order.serial_num)
+    if not pat:
+        return None
+    raw_key = (return_order.order_number or '').lstrip('#').strip()
+    qs = CustomerTransaction.objects.filter(account=account, reason='sales_return')
+    if raw_key:
+        qs = qs.filter(description__icontains=raw_key)
+    for tx in qs.order_by('id'):
+        if pat.search(tx.description or ''):
+            return tx
+    return None
+
+
+class CustomerAccountService:
+    """Service layer for safe non-cash customer account adjustments (e.g., تصفير الحساب)."""
+
+    @classmethod
+    @transaction.atomic
+    def zero_balance(cls, customer: Contact, user, reason_note: str = '', adjustment_date=None, request=None):
+        """
+        Zeros a customer's account balance via a non-cash accounting adjustment transaction.
+        STRICT INVARIANTS:
+        - Does NOT touch any Vault or create VaultTransaction / Collection records.
+        - Does NOT modify any individual SalesOrder.payment_status.
+        - Preserves full CustomerTransaction history and statements.
+        - Writes SecurityAuditLog and emits notification on commit.
+        """
+        clean_reason = (reason_note or '').strip()
+        if not clean_reason:
+            raise ValidationError("يرجى إدخال سبب تصفير الحساب للتوثيق المحاسبي.")
+
+        account = CustomerAccount.get_or_create_for_customer(customer)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        previous_balance = account.current_balance or Decimal('0.00')
+        if previous_balance == Decimal('0.00'):
+            raise ValidationError("رصيد حساب العميل صفر بالفعل ولا يحتاج إلى تصفير.")
+
+        tx_date = adjustment_date or timezone.now().date()
+        if previous_balance > Decimal('0.00'):
+            tx_type = 'credit'
+            debit_amt = Decimal('0.00')
+            credit_amt = previous_balance
+        else:
+            tx_type = 'debit'
+            debit_amt = abs(previous_balance)
+            credit_amt = Decimal('0.00')
+
+        tx = CustomerTransaction.objects.create(
+            account=account,
+            transaction_type=tx_type,
+            reason='adjustment',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=Decimal('0.00'),
+            description=f"تصفير رصيد الحساب (تسوية غير نقدية) - {clean_reason}"[:255],
+            created_by=user,
+        )
+
+        account.current_balance = Decimal('0.00')
+        account.overdue_balance = Decimal('0.00')
+        account.last_transaction_date = tx_date
+        account.save(update_fields=['current_balance', 'overdue_balance', 'last_transaction_date', 'updated_at'])
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action='update',
+            action_type='CUSTOMER_BALANCE_ZEROED',
+            module='sales',
+            actor=user,
+            record_id=account.id,
+            record_name=f"حساب العميل: {customer.name}",
+            description=(
+                f"تصفير رصيد حساب العميل {customer.name} من {previous_balance:,.2f} ج.م إلى 0.00 ج.م "
+                f"(قيد تسوية #{tx.serial} - بدون تأثير على الخزن) - السبب: {clean_reason}"
+            ),
+            previous_values={'current_balance': str(previous_balance)},
+            new_values={'current_balance': '0.00', 'transaction_serial': tx.serial, 'reason': clean_reason},
+            reason=clean_reason,
+            request=request,
+        )
+
+        try:
+            from notifications.services import NotificationService
+            from django.urls import reverse
+            NotificationService.emit(
+                event_code='sales.customer_balance_zeroed',
+                target_obj=account,
+                actor=user,
+                title=f"تصفير رصيد حساب العميل {customer.name}",
+                body=f"تم تصفير الرصيد من {previous_balance:,.2f} ج.م إلى 0.00 ج.م (تسوية غير نقدية) - {clean_reason}",
+                action_url=f"{reverse('customer_transactions_list')}?customer_id={customer.id}",
+                dedupe_key=f"sales.customer_balance_zeroed:{tx.serial}",
+            )
+        except Exception:
+            pass
+
+        return tx, previous_balance
 
 
 class SalesOrderService:
@@ -82,6 +224,11 @@ class SalesOrderService:
                         f"الرصيد المتاح من الصنف '{product.name}' في {source_warehouse.name} ({qty_avail:,.0f}) غير كافٍ للكمية المطلوبة ({total_qty:,.0f})."
                     )
 
+        from master_data.models import SalesSettings
+        sales_settings = SalesSettings.get_settings()
+        is_super = user.is_superuser or getattr(user, 'is_super_admin', False)
+        needs_approval = bool(getattr(sales_settings, 'require_manager_approval', False)) and not is_super
+
         order = SalesOrder(
             customer=customer,
             source_warehouse=source_warehouse,
@@ -91,9 +238,9 @@ class SalesOrderService:
             due_date=due_date,
             custom_discount_percentage=custom_disc_pct,
             shipping_fees=shipping,
-            status='invoiced',
-            approved_by=user,
-            approved_at=timezone.now(),
+            status='pending' if needs_approval else 'invoiced',
+            approved_by=None if needs_approval else user,
+            approved_at=None if needs_approval else timezone.now(),
             notes=notes,
             created_by=user
         )
@@ -115,52 +262,8 @@ class SalesOrderService:
 
         order.recalculate_totals()
 
-        # Immediate warehouse execution: Outward InventoryMemo + stock decrement (Requirement B2)
-        memo_number = f"MEMO-OUT-{order.serial_num}"
-        memo = InventoryMemo.objects.create(
-            memo_number=memo_number,
-            memo_type='outward',
-            warehouse=order.source_warehouse,
-            statement=f"صرف أمر بيع رقم {order.order_number} للعميل {order.customer.name}",
-            status='applied',
-            applied_at=timezone.now(),
-            notes=f"Generated from Sales Order #{order.order_number}",
-            created_by=user
-        )
-        for item in order.items.select_related('product'):
-            InventoryMemoItem.objects.create(
-                memo=memo,
-                product=item.product,
-                quantity=item.quantity,
-                unit_cost=item.product.default_purchase_cost
-            )
-            stock = InventoryStock.objects.select_for_update().get(
-                warehouse=order.source_warehouse,
-                product=item.product
-            )
-            stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
-            stock.save(update_fields=['qty_on_hand', 'updated_at'])
-
-        order.memo = memo
-        order.save(update_fields=['memo'])
-
-        # Immediate financial execution: Post invoice debit to CustomerAccount (Requirement B2)
-        account = CustomerAccount.get_or_create_for_customer(order.customer)
-        new_balance = account.current_balance + order.grand_total
-        CustomerTransaction.objects.create(
-            account=account,
-            transaction_type='debit',
-            reason='sales',
-            transaction_date=timezone.now().date(),
-            debit=order.grand_total,
-            credit=Decimal('0.00'),
-            running_balance=new_balance,
-            description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
-            created_by=user
-        )
-        account.current_balance = new_balance
-        account.last_transaction_date = timezone.now().date()
-        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        if not needs_approval:
+            cls._post_order_stock_and_ledger(order, user)
 
         from activities.models import ApprovalAuditLog
         ApprovalAuditLog.objects.create(
@@ -170,7 +273,7 @@ class SalesOrderService:
             actor=user,
             status_before='',
             status_after=order.status,
-            reason=notes or 'إنشاء وتنفيذ أمر البيع مباشرة'
+            reason=notes or ('إنشاء أمر بيع بانتظار اعتماد الإدارة' if needs_approval else 'إنشاء وتنفيذ أمر البيع تلقائياً')
         )
 
         from accounts.services import AuditLogService
@@ -330,6 +433,76 @@ class SalesOrderService:
         return order
 
     @classmethod
+    def _post_order_stock_and_ledger(cls, order: SalesOrder, user, release_reserved: bool = False):
+        """
+        Centralized, idempotent automatic posting for SalesOrder:
+        1. Deducts stock & creates outward InventoryMemo ONLY if order.memo is None.
+        2. Posts debit CustomerTransaction ONLY if no matching sales transaction already exists.
+        Must be called inside @transaction.atomic with order locked.
+        """
+        memo = order.memo
+        if not memo:
+            memo_number = f"MEMO-OUT-{order.serial_num}"
+            memo, created_memo = InventoryMemo.objects.get_or_create(
+                memo_number=memo_number,
+                defaults={
+                    'memo_type': 'outward',
+                    'warehouse': order.source_warehouse,
+                    'statement': f"صرف أمر بيع رقم {order.order_number} للعميل {order.customer.name}",
+                    'status': 'applied',
+                    'applied_at': timezone.now(),
+                    'notes': f"Generated from Sales Order #{order.order_number}",
+                    'created_by': user,
+                }
+            )
+            if created_memo:
+                for item in order.items.select_related('product'):
+                    InventoryMemoItem.objects.get_or_create(
+                        memo=memo,
+                        product=item.product,
+                        defaults={
+                            'quantity': item.quantity,
+                            'unit_cost': item.product.default_purchase_cost,
+                        }
+                    )
+                    stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                        warehouse=order.source_warehouse,
+                        product=item.product,
+                        defaults={
+                            'qty_on_hand': Decimal('0.00'),
+                            'qty_reserved': Decimal('0.00'),
+                            'product_cost': item.product.default_purchase_cost,
+                        }
+                    )
+                    stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
+                    if release_reserved:
+                        stock.qty_reserved = max(Decimal('0.00'), stock.qty_reserved - item.quantity)
+                    stock.save(update_fields=['qty_on_hand', 'qty_reserved', 'updated_at'])
+            order.memo = memo
+            order.save(update_fields=['memo'])
+
+        account = CustomerAccount.get_or_create_for_customer(order.customer)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_sales_order_transaction(order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance + order.grand_total
+            CustomerTransaction.objects.create(
+                account=account,
+                transaction_type='debit',
+                reason='sales',
+                transaction_date=timezone.now().date(),
+                debit=order.grand_total,
+                credit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
+                created_by=user,
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = timezone.now().date()
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        return memo
+
+    @classmethod
     @transaction.atomic
     def approve_order(cls, order, user, notes=''):
         """
@@ -337,6 +510,7 @@ class SalesOrderService:
         Automatically executes warehouse dispatch (InventoryMemo + stock deduction)
         and customer ledger invoicing (CustomerTransaction Debit), moving status directly to 'invoiced'.
         """
+        order = SalesOrder.objects.select_for_update().get(pk=order.pk)
         if order.status not in ['pending', 'rejected', 'manager_approval']:
             raise ValidationError(f"لا يمكن اعتماد الطلب في حالته الحالية: {order.get_status_display()}.")
 
@@ -350,80 +524,23 @@ class SalesOrderService:
 
         status_before = order.status
 
-        # 1. Authoritative atomic stock validation
-        for item in order.items.select_related('product'):
-            stock, _ = InventoryStock.objects.select_for_update().get_or_create(
-                warehouse=order.source_warehouse,
-                product=item.product,
-                defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
-            )
-            effective_avail = stock.qty_available if order.status != 'preparing' else (stock.qty_available + item.quantity)
-            if effective_avail < item.quantity:
-                raise ValidationError(
-                    f"لا يمكن اعتماد أمر البيع لعدم توفر رصيد كافٍ من الصنف '{item.product.name}' في {order.source_warehouse.name}. "
-                    f"الرصيد المتاح: {effective_avail:,.2f}، الكمية المطلوبة: {item.quantity:,.2f}."
-                )
-
-        # 2. Automatically generate outward InventoryMemo and decrement stock
-        memo_number = f"MEMO-OUT-{order.serial_num}"
-        memo = order.memo
-        if not memo:
-            memo, _ = InventoryMemo.objects.get_or_create(
-                memo_number=memo_number,
-                defaults={
-                    'memo_type': 'outward',
-                    'warehouse': order.source_warehouse,
-                    'statement': f"صرف أمر بيع رقم {order.order_number} للعميل {order.customer.name}",
-                    'status': 'applied',
-                    'applied_at': timezone.now(),
-                    'notes': f"Generated from Sales Order #{order.order_number}",
-                    'created_by': user
-                }
-            )
+        # 1. Authoritative atomic stock validation (only if stock hasn't already been deducted via memo)
+        if not order.memo_id:
             for item in order.items.select_related('product'):
-                InventoryMemoItem.objects.get_or_create(
-                    memo=memo,
-                    product=item.product,
-                    defaults={
-                        'quantity': item.quantity,
-                        'unit_cost': item.product.default_purchase_cost
-                    }
-                )
-                stock = InventoryStock.objects.select_for_update().get(
+                stock, _ = InventoryStock.objects.select_for_update().get_or_create(
                     warehouse=order.source_warehouse,
-                    product=item.product
+                    product=item.product,
+                    defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00'), 'product_cost': item.product.default_purchase_cost}
                 )
-                stock.qty_on_hand = max(Decimal('0.00'), stock.qty_on_hand - item.quantity)
-                if order.status == 'preparing':
-                    stock.qty_reserved = max(Decimal('0.00'), stock.qty_reserved - item.quantity)
-                stock.save(update_fields=['qty_on_hand', 'qty_reserved', 'updated_at'])
+                effective_avail = stock.qty_available if status_before != 'preparing' else (stock.qty_available + item.quantity)
+                if effective_avail < item.quantity:
+                    raise ValidationError(
+                        f"لا يمكن اعتماد أمر البيع لعدم توفر رصيد كافٍ من الصنف '{item.product.name}' في {order.source_warehouse.name}. "
+                        f"الرصيد المتاح: {effective_avail:,.2f}، الكمية المطلوبة: {item.quantity:,.2f}."
+                    )
 
-            order.memo = memo
-
-        # 3. Automatically post financial invoice (debit) to Customer Account
-        account = CustomerAccount.get_or_create_for_customer(order.customer)
-        existing_tx = CustomerTransaction.objects.filter(
-            account=account,
-            reason='sales',
-            description__contains=order.order_number
-        ).first()
-
-        if not existing_tx:
-            new_balance = account.current_balance + order.grand_total
-            CustomerTransaction.objects.create(
-                account=account,
-                transaction_type='debit',
-                reason='sales',
-                transaction_date=timezone.now().date(),
-                debit=order.grand_total,
-                credit=Decimal('0.00'),
-                running_balance=new_balance,
-                description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
-                created_by=user
-            )
-            account.current_balance = new_balance
-            account.last_transaction_date = timezone.now().date()
-            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        # 2 & 3. Centralized idempotent stock & ledger posting
+        memo = cls._post_order_stock_and_ledger(order, user, release_reserved=(status_before == 'preparing'))
 
         order.status = 'invoiced'
         order.approved_by = user
@@ -451,7 +568,7 @@ class SalesOrderService:
             record_name=f"Sales Order #{order.order_number}",
             description=f"اعتماد وصرف وفوترة أمر بيع رقم {order.order_number} بواسطة {user.name or user.username}",
             previous_values={'status': status_before},
-            new_values={'status': 'invoiced', 'approved_by': str(user), 'memo': memo.memo_number}
+            new_values={'status': 'invoiced', 'approved_by': str(user), 'memo': memo.memo_number if memo else None}
         )
         return order
 
@@ -682,32 +799,35 @@ class SalesOrderService:
     @transaction.atomic
     def invoice_order(cls, order, user):
         """
-        Invoices the delivered sales order and posts debit to customer's ledger.
+        Idempotent financial posting for a SalesOrder (auto-reconciles if already posted).
         """
+        order = SalesOrder.objects.select_for_update().get(pk=order.pk)
         if order.status == 'invoiced':
             return order
         if order.status not in ['delivered', 'manager_approval', 'preparing']:
-            raise ValidationError(f"يجب تسليم الطلب (Delivered) قبل ترحيل الفاتورة للحسابات.")
+            raise ValidationError(f"يجب اعتماد أو تسليم الطلب قبل ترحيل الفاتورة للحسابات.")
 
         account = CustomerAccount.get_or_create_for_customer(order.customer)
-        new_balance = account.current_balance + order.grand_total
-
-        # Create Customer Transaction (Debit)
-        CustomerTransaction.objects.create(
-            account=account,
-            transaction_type='debit',
-            reason='sales',
-            transaction_date=timezone.now().date(),
-            debit=order.grand_total,
-            credit=Decimal('0.00'),
-            running_balance=new_balance,
-            description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
-            created_by=user
-        )
-
-        account.current_balance = new_balance
-        account.last_transaction_date = timezone.now().date()
-        account.save(update_fields=['current_balance', 'last_transaction_date'])
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_sales_order_transaction(order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance + order.grand_total
+            CustomerTransaction.objects.create(
+                account=account,
+                transaction_type='debit',
+                reason='sales',
+                transaction_date=timezone.now().date(),
+                debit=order.grand_total,
+                credit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"فاتورة مبيعات أمر بيع #{order.order_number}",
+                created_by=user
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = timezone.now().date()
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            new_balance = account.current_balance
 
         order.status = 'invoiced'
         order.save(update_fields=['status', 'updated_at'])
@@ -720,7 +840,7 @@ class SalesOrderService:
             record_id=order.id,
             record_name=f"Sales Order #{order.order_number}",
             description=f"ترحيل فاتورة مبيعات لأمر بيع رقم {order.order_number} بقيمة {order.grand_total}",
-            new_values={'status': 'invoiced', 'customer_balance': str(new_balance)}
+            new_values={'status': 'invoiced', 'customer_balance': str(new_balance), 'reused_existing_tx': bool(existing_tx)}
         )
         return order
 
@@ -1199,9 +1319,86 @@ class SalesReturnOrderService:
         return_order.delete()
 
     @classmethod
+    def _post_return_stock_and_ledger(cls, locked_order, user):
+        """Centralized idempotent stock receipt & customer credit posting for SalesReturnOrder."""
+        from inventory.models import InventoryLot
+        now_dt = timezone.now()
+        if not locked_order.memo_id:
+            memo_number = f"MEMO-IN-SRET-{locked_order.serial_num}"
+            memo, created_memo = InventoryMemo.objects.get_or_create(
+                memo_number=memo_number,
+                defaults={
+                    'memo_type': 'inward',
+                    'warehouse': locked_order.target_warehouse,
+                    'statement': f"إذن إضافة استلام مرتجع مبيعات {locked_order.order_number} من العميل {locked_order.customer.name}",
+                    'status': 'applied',
+                    'applied_at': now_dt,
+                    'created_by': user,
+                }
+            )
+            if created_memo:
+                for item in locked_order.items.select_related('product'):
+                    InventoryMemoItem.objects.create(
+                        memo=memo,
+                        product=item.product,
+                        quantity=item.quantity,
+                        unit_cost=item.unit_price,
+                        batch_number=item.batch_number,
+                        expiry_date=item.expiry_date,
+                    )
+                    if item.condition == 'resalable':
+                        stock, _ = InventoryStock.objects.select_for_update().get_or_create(
+                            warehouse=locked_order.target_warehouse,
+                            product=item.product,
+                            defaults={'qty_on_hand': Decimal('0.00'), 'qty_reserved': Decimal('0.00')}
+                        )
+                        stock.qty_on_hand += item.quantity
+                        stock.save(update_fields=['qty_on_hand', 'updated_at'])
+                        if item.batch_number:
+                            lot, _ = InventoryLot.objects.get_or_create(
+                                stock=stock,
+                                batch_number=item.batch_number,
+                                defaults={'quantity': Decimal('0.00'), 'expiry_date': item.expiry_date}
+                            )
+                            lot.quantity += item.quantity
+                            if item.expiry_date and not lot.expiry_date:
+                                lot.expiry_date = item.expiry_date
+                            lot.save()
+            locked_order.memo = memo
+            locked_order.stocked_at = now_dt
+
+        account = CustomerAccount.get_or_create_for_customer(locked_order.customer)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_sales_return_transaction(locked_order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance - locked_order.grand_total
+            tx = CustomerTransaction.objects.create(
+                account=account,
+                transaction_type='credit',
+                reason='sales_return',
+                transaction_date=now_dt.date(),
+                credit=locked_order.grand_total,
+                debit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"إشعار دائن مرتجع مبيعات {locked_order.order_number}" + (f" (أمر بيع #{locked_order.sales_order.order_number})" if locked_order.sales_order else ""),
+                created_by=user,
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            tx = existing_tx
+        locked_order.settled_at = locked_order.settled_at or now_dt
+        locked_order.status = 'settled'
+        return tx
+
+    @classmethod
     @transaction.atomic
     def approve_return_order(cls, return_order, user, notes="", **kwargs):
-        """Transitions status from pending to approved with anti-self-approval."""
+        """
+        Approves a pending SalesReturnOrder with anti-self-approval and
+        automatically posts warehouse stock receipt and customer ledger credit ('settled').
+        """
         from accounts.permissions import can_user_access_object
         from activities.models import ApprovalAuditLog
         from accounts.services import AuditLogService
@@ -1214,12 +1411,10 @@ class SalesReturnOrderService:
             raise ValidationError("لا يمكنك اعتماد أمر إرجاع قمت بإنشائه بنفسك (منع الاعتماد الذاتي).")
 
         status_before = locked_order.status
-        locked_order.status = 'approved'
         locked_order.approved_by = user
         locked_order.approved_at = timezone.now()
         locked_order.updated_by = user
-        if notes:
-            locked_order.approval_notes = notes
+        tx = cls._post_return_stock_and_ledger(locked_order, user)
         locked_order.save()
 
         ApprovalAuditLog.objects.create(
@@ -1228,9 +1423,9 @@ class SalesReturnOrderService:
             action='approved',
             actor=user,
             status_before=status_before,
-            status_after='approved',
-            reason=notes or "اعتماد مرتجع المبيعات من قبل الإدارة",
-            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'معتمد من الإدارة'}],
+            status_after='settled',
+            reason=notes or "اعتماد واستلام وترحيل تلقائي لمرتجع المبيعات",
+            changes=[{'field': 'الحالة', 'old': 'قيد الانتظار', 'new': 'تم الترحيل للحسابات'}],
         )
 
         AuditLogService.log(
@@ -1239,9 +1434,9 @@ class SalesReturnOrderService:
             actor=user,
             record_id=locked_order.id,
             record_name=f"{locked_order.order_number} ({locked_order.customer.name})",
-            description=f"اعتماد مرتجع مبيعات {locked_order.order_number}",
+            description=f"اعتماد وترحيل تلقائي لمرتجع مبيعات {locked_order.order_number}",
             previous_values={'status': status_before},
-            new_values={'status': 'approved'}
+            new_values={'status': 'settled', 'transaction_serial': tx.serial if tx else None}
         )
 
         return locked_order
@@ -1399,23 +1594,27 @@ class SalesReturnOrderService:
             raise ValidationError("يجب استلام بضاعة المرتجع بالمخزن أولاً (Delivered) قبل الترحيل للحسابات.")
 
         account = CustomerAccount.get_or_create_for_customer(locked_order.customer)
-        new_balance = account.current_balance - locked_order.grand_total
-
-        tx = CustomerTransaction.objects.create(
-            account=account,
-            transaction_type='credit',
-            reason='sales_return',
-            transaction_date=timezone.now().date(),
-            credit=locked_order.grand_total,
-            debit=Decimal('0.00'),
-            running_balance=new_balance,
-            description=f"إشعار دائن مرتجع مبيعات {locked_order.order_number}" + (f" (أمر بيع #{locked_order.sales_order.order_number})" if locked_order.sales_order else ""),
-            created_by=user
-        )
-
-        account.current_balance = new_balance
-        account.last_transaction_date = tx.transaction_date
-        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        existing_tx = find_existing_sales_return_transaction(locked_order, account=account)
+        if not existing_tx:
+            new_balance = account.current_balance - locked_order.grand_total
+            tx = CustomerTransaction.objects.create(
+                account=account,
+                transaction_type='credit',
+                reason='sales_return',
+                transaction_date=timezone.now().date(),
+                credit=locked_order.grand_total,
+                debit=Decimal('0.00'),
+                running_balance=new_balance,
+                description=f"إشعار دائن مرتجع مبيعات {locked_order.order_number}" + (f" (أمر بيع #{locked_order.sales_order.order_number})" if locked_order.sales_order else ""),
+                created_by=user
+            )
+            account.current_balance = new_balance
+            account.last_transaction_date = tx.transaction_date
+            account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+        else:
+            tx = existing_tx
+            new_balance = account.current_balance
 
         locked_order.settled_at = timezone.now()
         locked_order.status = 'settled'

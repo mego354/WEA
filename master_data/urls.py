@@ -3,6 +3,7 @@ from django.shortcuts import redirect
 from . import views
 from . import attachment_views
 from . import list_search_api
+from . import excel_views
 
 urlpatterns = [
     path('', views.home_view, name='home'),
@@ -26,33 +27,43 @@ urlpatterns = [
 
     # Areas & Territories
     path('settings/areas/', views.areas_settings_view, name='areas_settings'),
+    path('settings/areas/export/', views.areas_export, name='areas_export'),
     path('settings/areas/add/', views.area_create, name='area_create'),
     path('settings/areas/<int:pk>/edit/', views.area_edit, name='area_edit'),
     path('settings/areas/<int:pk>/delete/', views.area_delete, name='area_delete'),
 
     # Expense Types
     path('settings/expenses/', views.expenses_settings_view, name='expenses_settings'),
+    path('settings/expenses/export/', views.expenses_export, name='expenses_export'),
     path('settings/expenses/add/', views.expense_create, name='expense_create'),
     path('settings/expenses/<int:pk>/edit/', views.expense_edit, name='expense_edit'),
     path('settings/expenses/<int:pk>/delete/', views.expense_delete, name='expense_delete'),
 
     # Ticket Types
     path('settings/tickets/', views.tickets_settings_view, name='tickets_settings'),
+    path('settings/tickets/export/', views.tickets_export, name='tickets_export'),
     path('settings/tickets/add/', views.ticket_create, name='ticket_create'),
     path('settings/tickets/<int:pk>/edit/', views.ticket_edit, name='ticket_edit'),
     path('settings/tickets/<int:pk>/delete/', views.ticket_delete, name='ticket_delete'),
 
     # Approval Request Types
     path('settings/requests/', views.requests_settings_view, name='requests_settings'),
+    path('settings/requests/export/', views.requests_export, name='requests_export'),
     path('settings/requests/add/', views.request_type_create, name='request_type_create'),
     path('settings/requests/<int:pk>/edit/', views.request_type_edit, name='request_type_edit'),
     path('settings/requests/<int:pk>/delete/', views.request_type_delete, name='request_type_delete'),
 
     # Agreement Types
     path('settings/agreements/', views.agreements_settings_view, name='agreements_settings'),
+    path('settings/agreements/export/', views.agreements_types_export, name='agreements_types_export'),
     path('settings/agreements/add/', views.agreement_create, name='agreement_type_create'),
     path('settings/agreements/<int:pk>/edit/', views.agreement_edit, name='agreement_type_edit'),
     path('settings/agreements/<int:pk>/delete/', views.agreement_delete, name='agreement_type_delete'),
+
+    # Reusable Global Excel Import Engine (10 Approved First-Wave Entities; Users Strictly Excluded)
+    path('excel/import/<str:entity>/', excel_views.excel_import_view, name='excel_import'),
+    path('excel/import/<str:entity>/template/', excel_views.excel_import_template_view, name='excel_import_template'),
+    path('excel/import/<str:entity>/errors/<str:batch_id>/', excel_views.excel_import_errors_view, name='excel_import_errors'),
 
     # Workflow Settings
     path('settings/sales/', views.sales_settings_view, name='sales_settings'),

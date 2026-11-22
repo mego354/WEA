@@ -1,0 +1,21 @@
+{% load erp_tags %}
+<div class="flex items-center gap-1.5 shrink-0">
+    {% if export_url %}
+    <a href="{{ export_url }}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+       class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-colors min-h-[38px]"
+       title="تصدير Excel">
+        <span class="material-symbols-outlined text-base">download</span>
+        <span class="hidden sm:inline">تصدير</span>
+    </a>
+    {% endif %}
+    {% if import_entity and import_perm %}
+        {% if request.user|has_permission:import_perm %}
+        <a href="{% url 'excel_import' entity=import_entity %}"
+           class="inline-flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors min-h-[38px]"
+           title="استيراد Excel">
+            <span class="material-symbols-outlined text-base">upload_file</span>
+            <span class="hidden sm:inline">استيراد</span>
+        </a>
+        {% endif %}
+    {% endif %}
+</div>

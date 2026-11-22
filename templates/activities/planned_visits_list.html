@@ -17,6 +17,8 @@
                 <span class="material-symbols-outlined text-base">playlist_add_check</span>
                 <span>تخطيط يومي مجمع لعدة عملاء</span>
             </button>
+            {% url 'planned_visits_export' as pv_export_url %}
+            {% include 'components/excel_toolbar_actions.html' with export_url=pv_export_url import_entity='planned_visits' import_perm='activities:planned/import' %}
         </div>
 
         <!-- Rep & Date Controls Form -->

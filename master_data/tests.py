@@ -1570,3 +1570,199 @@ class SidebarActiveNavigationTests(TestCase):
                     self.assertIn('hidden"', cls_fragment, f"Expected {sub} to be collapsed on {path}")
 
 
+class WeaDataIntegrationTests(TestCase):
+    """Comprehensive tests for WeaDataIntegrationService: idempotency, dedup, cleanup safeguards, and reconciliation."""
+
+    def setUp(self):
+        import os
+        import tempfile
+        import openpyxl
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.wea_dir = os.path.join(self.tmpdir.name, 'wea data')
+        self.data_dir = os.path.join(self.tmpdir.name, 'data_folder')
+        os.makedirs(self.wea_dir, exist_ok=True)
+        os.makedirs(self.data_dir, exist_ok=True)
+
+        self.superadmin_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_SUPERADMIN,
+            defaults={'display_name': 'مدير النظام الأعلى', 'is_super': True, 'is_system': True, 'is_active': True},
+        )
+        self.admin = User.objects.create_superuser(
+            username='wea.pharm2020@gmail.com',
+            email='wea.pharm2020@gmail.com',
+            password='Password123!',
+            role=self.superadmin_role,
+        )
+        # Test records to verify safe cleanup
+        self.test_user = User.objects.create_user(username='mgr2', password='Password123!')
+        self.main_wh = Warehouse.objects.create(code='WH-MAIN-01', name='المخزن الرئيسي بضاعه', is_main=True)
+        self.supplies_wh = Warehouse.objects.create(code='WH-SUPPLIES-01', name='مخزن المستلزمات')
+        self.wh_feisal = Warehouse.objects.create(code='WH-REP-0095', name='عهدة مندوب فبصل', is_rep_warehouse=True)
+        self.test_wh_empty = Warehouse.objects.create(code='WH-T1', name='wh_t_1')
+        self.main_vault = Vault.objects.create(serial_num=1014, name='الخزينة الرئيسية - المقر الرئيسي')
+        self.test_vault_empty = Vault.objects.create(serial_num=1018, name='v_del_test')
+
+        # Existing supplier #16031 (to be renamed) + contact with code='nan'
+        self.supp_16031 = Contact.objects.create(
+            serial_num=16031, name='مصنع ليدر لمستحضرات التجميل', code='nan', is_supplier=True, is_customer=True
+        )
+        self.cust_w0047 = Contact.objects.create(
+            serial_num=7001, name='مخزن ميجا فارم العياط', code='W0047', is_customer=True
+        )
+        self.cust_ct_only = Contact.objects.create(
+            serial_num=7002, name='صيدلية مستردة من الحركات', code='W9999', is_customer=True
+        )
+
+        def write_xlsx(path, headers, rows):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.append(headers)
+            for r in rows:
+                ws.append(r)
+            wb.save(path)
+
+        write_xlsx(os.path.join(self.data_dir, 'users.xlsx'),
+                   ['id', 'email', 'name', 'active'],
+                   [['u-admin', 'wea.pharm2020@gmail.com', 'Dr.wael Atta (CEO)', True]])
+
+        write_xlsx(os.path.join(self.wea_dir, 'inventory stock.xlsx'),
+                   ['المخزن', 'الكود', 'التصنيف', 'المنتج', 'تاريخ الصلاحية', 'التكلفة', 'رقم التشغيل', 'فى المخزن', 'محجوز', 'متاح', 'إجمالي التكلفة', 'سعر الوحدة', 'قيمة البيع'],
+                   [
+                       ['المخزن الرئيسي بضاعه', 'ST1', 'WEA', 'Steps', '2028-09-26', 10.0, 'B001', 100, 5, 95, 1000, 140, 14000],
+                       ['عهدة د. أحمد عبد العظيم', 'ST1', 'WEA', 'Steps', None, 10.0, None, 20, None, 20, 200, 140, 2800],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'memos.xlsx'),
+                   ['ID', 'Serial Number', 'Type', 'Note', 'Source ID', 'Source Type', 'Source Number', 'Source Contact ID', 'Source Contact Number', 'Source Contact Name', 'Cancelled At', 'Done At', 'Staged At', 'Warehouse Name', 'Warehouse IsActive', 'Creation Time', 'Creator Name', 'Status Name', 'Transfer Serial Number'],
+                   [
+                       ['m-1', 1, 'unstock', '', 'so-uuid-1', 'sales_order', '#9001', '', 'W0047', 'مخزن ميجا فارم العياط', None, '10/01/2026 10:00 AM', None, 'عهدة د. أحمد عبد العظيم', 'نعم', '10/01/2026 10:00 AM', 'Former Rep X', 'Done', None],
+                       ['m-2', 2, 'stock', '', 'po-uuid-1', 'purchase_order', '#10', '', '#16031', 'مصنع بايوفيردا لمستحضرات التجميل', None, '11/01/2026 10:00 AM', None, 'المخزن الرئيسي بضاعه', 'نعم', '11/01/2026 10:00 AM', 'Dr.wael Atta (CEO)', 'Done', None],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'purchases orders.xlsx'),
+                   ['المعرف', 'تاريخ الإنشاء', 'المنشء - المعرف', 'المنشء - الاسم', 'مسلسل', 'الرقم', 'العميل - مسلسل', 'العميل - الاسم', 'العميل - المنطقة - الكود', 'ملاحظة', 'الحالة - الاسم', 'الإجمالي', 'الإجمالي النهائي', 'تاريخ إصدار الفاتورة', 'تاريخ التخزين', 'تاريخ الاستحقاق', 'العناصر - المنتج - الكود', 'العناصر - المنتج - التصنيف', 'العناصر - المنتج - الاسم', 'العناصر - المنتج - سعر القطعة', 'العناصر - الكمية', 'العناصر - سعر القطعة', 'العناصر - الكلي', 'العناصر - رقم تشغيل المنتج', 'العناصر - تاريخ صلاحية المنتج', 'العناصر - خصم القطعة %', 'الخصم الإضافي - نسبة', 'الخصم الإضافي - قيمة', 'السعر قبل كل الخصومات', 'السعر بعد كل الخصومات'],
+                   [['po-uuid-1', '11/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', 10, '#10', 16031, 'مصنع بايوفيردا لمستحضرات التجميل', '', 'نقل 200', 'Settled', '1000.00', '1200.00', '11/01/2026 10:00 AM', '11/01/2026 10:00 AM', '11/02/2026', 'ST1', 'WEA', 'Steps', '140.00', 100, '10.00', '1000.00', 'B001', '26/09/2028', '0.00', '0.00', '0.00', '1000.00', '1000.00']])
+
+        write_xlsx(os.path.join(self.wea_dir, 'purchses return.xlsx'), ['المعرف'], [])
+
+        write_xlsx(os.path.join(self.wea_dir, 'vendors accounts.xlsx'),
+                   ['AccountID', 'Contact_SerialNum', 'Contact_Name', 'Contact_Mobile', 'Contact_Phone', 'Contact_Note', 'Contact_AreaID', 'Account_Name', 'Account_AccountStats_Balance', 'Account_AccountStats_OverdueAmount', 'Account_AccountStats_LastTransactionDate'],
+                   [['va-1', 16031, 'مصنع بايوفيردا لمستحضرات التجميل', '+201000000000', '', '', '', '[#16031] مصنع ليدر لمستحضرات التجميل', '700.00', '700.00', '2026-01-12']])
+
+        write_xlsx(os.path.join(self.wea_dir, 'vendor transactions.xlsx'),
+                   ['المعرف', 'التاريخ', 'السبب', 'السبب - المعرف', 'السبب - الرقم', 'تاريخ الاستحقاق', 'نوع الحركة', 'دائن', 'مدين', 'الرصيد', 'ملاحظة', 'نفذ فى', 'نفذ بواسطة - المعرف', 'نفذ بواسطة - الاسم', 'المديونية', 'الحساب - الاسم'],
+                   [
+                       ['vt-1', '11/01/2026', 'purchase', 'po-uuid-1', '#10', '11/02/2026', 'credit', '1200.00', '0.00', '1200.00', '', '11/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '700.00', '[#16031] مصنع ليدر لمستحضرات التجميل'],
+                       ['vt-2', '12/01/2026', 'purchase_payments', 'vp-uuid-1', '#10001', '12/01/2026', 'debit', '0.00', '500.00', '700.00', '', '12/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '0.00', '[#16031] مصنع ليدر لمستحضرات التجميل'],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'vendor-payments.xlsx'),
+                   ['ID', 'رقم التسلسل', 'تاريخ الإنشاء', 'id المنشء', 'اسم المنشء', 'الكمية', 'طريقة الدفع', 'اسم حالة التحصيل', 'رقم تسلسل جهة الإتصال', 'ملاحظة جهة الإتصال'],
+                   [['vp-uuid-1', 10001, '12/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '500.00', 'cash', 'Pending', 16031, 'دفعة']])
+
+        write_xlsx(os.path.join(self.wea_dir, 'sales orders.xlsx'),
+                   ['المعرف', 'تاريخ الإنشاء', 'المنشء - المعرف', 'المنشء - الاسم', 'مسلسل', 'الرقم', 'العميل - مسلسل', 'العميل - الكود', 'العميل - الاسم', 'العميل - المنطقة - الكود', 'العميل - المنطقة - المنطقة الرئيسية - الكود', 'ملاحظة', 'الحالة - الاسم', 'الإجمالي', 'الإجمالي النهائي', 'تاريخ الخصم من المخزن', 'تاريخ الاستحقاق', 'الدفع كاش', 'الخصم الإضافي - نسبة', 'الخصم الإضافي - قيمة', 'السعر قبل كل الخصومات', 'السعر بعد كل الخصومات', 'مصاريف الشحن', 'العناصر - المنتج - الكود', 'العناصر - المنتج - التصنيف', 'العناصر - المنتج - الاسم', 'العناصر - المنتج - سعر القطعة', 'العناصر - الكمية', 'العناصر - سعر القطعة', 'العناصر - الكلي', 'العناصر - خصم القطعة %', 'العناصر - السعر بعد كل الخصومات'],
+                   [['so-uuid-1', '10/01/2026 10:00 AM', 'u-former-1', 'Former Rep X', 9001, '#9001', 7001, 'W0047', 'مخزن ميجا فارم العياط', '', '', '', 'Invoiced', '1400.00', '1300.00', '10/01/2026 10:00 AM', '10/02/2026', 'لا', '0.00', '100.00', '1400.00', '1300.00', '0.00', 'ST1', 'WEA', 'Steps', '140.00', 10, '140.00', '1300.00', '0.00', '1300.00']])
+
+        write_xlsx(os.path.join(self.wea_dir, 'sales return orders.xlsx'), ['المعرف'], [])
+
+        write_xlsx(os.path.join(self.wea_dir, 'collections.xlsx'),
+                   ['ID', 'رقم التسلسل', 'تاريخ الإنشاء', 'id المنشء', 'اسم المنشء', 'الكمية', 'طريقة الدفع', 'رقم الشيك', 'تاريخ استحقاق الشيك', 'اسم حالة التحصيل', 'رقم تسلسل العميل', 'كود العميل', 'اسم العميل', 'ملاحظة العميل', 'رقم محمول العميل', 'كود المنطقة', 'كود المنطقة الرئيسية'],
+                   [['col-uuid-1', 15001, '10/01/2026 11:00 AM', 'u-former-1', 'Former Rep X', '800.00', 'cash', None, None, 'Settled', 7001, 'W0047', 'مخزن ميجا فارم العياط', None, None, '', '']])
+
+        # Include exact duplicate row for W0047 to verify deduplication!
+        write_xlsx(os.path.join(self.wea_dir, 'customers accounts.xlsx'),
+                   ['AccountID', 'Contact_SerialNum', 'Contact_Code', 'Contact_Name', 'Contact_Mobile', 'Contact_Phone', 'Contact_Extra_account_type', 'Contact_Extra_class', 'Contact_Extra_specialty', 'Contact_AreaID', 'Account_Name', 'Account_AccountStats_Balance', 'Account_AccountStats_OverdueAmount', 'Account_AccountStats_LastTransactionDate', 'Account_AccountLimits_DefaultDuePeriodDays'],
+                   [
+                       ['ca-1', 7001, 'W0047', 'مخزن ميجا فارم العياط', '', '', '', '', '', '', '[W0047] مخزن ميجا فارم العياط', '1988.20', '0.00', '2026-01-10', 30],
+                       ['ca-1', 7001, 'W0047', 'مخزن ميجا فارم العياط', '', '', '', '', '', '', '[W0047] مخزن ميجا فارم العياط', '1988.20', '0.00', '2026-01-10', 30],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'customer transactions 1.xlsx'),
+                   ['المعرف', 'التاريخ', 'السبب', 'السبب - المعرف', 'السبب - الرقم', 'تاريخ الاستحقاق', 'نوع الحركة', 'دائن', 'مدين', 'الرصيد', 'ملاحظة', 'نفذ فى', 'نفذ بواسطة - المعرف', 'نفذ بواسطة - الاسم', 'الحساب - الاسم'],
+                   [
+                       ['ct-1', '10/01/2026', 'payments', 'col-uuid-1', '#15001', '10/01/2026', 'credit', '800.00', '0.00', '500.00', '', '10/01/2026 11:00 AM', 'u-former-1', 'Former Rep X', '[W0047] مخزن ميجا فارم العياط'],
+                       ['ct-3', '10/01/2026', 'opening', None, None, '10/01/2026', 'credit', '0.00', '0.00', '0.00', '', '10/01/2026 09:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '[W9999] صيدلية مستردة من الحركات'],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'customer transactions 2.xlsx'),
+                   ['المعرف', 'التاريخ', 'السبب', 'السبب - المعرف', 'السبب - الرقم', 'تاريخ الاستحقاق', 'نوع الحركة', 'دائن', 'مدين', 'الرصيد', 'ملاحظة', 'نفذ فى', 'نفذ بواسطة - المعرف', 'نفذ بواسطة - الاسم', 'الحساب - الاسم'],
+                   [
+                       ['ct-2', '10/01/2026', 'sales', 'so-uuid-1', '#9001', '10/02/2026', 'debit', '0.00', '1300.00', '1300.00', '', '10/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '[W0047] مخزن ميجا فارم العياط'],
+                       ['ct-4', '10/01/2026', 'sales', None, '#9002', '10/02/2026', 'debit', '0.00', '250.00', '250.00', '', '10/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', '[W9999] صيدلية مستردة من الحركات'],
+                   ])
+
+        write_xlsx(os.path.join(self.wea_dir, 'vaults transactions.xlsx'),
+                   ['المعرف', 'التاريخ', 'السبب', 'السبب - المعرف', 'السبب - الرقم', 'نوع الحركة', 'دائن', 'مدين', 'الرصيد', 'ملاحظة', 'نفذ فى', 'نفذ بواسطة - المعرف', 'نفذ بواسطة - الاسم', 'الحساب - الاسم'],
+                   [
+                       ['vtx-1', '10/01/2026', 'payments', 'col-uuid-1', '#15001', 'debit', '0.00', '800.00', '800.00', '', '10/01/2026 11:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', 'خزنة WEA'],
+                       ['vtx-2', '12/01/2026', 'purchase_payments', 'vp-uuid-1', '#10001', 'credit', '500.00', '0.00', '300.00', '', '12/01/2026 10:00 AM', 'u-admin', 'Dr.wael Atta (CEO)', 'خزنة WEA'],
+                   ])
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_full_integration_idempotency_cleanup_and_reconciliation(self):
+        from master_data.wea_integration_service import WeaDataIntegrationService
+        from purchases.models import PurchaseOrder
+        from sales.models import SalesOrder, Collection, CustomerAccount, CustomerTransaction
+        from treasury.models import VendorAccount, VendorPayment, VaultTransaction
+        from inventory.models import InventoryStock, InventoryLot, InventoryMemo
+
+        svc = WeaDataIntegrationService(wea_dir=self.wea_dir, data_dir=self.data_dir)
+        res1 = svc.run(dry_run=False)
+
+        # All 9 reconciliation checks must match 100%
+        for k, v in res1['reconciliation'].items():
+            self.assertTrue(v['match'], f"Reconciliation failed for {k}: {v}")
+
+        # Verify cleanup decisions
+        self.assertFalse(Warehouse.objects.filter(code='WH-T1').exists())
+        self.assertFalse(Vault.objects.filter(serial_num=1018).exists())
+        self.assertFalse(User.objects.filter(username='mgr2').exists())
+        self.supp_16031.refresh_from_db()
+        self.assertEqual(self.supp_16031.name, 'مصنع بايوفيردا لمستحضرات التجميل')
+        self.assertEqual(self.supp_16031.code, '')
+        self.assertFalse(self.supp_16031.is_customer)
+        self.wh_feisal.refresh_from_db()
+        self.assertEqual(self.wh_feisal.name, 'عهدة د. أحمد عبد العظيم')
+
+        # Verify exact warehouse from memos.xlsx & inactive archive user
+        so = SalesOrder.objects.get(serial_num=9001)
+        self.assertEqual(so.source_warehouse, self.wh_feisal)
+        self.assertEqual(so.grand_total, Decimal('1300.00'))
+        self.assertFalse(so.created_by.is_active)
+        self.assertIsNone(so.created_by.role)
+
+        # Verify PO shipping fee derivation & cleared VendorPayment
+        po = PurchaseOrder.objects.get(serial_num=10)
+        self.assertEqual(po.shipping_fees, Decimal('200.00'))
+        self.assertEqual(po.grand_total, Decimal('1200.00'))
+        vp = VendorPayment.objects.get(serial_num=10001)
+        self.assertEqual(vp.status, 'cleared')
+        self.assertEqual(vp.vault, self.main_vault)
+
+        # Verify W0047 approved balance override + CT-only customer recovery + dedup
+        self.assertEqual(res1['stats']['ca_duplicates_skipped'], 1)
+        self.assertEqual(CustomerAccount.objects.get(customer=self.cust_w0047).current_balance, Decimal('1988.20'))
+        self.assertEqual(CustomerAccount.objects.get(customer=self.cust_ct_only).current_balance, Decimal('250.00'))
+        self.assertEqual(Vault.objects.get(pk=self.main_vault.pk).current_balance, Decimal('300.00'))
+        self.assertEqual(InventoryStock.objects.count(), 2)
+        self.assertEqual(InventoryLot.objects.count(), 1)
+
+        # Re-run second time -> verify 100% idempotency (zero duplicate records!)
+        svc2 = WeaDataIntegrationService(wea_dir=self.wea_dir, data_dir=self.data_dir)
+        res2 = svc2.run(dry_run=False)
+        for k, v in res2['reconciliation'].items():
+            self.assertTrue(v['match'], f"2nd run reconciliation failed for {k}: {v}")
+        self.assertEqual(SalesOrder.objects.count(), 1)
+        self.assertEqual(PurchaseOrder.objects.count(), 1)
+        self.assertEqual(Collection.objects.count(), 1)
+        self.assertEqual(VendorPayment.objects.count(), 1)
+        self.assertEqual(CustomerTransaction.objects.count(), 4)
+        self.assertEqual(VaultTransaction.objects.count(), 2)
+        self.assertEqual(InventoryMemo.objects.count(), 2)
+        self.assertEqual(Vault.objects.get(pk=self.main_vault.pk).current_balance, Decimal('300.00'))
+
+
+

@@ -26,11 +26,10 @@ This document specifies the enterprise authorization model, organizational data 
 | `rep` | مندوب مبيعات | `is_rep=True` | Commercial representative; manages own clients, orders, vault, and assigned warehouse. |
 | `medical_rep` | مندوب دعاية طبية | `is_rep=True` | Medical representative; conducts doctor visits within assigned Brick(s). |
 
-### Direct User-Level Permissions Authority (`User.has_custom_permissions`)
+### Role-Exclusive Authority (Single Source of Truth)
 
-- **Role Inheritance (`has_custom_permissions=False`)**: The user dynamically inherits all permissions and module scopes defined by their assigned `Role`.
-- **Granular User Authority (`has_custom_permissions=True`)**: The user's permissions are controlled directly and exclusively by `user.user_permissions.all()`, overriding role defaults. Administrators can grant or revoke any specific action without creating duplicate roles.
-- **Dedicated Management Interface**: Managed at `/settings/users/<pk>/effective-permissions/`. Supports copying role presets, toggling custom mode, and restoring defaults with full `SecurityAuditLog` tracking.
+- **Role Settings (`settings/roles/`)** is the sole UI and authority for managing permissions, `RoleModuleScope` (`view_scope` / `manage_scope`), and `RoleNotificationRule` (3-tab interface).
+- Individual per-user permission overrides (`/settings/users/<pk>/effective-permissions/`) have been completely removed. `User.get_effective_permission_codenames()` and `ScopeResolutionService.get_user_scope()` resolve permissions and scopes strictly from the user's assigned `Role` (with SuperAdmin/superuser explicit bypasses).
 
 ---
 

@@ -316,6 +316,7 @@ def get_erp_attachments(obj):
 _NAV_URL_MAP = {
     # Top-level items
     'home': ('', 'home'),
+    'notifications_inbox': ('', 'notifications'),
     'agenda': ('', 'agenda'),
     'agenda_root': ('', 'agenda'),
     'agenda_todo_add': ('', 'agenda'),
@@ -538,7 +539,6 @@ _NAV_URL_MAP = {
     'user_detail_root_alias': ('submenu-settings', 'users'),
     'user_edit': ('submenu-settings', 'users'),
     'user_edit_root_alias': ('submenu-settings', 'users'),
-    'user_effective_permissions': ('submenu-settings', 'users'),
     'user_reset_password': ('submenu-settings', 'users'),
     'user_reset_password_root_alias': ('submenu-settings', 'users'),
     'user_toggle_status': ('submenu-settings', 'users'),

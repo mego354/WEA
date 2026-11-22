@@ -4,7 +4,13 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.urls import reverse
 from django.utils.html import format_html
-from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope, UserModuleScope
+from .models import User, Role, RoleTag, SecurityAuditLog, RoleModuleScope
+from master_data.admin_mixins import (
+    SafeCascadeAdminMixin,
+    ProtectedMasterAdminMixin,
+    ControlledServiceDeleteAdminMixin,
+    ImmutableAdminMixin,
+)
 
 
 class RoleModuleScopeInline(admin.TabularInline):
@@ -85,14 +91,20 @@ class CustomUserCreationForm(UserCreationForm):
 
 
 @admin.register(RoleTag)
-class RoleTagAdmin(admin.ModelAdmin):
+class RoleTagAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('display_name', 'tag')
     search_fields = ('tag', 'display_name')
     ordering = ('tag',)
 
 
 @admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
+class RoleAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
+    def get_custom_delete_blocker(self, request, obj):
+        if obj.is_system or obj.is_super or (obj.name or '').lower() == 'superadmin':
+            return f"لا يمكن حذف الدور النظامي الأساسي '{obj.display_name}'."
+        if obj.users.exists():
+            return f"لا يمكن حذف الدور '{obj.display_name}' لارتباطه بـ {obj.users.count()} مستخدم."
+        return ''
     list_display = (
         'display_name', 'name', 'is_active_badge', 'is_system_badge',
         'is_manager_badge', 'is_rep', 'permissions_count', 'users_count', 'updated_at'
@@ -138,17 +150,14 @@ class RoleAdmin(admin.ModelAdmin):
         queryset.filter(is_system=False).update(is_active=False)
 
 
-@admin.register(UserModuleScope)
-class UserModuleScopeAdmin(admin.ModelAdmin):
-    list_display = ('user', 'module', 'view_scope', 'manage_scope')
-    list_filter = ('module', 'view_scope', 'manage_scope')
-    search_fields = ('user__username', 'user__name', 'module')
-
-
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(ControlledServiceDeleteAdminMixin, BaseUserAdmin):
     form = CustomUserChangeForm
     add_form = CustomUserCreationForm
+
+    def perform_service_delete(self, request, obj):
+        from accounts.services import delete_user_safely
+        delete_user_safely(obj, actor=request.user, request=request)
 
     list_display = (
         'username', 'name', 'code', 'mobile', 'role_badge',
@@ -157,7 +166,7 @@ class UserAdmin(BaseUserAdmin):
     )
     list_filter = ('role', 'is_active', 'is_staff', 'is_superuser', 'created_at')
     search_fields = ('username', 'name', 'code', 'mobile', 'email')
-    filter_horizontal = ('assigned_areas', 'user_permissions', 'groups')
+    filter_horizontal = ('assigned_areas', 'groups')
     ordering = ('-date_joined',)
     actions = [
         'reset_password_to_wea4444',
@@ -178,11 +187,11 @@ class UserAdmin(BaseUserAdmin):
                 'name', 'code', 'email', 'mobile', 'avatar', 'locale'
             )
         }),
-        ('الدور والصلاحيات الجغرافية', {
-            'fields': ('role', 'assigned_areas', 'has_custom_permissions')
+        ('الدور والنطاق الجغرافي', {
+            'fields': ('role', 'assigned_areas')
         }),
-        ('أذونات النظام وحالة الحساب', {
-            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')
+        ('حالة الحساب والصلاحية النظامية', {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups')
         }),
         ('التواريخ والسجلات', {
             'fields': ('last_login', 'date_joined', 'created_at', 'updated_at')
@@ -301,7 +310,7 @@ class UserAdmin(BaseUserAdmin):
 
 
 @admin.register(SecurityAuditLog)
-class SecurityAuditLogAdmin(admin.ModelAdmin):
+class SecurityAuditLogAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('created_at', 'action_type_badge', 'actor', 'target_user', 'target_role', 'ip_address', 'description_short')
     list_filter = ('action_type', 'created_at')
     search_fields = ('description', 'actor__username', 'actor__name', 'target_user__username', 'ip_address')

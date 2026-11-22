@@ -49,6 +49,7 @@ urlpatterns = [
 
     # Settings -> Visit Templates (Reference ERP URL Parity)
     path('settings/visits/templates/', views.visit_templates_list, name='visit_templates_list'),
+    path('settings/visits/templates/export/', views.visit_templates_export, name='visit_templates_export'),
     path('settings/visits/templates/create/', views.visit_template_create, name='visit_template_create'),
     path('settings/visits/templates/<int:pk>/edit/', views.visit_template_edit, name='visit_template_edit'),
     path('settings/visits/templates/<int:pk>/preview/', views.visit_template_preview, name='visit_template_preview'),

@@ -1,0 +1,135 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}مركز الإشعارات - WEA Pharma ERP{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-slate-900">مركز الإشعارات</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-5">
+
+    <!-- Header -->
+    <div class="erp-page-hero">
+        <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">notifications</span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900">مركز الإشعارات</h1>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    إجمالي السجل: <span class="font-bold text-slate-700">{{ total_count }}</span> |
+                    غير مقروء: <span id="inboxUnreadCount" class="font-bold text-brand-600">{{ unread_count }}</span>
+                </p>
+            </div>
+        </div>
+        <div class="erp-hero-actions">
+            {% if unread_count > 0 %}
+            <button type="button" onclick="markAllInboxRead()"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[42px]">
+                <span class="material-symbols-outlined text-base">done_all</span>
+                <span>تحديد الكل كمقروء</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-wrap items-center gap-2">
+        <a href="{% url 'notifications_inbox' %}{% if filter_module %}?module={{ filter_module }}{% endif %}"
+           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'all' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+            الكل
+        </a>
+        <a href="{% url 'notifications_inbox' %}?read=unread{% if filter_module %}&module={{ filter_module }}{% endif %}"
+           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'unread' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+            غير مقروء ({{ unread_count }})
+        </a>
+        <a href="{% url 'notifications_inbox' %}?read=read{% if filter_module %}&module={{ filter_module }}{% endif %}"
+           class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors min-h-[36px] inline-flex items-center {% if filter_read == 'read' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+            مقروء
+        </a>
+
+        <form method="GET" class="mr-auto flex items-center gap-2">
+            {% if filter_read != 'all' %}<input type="hidden" name="read" value="{{ filter_read }}">{% endif %}
+            <select name="module" onchange="this.form.submit()"
+                    class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-h-[36px]">
+                <option value="">جميع الموديولات</option>
+                {% for mod_key, meta in modules_meta.items %}
+                <option value="{{ mod_key }}" {% if filter_module == mod_key %}selected{% endif %}>{{ meta.name_ar }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+        {% for n in notifications %}
+        <div class="p-4 flex items-start gap-3.5 transition-colors {% if not n.is_read %}bg-teal-50/40{% else %}hover:bg-slate-50/70{% endif %}" data-notif-row="{{ n.id }}">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5
+                {% if n.severity == 'danger' %}bg-rose-50 text-rose-600
+                {% elif n.severity == 'warning' %}bg-amber-50 text-amber-600
+                {% elif n.severity == 'success' %}bg-emerald-50 text-emerald-600
+                {% else %}bg-teal-50 text-[#27bebe]{% endif %}">
+                <span class="material-symbols-outlined text-xl">
+                    {% if n.severity == 'danger' %}error{% elif n.severity == 'warning' %}warning{% elif n.severity == 'success' %}check_circle{% else %}notifications{% endif %}
+                </span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <a href="{% url 'notification_open' n.id %}" class="text-sm font-bold text-slate-900 hover:text-brand-600 transition-colors flex items-center gap-2">
+                        {% if not n.is_read %}<span class="w-2 h-2 rounded-full bg-brand-500 shrink-0"></span>{% endif %}
+                        <span>{{ n.title }}</span>
+                    </a>
+                    <span class="text-[11px] font-mono text-slate-400 shrink-0">{{ n.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                {% if n.body %}
+                <p class="text-xs text-slate-600 mt-1 leading-relaxed">{{ n.body }}</p>
+                {% endif %}
+                <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">{{ n.module }}</span>
+                    {% if n.actor %}
+                    <span>بواسطة: <strong class="text-slate-600">{{ n.actor.name|default:n.actor.username }}</strong></span>
+                    {% endif %}
+                    {% if n.action_url %}
+                    <a href="{% url 'notification_open' n.id %}" class="text-brand-600 font-bold hover:underline">عرض التفاصيل ←</a>
+                    {% endif %}
+                    {% if not n.is_read %}
+                    <button type="button" onclick="markSingleInboxRead({{ n.id }}, this)" class="text-slate-500 hover:text-brand-600 font-bold mr-auto">
+                        تحديد كمقروء
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="py-14 text-center text-slate-400">
+            <span class="material-symbols-outlined text-5xl block mb-2 text-slate-300">notifications_off</span>
+            <p class="text-sm font-bold text-slate-600">لا توجد إشعارات مطابقة حالياً</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% include 'components/pagination.html' %}
+</div>
+
+<script>
+function markSingleInboxRead(id, btn) {
+    if (!window._erpNotifClient) return;
+    window._erpNotifClient.markAsRead(id).then(() => {
+        const row = document.querySelector('[data-notif-row="' + id + '"]');
+        if (row) row.classList.remove('bg-teal-50/40');
+        if (btn) btn.remove();
+        const cntEl = document.getElementById('inboxUnreadCount');
+        if (cntEl) cntEl.textContent = window._erpNotifClient.state.unreadCount;
+    }).catch(() => {});
+}
+function markAllInboxRead() {
+    if (!window._erpNotifClient) return;
+    window._erpNotifClient.markAllAsRead("{{ filter_module|escapejs }}").then(() => {
+        window.location.reload();
+    }).catch(() => {});
+}
+</script>
+{% endblock %}

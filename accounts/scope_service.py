@@ -78,16 +78,8 @@ class ScopeResolutionService:
 
         scope = None
 
-        # 1. Custom User-Level Overrides (100% authoritative when enabled — fail closed to 'own' if unconfigured)
-        if getattr(user, 'has_custom_permissions', False):
-            from accounts.models import UserModuleScope
-            ums = UserModuleScope.objects.filter(user=user, module=module).first()
-            scope = getattr(ums, f"{scope_type}_scope", None) if ums else 'own'
-            if not scope:
-                scope = 'own'
-
-        # 2. Role-Level Configuration
-        if not scope and role:
+        # 1. Role-Level Configuration (single source of truth)
+        if role and getattr(role, 'is_active', True):
             from accounts.models import RoleModuleScope
             rms = RoleModuleScope.objects.filter(role=role, module=module).first()
             if rms:

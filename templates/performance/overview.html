@@ -17,7 +17,15 @@
         </div>
 
         <!-- Section Tabs Switcher -->
-        <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold self-start sm:self-auto overflow-x-auto max-w-full">
+        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {% if request.user|has_permission:'performance:overview/export' %}
+            <a href="{% url 'performance_overview_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+               class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold min-h-[38px]">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير Excel</span>
+            </a>
+            {% endif %}
+        <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
             <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
                 <span class="material-symbols-outlined text-base">dashboard</span>
                 <span>نظرة عامة</span>
@@ -34,6 +42,7 @@
                 <span class="material-symbols-outlined text-base">grid_on</span>
                 <span>مفصل</span>
             </a>
+        </div>
         </div>
     </div>
 

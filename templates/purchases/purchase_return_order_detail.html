@@ -40,23 +40,7 @@
                 {% csrf_token %}
                 <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
                     <span class="material-symbols-outlined text-base">check_circle</span>
-                    <span>اعتماد المرتجع</span>
-                </button>
-            </form>
-            {% elif return_order.status == 'approved' and request.user|has_permission:'purchases:returns/approve' %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'deliver' %}" class="inline">
-                {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
-                    <span class="material-symbols-outlined text-base">local_shipping</span>
-                    <span>صرف من المخزن</span>
-                </button>
-            </form>
-            {% elif return_order.status == 'delivered' and request.user|has_permission:'purchases:returns/approve' %}
-            <form method="POST" action="{% url 'purchase_return_order_action' return_order.id 'settle' %}" class="inline">
-                {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white rounded-xl text-xs font-bold shadow-xs transition-colors">
-                    <span class="material-symbols-outlined text-base">receipt_long</span>
-                    <span>ترحيل للحسابات</span>
+                    <span>اعتماد المرتجع (وترحيله تلقائياً)</span>
                 </button>
             </form>
             {% endif %}

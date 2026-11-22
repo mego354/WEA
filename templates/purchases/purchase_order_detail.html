@@ -36,68 +36,14 @@
             </div>
         </div>
 
-        <!-- Action Buttons & Status Dropdown -->
+        <!-- Action Buttons (Automatic Posting — Manual Invoicing Removed) -->
         <div class="flex items-center gap-2 flex-wrap">
-            <!-- Status Dropdown (AJAX) -->
-            <div class="relative">
-                <button type="button" onclick="toggleDropdown('status-dropdown-menu')"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-xs transition-colors">
-                    <span class="material-symbols-outlined text-base">expand_more</span>
-                    <span id="current-status-label">{{ order.status_label_en }}</span>
-                </button>
-                <div id="status-dropdown-menu" class="hidden absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30">
-                    <button type="button" onclick="updateOrderStatus('pending')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                        <span>Pending</span>
-                        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                    </button>
-                    <button type="button" onclick="updateOrderStatus('approved')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                        <span>Approved</span>
-                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                    </button>
-                    <button type="button" onclick="updateOrderStatus('picked')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                        <span>Picked (دخل المخزن)</span>
-                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                    </button>
-                    <button type="button" onclick="updateOrderStatus('settled')" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                        <span>Settled (تم الترحيل)</span>
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    </button>
-                    <button type="button" onclick="updateOrderStatus('rejected')" class="w-full text-right px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center justify-between">
-                        <span>Rejected</span>
-                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Undo Invoice (if settled) -->
-            {% if order.status == 'settled' %}
-            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'purchase_order_action' order.id 'undo_invoice' %}', title: 'إلغاء فاتورة الحسابات', itemName: '{{ order.serial_num }}', message: 'هل أنت متأكد من رغبتك في إلغاء فاتورة الحسابات لأمر الشراء رقم <span class=\'font-bold text-slate-800\'>#{{ order.serial_num }}</span> والعودة إلى حالة استلام المخزن؟', submitText: 'نعم، إلغاء الفاتورة', submitColor: 'bg-amber-600 hover:bg-amber-700', icon: 'undo', iconColor: 'text-amber-600 bg-amber-50' })"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors">
-                <span class="material-symbols-outlined text-base">attach_money</span>
-                <span>الغاء الفاتورة</span>
-            </button>
-            {% elif order.status == 'picked' %}
-            <form method="POST" action="{% url 'purchase_order_action' order.id 'invoice' %}">
-                {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">receipt_long</span>
-                    <span>ترحيل الفاتورة للحسابات</span>
-                </button>
-            </form>
-            {% elif order.status == 'approved' %}
-            <form method="POST" action="{% url 'purchase_order_action' order.id 'stock' %}">
-                {% csrf_token %}
-                <button type="submit" class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-lg text-xs font-bold transition-colors">
-                    <span class="material-symbols-outlined text-base">inventory</span>
-                    <span>إدخال البضاعة للمخزن</span>
-                </button>
-            </form>
-            {% elif can_approve and order.status in 'pending,rejected' %}
+            {% if can_approve and order.status in 'pending,rejected' %}
             <form method="POST" action="{% url 'purchase_order_action' order.id 'approve' %}" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">
                     <span class="material-symbols-outlined text-base">check_circle</span>
-                    <span>اعتماد الأمر</span>
+                    <span>اعتماد الأمر (وترحيله تلقائياً)</span>
                 </button>
             </form>
             <button type="button" onclick="openRejectModal()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">

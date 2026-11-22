@@ -13,15 +13,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-5xl mx-auto space-y-5">
 
-    <!-- Header matching Reference ERP -->
+    <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-[#27bebe]">
-                {% if is_create %}إنشاء دور وصلاحيات جديد{% else %}تعديل دور: {{ role.display_name }}{% endif %}
+                {% if is_create %}إنشاء دور وصلاحيات جديد{% else %}إعدادات الدور: {{ role.display_name }}{% endif %}
             </h1>
-            <p class="text-xs text-slate-500 mt-1">تحديد المسمى الوظيفي، سمات الدور، النطاقات الجغرافية للموديولات، ومصفوفة الصلاحيات الهرمية.</p>
+            <p class="text-xs text-slate-500 mt-1">إدارة خصائص الدور، النطاقات الجغرافية (DataScope)، مصفوفة الصلاحيات، وقواعد الإشعارات.</p>
         </div>
         <a href="{% url 'roles_list' %}" class="self-start sm:self-auto px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-xs min-h-[44px]">
             <span class="material-symbols-outlined text-base">arrow_forward</span>
@@ -29,297 +29,343 @@
         </a>
     </div>
 
-    {% if role and role.name == 'SuperAdmin' %}
-    <div class="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-3 text-teal-800 text-xs sm:text-sm">
+    {% if role and role.is_super %}
+    <div class="p-3.5 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-3 text-teal-800 text-xs">
         <span class="material-symbols-outlined text-xl text-teal-600 shrink-0">verified_user</span>
         <div>
             <span class="font-bold">دور مدير النظام الأعلى (SuperAdmin):</span>
-            <p class="mt-0.5 text-xs text-teal-700">هذا الدور هو الحساب السيادي للنظام ولديه كافة الصلاحيات بشكل افتراضي دائم. لا يمكن حظر صلاحياته أو تعطيله لحماية النظام من الإغلاق العرضي.</p>
+            <span class="text-teal-700">يمتلك كافة الصلاحيات بشكل دائم ولا يمكن تعطيله.</span>
         </div>
     </div>
     {% endif %}
 
+    <!-- 3-Tab Role Settings Bar (No Full-Page Reload) -->
+    <div class="bg-white rounded-xl border border-slate-200 p-1.5 shadow-2xs grid grid-cols-3 gap-1.5" role="tablist">
+        <button type="button" onclick="switchRoleTab('general')" id="tabBtn_general" role="tab" aria-selected="true"
+                class="role-tab-btn px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all min-h-[44px] bg-[#27bebe] text-white shadow-xs">
+            <span class="material-symbols-outlined text-base">badge</span>
+            <span>البيانات والنطاقات</span>
+        </button>
+        <button type="button" onclick="switchRoleTab('permissions')" id="tabBtn_permissions" role="tab" aria-selected="false"
+                class="role-tab-btn px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all min-h-[44px] text-slate-600 hover:bg-slate-50">
+            <span class="material-symbols-outlined text-base">lock_open</span>
+            <span>الصلاحيات</span>
+        </button>
+        <button type="button" onclick="switchRoleTab('notifications')" id="tabBtn_notifications" role="tab" aria-selected="false"
+                class="role-tab-btn px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all min-h-[44px] text-slate-600 hover:bg-slate-50">
+            <span class="material-symbols-outlined text-base">notifications</span>
+            <span>قواعد الإشعارات</span>
+        </button>
+    </div>
+
     <form method="POST" action="{% if is_create %}{% url 'role_create' %}{% else %}{% url 'role_edit' role.pk %}{% endif %}" id="roleForm" class="space-y-6">
         {% csrf_token %}
+        <input type="hidden" name="notification_rules_submitted" value="1">
 
-        <!-- Role Attributes Card -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-6">
-            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <span class="material-symbols-outlined text-[#27bebe]">badge</span>
-                <span>بيانات وخصائص الدور الأساسية</span>
-            </h2>
+        <!-- TAB 1: BASIC ATTRIBUTES & DATA SCOPES -->
+        <div id="tabPanel_general" class="role-tab-panel space-y-5">
+            <!-- Role Attributes Card -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 space-y-5">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe]">badge</span>
+                    <span>بيانات وخصائص الدور الأساسية</span>
+                </h2>
 
-            <!-- Role Name Fields -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {% if is_create %}
-                <div>
-                    <label for="role_code_name" class="block text-xs font-bold text-slate-700 mb-1.5">المعرف البرمجي للدور (بالإنجليزية)*</label>
-                    <input type="text" name="name" id="role_code_name" required placeholder="e.g. SalesCoordinator" dir="ltr"
-                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
-                </div>
-                {% endif %}
-                <div class="{% if not is_create %}md:col-span-2{% endif %}">
-                    <label for="role_display_name" class="block text-xs font-bold text-slate-700 mb-1.5">الاسم (المسمى الوظيفي بالعربية)*</label>
-                    <input type="text" name="display_name" id="role_display_name" value="{{ role.display_name|default:'' }}" required
-                           class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">
-                </div>
-                <div class="md:col-span-2">
-                    <label for="role_description" class="block text-xs font-bold text-slate-700 mb-1.5">الوصف والمسؤوليات الوظيفية</label>
-                    <textarea name="description" id="role_description" rows="2" placeholder="وصف مهام الدور ونطاق عمله..."
-                              class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] transition-all">{{ role.description|default:'' }}</textarea>
-                </div>
-            </div>
-
-            <!-- Two-Column Toggles for Role Hierarchy & Operational Attributes -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 pt-2 border-t border-slate-100">
-                <!-- Right Column Toggles -->
-                <div class="space-y-3">
-                    <!-- سوبر (is_super) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">سوبر (مدير نظام أعلى)</span>
-                            <span class="text-[10px] text-slate-400">تجاوز كامل لكافة قيود الصلاحيات والتحقق</span>
-                        </div>
-                        <input type="checkbox" name="is_super" {% if role.is_super %}checked{% endif %} {% if role and role.name == 'SuperAdmin' %}disabled checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- مندوب (is_rep) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">مندوب ميداني</span>
-                            <span class="text-[10px] text-slate-400">تنفيذ الزيارات والطلبات الميدانية</span>
-                        </div>
-                        <input type="checkbox" name="is_rep" {% if role.is_rep %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- مفعل (is_active) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">الدور مفعل</span>
-                            <span class="text-[10px] text-slate-400">حالة الدور بالنظام</span>
-                        </div>
-                        <input type="checkbox" name="is_active" {% if is_create or role.is_active %}checked{% endif %} {% if role and role.name == 'SuperAdmin' %}disabled checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% if is_create %}
+                    <div>
+                        <label for="role_code_name" class="block text-xs font-bold text-slate-700 mb-1.5">المعرف البرمجي للدور (بالإنجليزية)*</label>
+                        <input type="text" name="name" id="role_code_name" required placeholder="e.g. SalesCoordinator" dir="ltr"
+                               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                    </div>
+                    {% endif %}
+                    <div class="{% if not is_create %}md:col-span-2{% endif %}">
+                        <label for="role_display_name" class="block text-xs font-bold text-slate-700 mb-1.5">الاسم (المسمى الوظيفي بالعربية)*</label>
+                        <input type="text" name="display_name" id="role_display_name" value="{{ role.display_name|default:'' }}" required
+                               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="role_description" class="block text-xs font-bold text-slate-700 mb-1.5">الوصف والمسؤوليات</label>
+                        <textarea name="description" id="role_description" rows="2" placeholder="وصف مهام الدور..."
+                                  class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe]">{{ role.description|default:'' }}</textarea>
+                    </div>
                 </div>
 
-                <!-- Left Column Toggles -->
-                <div class="space-y-3">
-                    <!-- مدير لمنطقة رئيسية (is_area_manager) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">مدير لمنطقة رئيسية</span>
-                            <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى المحافظة</span>
-                        </div>
-                        <input type="checkbox" name="is_area_manager" {% if role.is_area_manager %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- مدير لمنطقة فرعية (is_sub_area_manager) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">مدير لمنطقة فرعية</span>
-                            <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى القطاع</span>
-                        </div>
-                        <input type="checkbox" name="is_sub_area_manager" {% if role.is_sub_area_manager %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
-
-                    <!-- مخول بعهدة نقدية / خزنة (can_hold_vault) -->
-                    <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
-                        <div>
-                            <span class="text-xs font-bold text-slate-700 block">مخول بعهدة نقدية / خزنة</span>
-                            <span class="text-[10px] text-slate-400">إمكانية ربط خزنة نقدية شخصية للمندوب</span>
-                        </div>
-                        <input type="checkbox" name="can_hold_vault" {% if role.can_hold_vault %}checked{% endif %} class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
-                    </label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-2.5 pt-2 border-t border-slate-100">
+                    <div class="space-y-2.5">
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">سوبر (مدير نظام أعلى)</span>
+                                <span class="text-[10px] text-slate-400">تجاوز كامل لكافة قيود الصلاحيات</span>
+                            </div>
+                            <input type="checkbox" name="is_super" {% if role.is_super %}checked{% endif %} {% if role and role.is_super %}disabled checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">مندوب ميداني</span>
+                                <span class="text-[10px] text-slate-400">تنفيذ الزيارات والطلبات الميدانية</span>
+                            </div>
+                            <input type="checkbox" name="is_rep" {% if role.is_rep %}checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">الدور مفعل</span>
+                                <span class="text-[10px] text-slate-400">حالة الدور بالنظام</span>
+                            </div>
+                            <input type="checkbox" name="is_active" {% if is_create or role.is_active %}checked{% endif %} {% if role and role.is_super %}disabled checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                    </div>
+                    <div class="space-y-2.5">
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">مدير لمنطقة رئيسية</span>
+                                <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى المحافظة</span>
+                            </div>
+                            <input type="checkbox" name="is_area_manager" {% if role.is_area_manager %}checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">مدير لمنطقة فرعية</span>
+                                <span class="text-[10px] text-slate-400">إشراف واعتماد على مستوى القطاع</span>
+                            </div>
+                            <input type="checkbox" name="is_sub_area_manager" {% if role.is_sub_area_manager %}checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1 min-h-[44px]">
+                            <div>
+                                <span class="text-xs font-bold text-slate-700 block">مخول بعهدة نقدية / خزنة</span>
+                                <span class="text-[10px] text-slate-400">ربط خزنة نقدية شخصية للمندوب</span>
+                            </div>
+                            <input type="checkbox" name="can_hold_vault" {% if role.can_hold_vault %}checked{% endif %} class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#27bebe] relative"></div>
+                        </label>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Module Data Access Scopes Section (النطاق الجغرافي والبياني للموديولات) -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
-            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[#27bebe] text-xl">share_location</span>
-                    <h2 class="text-base font-bold text-slate-800">نطاقات البيانات الإقليمية والتنظيمية (Data Scopes)</h2>
+            <!-- Module Data Access Scopes -->
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#27bebe] text-xl">share_location</span>
+                        <h2 class="text-base font-bold text-slate-800">نطاقات البيانات (DataScope)</h2>
+                    </div>
+                    <span class="text-[11px] text-slate-400">نطاق الرؤية والإدارة لكل موديول</span>
                 </div>
-                <span class="text-xs text-slate-400">تحديد نطاق الرؤية والإدارة لكل موديول</span>
-            </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-right text-xs text-slate-700">
-                    <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">
-                        <tr>
-                            <th class="py-2.5 px-3">الموديول</th>
-                            <th class="py-2.5 px-3">نطاق الاستعراض والعرض (View Scope)</th>
-                            <th class="py-2.5 px-3">نطاق التعديل والإدارة (Manage Scope)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        {% for mod in module_scopes %}
-                        <tr class="hover:bg-slate-50/70 transition-colors">
-                            <td class="py-2.5 px-3 font-semibold flex items-center gap-2">
-                                <span class="material-symbols-outlined text-slate-400 text-sm">{{ mod.icon }}</span>
-                                <span>{{ mod.name }}</span>
-                            </td>
-                            <td class="py-2.5 px-3">
-                                <select name="view_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
-                                    {% for s_val, s_label in scope_options %}
-                                    <option value="{{ s_val }}" {% if mod.view_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td class="py-2.5 px-3">
-                                <select name="manage_scope_{{ mod.key }}" class="w-full py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
-                                    {% for s_val, s_label in scope_options %}
-                                    <option value="{{ s_val }}" {% if mod.manage_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <div class="space-y-2.5 sm:space-y-0">
+                    <div class="hidden sm:grid sm:grid-cols-3 gap-3 px-3 py-2 bg-slate-50 rounded-lg text-[11px] font-bold text-slate-500">
+                        <div>الموديول</div>
+                        <div>نطاق العرض (View Scope)</div>
+                        <div>نطاق الإدارة (Manage Scope)</div>
+                    </div>
+                    {% for mod in module_scopes %}
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 items-center p-3 rounded-xl border sm:border-0 sm:border-b border-slate-100 bg-slate-50/40 sm:bg-transparent">
+                        <div class="font-bold text-xs text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-slate-400 text-base">{{ mod.icon }}</span>
+                            <span>{{ mod.name }}</span>
+                        </div>
+                        <div>
+                            <span class="sm:hidden text-[10px] font-bold text-slate-400 block mb-1">نطاق العرض</span>
+                            <select name="view_scope_{{ mod.key }}" class="w-full py-2 px-2.5 bg-white sm:bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe] min-h-[38px]">
+                                {% for s_val, s_label in scope_options %}
+                                <option value="{{ s_val }}" {% if mod.view_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <span class="sm:hidden text-[10px] font-bold text-slate-400 block mb-1">نطاق الإدارة</span>
+                            <select name="manage_scope_{{ mod.key }}" class="w-full py-2 px-2.5 bg-white sm:bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#27bebe] min-h-[38px]">
+                                {% for s_val, s_label in scope_options %}
+                                <option value="{{ s_val }}" {% if mod.manage_scope == s_val %}selected{% endif %}>{{ s_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
 
-        <!-- Permissions Section matching Reference ERP -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-6 space-y-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                <div>
-                    <h2 class="text-xl font-bold text-[#27bebe] flex items-center gap-2">
+        <!-- TAB 2: HIERARCHICAL PERMISSIONS MATRIX -->
+        <div id="tabPanel_permissions" class="role-tab-panel hidden">
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <h2 class="text-base font-bold text-[#27bebe] flex items-center gap-2">
                         <span class="material-symbols-outlined">lock_open</span>
                         <span>مصفوفة الصلاحيات الهرمية</span>
                     </h2>
-                    <p class="text-xs text-slate-500 mt-0.5">الصلاحيات منظمة حسب الموديولات والصفحات والإجراءات التنفيذية.</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-3">
-                    <!-- Search input -->
-                    <div class="relative w-full sm:w-64">
-                        <input type="text" id="permSearch" oninput="filterPermissions()" placeholder="بحث في الصلاحيات..."
-                               class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
-                        <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-sm">search</span>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <div class="relative w-full sm:w-60">
+                            <input type="text" id="permSearch" oninput="filterPermissions()" placeholder="بحث في الصلاحيات..."
+                                   class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                            <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-sm">search</span>
+                        </div>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 min-h-[40px]">
+                            <span>تحديد الكل</span>
+                            <input type="checkbox" id="selectAllPerms" onchange="toggleSelectAllPermissions(this.checked)"
+                                   class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300">
+                        </label>
                     </div>
-
-                    <!-- Global Select All Toggle -->
-                    <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 min-h-[40px]">
-                        <span>تحديد الكل</span>
-                        <input type="checkbox" id="selectAllPerms" onchange="toggleSelectAllPermissions(this.checked)"
-                               class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300">
-                    </label>
                 </div>
-            </div>
 
-            <!-- Permission Modules List Accordion -->
-            <div class="space-y-4" id="permsAccordion">
-                {% for mod in modules_tree %}
-                <div class="border border-slate-200 rounded-xl overflow-hidden perm-module-block bg-white shadow-2xs" id="block_{{ mod.code }}">
-                    <!-- Module Row Header -->
-                    <div class="p-3.5 bg-slate-50/90 flex flex-col md:flex-row md:items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/70 transition-colors"
-                         onclick="toggleModuleAccordion('mod_{{ mod.code }}')">
-                        <div class="flex items-center gap-3">
-                            <span class="material-symbols-outlined text-lg text-slate-400 transition-transform duration-200" id="icon_mod_{{ mod.code }}">chevron_left</span>
-                            <span class="material-symbols-outlined text-xl text-[#27bebe]">{{ mod.icon }}</span>
-                            <div>
+                <div class="space-y-3" id="permsAccordion">
+                    {% for mod in modules_tree %}
+                    <div class="border border-slate-200 rounded-xl overflow-hidden perm-module-block bg-white" id="block_{{ mod.code }}">
+                        <div class="p-3 bg-slate-50/90 flex flex-col md:flex-row md:items-center justify-between gap-2.5 cursor-pointer hover:bg-slate-100/70 transition-colors"
+                             onclick="toggleModuleAccordion('mod_{{ mod.code }}')">
+                            <div class="flex items-center gap-2.5">
+                                <span class="material-symbols-outlined text-lg text-slate-400 transition-transform duration-200" id="icon_mod_{{ mod.code }}">chevron_left</span>
+                                <span class="material-symbols-outlined text-lg text-[#27bebe]">{{ mod.icon }}</span>
                                 <span class="text-sm font-bold text-slate-800">{{ mod.name_ar }}</span>
-                                <span class="text-[10px] text-slate-400 font-mono block sm:inline-block sm:mr-2">({{ mod.name_en }})</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">{{ mod.total_perms }}</span>
                             </div>
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">({{ mod.total_perms }})</span>
-                        </div>
 
-                        <!-- Presets and Module Master Switch -->
-                        <div class="flex flex-wrap items-center gap-2" onclick="event.stopPropagation();">
-                            {% if mod.root_perm %}
-                            <!-- Master Module Switch -->
-                            <label class="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 cursor-pointer hover:bg-slate-50 min-h-[34px]">
-                                <input type="checkbox" name="permissions" value="{{ mod.root_perm.id }}"
-                                       id="root_{{ mod.code }}"
-                                       data-module="{{ mod.code }}"
-                                       onchange="toggleModuleRoot('{{ mod.code }}', this.checked)"
-                                       {% if mod.root_perm.id in role_perm_ids %}checked{% endif %}
-                                       class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox perm-root-checkbox">
-                                <span>تفعيل الموديول</span>
-                            </label>
-                            {% endif %}
-
-                            <!-- Preset Buttons -->
-                            <button type="button" onclick="setModulePreset('{{ mod.code }}', 'admin')"
-                                    class="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md border border-rose-200/80 transition-colors min-h-[34px]">
-                                أدمن
-                            </button>
-                            <button type="button" onclick="setModulePreset('{{ mod.code }}', 'default')"
-                                    class="px-2.5 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-md border border-teal-200/80 transition-colors min-h-[34px]">
-                                افتراضي
-                            </button>
-                            <button type="button" onclick="setModulePreset('{{ mod.code }}', 'readonly')"
-                                    class="px-2.5 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-300 transition-colors min-h-[34px]">
-                                قراءة فقط
-                            </button>
-                            <button type="button" onclick="setModulePreset('{{ mod.code }}', 'clear')"
-                                    class="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 rounded-md transition-colors min-h-[34px]">
-                                مسح
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Collapsible Granular Permissions Grid -->
-                    <div id="mod_{{ mod.code }}" class="hidden p-4 bg-white border-t border-slate-200 space-y-4">
-                        {% for page in mod.pages %}
-                        <div class="perm-page-group bg-slate-50/50 p-3.5 rounded-xl border border-slate-100">
-                            <h3 class="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5 pb-1 border-b border-slate-200/60">
-                                <span class="material-symbols-outlined text-sm text-slate-500">subdirectory_arrow_left</span>
-                                <span>{{ page.name_ar }}</span>
-                            </h3>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                {% for act in page.actions %}
-                                <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-slate-200/70 hover:border-teal-300 hover:bg-teal-50/20 transition-all cursor-pointer perm-item min-h-[44px]"
-                                       data-codename="{{ act.codename }}"
-                                       data-action-type="{{ act.action_type }}"
-                                       data-module="{{ mod.code }}">
-                                    <input type="checkbox" name="permissions" value="{{ act.perm.id }}"
-                                           {% if act.perm.id in role_perm_ids %}checked{% endif %}
-                                           class="w-4 h-4 mt-0.5 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox perm-child-{{ mod.code }}">
-                                    <div class="text-right flex-1 min-w-0">
-                                        <div class="flex items-center justify-between gap-1">
-                                            <span class="block text-xs font-semibold text-slate-800 leading-tight truncate">{{ act.name }}</span>
-                                            {% if act.action_type == 'read' %}
-                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold shrink-0">عرض</span>
-                                            {% elif act.action_type == 'workflow' %}
-                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-600 font-bold shrink-0">اعتماد</span>
-                                            {% elif act.action_type == 'financial' %}
-                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-bold shrink-0">مالي</span>
-                                            {% elif act.action_type == 'delete' %}
-                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 font-bold shrink-0">حذف</span>
-                                            {% elif act.action_type == 'export' %}
-                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-bold shrink-0">تصدير</span>
-                                            {% endif %}
-                                        </div>
-                                        <span class="block text-[10px] text-slate-400 font-mono mt-0.5 truncate" dir="ltr">{{ act.codename }}</span>
-                                    </div>
+                            <div class="flex flex-wrap items-center gap-1.5" onclick="event.stopPropagation();">
+                                {% if mod.root_perm %}
+                                <label class="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 cursor-pointer min-h-[34px]">
+                                    <input type="checkbox" name="permissions" value="{{ mod.root_perm.id }}"
+                                           id="root_{{ mod.code }}" data-module="{{ mod.code }}"
+                                           onchange="toggleModuleRoot('{{ mod.code }}', this.checked)"
+                                           {% if mod.root_perm.id in role_perm_ids %}checked{% endif %}
+                                           class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox perm-root-checkbox">
+                                    <span>تفعيل</span>
                                 </label>
-                                {% endfor %}
+                                {% endif %}
+                                <button type="button" onclick="setModulePreset('{{ mod.code }}', 'admin')" class="px-2 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md border border-rose-200 min-h-[34px]">أدمن</button>
+                                <button type="button" onclick="setModulePreset('{{ mod.code }}', 'default')" class="px-2 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-md border border-teal-200 min-h-[34px]">افتراضي</button>
+                                <button type="button" onclick="setModulePreset('{{ mod.code }}', 'readonly')" class="px-2 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-300 min-h-[34px]">قراءة</button>
+                                <button type="button" onclick="setModulePreset('{{ mod.code }}', 'clear')" class="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 rounded-md min-h-[34px]">مسح</button>
                             </div>
                         </div>
-                        {% endfor %}
+
+                        <div id="mod_{{ mod.code }}" class="hidden p-3.5 bg-white border-t border-slate-200 space-y-3">
+                            {% for page in mod.pages %}
+                            <div class="perm-page-group bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5 pb-1 border-b border-slate-200/60">
+                                    <span class="material-symbols-outlined text-sm text-slate-500">subdirectory_arrow_left</span>
+                                    <span>{{ page.name_ar }}</span>
+                                </h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    {% for act in page.actions %}
+                                    <label class="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200/70 hover:border-teal-300 cursor-pointer perm-item min-h-[44px]"
+                                           data-codename="{{ act.codename }}" data-action-type="{{ act.action_type }}" data-module="{{ mod.code }}">
+                                        <input type="checkbox" name="permissions" value="{{ act.perm.id }}"
+                                               {% if act.perm.id in role_perm_ids %}checked{% endif %}
+                                               class="w-4 h-4 mt-0.5 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 perm-checkbox perm-child-{{ mod.code }}">
+                                        <div class="text-right flex-1 min-w-0">
+                                            <span class="block text-xs font-semibold text-slate-800 leading-tight truncate">{{ act.name }}</span>
+                                            <span class="block text-[10px] text-slate-400 font-mono mt-0.5 truncate" dir="ltr">{{ act.codename }}</span>
+                                        </div>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
         </div>
 
-        <!-- Sticky Save Button -->
-        <div class="flex items-center justify-between gap-3 sticky bottom-4 z-20 bg-white/95 backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl">
-            <a href="{% url 'roles_list' %}" class="px-5 py-2.5 text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors min-h-[44px] flex items-center">
-                إلغاء
-            </a>
-            <button type="submit" class="px-8 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-md shadow-teal-500/20 transition-all flex items-center gap-2 min-h-[44px]">
+        <!-- TAB 3: ROLE NOTIFICATION RULES (54 EVENTS) -->
+        <div id="tabPanel_notifications" class="role-tab-panel hidden">
+            <div class="bg-white rounded-xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <h2 class="text-base font-bold text-[#27bebe] flex items-center gap-2">
+                        <span class="material-symbols-outlined">notifications_active</span>
+                        <span>قواعد الإشعارات لهذا الدور ({{ notification_total_events }} حدثاً)</span>
+                    </h2>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="relative w-full sm:w-56">
+                            <input type="text" id="notifSearch" oninput="filterNotificationRules()" placeholder="بحث في أحداث الإشعارات..."
+                                   class="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                            <span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-sm">search</span>
+                        </div>
+                        <button type="button" onclick="toggleAllNotifications(true)" class="px-3 py-1.5 text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 min-h-[38px]">تفعيل الكل</button>
+                        <button type="button" onclick="toggleAllNotifications(false)" class="px-3 py-1.5 text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-200 min-h-[38px]">تعطيل الكل</button>
+                    </div>
+                </div>
+
+                <div class="space-y-3" id="notifAccordion">
+                    {% for grp in notification_groups %}
+                    <div class="border border-slate-200 rounded-xl overflow-hidden notif-module-block bg-white">
+                        <div class="p-3 bg-slate-50/90 flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-slate-100/70"
+                             onclick="toggleModuleAccordion('notif_mod_{{ grp.code }}')">
+                            <div class="flex items-center gap-2.5">
+                                <span class="material-symbols-outlined text-lg text-slate-400 transition-transform duration-200" id="icon_notif_mod_{{ grp.code }}">chevron_left</span>
+                                <span class="material-symbols-outlined text-lg text-[#27bebe]">{{ grp.icon }}</span>
+                                <span class="text-sm font-bold text-slate-800">{{ grp.name_ar }}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">{{ grp.events|length }}</span>
+                            </div>
+                            <div class="flex items-center gap-1.5" onclick="event.stopPropagation();">
+                                <button type="button" onclick="setNotifModuleToggle('{{ grp.code }}', true)" class="px-2.5 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 rounded-md border border-teal-200 min-h-[32px]">تفعيل</button>
+                                <button type="button" onclick="setNotifModuleToggle('{{ grp.code }}', false)" class="px-2.5 py-1 text-[11px] font-bold text-slate-500 bg-slate-100 rounded-md border border-slate-200 min-h-[32px]">إيقاف</button>
+                            </div>
+                        </div>
+
+                        <div id="notif_mod_{{ grp.code }}" class="hidden p-3 bg-white border-t border-slate-200 divide-y divide-slate-100">
+                            {% for ev in grp.events %}
+                            <div class="py-3 space-y-2 notif-event-row" data-code="{{ ev.code }}">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <label class="flex items-center gap-2.5 cursor-pointer min-h-[36px]">
+                                        <input type="checkbox" name="notif_enabled__{{ ev.code }}"
+                                               {% if ev.is_enabled %}checked{% endif %}
+                                               class="w-4 h-4 rounded text-[#27bebe] focus:ring-[#27bebe] border-slate-300 notif-cb notif-cb-{{ grp.code }}">
+                                        <div>
+                                            <span class="text-xs font-bold text-slate-800 block">{{ ev.name_ar }}</span>
+                                            <span class="text-[10px] font-mono text-slate-400" dir="ltr">{{ ev.code }}</span>
+                                        </div>
+                                    </label>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <select name="notif_mode__{{ ev.code }}" onchange="onNotifModeChanged(this, '{{ ev.code }}')"
+                                                class="py-1.5 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#27bebe] min-h-[36px]">
+                                            {% for m_val, m_label in delivery_mode_choices %}
+                                            <option value="{{ m_val }}" {% if ev.delivery_mode == m_val %}selected{% endif %}>{{ m_label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer">
+                                            <input type="checkbox" name="notif_same_area__{{ ev.code }}" {% if ev.same_area_only %}checked{% endif %} class="rounded text-[#27bebe]">
+                                            <span>نفس المنطقة</span>
+                                        </label>
+                                        <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer">
+                                            <input type="checkbox" name="notif_inc_owner__{{ ev.code }}" {% if ev.include_record_owner %}checked{% endif %} class="rounded text-[#27bebe]">
+                                            <span>صاحب السجل</span>
+                                        </label>
+                                        <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer">
+                                            <input type="checkbox" name="notif_inc_actor__{{ ev.code }}" {% if ev.include_actor %}checked{% endif %} class="rounded text-[#27bebe]">
+                                            <span>تضمين الفاعل</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="notif_users_wrap__{{ ev.code }}" class="{% if ev.delivery_mode != 'specific_users' %}hidden{% endif %} pt-1">
+                                    <label class="text-[10px] font-bold text-slate-500 block mb-1">اختر المستخدمين المحددين لهذا الحدث:</label>
+                                    <select name="notif_users__{{ ev.code }}" multiple class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs max-h-28">
+                                        {% for u in active_users_for_rules %}
+                                        <option value="{{ u.id }}" {% if u.id in ev.specific_user_ids %}selected{% endif %}>{{ u.name|default:u.username }} ({{ u.role_name }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sticky Save Bar -->
+        <div class="flex items-center justify-between gap-3 sticky bottom-4 z-20 bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-200 shadow-xl">
+            <a href="{% url 'roles_list' %}" class="px-5 py-2 text-slate-600 hover:text-slate-800 text-sm font-semibold min-h-[44px] flex items-center">إلغاء</a>
+            <button type="submit" class="px-7 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-sm font-bold rounded-lg shadow-md shadow-teal-500/20 transition-all flex items-center gap-2 min-h-[44px]">
                 <span class="material-symbols-outlined text-lg">save</span>
-                <span>حفظ بيانات وصلاحيات الدور</span>
+                <span>حفظ بيانات وصلاحيات وإشعارات الدور</span>
             </button>
         </div>
     </form>
@@ -327,9 +373,28 @@
 </div>
 
 <script>
+    function switchRoleTab(tabKey) {
+        document.querySelectorAll('.role-tab-panel').forEach(p => p.classList.add('hidden'));
+        const activePanel = document.getElementById('tabPanel_' + tabKey);
+        if (activePanel) activePanel.classList.remove('hidden');
+
+        document.querySelectorAll('.role-tab-btn').forEach(b => {
+            b.classList.remove('bg-[#27bebe]', 'text-white', 'shadow-xs');
+            b.classList.add('text-slate-600', 'hover:bg-slate-50');
+            b.setAttribute('aria-selected', 'false');
+        });
+        const activeBtn = document.getElementById('tabBtn_' + tabKey);
+        if (activeBtn) {
+            activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
+            activeBtn.classList.add('bg-[#27bebe]', 'text-white', 'shadow-xs');
+            activeBtn.setAttribute('aria-selected', 'true');
+        }
+    }
+
     function toggleModuleAccordion(id) {
         const el = document.getElementById(id);
         const icon = document.getElementById('icon_' + id);
+        if (!el) return;
         if (el.classList.contains('hidden')) {
             el.classList.remove('hidden');
             if (icon) icon.style.transform = 'rotate(-90deg)';
@@ -340,20 +405,14 @@
     }
 
     function toggleModuleRoot(modCode, isChecked) {
-        const rootCb = document.getElementById('root_' + modCode);
         const childCbs = document.querySelectorAll('.perm-child-' + modCode);
         if (!isChecked) {
-            // Disabling module root unchecks all child actions (Enforcing inheritance)
-            childCbs.forEach(cb => {
-                cb.checked = false;
-            });
+            childCbs.forEach(cb => { cb.checked = false; });
         }
     }
 
     function toggleSelectAllPermissions(checked) {
-        document.querySelectorAll('.perm-checkbox').forEach(cb => {
-            cb.checked = checked;
-        });
+        document.querySelectorAll('.perm-checkbox').forEach(cb => { cb.checked = checked; });
     }
 
     function setModulePreset(modCode, preset) {
@@ -361,30 +420,20 @@
         container.classList.remove('hidden');
         const icon = document.getElementById('icon_mod_' + modCode);
         if (icon) icon.style.transform = 'rotate(-90deg)';
-
         const rootCb = document.getElementById('root_' + modCode);
         const childCbs = document.querySelectorAll('.perm-child-' + modCode);
-
         if (preset === 'clear') {
             if (rootCb) rootCb.checked = false;
             childCbs.forEach(cb => { cb.checked = false; });
             return;
         }
-
-        // For all active presets, ensure module root is enabled
         if (rootCb) rootCb.checked = true;
-
         childCbs.forEach(cb => {
             const item = cb.closest('.perm-item');
             const actionType = item.getAttribute('data-action-type');
-
-            if (preset === 'admin') {
-                cb.checked = true;
-            } else if (preset === 'readonly') {
-                cb.checked = (actionType === 'read' || actionType === 'export');
-            } else if (preset === 'default') {
-                cb.checked = (actionType !== 'delete' && actionType !== 'admin');
-            }
+            if (preset === 'admin') cb.checked = true;
+            else if (preset === 'readonly') cb.checked = (actionType === 'read' || actionType === 'export');
+            else if (preset === 'default') cb.checked = (actionType !== 'delete' && actionType !== 'admin');
         });
     }
 
@@ -402,15 +451,46 @@
                     item.style.display = 'none';
                 }
             });
+            block.style.display = (!q || hasVisible) ? 'block' : 'none';
+            if (q && hasVisible) {
+                const content = block.querySelector('[id^="mod_"]');
+                if (content) content.classList.remove('hidden');
+            }
+        });
+    }
 
-            if (!q) {
-                block.style.display = 'block';
-            } else {
-                block.style.display = hasVisible ? 'block' : 'none';
-                if (hasVisible) {
-                    const content = block.querySelector('[id^="mod_"]');
-                    if (content) content.classList.remove('hidden');
+    function toggleAllNotifications(checked) {
+        document.querySelectorAll('.notif-cb').forEach(cb => { cb.checked = checked; });
+    }
+
+    function setNotifModuleToggle(modCode, checked) {
+        document.querySelectorAll('.notif-cb-' + modCode).forEach(cb => { cb.checked = checked; });
+    }
+
+    function onNotifModeChanged(selectEl, code) {
+        const wrap = document.getElementById('notif_users_wrap__' + code);
+        if (!wrap) return;
+        if (selectEl.value === 'specific_users') wrap.classList.remove('hidden');
+        else wrap.classList.add('hidden');
+    }
+
+    function filterNotificationRules() {
+        const q = (document.getElementById('notifSearch').value || '').toLowerCase().trim();
+        document.querySelectorAll('.notif-module-block').forEach(block => {
+            let hasVisible = false;
+            block.querySelectorAll('.notif-event-row').forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (!q || text.includes(q)) {
+                    row.style.display = '';
+                    hasVisible = true;
+                } else {
+                    row.style.display = 'none';
                 }
+            });
+            block.style.display = (!q || hasVisible) ? 'block' : 'none';
+            if (q && hasVisible) {
+                const content = block.querySelector('[id^="notif_mod_"]');
+                if (content) content.classList.remove('hidden');
             }
         });
     }

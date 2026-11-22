@@ -66,6 +66,17 @@ class CustomerTransaction(models.Model):
             self.serial = max_s + 1
         super().save(*args, **kwargs)
 
+    @property
+    def reason_display_ar(self):
+        mapping = {
+            'sales': 'فاتورة بيع',
+            'collection': 'تحصيل نقدية',
+            'sales_return': 'مرتجع مبيعات',
+            'adjustment': 'تسوية / تصفير رصيد',
+            'opening': 'رصيد افتتاحي',
+        }
+        return mapping.get(self.reason, self.get_reason_display())
+
 
 class SalesOrder(models.Model):
     STATUS_CHOICES = [
@@ -167,16 +178,25 @@ class SalesOrder(models.Model):
 
     @classmethod
     def with_payment_totals(cls, queryset=None):
-        """Annotate SalesOrders with `_annotated_total_paid` in SQL to prevent N+1 queries."""
-        from django.db.models import DecimalField, Sum, Value
+        """Annotate SalesOrders with SQL payment and settled-return totals to prevent N+1 queries."""
+        from django.db.models import DecimalField, Q, Sum, Value
         from django.db.models.functions import Coalesce
         qs = queryset if queryset is not None else cls.objects.all()
         return qs.annotate(
             _annotated_total_paid=Coalesce(
-                Sum('collections__amount'),
+                Sum('collections__amount', distinct=False),
                 Value(Decimal('0.00')),
                 output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
+            ),
+            _annotated_total_returned=Coalesce(
+                Sum(
+                    'return_orders__grand_total',
+                    filter=Q(return_orders__status__in=['settled', 'delivered', 'approved']),
+                    distinct=False,
+                ),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            ),
         )
 
     @property
@@ -191,9 +211,22 @@ class SalesOrder(models.Model):
         return res or Decimal('0.00')
 
     @property
+    def total_returned(self):
+        """Total value of approved/settled sales returns linked to this order."""
+        annotated = getattr(self, '_annotated_total_returned', None)
+        if annotated is not None:
+            return annotated
+        res = self.return_orders.filter(status__in=['settled', 'delivered', 'approved']).aggregate(
+            total=models.Sum('grand_total')
+        )['total']
+        return res or Decimal('0.00')
+
+    @property
     def outstanding_balance(self):
-        """Remaining unpaid balance on this sales order."""
-        return max(Decimal('0.00'), self.grand_total - self.total_paid)
+        """Remaining unpaid balance on this sales order (0.00 when paid, cancelled, or rejected)."""
+        if self.status in ('cancelled', 'rejected') or self.payment_status in ('paid', 'returned'):
+            return Decimal('0.00')
+        return max(Decimal('0.00'), (self.grand_total or Decimal('0.00')) - self.total_paid - self.total_returned)
 
     @property
     def is_paid(self):

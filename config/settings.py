@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'sales.apps.SalesConfig',
     'activities.apps.ActivitiesConfig',
     'reports.apps.ReportsConfig',
+    'notifications.apps.NotificationsConfig',
 ]
 
 MIDDLEWARE = [

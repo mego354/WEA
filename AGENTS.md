@@ -38,6 +38,7 @@ Django project package: `config`. Custom user: `accounts.User`. UI language: Ara
 | `sales` | Sales orders, sales returns, collections, customer accounts/transactions |
 | `activities` | Visits, planned visits, visit plans, agreements, visit templates, agenda, approval hub, GPS integrity |
 | `reports` | Performance analytics dashboards and 8 standalone financial/operational Excel & print reports |
+| `notifications` | Centralized Capacitor-ready notification system (60 events across all 10 apps, Role Settings rules, 4-layer DataScope, `/api/v1/notifications/` & device registration) |
 
 Business mutations for sales, purchases, treasury, and stock transfers belong in `*/services.py` with `@transaction.atomic`. HTTP views authenticate, authorize, validate input, call services, and render templates. Shared UI: `templates/layouts/base.html` (Tailwind CDN, Cairo, Material Symbols, Leaflet). Full map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -49,7 +50,7 @@ Browser/AJAX → `config/urls.py` (includes plus **reference-ERP URL aliases**) 
 
 Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissions`, and `accounts.User.has_permission`. Details: [`docs/AUTHORIZATION.md`](docs/AUTHORIZATION.md) and [`docs/BUSINESS_LOGIC.md`](docs/BUSINESS_LOGIC.md).
 
-1. **Configurable Module Scopes (`OWN`, `BRICK`, `AREA`, `ALL`)**: All organizational data access is resolved through `ScopeResolutionService` based on configurable `view_scope` and `manage_scope` per module (stored in `RoleModuleScope`, customizable per-user via `UserModuleScope`). Hardcoded role-name checks must never control data access or authorization.
+1. **Configurable Module Scopes (`OWN`, `BRICK`, `AREA`, `ALL`)**: All organizational data access is resolved through `ScopeResolutionService` based on configurable `view_scope` and `manage_scope` per module (stored in `RoleModuleScope` and managed exclusively via Role Settings; individual per-user effective-permissions overrides have been removed). Hardcoded role-name checks must never control data access or authorization.
 2. **Superadmin** (`User.is_superuser` or active role `name='superadmin'` / `role.is_super`): system-wide access to records and admin functions. Role/RBAC screens and audit log UI remain SuperAdmin-gated.
 3. **Managers**: access representatives, customers, and records whose **canonical root main area** (governorate, `Area.parent is None`) intersects the manager's assigned areas (including all child bricks inside that main area). Sub-area equality is **not** required for managers. A Cairo manager may supervise Nasr City and Maadi reps. A Giza manager must not see Cairo records. Managers with **no** assigned main area fail closed (empty scope).
 4. **Representatives** (`rep`, `medical_rep`): own created/assigned records only, and for visit creation/planning are restricted to customers in their assigned **Brick(s)** (`Area.parent is not None`). No peer-rep access inside the same area.

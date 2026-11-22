@@ -554,6 +554,11 @@ class VendorPaymentRequestWorkflowTests(TestCase):
             warehouse=self.wh, product=self.product, qty_on_hand=Decimal('100.00'), product_cost=Decimal('60.00')
         )
 
+        from master_data.models import PurchaseSettings
+        ps = PurchaseSettings.get_settings()
+        ps.require_manager_approval = False
+        ps.save()
+
         # Invoiced purchase order with outstanding balance: 10 * 60 = 600.00 LE
         self.po = PurchaseOrderService.create_order(
             supplier=self.supplier,

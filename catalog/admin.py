@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import ProductCategory, Product, ProductVolumeDiscountTier, ProductPriceList
+from master_data.admin_mixins import ProtectedMasterAdminMixin, SafeCascadeAdminMixin
 
 
 class ProductVolumeDiscountTierInline(admin.TabularInline):
@@ -14,7 +15,7 @@ class ProductPriceListInline(admin.TabularInline):
 
 
 @admin.register(ProductCategory)
-class ProductCategoryAdmin(admin.ModelAdmin):
+class ProductCategoryAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'code', 'products_count', 'created_at')
     search_fields = ('name', 'code', 'description')
 
@@ -24,7 +25,7 @@ class ProductCategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = (
         'sku_code', 'name', 'category', 'retail_price_display',
         'default_purchase_cost_display', 'unit', 'sellable_badge',
@@ -85,14 +86,14 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductVolumeDiscountTier)
-class ProductVolumeDiscountTierAdmin(admin.ModelAdmin):
+class ProductVolumeDiscountTierAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('product', 'min_quantity', 'discount_percentage')
     list_filter = ('product__category',)
     search_fields = ('product__name', 'product__sku_code')
 
 
 @admin.register(ProductPriceList)
-class ProductPriceListAdmin(admin.ModelAdmin):
+class ProductPriceListAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'product', 'price')
     list_filter = ('name',)
     search_fields = ('name', 'product__name')

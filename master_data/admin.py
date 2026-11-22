@@ -6,10 +6,15 @@ from .models import (
     AgreementType, DataSyncConfig, ERPAttachment, R2StorageConfig,
     PendingStorageDeletion,
 )
+from .admin_mixins import (
+    SafeCascadeAdminMixin,
+    ProtectedMasterAdminMixin,
+    SingletonSettingsAdminMixin,
+)
 
 
 @admin.register(Area)
-class AreaAdmin(admin.ModelAdmin):
+class AreaAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('code', 'name', 'area_type_badge', 'parent', 'assigned_users_count', 'contacts_count', 'created_at')
     list_filter = ('area_type',)
     search_fields = ('code', 'name')
@@ -31,7 +36,7 @@ class AreaAdmin(admin.ModelAdmin):
 
 
 @admin.register(CompanyProfile)
-class CompanyProfileAdmin(admin.ModelAdmin):
+class CompanyProfileAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
     list_display = ('company_name', 'phone', 'email', 'commercial_registry', 'tax_id', 'currency', 'use_batch_number', 'use_expiry_date')
     filter_horizontal = ('roles_can_stock_in', 'roles_can_stock_out', 'roles_can_transfer')
 
@@ -40,7 +45,7 @@ class CompanyProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(LocationSettings)
-class LocationSettingsAdmin(admin.ModelAdmin):
+class LocationSettingsAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
     list_display = (
         'tolerance_display', 'max_verified_accuracy', 'verify_visits_badge',
         'allow_template_distance_override', 'verify_unplanned_visit_distance',
@@ -74,7 +79,7 @@ class LocationSettingsAdmin(admin.ModelAdmin):
 
 
 @admin.register(SalesSettings)
-class SalesSettingsAdmin(admin.ModelAdmin):
+class SalesSettingsAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
     list_display = (
         'tax_mode', 'default_packaging_unit', 'require_manager_approval',
         'allow_all_users_to_create'
@@ -85,7 +90,7 @@ class SalesSettingsAdmin(admin.ModelAdmin):
 
 
 @admin.register(PurchaseSettings)
-class PurchaseSettingsAdmin(admin.ModelAdmin):
+class PurchaseSettingsAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
     list_display = (
         'tax_mode', 'default_packaging_unit', 'require_manager_approval',
         'allow_all_users_to_create'
@@ -96,7 +101,7 @@ class PurchaseSettingsAdmin(admin.ModelAdmin):
 
 
 @admin.register(ExpenseType)
-class ExpenseTypeAdmin(admin.ModelAdmin):
+class ExpenseTypeAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'name_en', 'category_badge', 'unit', 'is_active_badge')
     list_filter = ('category', 'is_active')
     search_fields = ('name', 'name_en')
@@ -115,35 +120,35 @@ class ExpenseTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(TicketType)
-class TicketTypeAdmin(admin.ModelAdmin):
+class TicketTypeAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'is_default', 'is_active')
     list_filter = ('is_default', 'is_active')
     search_fields = ('name',)
 
 
 @admin.register(ApprovalRequestType)
-class ApprovalRequestTypeAdmin(admin.ModelAdmin):
+class ApprovalRequestTypeAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'is_default', 'is_active')
     list_filter = ('is_default', 'is_active')
     search_fields = ('name',)
 
 
 @admin.register(AgreementType)
-class AgreementTypeAdmin(admin.ModelAdmin):
+class AgreementTypeAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'is_active')
     list_filter = ('is_active',)
     search_fields = ('name',)
 
 
 @admin.register(DataSyncConfig)
-class DataSyncConfigAdmin(admin.ModelAdmin):
+class DataSyncConfigAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     list_display = ('title', 'sync_type', 'status', 'last_synced_at')
     list_filter = ('sync_type', 'status')
     search_fields = ('title', 'service_account_email')
 
 
 @admin.register(ERPAttachment)
-class ERPAttachmentAdmin(admin.ModelAdmin):
+class ERPAttachmentAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('original_filename', 'content_type', 'object_id', 'mime_type', 'size_display', 'uploaded_by', 'created_at')
     list_filter = ('content_type', 'mime_type', 'is_public', 'created_at')
     search_fields = ('original_filename', 'title', 'storage_key', 'file_hash')
@@ -152,7 +157,7 @@ class ERPAttachmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(R2StorageConfig)
-class R2StorageConfigAdmin(admin.ModelAdmin):
+class R2StorageConfigAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
     list_display = ('metrics_month', 'tracked_objects_count', 'tracked_storage_bytes', 'current_month_class_a_ops', 'current_month_class_b_ops', 'updated_at')
     readonly_fields = ('tracked_storage_bytes', 'tracked_objects_count', 'current_month_class_a_ops', 'current_month_class_b_ops', 'metrics_month', 'updated_at', 'updated_by')
 
@@ -161,7 +166,7 @@ class R2StorageConfigAdmin(admin.ModelAdmin):
 
 
 @admin.register(PendingStorageDeletion)
-class PendingStorageDeletionAdmin(admin.ModelAdmin):
+class PendingStorageDeletionAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('storage_key', 'attempts', 'created_at', 'last_attempt_at')
     search_fields = ('storage_key', 'last_error')
     readonly_fields = ('storage_key', 'attempts', 'last_error', 'created_at', 'last_attempt_at')

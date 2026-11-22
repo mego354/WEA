@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
 from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturnOrder, PurchaseReturnOrderItem
+from master_data.admin_mixins import ControlledServiceDeleteAdminMixin, ImmutableAdminMixin
 
 
 class PurchaseOrderItemInline(admin.TabularInline):
@@ -19,7 +20,10 @@ class PurchaseReturnOrderItemInline(admin.TabularInline):
 
 
 @admin.register(PurchaseOrder)
-class PurchaseOrderAdmin(admin.ModelAdmin):
+class PurchaseOrderAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from purchases.services import PurchaseOrderService
+        PurchaseOrderService.delete_order(obj, request.user)
     list_display = (
         'order_number', 'supplier', 'target_warehouse', 'order_date',
         'status_badge', 'grand_total_display', 'items_count',
@@ -85,14 +89,17 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(PurchaseOrderItem)
-class PurchaseOrderItemAdmin(admin.ModelAdmin):
+class PurchaseOrderItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('order', 'product', 'quantity', 'unit_price', 'total_price', 'product_batch_number', 'product_expiry_date')
     list_filter = ('order__status', 'order__target_warehouse')
     search_fields = ('product__name', 'order__order_number', 'product_batch_number')
 
 
 @admin.register(PurchaseReturnOrder)
-class PurchaseReturnOrderAdmin(admin.ModelAdmin):
+class PurchaseReturnOrderAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from purchases.services import PurchaseReturnOrderService
+        PurchaseReturnOrderService.delete_return_order(obj, request.user)
     list_display = ('order_number', 'supplier', 'warehouse', 'order_date', 'status_badge', 'grand_total_display', 'created_by')
     list_filter = ('status', 'warehouse', 'order_date')
     search_fields = ('order_number', 'supplier__name')
@@ -118,6 +125,6 @@ class PurchaseReturnOrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(PurchaseReturnOrderItem)
-class PurchaseReturnOrderItemAdmin(admin.ModelAdmin):
+class PurchaseReturnOrderItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('return_order', 'product', 'quantity', 'unit_price', 'total_price')
     search_fields = ('product__name', 'return_order__order_number')

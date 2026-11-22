@@ -5,6 +5,7 @@ from .models import (
     CustomerAccount, CustomerTransaction, SalesOrder,
     SalesOrderItem, Collection, SalesReturnOrder, SalesReturnOrderItem
 )
+from master_data.admin_mixins import ControlledServiceDeleteAdminMixin, ImmutableAdminMixin
 
 
 class SalesOrderItemInline(admin.TabularInline):
@@ -22,12 +23,17 @@ class SalesReturnOrderItemInline(admin.TabularInline):
 
 
 @admin.register(SalesOrder)
-class SalesOrderAdmin(admin.ModelAdmin):
+class SalesOrderAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from sales.services import SalesOrderService
+        SalesOrderService.delete_order(obj, request.user)
     list_display = (
         'order_number', 'customer', 'source_warehouse', 'order_date',
         'status_badge', 'payment_status_badge', 'grand_total_display', 'created_by',
         'approved_by', 'approved_at'
     )
+    list_select_related = ('customer', 'source_warehouse', 'created_by', 'approved_by')
+    raw_id_fields = ('customer', 'delivery_address', 'memo')
     list_filter = ('status', 'payment_status', 'source_warehouse', 'order_date')
     search_fields = ('order_number', 'serial_num', 'customer__name', 'customer__code', 'notes')
     date_hierarchy = 'order_date'
@@ -91,15 +97,17 @@ class SalesOrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(SalesOrderItem)
-class SalesOrderItemAdmin(admin.ModelAdmin):
+class SalesOrderItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('order', 'product', 'quantity', 'unit_price', 'subtotal')
     list_filter = ('order__status', 'order__source_warehouse')
     search_fields = ('product__name', 'order__order_number')
 
 
 @admin.register(Collection)
-class CollectionAdmin(admin.ModelAdmin):
+class CollectionAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('serial_num', 'customer', 'vault', 'amount_display', 'collection_date', 'payment_method_badge', 'created_by')
+    list_select_related = ('customer', 'vault', 'created_by')
+    raw_id_fields = ('customer', 'sales_order')
     list_filter = ('payment_method', 'vault', 'collection_date')
     search_fields = ('serial_num', 'customer__name', 'customer__code', 'notes')
     date_hierarchy = 'collection_date'
@@ -116,7 +124,7 @@ class CollectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(CustomerAccount)
-class CustomerAccountAdmin(admin.ModelAdmin):
+class CustomerAccountAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('customer', 'credit_limit_display', 'current_balance_display', 'overdue_balance_display', 'last_transaction_date')
     search_fields = ('customer__name', 'customer__code')
 
@@ -134,11 +142,13 @@ class CustomerAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(CustomerTransaction)
-class CustomerTransactionAdmin(admin.ModelAdmin):
+class CustomerTransactionAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = (
         'serial', 'account', 'transaction_type_badge', 'reason',
         'transaction_date', 'debit_display', 'credit_display', 'running_balance_display'
     )
+    list_select_related = ('account__customer', 'created_by')
+    raw_id_fields = ('account',)
     list_filter = ('transaction_type', 'reason', 'transaction_date')
     search_fields = ('account__customer__name', 'serial', 'description')
     date_hierarchy = 'transaction_date'
@@ -163,7 +173,10 @@ class CustomerTransactionAdmin(admin.ModelAdmin):
 
 
 @admin.register(SalesReturnOrder)
-class SalesReturnOrderAdmin(admin.ModelAdmin):
+class SalesReturnOrderAdmin(ControlledServiceDeleteAdminMixin, admin.ModelAdmin):
+    def perform_service_delete(self, request, obj):
+        from sales.services import SalesReturnOrderService
+        SalesReturnOrderService.delete_return_order(obj, request.user)
     list_display = ('order_number', 'customer', 'target_warehouse', 'order_date', 'status', 'grand_total', 'created_by')
     list_filter = ('status', 'target_warehouse', 'order_date')
     search_fields = ('order_number', 'customer__name')
@@ -172,6 +185,6 @@ class SalesReturnOrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(SalesReturnOrderItem)
-class SalesReturnOrderItemAdmin(admin.ModelAdmin):
+class SalesReturnOrderItemAdmin(ImmutableAdminMixin, admin.ModelAdmin):
     list_display = ('order', 'product', 'quantity', 'unit_price', 'subtotal')
     search_fields = ('product__name', 'order__order_number')

@@ -41,6 +41,11 @@
 
             {% include 'components/table_column_picker.html' with table_id='roles_table' %}
 
+            <a href="{% url 'roles_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="min-h-[38px] px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5" title="تصدير Excel">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">تصدير Excel</span>
+            </a>
+
             <!-- Create Role Button -->
             <a href="{% url 'role_create' %}" class="min-h-[38px] px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-lg shadow-xs shadow-teal-500/20 transition-all flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-base">add</span>

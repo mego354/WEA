@@ -12,6 +12,7 @@ urlpatterns = [
     path('payment-requests/<int:pk>/action/<str:action>/', views.vendor_payment_request_action, name='vendor_payment_request_action'),
     path('vendors/', views.accounting_vendors_list, name='accounting_vendors_list'),
     path('vendors/export/', views.accounting_vendors_export, name='accounting_vendors_export'),
+    path('vendors/<int:pk>/zero/', views.accounting_vendor_zero_balance, name='accounting_vendor_zero_balance'),
     path('vendor-transactions/', views.vendor_transactions_list, name='vendor_transactions_list'),
     path('vendor-transactions/export/', views.vendor_transactions_export, name='vendor_transactions_export'),
     path('vaults/', views.vaults_list, name='vaults_list'),
