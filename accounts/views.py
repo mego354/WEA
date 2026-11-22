@@ -140,6 +140,17 @@ def login_view(request):
 
 def logout_view(request):
     if request.user.is_authenticated:
+        device_token = (
+            request.POST.get('device_token')
+            or request.GET.get('device_token')
+            or ''
+        ).strip()
+        if device_token:
+            try:
+                from notifications.services import NotificationService
+                NotificationService.unregister_device(request.user, device_token)
+            except Exception:
+                pass
         AuditLogService.log(
             action_type='LOGOUT',
             module='auth',

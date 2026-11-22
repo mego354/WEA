@@ -96,6 +96,7 @@ class NotificationService:
         title: str = '',
         body: str = '',
         action_url: str = '',
+        route_key: str = '',
         severity: Optional[str] = None,
         dedupe_key: str = '',
         metadata: Optional[Dict[str, Any]] = None,
@@ -108,6 +109,8 @@ class NotificationService:
         Schedules delivery inside transaction.on_commit() so rolled-back transactions
         NEVER persist notifications. Never raises into business transactions.
         """
+        from .formatters import get_default_route_key, resolve_destination_url
+
         ev_def = get_event_definition(event_code)
         if not ev_def:
             logger.warning("NotificationService.emit called with unregistered event_code=%s", event_code)
@@ -117,6 +120,7 @@ class NotificationService:
         final_body = (body or '')[:2000]
         final_severity = severity or ev_def.get('default_severity', 'info')
         final_module = ev_def['module']
+        final_route_key = (route_key or '').strip() or get_default_route_key(event_code)
         final_metadata = dict(metadata or {})
         actor_id = getattr(actor, 'pk', None) if actor else None
 
@@ -125,6 +129,14 @@ class NotificationService:
         if target_obj is not None:
             target_model_name = target_obj.__class__.__name__.lower()
             target_pk = getattr(target_obj, 'pk', None)
+
+        final_action_url = (action_url or '').strip()
+        if not final_action_url and final_route_key:
+            final_action_url = resolve_destination_url(
+                route_key=final_route_key,
+                record_id=target_pk,
+                target_obj=target_obj,
+            )
 
         owner_ids = _extract_record_owner_ids(target_obj)
         if extra_owner_ids:
@@ -144,7 +156,8 @@ class NotificationService:
                     target_main_area_ids=target_main_area_ids,
                     title=final_title,
                     body=final_body,
-                    action_url=action_url or '',
+                    route_key=final_route_key,
+                    action_url=final_action_url,
                     severity=final_severity,
                     module=final_module,
                     dedupe_key=dedupe_key or '',
@@ -309,6 +322,7 @@ class NotificationService:
         target_main_area_ids: Set[int],
         title: str,
         body: str,
+        route_key: str,
         action_url: str,
         severity: str,
         module: str,
@@ -350,6 +364,7 @@ class NotificationService:
                     severity=severity,
                     title=title,
                     body=body,
+                    route_key=route_key,
                     action_url=action_url,
                     target_model=target_model_name,
                     target_object_id=target_pk,
@@ -380,15 +395,35 @@ class NotificationService:
 
     @classmethod
     def serialize_notification(cls, n: Notification) -> Dict[str, Any]:
+        from .formatters import (
+            get_default_route_key,
+            get_module_label_ar,
+            get_severity_label_ar,
+        )
+
+        ev_def = get_event_definition(n.event_code) or {}
+        resolved_route_key = (n.route_key or '').strip() or get_default_route_key(n.event_code)
+        open_url = f"/notifications/{n.id}/open/"
         return {
             'id': n.id,
             'event_code': n.event_code,
+            'event_label_ar': ev_def.get('name_ar') or n.title,
             'module': n.module,
+            'module_label_ar': get_module_label_ar(n.module),
             'severity': n.severity,
+            'severity_label_ar': get_severity_label_ar(n.severity),
             'title': n.title,
             'body': n.body,
+            'route_key': resolved_route_key,
+            'destination': {
+                'route_key': resolved_route_key,
+                'record_type': n.target_model or '',
+                'record_id': n.target_object_id,
+                'open_url': open_url,
+                'fallback_url': '/notifications/',
+            },
             'action_url': n.action_url,
-            'open_url': f"/notifications/{n.id}/open/",
+            'open_url': open_url,
             'target_model': n.target_model,
             'target_object_id': n.target_object_id,
             'metadata': n.metadata or {},
@@ -429,42 +464,69 @@ class NotificationService:
         app_version: str = '',
         app_id: str = '',
         permission_status: str = 'granted',
+        device_uid: str = '',
     ) -> NotificationDevice:
         from .fcm_provider import is_Likely_webpush_or_invalid_native_token, mask_token
 
         token = (device_token or '').strip()
         if not token:
-            raise ValueError("device_token is required.")
+            raise ValueError("رمز الجهاز (device_token) مطلوب.")
 
         valid_platforms = {c[0] for c in NotificationDevice.PLATFORM_CHOICES}
         valid_providers = {c[0] for c in NotificationDevice.PROVIDER_CHOICES}
         platform = (platform or 'android').lower().strip()
-        provider = (provider or ('apns' if platform == 'ios' else 'fcm')).lower().strip()
+        # Both Android and iOS use FCM tokens (APNs bridged to FCM via Firebase Messaging)
+        provider = (provider or 'fcm').lower().strip()
         platform = platform if platform in valid_platforms else 'android'
-        provider = provider if provider in valid_providers else ('apns' if platform == 'ios' else 'fcm')
+        provider = provider if provider in valid_providers else 'fcm'
+        clean_uid = (device_uid or '').strip()[:128]
 
         if platform in ('android', 'ios') and provider == 'webpush':
-            raise ValueError("Web Push provider cannot be used for native Android/iOS device registration.")
+            raise ValueError("لا يمكن استخدام مزود Web Push لتسجيل أجهزة تطبيقات الموبايل الأصلية.")
 
         is_bad, bad_reason = is_Likely_webpush_or_invalid_native_token(token, platform)
         if is_bad:
             raise ValueError(bad_reason)
 
+        defaults = {
+            'user': user,
+            'platform': platform,
+            'provider': provider,
+            'device_name': (device_name or '')[:150],
+            'app_version': (app_version or '')[:40],
+            'app_id': (app_id or '')[:120],
+            'permission_status': (permission_status or 'granted')[:30],
+            'is_active': True,
+            'deactivated_reason': '',
+            'failure_count': 0,
+        }
+        if clean_uid:
+            defaults['device_uid'] = clean_uid
+
         device, created = NotificationDevice.objects.update_or_create(
             device_token=token,
-            defaults={
-                'user': user,
-                'platform': platform,
-                'provider': provider,
-                'device_name': (device_name or '')[:150],
-                'app_version': (app_version or '')[:40],
-                'app_id': (app_id or '')[:120],
-                'permission_status': (permission_status or 'granted')[:30],
-                'is_active': True,
-                'deactivated_reason': '',
-                'failure_count': 0,
-            },
+            defaults=defaults,
         )
+
+        # Safe token rotation: if device_uid is supplied, deactivate ONLY previous tokens
+        # belonging to the SAME physical installation (user + platform + device_uid),
+        # never touching other devices owned by the user.
+        if clean_uid:
+            rotated = NotificationDevice.objects.filter(
+                user=user,
+                platform=platform,
+                device_uid=clean_uid,
+                is_active=True,
+            ).exclude(pk=device.pk).update(
+                is_active=False,
+                deactivated_reason='token_rotated',
+            )
+            if rotated:
+                logger.info(
+                    "[NotificationService] Rotated %s old token(s) for user=%s device_uid=%s",
+                    rotated, user.pk, clean_uid[:16],
+                )
+
         logger.info(
             "[NotificationService] Device %s: id=%s user=%s platform=%s provider=%s token=%s app_id=%s",
             'created' if created else 'updated',
@@ -526,6 +588,7 @@ class NotificationService:
             severity='info',
             title=final_title,
             body=final_body,
+            route_key='notifications.inbox',
             action_url=final_target,
             target_model='notification',
             metadata={'is_test_push': True, 'target_url': final_target},
@@ -562,6 +625,7 @@ class NotificationService:
                 notification_obj=notif,
                 notification_id=str(notif.id),
                 event_type='system.test_push',
+                route_key='notifications.inbox',
                 object_type='notification',
                 object_id=str(notif.id),
                 target_url=final_target,

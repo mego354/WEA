@@ -541,13 +541,17 @@ All smart-search endpoints enforce `@require_permission([...])`, use `ScopeResol
 - Additional Excel Exports: `GET /accounts/roles/export/` (`roles_export`), `GET /settings/areas/export/` (`areas_export`), `GET /settings/expenses/export/` (`expenses_export`), `GET /settings/tickets/export/` (`tickets_export`), `GET /settings/requests/export/` (`requests_export`), `GET /settings/agreements/export/` (`agreements_types_export`), `GET /activities/settings/visits/templates/export/` (`visit_templates_export`), `GET /performance/overview/export/` (`performance_overview_export`).
 
 ### 9.4 Centralized Notifications APIs (Web & Capacitor Mobile Ready)
-Base paths: `/api/v1/notifications/` (versioned mobile/Capacitor API) and `/notifications/api/` (web UI alias):
-- `GET /api/v1/notifications/?is_read=0|1&module=<key>&page=1&per_page=25` — Paginated scoped inbox.
+Base paths: `/api/v1/notifications/` (versioned mobile/Capacitor API) and `/notifications/api/` (web UI alias). Full integration guide: [`docs/notifications-deep-linking.md`](notifications-deep-linking.md).
+- `GET /api/v1/notifications/?is_read=true|false&module=<key>&severity=<level>&page=1&page_size=20` — Paginated scoped inbox returning `results` (with `route_key`, `destination`, `module_label_ar`, `event_label_ar`, `severity_label_ar`) and `pagination`.
 - `GET /api/v1/notifications/unread-count/` — Lightweight unread badge counter for 45s visibility-aware polling.
-- `GET /api/v1/notifications/recent/?limit=12` — Latest popover/drawer notifications.
-- `GET /api/v1/notifications/<int:pk>/` — Single notification detail (recipient-isolated, 404 on IDOR).
+- `GET /api/v1/notifications/summary/?limit=12` — Combined unread count + latest items for header bell popover & mobile drawer.
+- `GET /api/v1/notifications/<int:pk>/` — Single notification detail (recipient-isolated, `404` on IDOR).
 - `POST /api/v1/notifications/<int:pk>/read/` — Mark single notification read.
-- `POST /api/v1/notifications/mark-all-read/` — Mark all (or module/IDs subset) read.
-- `POST /api/v1/notifications/devices/register/` — Register Capacitor FCM/APNs/Web Push device token (`platform`, `provider`, `device_token`, `device_name`, `app_version`).
+- `POST /api/v1/notifications/read-all/` — Mark all (or `module` / `ids` subset) read.
+- `POST /api/v1/notifications/devices/register/` — Register/update native Capacitor FCM device token (`device_token`, optional `device_uid`, `platform`, `provider` [`fcm` for both Android & iOS], `device_name`, `app_version`, `app_id`, `permission_status`).
 - `POST /api/v1/notifications/devices/unregister/` — Deactivate device token on logout.
+- `GET /api/v1/notifications/diagnostics/` — Authenticated user's masked registered devices, FCM server config status, and recent push delivery attempts.
+- `POST /api/v1/notifications/test-push/` — Authenticated end-to-end test push to the user's own active registered device(s).
+- `GET /notifications/<int:pk>/open/` — Canonical web & Capacitor deep-link gatekeeper (marks read, enforces RBAC + DataScope + target existence, redirects safely to destination or `/notifications/`).
+- **Authentication Errors:** All `/api/v1/notifications/*` endpoints return `HTTP 401` JSON (`{"status": "error", "code": "authentication_required", "message": "...", "login_url": "/auth/login/"}`) when unauthenticated or session-expired.
 

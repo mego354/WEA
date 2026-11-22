@@ -94,6 +94,7 @@ class ExternalPushChannelAdapter(BaseNotificationChannel):
                     notification_obj=notif if notif.pk else None,
                     notification_id=notif_id_str,
                     event_type=notif.event_code,
+                    route_key=notif.route_key or '',
                     object_type=notif.target_model or '',
                     object_id=str(notif.target_object_id or ''),
                     target_url=target_url,

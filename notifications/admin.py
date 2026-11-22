@@ -13,18 +13,18 @@ class RoleNotificationRuleAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
-    list_display = ('id', 'recipient', 'event_code', 'module', 'severity', 'title', 'is_read', 'created_at')
+    list_display = ('id', 'recipient', 'event_code', 'module', 'severity', 'route_key', 'title', 'is_read', 'created_at')
     list_filter = ('module', 'severity', 'is_read', 'created_at')
-    search_fields = ('title', 'body', 'event_code', 'recipient__username', 'recipient__name')
+    search_fields = ('title', 'body', 'event_code', 'route_key', 'recipient__username', 'recipient__name')
     readonly_fields = ('created_at', 'read_at')
     date_hierarchy = 'created_at'
 
 
 @admin.register(NotificationDevice)
 class NotificationDeviceAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
-    list_display = ('user', 'platform', 'provider', 'device_name', 'app_id', 'is_active', 'last_seen_at', 'last_push_attempt_at')
+    list_display = ('user', 'platform', 'provider', 'device_uid', 'device_name', 'app_id', 'is_active', 'last_seen_at', 'last_push_attempt_at')
     list_filter = ('platform', 'provider', 'is_active')
-    search_fields = ('user__username', 'user__name', 'device_name', 'app_id')
+    search_fields = ('user__username', 'user__name', 'device_uid', 'device_name', 'app_id')
     readonly_fields = ('last_seen_at', 'created_at', 'last_push_attempt_at', 'last_push_success_at')
 
 

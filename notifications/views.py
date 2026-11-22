@@ -1,19 +1,23 @@
 import json
 import logging
+from functools import wraps
 from django.apps import apps
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
+from accounts.permissions import has_perm_or_admin
 from accounts.scope_service import ScopeResolutionService
 from master_data.pagination_utils import paginate_queryset
 
 from .fcm_provider import FCMProvider
+from .formatters import resolve_destination_url
 from .models import Notification, NotificationDevice, PushDeliveryAttempt
-from .registry import NOTIFICATION_MODULES_META
+from .registry import NOTIFICATION_MODULES_META, get_event_definition
 from .services import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -27,18 +31,41 @@ TARGET_MODEL_APP_MAP = {
     'purchasereturnorder': ('purchases', 'PurchaseReturnOrder'),
     'vendorpayment': ('treasury', 'VendorPayment'),
     'vendorpaymentrequest': ('treasury', 'VendorPaymentRequest'),
+    'vendoraccount': ('treasury', 'VendorAccount'),
     'vault': ('treasury', 'Vault'),
     'vaulttransaction': ('treasury', 'VaultTransaction'),
     'producttransferrequest': ('inventory', 'ProductTransferRequest'),
     'inventorymemo': ('inventory', 'InventoryMemo'),
     'inventorystock': ('inventory', 'InventoryStock'),
+    'warehouse': ('inventory', 'Warehouse'),
     'visit': ('activities', 'Visit'),
     'visitplan': ('activities', 'VisitPlan'),
     'agreement': ('activities', 'Agreement'),
     'contact': ('contacts', 'Contact'),
     'product': ('catalog', 'Product'),
     'user': ('accounts', 'User'),
+    'role': ('accounts', 'Role'),
+    'salestarget': ('reports', 'SalesTarget'),
+    'coachingevaluation': ('reports', 'CoachingEvaluation'),
 }
+
+
+def api_login_required(view_func):
+    """Returns HTTP 401 JSON instead of a 302 HTML login redirect for API clients & Capacitor WebView."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {
+                    'status': 'error',
+                    'code': 'authentication_required',
+                    'message': 'انتهت جلسة العمل، يرجى تسجيل الدخول مجدداً.',
+                    'login_url': getattr(settings, 'LOGIN_URL', '/auth/login/'),
+                },
+                status=401,
+            )
+        return view_func(request, *args, **kwargs)
+    return _wrapped
 
 
 def _parse_json_body(request):
@@ -107,9 +134,19 @@ def notification_open(request, pk):
 
     NotificationService.mark_as_read(request.user, n.id)
 
-    # Check if the target record was deleted or user no longer has access
+    is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
+
+    # 1. Verify RBAC permission for the event before redirecting
+    ev_def = get_event_definition(n.event_code) or {}
+    req_perm = ev_def.get('required_permission')
+    if req_perm and not is_super and not has_perm_or_admin(request.user, req_perm):
+        messages.error(request, "عذراً، لم تعد تملك صلاحية عرض الصفحة المرتبطة بهذا الإشعار.")
+        return redirect('notifications_inbox')
+
+    # 2. Check if the target record was deleted or user no longer has DataScope access
     t_model = (n.target_model or '').strip().lower()
     t_obj_id = n.target_object_id
+    target_instance = None
     if t_model in TARGET_MODEL_APP_MAP and t_obj_id:
         app_label, model_name = TARGET_MODEL_APP_MAP[t_model]
         try:
@@ -118,14 +155,25 @@ def notification_open(request, pk):
             if target_instance is None:
                 messages.warning(request, "عذراً، السجل المرتبط بهذا الإشعار تم حذفه أو لم يعد موجوداً.")
                 return redirect('notifications_inbox')
-            is_super = bool(request.user.is_superuser or getattr(request.user, 'is_super_admin', False))
-            if not is_super and not ScopeResolutionService.can_user_access_object(request.user, target_instance, 'view'):
-                messages.error(request, "عذراً، لم تعد تملك صلاحية عرض السجل المرتبط بهذا الإشعار.")
-                return redirect('notifications_inbox')
+            if not is_super and t_model in ScopeResolutionService.MODEL_MODULE_MAP:
+                if not ScopeResolutionService.can_user_access_object(request.user, target_instance, 'view'):
+                    messages.error(request, "عذراً، لم تعد تملك صلاحية عرض السجل المرتبط بهذا الإشعار.")
+                    return redirect('notifications_inbox')
         except Exception:
             logger.exception("Error validating target record for notification %s", n.id)
 
-    target = (n.action_url or '').strip()
+    # 3. Prefer structured route_key resolution, falling back safely to validated action_url
+    target = ''
+    if n.route_key:
+        target = resolve_destination_url(
+            route_key=n.route_key,
+            record_id=t_obj_id,
+            target_obj=target_instance,
+            fallback_url=(n.action_url or '').strip(),
+        )
+    if not target:
+        target = (n.action_url or '').strip()
+
     if _is_safe_internal_target_url(request, target):
         return redirect(target)
     return redirect('notifications_inbox')
@@ -135,7 +183,7 @@ def notification_open(request, pk):
 # CAPACITOR-READY AUTHENTICATED JSON API (v1)
 # ==========================================
 
-@login_required
+@api_login_required
 @require_GET
 def api_notifications_list(request):
     """Paginated JSON notifications list for Web UI and Capacitor Android/iOS clients."""
@@ -184,7 +232,7 @@ def api_notifications_list(request):
     })
 
 
-@login_required
+@api_login_required
 @require_GET
 def api_notifications_unread_count(request):
     """Lightweight unread counter endpoint for visibility-aware polling & Capacitor badges."""
@@ -194,7 +242,7 @@ def api_notifications_unread_count(request):
     })
 
 
-@login_required
+@api_login_required
 @require_GET
 def api_notifications_summary(request):
     """Combined unread count + latest items for header bell popover & mobile drawer."""
@@ -215,7 +263,7 @@ def api_notifications_summary(request):
     })
 
 
-@login_required
+@api_login_required
 @require_GET
 def api_notification_detail(request, pk):
     """Returns a single notification strictly owned by the authenticated user."""
@@ -228,7 +276,7 @@ def api_notification_detail(request, pk):
     })
 
 
-@login_required
+@api_login_required
 @require_POST
 def api_notification_mark_read(request, pk):
     """Marks a single recipient-owned notification as read."""
@@ -243,7 +291,7 @@ def api_notification_mark_read(request, pk):
     })
 
 
-@login_required
+@api_login_required
 @require_POST
 def api_notifications_mark_all_read(request):
     """Marks all (or filtered) unread notifications for the authenticated user as read."""
@@ -263,25 +311,32 @@ def api_notifications_mark_all_read(request):
     })
 
 
-@login_required
+@api_login_required
 @require_POST
 def api_device_register(request):
     """
-    Registers a Capacitor Android/iOS native FCM/APNs device token against the authenticated user.
-    Accepts `device_token` (or `token` alias for compatibility) and rejects browser Web Push tokens
-    when a native platform is specified.
+    Registers or updates a Capacitor Android/iOS native FCM device token against the authenticated user.
+    Accepts `device_token` (or `token` alias) and optional `device_uid` for safe token rotation.
+    Rejects browser Web Push tokens when a native platform is specified.
     """
     payload = _parse_json_body(request)
     token = ''
     if hasattr(payload, 'get'):
         token = (payload.get('device_token') or payload.get('token') or '').strip()
     if not token:
-        return JsonResponse({'status': 'error', 'message': 'device_token is required.'}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'رمز الجهاز (device_token) مطلوب.'}, status=400)
 
     platform = (payload.get('platform') or 'android').strip().lower() if hasattr(payload, 'get') else 'android'
-    default_provider = 'apns' if platform == 'ios' else 'fcm'
-    provider = (payload.get('provider') or default_provider).strip().lower() if hasattr(payload, 'get') else default_provider
+    # Both Android and iOS use FCM tokens (Firebase Messaging bridges APNs -> FCM on iOS)
+    provider = (payload.get('provider') or 'fcm').strip().lower() if hasattr(payload, 'get') else 'fcm'
     device_name = (payload.get('device_name') or payload.get('deviceName') or '').strip() if hasattr(payload, 'get') else ''
+    device_uid = (
+        payload.get('device_uid')
+        or payload.get('deviceUid')
+        or payload.get('installation_id')
+        or payload.get('installationId')
+        or ''
+    ).strip() if hasattr(payload, 'get') else ''
     app_version = (payload.get('app_version') or payload.get('appVersion') or '').strip() if hasattr(payload, 'get') else ''
     app_id = (payload.get('app_id') or payload.get('appId') or payload.get('app') or '').strip() if hasattr(payload, 'get') else ''
     permission_status = (payload.get('permission_status') or payload.get('permissionStatus') or 'granted').strip() if hasattr(payload, 'get') else 'granted'
@@ -296,6 +351,7 @@ def api_device_register(request):
             app_version=app_version,
             app_id=app_id,
             permission_status=permission_status,
+            device_uid=device_uid,
         )
     except ValueError as exc:
         logger.warning("[api_device_register] Rejected token for user=%s: %s", request.user.pk, str(exc))
@@ -305,6 +361,7 @@ def api_device_register(request):
     return JsonResponse({
         'status': 'ok',
         'device_id': device.id,
+        'device_uid': device.device_uid,
         'masked_token': device.masked_token,
         'platform': device.platform,
         'provider': device.provider,
@@ -317,7 +374,7 @@ def api_device_register(request):
     })
 
 
-@login_required
+@api_login_required
 @require_POST
 def api_device_unregister(request):
     """Deactivates a previously registered device token for the authenticated user."""
@@ -326,12 +383,12 @@ def api_device_unregister(request):
     if hasattr(payload, 'get'):
         token = (payload.get('device_token') or payload.get('token') or '').strip()
     if not token:
-        return JsonResponse({'status': 'error', 'message': 'device_token is required.'}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'رمز الجهاز (device_token) مطلوب.'}, status=400)
     updated = NotificationService.unregister_device(request.user, token)
     return JsonResponse({'status': 'ok', 'deactivated_count': updated})
 
 
-@login_required
+@api_login_required
 @require_POST
 def api_send_test_push(request):
     """
@@ -362,7 +419,7 @@ def api_send_test_push(request):
     return JsonResponse(result, status=http_status)
 
 
-@login_required
+@api_login_required
 @require_GET
 def api_push_diagnostics(request):
     """
@@ -389,6 +446,7 @@ def api_push_diagnostics(request):
         'devices': [
             {
                 'id': d.id,
+                'device_uid': d.device_uid,
                 'platform': d.platform,
                 'provider': d.provider,
                 'masked_token': d.masked_token,

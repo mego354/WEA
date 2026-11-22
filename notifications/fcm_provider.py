@@ -45,14 +45,14 @@ def is_Likely_webpush_or_invalid_native_token(token: str, platform: str = 'andro
     """
     tok = (token or '').strip()
     if not tok:
-        return True, 'Empty device_token'
+        return True, 'رمز الجهاز (device_token) فارغ.'
     if len(tok) < 12:
-        return True, 'Token is too short to be a valid FCM/APNs token'
+        return True, 'رمز الجهاز قصير جداً ولا يطابق تنسيق FCM/APNs الصالح.'
     if platform in ('android', 'ios'):
         if tok.startswith('http://') or tok.startswith('https://'):
-            return True, 'Received a Web Push endpoint URL instead of a native FCM/APNs registration token'
+            return True, 'تم استلام رابط Web Push بدلاً من رمز تسجيل FCM الأصلي للتطبيق.'
         if tok.startswith('{') and ('endpoint' in tok or 'keys' in tok):
-            return True, 'Received a Web Push PushSubscription JSON object instead of a native FCM/APNs token'
+            return True, 'تم استلام كائن Web Push Subscription بدلاً من رمز تسجيل FCM الأصلي للتطبيق.'
     return False, ''
 
 
@@ -185,6 +185,7 @@ class FCMProvider:
         body: str,
         notification_id: str = '',
         event_type: str = 'system',
+        route_key: str = '',
         object_type: str = '',
         object_id: str = '',
         target_url: str = '/notifications/',
@@ -196,8 +197,11 @@ class FCMProvider:
         Builds a canonical FCM HTTP v1 message payload with structured deep-link data.
         All values in `message.data` are strictly strings as required by FCM HTTP v1.
         """
+        from .formatters import get_default_route_key
+
         clean_target = (target_url or '').strip() or '/notifications/'
         open_url = f"/notifications/{notification_id}/open/" if notification_id and str(notification_id).isdigit() else clean_target
+        resolved_route_key = (route_key or '').strip() or get_default_route_key(event_type)
         channel_id = getattr(settings, 'FCM_DEFAULT_CHANNEL_ID', 'app_push_notifications_channel')
 
         data_dict: Dict[str, str] = {
@@ -208,11 +212,14 @@ class FCMProvider:
             'event_code': str(event_type or 'system'),
             'module': str(module or 'general'),
             'severity': str(severity or 'info'),
+            'route_key': str(resolved_route_key),
+            'record_type': str(object_type or ''),
+            'record_id': str(object_id or ''),
             'object_type': str(object_type or ''),
             'object_id': str(object_id or ''),
+            'open_url': str(open_url),
             'target_url': str(clean_target),
             'action_url': str(clean_target),
-            'open_url': str(open_url),
         }
         if extra_data:
             for k, v in extra_data.items():
@@ -277,6 +284,7 @@ class FCMProvider:
         notification_obj=None,
         notification_id: str = '',
         event_type: str = 'system',
+        route_key: str = '',
         object_type: str = '',
         object_id: str = '',
         target_url: str = '/notifications/',
@@ -378,6 +386,7 @@ class FCMProvider:
             body=body,
             notification_id=notif_id_str,
             event_type=event_type,
+            route_key=route_key or (getattr(notification_obj, 'route_key', '') if notification_obj else ''),
             object_type=object_type,
             object_id=object_id,
             target_url=final_target,

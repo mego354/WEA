@@ -129,13 +129,26 @@ def dispatch_from_audit_log(log_entry) -> None:
 
         rec_label = log_entry.record_name or log_entry.record_id or ''
         raw_desc = log_entry.description
-        if isinstance(raw_desc, (dict, list)):
-            import json
-            body = json.dumps(raw_desc, ensure_ascii=False).strip()
-        else:
-            body = str(raw_desc or '').strip()
-        if not body and rec_label:
-            body = f"السجل: {rec_label}"
+        fallback_body = ''
+        if isinstance(raw_desc, str):
+            fallback_body = raw_desc.strip()
+
+        from .formatters import build_arabic_notification
+        formatted = build_arabic_notification(
+            event_code=event_code,
+            target_obj=target_obj,
+            actor=log_entry.actor,
+            action_type=action_type,
+            fallback_body=fallback_body,
+            record_name=rec_label,
+        )
+        final_url = action_url or formatted['action_url']
+        merged_meta = {
+            'audit_log_id': log_entry.pk,
+            'action_type': action_type,
+            'record_name': rec_label,
+            **formatted['metadata'],
+        }
 
         dedupe_key = f"audit:{action_type}:{log_entry.record_id or log_entry.pk}"
 
@@ -143,38 +156,56 @@ def dispatch_from_audit_log(log_entry) -> None:
             event_code=event_code,
             target_obj=target_obj,
             actor=log_entry.actor,
-            body=body,
-            action_url=action_url,
+            title=formatted['title'],
+            body=formatted['body'],
+            route_key=formatted['route_key'],
+            action_url=final_url,
             dedupe_key=dedupe_key,
-            metadata={
-                'audit_log_id': log_entry.pk,
-                'action_type': action_type,
-                'record_name': rec_label,
-            },
+            metadata=merged_meta,
         )
 
         # Secondary pending-approval event when a newly created order awaits manager approval
         if action_type == 'SALES_ORDER_CREATED' and target_obj is not None:
             if getattr(target_obj, 'status', '') in ('pending', 'manager_approval'):
+                pending_fmt = build_arabic_notification(
+                    event_code='sales.order_pending_approval',
+                    target_obj=target_obj,
+                    actor=log_entry.actor,
+                    action_type=action_type,
+                    fallback_body=fallback_body,
+                    record_name=rec_label,
+                )
                 NotificationService.emit(
                     event_code='sales.order_pending_approval',
                     target_obj=target_obj,
                     actor=log_entry.actor,
-                    title=f"أمر بيع بانتظار الاعتماد #{target_obj.order_number}",
-                    body=body,
-                    action_url=action_url,
+                    title=pending_fmt['title'],
+                    body=pending_fmt['body'],
+                    route_key=pending_fmt['route_key'],
+                    action_url=final_url or pending_fmt['action_url'],
                     dedupe_key=f"so_pending:{target_obj.pk}",
+                    metadata=pending_fmt['metadata'],
                 )
         elif action_type == 'PURCHASE_ORDER_CREATED' and target_obj is not None:
             if getattr(target_obj, 'status', '') in ('pending', 'manager_approval'):
+                pending_fmt = build_arabic_notification(
+                    event_code='purchases.order_pending_approval',
+                    target_obj=target_obj,
+                    actor=log_entry.actor,
+                    action_type=action_type,
+                    fallback_body=fallback_body,
+                    record_name=rec_label,
+                )
                 NotificationService.emit(
                     event_code='purchases.order_pending_approval',
                     target_obj=target_obj,
                     actor=log_entry.actor,
-                    title=f"أمر شراء بانتظار الاعتماد #{target_obj.order_number}",
-                    body=body,
-                    action_url=action_url,
+                    title=pending_fmt['title'],
+                    body=pending_fmt['body'],
+                    route_key=pending_fmt['route_key'],
+                    action_url=final_url or pending_fmt['action_url'],
                     dedupe_key=f"po_pending:{target_obj.pk}",
+                    metadata=pending_fmt['metadata'],
                 )
     except Exception:
         logger.exception("dispatch_from_audit_log failed cleanly")

@@ -406,3 +406,161 @@ class NotificationTransactionRollbackTests(TransactionTestCase):
         except RuntimeError:
             pass
         self.assertEqual(Notification.objects.filter(title='Should Rollback').count(), 0)
+
+
+class ArabicNotificationAndDeepLinkingTests(TestCase):
+    """Verifies Arabic-first formatting, structured route_key/destination, 401 API auth, device_uid token rotation, and deep-link security."""
+
+    def setUp(self):
+        call_command('setup_permissions')
+        NotificationService.seed_default_rules(overwrite=True)
+        self.super_role = Role.objects.get(name='superadmin')
+        self.rep_role = Role.objects.get(name='rep')
+        self.cairo = Area.objects.create(code='N-DL-CAI', name='القاهرة إشعارات', area_type='governorate')
+        self.nasr = Area.objects.create(code='N-DL-NSR', name='مدينة نصر', area_type='subarea', parent=self.cairo)
+        self.admin = User.objects.create_superuser(
+            username='dl_admin@wea.com', email='dl_admin@wea.com', password='Password123!', name='مدير النظام', role=self.super_role
+        )
+        self.rep = User.objects.create_user(
+            username='dl_rep@wea.com', email='dl_rep@wea.com', password='Password123!', name='أحمد المندوب', role=self.rep_role
+        )
+        self.rep.assigned_areas.add(self.nasr)
+
+    def test_arabic_contact_status_localization_and_no_raw_english_enums(self):
+        from contacts.models import Contact
+        from notifications.formatters import build_arabic_notification
+
+        contact = Contact.objects.create(
+            name='صيدلية النور الجديدة',
+            is_customer=True,
+            status='customer',
+            area=self.cairo,
+            brick=self.nasr,
+            created_by=self.rep,
+        )
+        fmt = build_arabic_notification(
+            event_code='contacts.contact_status_changed',
+            target_obj=contact,
+            actor=self.admin,
+            extra={'old_status': 'lead', 'new_status': 'customer'},
+        )
+        self.assertEqual(fmt['route_key'], 'contacts.detail')
+        self.assertIn('عميل محتمل', fmt['body'])
+        self.assertIn('عميل', fmt['body'])
+        self.assertNotIn('lead', fmt['body'])
+        self.assertNotIn('customer', fmt['body'])
+
+    def test_unauthenticated_api_returns_401_json_not_302_redirect(self):
+        for url in [
+            '/api/v1/notifications/',
+            '/api/v1/notifications/unread-count/',
+            '/api/v1/notifications/summary/',
+            '/api/v1/notifications/diagnostics/',
+        ]:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 401, f"Expected 401 for {url}, got {res.status_code}")
+            data = res.json()
+            self.assertEqual(data['code'], 'authentication_required')
+            self.assertIn('login_url', data)
+
+        reg_res = self.client.post('/api/v1/notifications/devices/register/', {'device_token': 'x' * 20}, content_type='application/json')
+        self.assertEqual(reg_res.status_code, 401)
+
+    def test_device_registration_fcm_default_ios_and_safe_token_rotation(self):
+        self.client.force_login(self.rep)
+
+        # 1. Register iOS phone #1 with device_uid -> defaults to provider='fcm'
+        r1 = self.client.post(
+            '/api/v1/notifications/devices/register/',
+            {'device_token': 'ios_fcm_token_phone1_v1_123456', 'device_uid': 'install-phone-1', 'platform': 'ios'},
+            content_type='application/json',
+        )
+        self.assertEqual(r1.status_code, 200)
+        d1 = r1.json()
+        self.assertEqual(d1['platform'], 'ios')
+        self.assertEqual(d1['provider'], 'fcm')
+        self.assertEqual(d1['device_uid'], 'install-phone-1')
+
+        # 2. Register second device (Android tablet #2) with different device_uid
+        r2 = self.client.post(
+            '/api/v1/notifications/devices/register/',
+            {'device_token': 'android_fcm_token_tablet2_123456', 'device_uid': 'install-tablet-2', 'platform': 'android'},
+            content_type='application/json',
+        )
+        self.assertEqual(r2.status_code, 200)
+
+        # 3. Rotate token on iOS phone #1 (same device_uid) -> deactivates ONLY phone #1's old token, NOT tablet #2
+        r3 = self.client.post(
+            '/api/v1/notifications/devices/register/',
+            {'device_token': 'ios_fcm_token_phone1_v2_999999', 'device_uid': 'install-phone-1', 'platform': 'ios'},
+            content_type='application/json',
+        )
+        self.assertEqual(r3.status_code, 200)
+
+        old_phone1 = NotificationDevice.objects.get(device_token='ios_fcm_token_phone1_v1_123456')
+        new_phone1 = NotificationDevice.objects.get(device_token='ios_fcm_token_phone1_v2_999999')
+        tablet2 = NotificationDevice.objects.get(device_token='android_fcm_token_tablet2_123456')
+        self.assertFalse(old_phone1.is_active)
+        self.assertEqual(old_phone1.deactivated_reason, 'token_rotated')
+        self.assertTrue(new_phone1.is_active)
+        self.assertTrue(tablet2.is_active)
+
+        # 4. Missing token returns Arabic error message
+        bad = self.client.post('/api/v1/notifications/devices/register/', {}, content_type='application/json')
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn('مطلوب', bad.json()['message'])
+
+        # 5. Logout with device_token synchronously deactivates that token
+        logout_res = self.client.post('/auth/logout/', {'device_token': 'ios_fcm_token_phone1_v2_999999'})
+        self.assertEqual(logout_res.status_code, 302)
+        new_phone1.refresh_from_db()
+        self.assertFalse(new_phone1.is_active)
+        tablet2.refresh_from_db()
+        self.assertTrue(tablet2.is_active)
+
+    def test_structured_destination_payload_and_rbac_gatekeeper_on_open(self):
+        from notifications.fcm_provider import FCMProvider
+
+        n = Notification.objects.create(
+            recipient=self.rep,
+            actor=self.admin,
+            event_code='accounts.role_updated',
+            module='accounts',
+            severity='warning',
+            title='تحديث صلاحيات الدور',
+            body='حدّث مدير النظام صلاحيات الدور.',
+            route_key='accounts.roles_list',
+            action_url='/roles/',
+        )
+
+        # JSON API includes route_key, destination, and Arabic labels
+        self.client.force_login(self.rep)
+        res = self.client.get(f'/api/v1/notifications/{n.pk}/')
+        self.assertEqual(res.status_code, 200)
+        payload = res.json()['notification']
+        self.assertEqual(payload['route_key'], 'accounts.roles_list')
+        self.assertEqual(payload['destination']['route_key'], 'accounts.roles_list')
+        self.assertEqual(payload['destination']['open_url'], f'/notifications/{n.pk}/open/')
+        self.assertEqual(payload['module_label_ar'], 'المستخدمون والأدوار')
+        self.assertEqual(payload['severity_label_ar'], 'تنبيه')
+
+        # FCM payload includes route_key, open_url, record_type, record_id
+        fcm = FCMProvider.build_fcm_v1_payload(
+            device_token='tok_1234567890123456',
+            title=n.title,
+            body=n.body,
+            notification_id=str(n.pk),
+            event_type=n.event_code,
+            route_key=n.route_key,
+            object_type='role',
+            object_id='1',
+            target_url='/roles/',
+        )
+        self.assertEqual(fcm['message']['data']['route_key'], 'accounts.roles_list')
+        self.assertEqual(fcm['message']['data']['open_url'], f'/notifications/{n.pk}/open/')
+
+        # Rep lacks settings:rbac/view -> notification_open safely redirects to /notifications/ instead of /roles/
+        open_res = self.client.get(reverse('notification_open', kwargs={'pk': n.pk}))
+        self.assertEqual(open_res.status_code, 302)
+        self.assertEqual(open_res.url, reverse('notifications_inbox'))
+

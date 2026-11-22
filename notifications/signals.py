@@ -18,6 +18,7 @@ from contacts.models import Contact, ContactTodo
 from inventory.models import InventoryStock
 from reports.models import CoachingEvaluation, SalesTarget
 
+from .formatters import build_arabic_notification
 from .hooks import dispatch_from_audit_log
 from .services import NotificationService
 
@@ -45,35 +46,55 @@ def on_visit_saved(sender, instance, created, raw=False, **kwargs):
         return
     try:
         url = _safe_url('visit_detail', pk=instance.pk)
-        contact_name = instance.contact.name if instance.contact_id else ''
         if created and instance.approval_status == 'pending':
+            fmt = build_arabic_notification(
+                event_code='activities.visit_pending_approval',
+                target_obj=instance,
+                actor=instance.owner or instance.created_by,
+            )
             NotificationService.emit(
                 event_code='activities.visit_pending_approval',
                 target_obj=instance,
                 actor=instance.owner or instance.created_by,
-                title=f"زيارة ميدانية بانتظار الاعتماد - {contact_name}",
-                body=f"سجّل {getattr(instance.owner, 'name', '') or 'المندوب'} زيارة للعميل {contact_name} وتنتظر الاعتماد.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"visit_pending:{instance.pk}",
             )
         if getattr(instance, 'gps_integrity_status', '') in ('suspicious', 'flagged') or getattr(instance, 'location_status', '') in ('suspicious', 'outside_range'):
+            fmt = build_arabic_notification(
+                event_code='activities.visit_gps_suspicious',
+                target_obj=instance,
+                actor=instance.owner or instance.created_by,
+            )
             NotificationService.emit(
                 event_code='activities.visit_gps_suspicious',
                 target_obj=instance,
                 actor=instance.owner or instance.created_by,
-                title=f"تنبيه موقع GPS مشبوه - {contact_name}",
-                body=instance.gps_suspicion_reason or f"تم رصد مؤشر GPS غير معتاد للزيارة #{instance.serial_num or instance.pk}.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"visit_gps:{instance.pk}",
             )
         if getattr(instance, 'waiting_for_reapproval', False):
+            fmt = build_arabic_notification(
+                event_code='activities.visit_reapproval_required',
+                target_obj=instance,
+                actor=instance.last_edited_by or instance.owner,
+            )
             NotificationService.emit(
                 event_code='activities.visit_reapproval_required',
                 target_obj=instance,
                 actor=instance.last_edited_by or instance.owner,
-                title=f"زيارة معتمدة تم تعديلها - {contact_name}",
-                body=f"تم تعديل الزيارة #{instance.serial_num or instance.pk} بعد اعتمادها وتحتاج إعادة اعتماد.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"visit_reapproval:{instance.pk}:{instance.last_edited_at or instance.updated_at}",
             )
     except Exception:
@@ -99,13 +120,21 @@ def on_agreement_post_save(sender, instance, created, raw=False, **kwargs):
     try:
         prev = getattr(instance, '_prev_status', None)
         if prev != instance.status and instance.status == 'rejected':
+            actor = instance.approved_by or instance.updated_by
+            fmt = build_arabic_notification(
+                event_code='activities.agreement_rejected',
+                target_obj=instance,
+                actor=actor,
+            )
             NotificationService.emit(
                 event_code='activities.agreement_rejected',
                 target_obj=instance,
-                actor=instance.approved_by or instance.updated_by,
-                title=f"رفض الاتفاقية #{instance.serial_num or instance.pk}",
-                body=instance.approval_notes or f"تم رفض الاتفاقية: {instance.title}",
-                action_url=_safe_url('agreement_detail', pk=instance.pk),
+                actor=actor,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=_safe_url('agreement_detail', pk=instance.pk) or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"agreement_rejected:{instance.pk}",
             )
     except Exception:
@@ -133,13 +162,20 @@ def on_contact_post_save(sender, instance, created, raw=False, **kwargs):
     try:
         url = _safe_url('contact_detail', pk=instance.pk)
         if created:
+            fmt = build_arabic_notification(
+                event_code='contacts.contact_created',
+                target_obj=instance,
+                actor=instance.created_by,
+            )
             NotificationService.emit(
                 event_code='contacts.contact_created',
                 target_obj=instance,
                 actor=instance.created_by,
-                title=f"إضافة جهة اتصال جديدة: {instance.name}",
-                body=f"تم تسجيل {instance.name} في النظام.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"contact_created:{instance.pk}",
             )
             return
@@ -148,23 +184,37 @@ def on_contact_post_save(sender, instance, created, raw=False, **kwargs):
         if not prev:
             return
         if prev.get('status') != instance.status:
+            fmt = build_arabic_notification(
+                event_code='contacts.contact_status_changed',
+                target_obj=instance,
+                extra={'old_status': prev.get('status'), 'new_status': instance.status},
+            )
             NotificationService.emit(
                 event_code='contacts.contact_status_changed',
                 target_obj=instance,
-                title=f"تغيير حالة جهة اتصال: {instance.name}",
-                body=f"تغيرت الحالة من {prev.get('status')} إلى {instance.status}.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"contact_status:{instance.pk}:{instance.status}:{timezone.now().date().isoformat()}",
             )
         prev_credit = Decimal(str(prev.get('credit_limit') or 0))
         curr_credit = Decimal(str(instance.credit_limit or 0))
         if prev_credit != curr_credit:
+            fmt = build_arabic_notification(
+                event_code='contacts.contact_credit_changed',
+                target_obj=instance,
+                extra={'old_limit': prev_credit, 'new_limit': curr_credit},
+            )
             NotificationService.emit(
                 event_code='contacts.contact_credit_changed',
                 target_obj=instance,
-                title=f"تعديل الحد الائتماني: {instance.name}",
-                body=f"تم تعديل الحد الائتماني من {prev_credit:,.2f} إلى {curr_credit:,.2f} ج.م.",
-                action_url=url,
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=url or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"contact_credit:{instance.pk}:{curr_credit}",
             )
     except Exception:
@@ -178,14 +228,22 @@ def on_contact_todo_created(sender, instance, created, raw=False, **kwargs):
         return
     try:
         contact = instance.contact
+        fmt = build_arabic_notification(
+            event_code='contacts.todo_assigned',
+            target_obj=contact,
+            actor=instance.created_by,
+            extra={'todo_title': instance.title, 'due_date': instance.due_date},
+        )
         NotificationService.emit(
             event_code='contacts.todo_assigned',
             target_obj=contact,
             actor=instance.created_by,
-            title=f"مهمة متابعة جديدة: {instance.title}",
-            body=f"عميل: {contact.name}" + (f" - استحقاق {instance.due_date}" if instance.due_date else ""),
-            action_url=_safe_url('contact_detail', pk=contact.pk) if contact else _safe_url('agenda'),
+            title=fmt['title'],
+            body=fmt['body'],
+            route_key=fmt['route_key'],
+            action_url=fmt['action_url'] if contact else _safe_url('agenda'),
             extra_owner_ids=[contact.created_by_id] if contact and contact.created_by_id else None,
+            metadata=fmt['metadata'],
             dedupe_key=f"contact_todo:{instance.pk}",
         )
     except Exception:
@@ -211,12 +269,19 @@ def on_product_post_save(sender, instance, created, raw=False, **kwargs):
     try:
         prev = getattr(instance, '_prev_retail_price', None)
         if prev is not None and Decimal(str(prev)) != Decimal(str(instance.retail_price or 0)):
+            fmt = build_arabic_notification(
+                event_code='catalog.product_price_changed',
+                target_obj=instance,
+                extra={'old_price': prev, 'new_price': instance.retail_price or 0},
+            )
             NotificationService.emit(
                 event_code='catalog.product_price_changed',
                 target_obj=instance,
-                title=f"تعديل سعر المنتج: {instance.name}",
-                body=f"تغير سعر البيع من {Decimal(str(prev)):,.2f} إلى {Decimal(str(instance.retail_price or 0)):,.2f} ج.م.",
-                action_url=_safe_url('product_detail', pk=instance.pk),
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=_safe_url('product_detail', pk=instance.pk) or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"product_price:{instance.pk}:{instance.retail_price}",
             )
     except Exception:
@@ -244,14 +309,18 @@ def on_stock_post_save(sender, instance, created, raw=False, **kwargs):
         prev_qty = getattr(instance, '_prev_qty_on_hand', None)
         curr_qty = Decimal(str(instance.qty_on_hand or 0))
         if curr_qty <= threshold and (prev_qty is None or Decimal(str(prev_qty)) > threshold):
-            prod_name = instance.product.name if instance.product_id else ''
-            wh_name = instance.warehouse.name if instance.warehouse_id else ''
+            fmt = build_arabic_notification(
+                event_code='inventory.low_stock_alert',
+                target_obj=instance,
+            )
             NotificationService.emit(
                 event_code='inventory.low_stock_alert',
                 target_obj=instance,
-                title=f"تنبيه انخفاض رصيد: {prod_name}",
-                body=f"الرصيد الحالي للصنف '{prod_name}' في مخزن '{wh_name}' وصل إلى {curr_qty:,.0f} وحدة.",
-                action_url=_safe_url('inventory_stock_list'),
+                title=fmt['title'],
+                body=fmt['body'],
+                route_key=fmt['route_key'],
+                action_url=_safe_url('inventory_stock_list') or fmt['action_url'],
+                metadata=fmt['metadata'],
                 dedupe_key=f"low_stock:{instance.pk}:{timezone.now().date().isoformat()}",
             )
     except Exception:
@@ -264,14 +333,21 @@ def on_sales_target_saved(sender, instance, created, raw=False, **kwargs):
     if raw:
         return
     try:
+        fmt = build_arabic_notification(
+            event_code='reports.target_assigned',
+            target_obj=instance,
+            actor=instance.created_by,
+        )
         NotificationService.emit(
             event_code='reports.target_assigned',
             target_obj=instance,
             actor=instance.created_by,
-            title=f"تحديث هدف الأداء ({instance.month}/{instance.year})",
-            body=f"تم تحديد هدف مبيعات {instance.target_sales_amount:,.2f} ج.م وتحصيلات {instance.target_collections_amount:,.2f} ج.م وعدد {instance.target_visits_count} زيارة.",
-            action_url=_safe_url('performance_overview'),
+            title=fmt['title'],
+            body=fmt['body'],
+            route_key=fmt['route_key'],
+            action_url=_safe_url('performance_overview') or fmt['action_url'],
             extra_owner_ids=[instance.user_id] if instance.user_id else None,
+            metadata=fmt['metadata'],
             dedupe_key=f"sales_target:{instance.pk}:{instance.updated_at.strftime('%Y%m%d%H%M') if instance.updated_at else ''}",
         )
     except Exception:
@@ -283,14 +359,21 @@ def on_coaching_evaluation_created(sender, instance, created, raw=False, **kwarg
     if raw or not created:
         return
     try:
+        fmt = build_arabic_notification(
+            event_code='reports.coaching_evaluated',
+            target_obj=instance,
+            actor=instance.manager,
+        )
         NotificationService.emit(
             event_code='reports.coaching_evaluated',
             target_obj=instance,
             actor=instance.manager,
-            title=f"تسجيل تقييم كوتشينج ميداني جديد",
-            body=f"تم تسجيل تقييم كوتشينج بدرجة إجمالية {instance.overall_score} بتاريخ {instance.date}.",
-            action_url=_safe_url('performance_detailed'),
+            title=fmt['title'],
+            body=fmt['body'],
+            route_key=fmt['route_key'],
+            action_url=_safe_url('performance_detailed') or fmt['action_url'],
             extra_owner_ids=[instance.rep_id] if instance.rep_id else None,
+            metadata=fmt['metadata'],
             dedupe_key=f"coaching:{instance.pk}",
         )
     except Exception:

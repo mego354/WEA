@@ -61,6 +61,37 @@
             this._boundVisibilityHandler = null;
             this._nativePushInitialized = false;
             this._currentToken = null;
+            this._lastNavKey = '';
+            this._lastNavTime = 0;
+        }
+
+        _getOrCreateDeviceUid(meta = {}) {
+            const fromNative = String(meta.deviceUid || meta.device_uid || meta.installationId || meta.installation_id || '').trim();
+            if (fromNative) return fromNative.slice(0, 128);
+            const storageKey = 'wea_erp_device_uid_v1';
+            try {
+                let uid = global.localStorage.getItem(storageKey);
+                if (!uid) {
+                    uid = (global.crypto && typeof global.crypto.randomUUID === 'function')
+                        ? global.crypto.randomUUID()
+                        : ('dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));
+                    global.localStorage.setItem(storageKey, uid);
+                }
+                return uid;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        _handleUnauthorized(res) {
+            if (res && res.status === 401) {
+                this.stopPolling();
+                this.state.error = 'انتهت جلسة العمل، يرجى تسجيل الدخول مجدداً.';
+                this.state.authExpired = true;
+                this._notify();
+                return true;
+            }
+            return false;
         }
 
         subscribe(listener) {
@@ -82,7 +113,6 @@
                 'X-Skip-Global-Loader': '1',
             };
             if (isWrite) {
-                h['Content-Type': 'application/json'];
                 h['Content-Type'] = 'application/json';
                 const csrf = getCookie('csrftoken');
                 if (csrf) h['X-CSRFToken'] = csrf;
@@ -96,6 +126,7 @@
                 credentials: 'same-origin',
                 headers: this._headers(false),
             });
+            if (this._handleUnauthorized(res)) return 0;
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             this.state.unreadCount = Number(data.unread_count || 0);
@@ -115,6 +146,7 @@
                     credentials: 'same-origin',
                     headers: this._headers(false),
                 });
+                if (this._handleUnauthorized(res)) return null;
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 this.state.unreadCount = Number(data.unread_count || 0);
@@ -184,12 +216,13 @@
             platform = 'android',
             provider = 'fcm',
             deviceName = '',
+            deviceUid = '',
             appVersion = '',
             appId = '',
             permissionStatus = 'granted',
         }) {
             const cleanToken = String(deviceToken || '').trim();
-            if (!cleanToken) throw new Error('device_token is empty');
+            if (!cleanToken) throw new Error('رمز الجهاز (device_token) مطلوب.');
 
             const res = await fetch(`${this.apiBase}/devices/register/`, {
                 method: 'POST',
@@ -197,14 +230,16 @@
                 headers: this._headers(true),
                 body: JSON.stringify({
                     device_token: cleanToken,
+                    device_uid: deviceUid || this._getOrCreateDeviceUid(),
                     platform,
-                    provider,
+                    provider: provider || 'fcm',
                     device_name: deviceName,
                     app_version: appVersion,
                     app_id: appId,
                     permission_status: permissionStatus,
                 }),
             });
+            if (this._handleUnauthorized(res)) throw new Error('انتهت جلسة العمل.');
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 throw new Error(data.message || `HTTP ${res.status}`);
@@ -218,12 +253,13 @@
             return data;
         }
 
-        async unregisterDevice(deviceToken) {
+        async unregisterDevice(deviceToken, { keepalive = false } = {}) {
             const tok = String(deviceToken || this._currentToken || '').trim();
             if (!tok) return null;
             const res = await fetch(`${this.apiBase}/devices/unregister/`, {
                 method: 'POST',
                 credentials: 'same-origin',
+                keepalive: Boolean(keepalive),
                 headers: this._headers(true),
                 body: JSON.stringify({ device_token: tok }),
             });
@@ -280,10 +316,13 @@
             const platform = (global.Capacitor && typeof global.Capacitor.getPlatform === 'function')
                 ? global.Capacitor.getPlatform()
                 : (global.AndroidPush ? 'android' : 'ios');
-            const provider = platform === 'ios' ? 'apns' : 'fcm';
+            // Both Android and iOS use FCM tokens (Firebase Messaging bridges APNs -> FCM on iOS)
+            const provider = 'fcm';
 
             // Bind logout links/forms to unregister device before session logout
             this._bindLogoutUnregister();
+            // Consume any cold-start pending deep link passed by the native wrapper
+            this.consumePendingDeepLink();
 
             const PushPlugin = global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.PushNotifications;
             if (!PushPlugin) {
@@ -302,6 +341,7 @@
                     try {
                         await this.registerDevice({
                             deviceToken: tokenVal,
+                            deviceUid: this._getOrCreateDeviceUid(meta),
                             platform,
                             provider,
                             deviceName: meta.deviceName || navigator.userAgent.slice(0, 80),
@@ -332,8 +372,10 @@
                 PushPlugin.addListener('pushNotificationActionPerformed', (action) => {
                     const notif = (action && action.notification) ? action.notification : (action || {});
                     const data = notif.data || {};
-                    const rawTarget = data.target_url || data.action_url || data.open_url || data.url || '';
-                    console.info('[ERPNotifications Push] Notification tap action received, target_url=', rawTarget);
+                    // Prefer server-validated open_url (/notifications/<id>/open/) so auth, mark-read,
+                    // RBAC, DataScope, and deleted-record fallback are always enforced server-side.
+                    const rawTarget = data.open_url || data.target_url || data.action_url || data.url || '';
+                    console.info('[ERPNotifications Push] Notification tap action received, target=', rawTarget);
                     this.navigateToDeepLink(rawTarget, data.notification_id);
                 });
 
@@ -358,9 +400,41 @@
             }
         }
 
+        consumePendingDeepLink() {
+            try {
+                let pending = null;
+                if (global.__ERP_PENDING_DEEP_LINK__) {
+                    pending = global.__ERP_PENDING_DEEP_LINK__;
+                    global.__ERP_PENDING_DEEP_LINK__ = null;
+                } else if (global.AndroidPush && typeof global.AndroidPush.consumePendingDeepLink === 'function') {
+                    const raw = global.AndroidPush.consumePendingDeepLink();
+                    if (raw) {
+                        try { pending = JSON.parse(raw); } catch (e) { pending = { open_url: String(raw) }; }
+                    }
+                } else if (global.sessionStorage) {
+                    const stored = global.sessionStorage.getItem('erp_pending_deep_link');
+                    if (stored) {
+                        global.sessionStorage.removeItem('erp_pending_deep_link');
+                        try { pending = JSON.parse(stored); } catch (e) { pending = { open_url: stored }; }
+                    }
+                }
+                if (pending) {
+                    const url = typeof pending === 'string'
+                        ? pending
+                        : (pending.open_url || pending.target_url || pending.action_url || '');
+                    const notifId = typeof pending === 'object' ? (pending.notification_id || '') : '';
+                    if (url || notifId) {
+                        this.navigateToDeepLink(url, notifId);
+                    }
+                }
+            } catch (e) {}
+        }
+
         navigateToDeepLink(rawTargetUrl, notificationId) {
             let target = String(rawTargetUrl || '').trim();
-            if (!target && notificationId && /^\d+$/.test(String(notificationId))) {
+            const hasNotifId = Boolean(notificationId && /^\d+$/.test(String(notificationId)));
+            // Prefer canonical server gatekeeper (/notifications/<id>/open/) when notificationId is present
+            if (hasNotifId && (!target || !target.includes(`/notifications/${notificationId}/open/`))) {
                 target = `/notifications/${notificationId}/open/`;
             }
             if (!target) {
@@ -370,9 +444,15 @@
                 console.warn('[ERPNotifications Push] Deep-link rejected (untrusted origin or scheme):', target);
                 return false;
             }
-            if (notificationId && /^\d+$/.test(String(notificationId))) {
-                this.markAsRead(notificationId).catch(() => {});
+            // Prevent duplicate rapid navigations (e.g., cold-start + intent replay within 1.5s)
+            const navKey = `${target}|${notificationId || ''}`;
+            const now = Date.now();
+            if (this._lastNavKey === navKey && (now - this._lastNavTime) < 1500) {
+                return false;
             }
+            this._lastNavKey = navKey;
+            this._lastNavTime = now;
+
             const resolved = new URL(target, global.location.origin).toString();
             if (global.location.href !== resolved) {
                 global.location.href = resolved;
@@ -385,7 +465,7 @@
             const data = notification.data || {};
             const title = notification.title || data.title || 'إشعار جديد';
             const body = notification.body || data.body || '';
-            const targetUrl = data.target_url || data.action_url || data.open_url || '/notifications/';
+            const targetUrl = data.open_url || data.target_url || data.action_url || '/notifications/';
             const notifId = data.notification_id || notification.id || '';
 
             // Deduplicate foreground banner if native bridge already showed one for the same notification ID within 2s
@@ -472,18 +552,31 @@
         }
 
         _bindLogoutUnregister() {
+            const triggerUnregister = () => {
+                try {
+                    if (global.AndroidPush && typeof global.AndroidPush.unregisterDevice === 'function') {
+                        global.AndroidPush.unregisterDevice();
+                    }
+                    if (this._currentToken) {
+                        this.unregisterDevice(this._currentToken, { keepalive: true }).catch(() => {});
+                    }
+                } catch (err) {}
+            };
+
             document.addEventListener('click', (e) => {
                 let a = e.target;
                 while (a && a.tagName !== 'A') a = a.parentNode;
                 if (!a || !a.href) return;
                 if (a.href.includes('/logout/') || a.href.includes('/auth/logout/')) {
-                    try {
-                        if (global.AndroidPush && typeof global.AndroidPush.unregisterDevice === 'function') {
-                            global.AndroidPush.unregisterDevice();
-                        } else if (this._currentToken) {
-                            this.unregisterDevice(this._currentToken);
-                        }
-                    } catch (err) {}
+                    triggerUnregister();
+                }
+            }, true);
+
+            document.addEventListener('submit', (e) => {
+                const form = e.target;
+                if (!form || !form.action) return;
+                if (form.action.includes('/logout/') || form.action.includes('/auth/logout/')) {
+                    triggerUnregister();
                 }
             }, true);
         }
