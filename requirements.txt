@@ -41,6 +41,9 @@ certifi==2025.11.12
 idna==2.10
 charset-normalizer==3.4.2
 
+# Firebase Cloud Messaging (FCM HTTP v1 OAuth2 Service Account Auth)
+google-auth>=2.35.0
+
 # Static Assets & Production WSGI
 whitenoise==6.7.0
 gunicorn==21.2.0

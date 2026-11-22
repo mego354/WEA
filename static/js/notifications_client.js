@@ -310,6 +310,7 @@
             );
             if (!isCapNative) return;
 
+            this._nativePushInitialized = true;
             this.state.nativePush.isNative = true;
 
             const platform = (global.Capacitor && typeof global.Capacitor.getPlatform === 'function')
@@ -318,52 +319,16 @@
             // Both Android and iOS use FCM tokens (Firebase Messaging bridges APNs -> FCM on iOS)
             const provider = 'fcm';
 
-            // Bind logout links/forms & consume any cold-start pending deep link once
-            if (!this._nativeAuxBound) {
-                this._nativeAuxBound = true;
-                this._bindLogoutUnregister();
-                this.consumePendingDeepLink();
-            }
-
-            // Fallback: if AndroidPush JS interface is already ready with a cached FCM token
-            // before onPageFinished injects Capacitor.Plugins.PushNotifications, register immediately.
-            if (global.AndroidPush && typeof global.AndroidPush.getCachedToken === 'function') {
-                try {
-                    const cachedTok = String(global.AndroidPush.getCachedToken() || '').trim();
-                    if (cachedTok && cachedTok !== this._currentToken) {
-                        let meta = {};
-                        if (typeof global.AndroidPush.getDeviceMetadataJson === 'function') {
-                            try { meta = JSON.parse(global.AndroidPush.getDeviceMetadataJson() || '{}'); } catch (e) {}
-                        }
-                        this.registerDevice({
-                            deviceToken: cachedTok,
-                            deviceUid: this._getOrCreateDeviceUid(meta),
-                            platform,
-                            provider,
-                            deviceName: meta.deviceName || navigator.userAgent.slice(0, 80),
-                            appVersion: meta.appVersion || '1.0.0',
-                            appId: meta.appId || '',
-                            permissionStatus: (typeof global.AndroidPush.checkPermissions === 'function')
-                                ? global.AndroidPush.checkPermissions()
-                                : 'granted',
-                        }).catch((regErr) => {
-                            this.state.nativePush.lastError = regErr.message || String(regErr);
-                            this._notify();
-                        });
-                    }
-                } catch (e) {}
-            }
+            // Bind logout links/forms to unregister device before session logout
+            this._bindLogoutUnregister();
+            // Consume any cold-start pending deep link passed by the native wrapper
+            this.consumePendingDeepLink();
 
             const PushPlugin = global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.PushNotifications;
             if (!PushPlugin) {
-                // Do NOT lock _nativePushInitialized here: NativePushManager.onPageFinished()
-                // injects Capacitor.Plugins.PushNotifications after DOMContentLoaded and re-invokes this method.
-                console.warn('[ERPNotifications Push] Waiting for Capacitor.Plugins.PushNotifications bridge injection...');
+                console.warn('[ERPNotifications Push] Native platform detected but Capacitor.Plugins.PushNotifications is unavailable');
                 return;
             }
-
-            this._nativePushInitialized = true;
-            this.state.nativePush.isNative = true;
 
             try {
                 PushPlugin.addListener('registration', async (tokenObj) => {
