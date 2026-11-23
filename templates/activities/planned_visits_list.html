@@ -115,7 +115,7 @@
                                 </div>
 
                                 <!-- Plan-Level Approval Actions -->
-                                {% if pl_group.can_approve and pl_group.plan and pl_group.approval_status != 'approved' %}
+                                {% if pl_group.can_approve and pl_group.plan and pl_group.approval_status == 'pending' %}
                                 <div class="flex items-center gap-1.5">
                                     <form method="POST" action="{% url 'plan_action' pl_group.plan.pk 'approve' %}" class="inline">
                                         {% csrf_token %}
@@ -180,8 +180,8 @@
                                                 <span class="material-symbols-outlined text-sm">{% if it.visit.status == 'finished' %}visibility{% else %}open_in_new{% endif %}</span>
                                                 <span>زيارة #{{ it.visit.serial_num }}</span>
                                             </a>
-                                            {% if it.visit.status == 'planned' %}
-                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }}؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                            {% if it.can_delete_item %}
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }} من الخطة؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف من الخطة">
                                                 <span class="material-symbols-outlined text-base">delete</span>
                                             </button>
                                             {% endif %}
@@ -190,9 +190,11 @@
                                                 <span class="material-symbols-outlined text-sm">directions_walk</span>
                                                 <span>تنفيذ الزيارة</span>
                                             </a>
-                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }}؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف">
+                                            {% if it.can_delete_item %}
+                                            <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'planned_visit_item_delete' it.pk %}', title: 'حذف الزيارة المخططة', itemName: '{{ it.contact.name|escapejs }}', message: 'هل أنت متأكد من رغبتك في حذف هذه الزيارة المخططة للعميل {{ it.contact.name|escapejs }} من الخطة؟' })" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="حذف من الخطة">
                                                 <span class="material-symbols-outlined text-base">delete</span>
                                             </button>
+                                            {% endif %}
                                         {% endif %}
                                     </div>
                                 </div>

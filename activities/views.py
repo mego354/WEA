@@ -1021,6 +1021,8 @@ def planned_visits_list(request):
         6: 'الأحد'
     }
 
+    can_manage_planned = has_perm_or_admin(request.user, 'activities:planned/manage')
+
     while current_date <= end_date:
         day_plans = plans_by_date.get(current_date, [])
         plan_groups = []
@@ -1029,9 +1031,22 @@ def planned_visits_list(request):
 
         for pl in day_plans:
             pl_items = list(pl.planned_items.all().order_by('order', 'id'))
+            if not pl_items:
+                continue
             all_day_items.extend(pl_items)
             for it in pl_items:
                 covered_item_ids.add(it.id)
+                is_pending_approval = (
+                    (it.visit.approval_status == 'pending')
+                    if it.visit else (pl.approval_status == 'pending')
+                )
+                is_unstarted = (not it.visit) or (it.visit.status == 'planned')
+                it.can_delete_item = (
+                    can_manage_planned
+                    and is_unstarted
+                    and (not is_pending_approval)
+                    and can_user_access_object(request.user, it, 'manage')
+                )
             can_approve_pl = can_manage_approvals(request.user) and can_user_access_object(request.user, pl, 'approve')
             plan_groups.append({
                 'plan': pl,
@@ -1050,6 +1065,14 @@ def planned_visits_list(request):
         for pvd in legacy_days:
             for it in pvd.items.all():
                 if it.id not in covered_item_ids:
+                    is_pending_approval = bool(it.visit and it.visit.approval_status == 'pending')
+                    is_unstarted = (not it.visit) or (it.visit.status == 'planned')
+                    it.can_delete_item = (
+                        can_manage_planned
+                        and is_unstarted
+                        and (not is_pending_approval)
+                        and can_user_access_object(request.user, it, 'manage')
+                    )
                     unlinked_items.append(it)
                     all_day_items.append(it)
 
@@ -1937,22 +1960,43 @@ def planned_visits_bulk_add(request):
 
 @require_permission('activities:planned/manage')
 def planned_visit_item_delete(request, pk):
-    """Remove a planned visit item (and its unstarted linked visit if any)."""
-    item = get_object_or_404(PlannedVisitItem.objects.select_related('plan_day__assignee', 'contact', 'visit'), pk=pk)
+    """Remove a planned visit item (and its unstarted linked visit if any) from the plan."""
+    item = get_object_or_404(
+        PlannedVisitItem.objects.select_related('plan', 'plan_day__assignee', 'contact', 'visit'),
+        pk=pk
+    )
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
     if not can_user_access_object(request.user, item, 'manage'):
         return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب أو منطقة خارج نطاقك.")
 
     if item.visit and item.visit.status in ('started', 'finished'):
-        messages.error(request, f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها بدأت أو انتهت بالفعل.")
+        msg = f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها بدأت أو انتهت بالفعل."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{item.plan_day.date.strftime('%Y-%m-%d')}")
+
+    is_pending_approval = (
+        (item.visit and item.visit.approval_status == 'pending')
+        or (not item.visit and item.plan and item.plan.approval_status == 'pending')
+    )
+    if is_pending_approval:
+        msg = f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها قيد الاعتماد حالياً."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=400)
+        messages.error(request, msg)
         return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{item.plan_day.date.strftime('%Y-%m-%d')}")
 
     contact_name = item.contact.name
     date_str = item.plan_day.date.strftime('%Y-%m-%d')
     with transaction.atomic():
         linked_visit = item.visit
+        parent_plan = item.plan
         item.delete()
         if linked_visit and linked_visit.status == 'planned':
             linked_visit.delete()
+        if parent_plan and not parent_plan.planned_items.exists() and not parent_plan.visits.exists():
+            parent_plan.delete()
         AuditLogService.log(
             action='delete',
             action_type='PLANNED_VISIT_ITEM_DELETED',
@@ -1962,7 +2006,10 @@ def planned_visit_item_delete(request, pk):
             record_id=pk,
             object_repr=f"PlannedVisitItem #{pk} ({contact_name} - {date_str})",
         )
-    messages.success(request, f"تم حذف الزيارة المخططة للعميل {contact_name}.")
+    msg = f"تم حذف الزيارة المخططة للعميل {contact_name} من الخطة."
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': msg})
+    messages.success(request, msg)
     return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{date_str}")
 
 
@@ -3505,6 +3552,13 @@ def plan_action(request, pk, action):
             messages.error(request, msg)
             return get_redirect()
 
+        if plan.approval_status != 'pending':
+            msg = "تم اتخاذ قرار الاعتماد لهذه الخطة مسبقاً ولا يمكن تغييره."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.warning(request, msg)
+            return get_redirect()
+
         notes = request.POST.get('approval_notes', '').strip() or request.POST.get('reason', '').strip()
 
         with transaction.atomic():
@@ -3724,6 +3778,16 @@ def visit_action(request, pk, action):
             if is_ajax:
                 return JsonResponse({'success': False, 'message': msg}, status=403)
             messages.error(request, msg)
+            return get_redirect()
+
+        if visit.approval_status != 'pending':
+            if visit.approval_status == 'approved':
+                msg = "لا يمكن تعديل قرار الاعتماد لأن الزيارة معتمدة بالفعل."
+            else:
+                msg = "تم رفض هذه الزيارة مسبقاً. يجب إعادة تقديمها من المندوب قبل اتخاذ قرار اعتماد جديد."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.warning(request, msg)
             return get_redirect()
 
         notes = request.POST.get('approval_notes', '').strip() or request.POST.get('reason', '').strip()

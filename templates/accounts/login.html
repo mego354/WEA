@@ -57,7 +57,7 @@
             </div>
             {% endif %}
 
-            <form method="POST" action="{% url 'login' %}" class="space-y-5">
+            <form id="login-form" method="POST" action="{{ request.path }}" class="space-y-5">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.GET.next }}">
 
@@ -87,9 +87,9 @@
                 </div>
 
                 <!-- Submit Button -->
-                <button type="submit"
-                        class="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-700 text-white font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all flex items-center justify-center gap-2 text-sm mt-2 min-h-[48px]">
-                    <span>تسجيل الدخول</span>
+                <button id="login-submit-btn" type="submit"
+                        class="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-brand-500/25 transition-all flex items-center justify-center gap-2 text-sm mt-2 min-h-[48px]">
+                    <span id="login-submit-label">تسجيل الدخول</span>
                     <span class="material-symbols-outlined text-base">login</span>
                 </button>
             </form>
@@ -112,6 +112,31 @@
                 eyeIcon.innerText = 'visibility';
             }
         }
+
+        // Prevent stale CSRF tokens when restored from browser Back/Forward cache (bfcache)
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
+        // Prevent duplicate login submissions that cause post-rotation CSRF 403 errors
+        (function () {
+            const form = document.getElementById('login-form');
+            const btn = document.getElementById('login-submit-btn');
+            const label = document.getElementById('login-submit-label');
+            if (!form || !btn) return;
+            let submitted = false;
+            form.addEventListener('submit', function (e) {
+                if (submitted) {
+                    e.preventDefault();
+                    return;
+                }
+                submitted = true;
+                btn.disabled = true;
+                if (label) label.textContent = 'جاري تسجيل الدخول...';
+            });
+        })();
     </script>
 </body>
 </html>

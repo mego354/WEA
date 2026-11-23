@@ -552,8 +552,11 @@
         }
 
         _bindLogoutUnregister() {
+            if (this._logoutBound) return;
+            this._logoutBound = true;
             const triggerUnregister = () => {
                 try {
+                    this.stopPolling();
                     if (global.AndroidPush && typeof global.AndroidPush.unregisterDevice === 'function') {
                         global.AndroidPush.unregisterDevice();
                     }
@@ -596,6 +599,7 @@
                 }
             };
             document.addEventListener('visibilitychange', this._boundVisibilityHandler);
+            this._bindLogoutUnregister();
             this.initCapacitorNativePush().catch(() => {});
         }
 

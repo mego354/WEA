@@ -99,8 +99,20 @@ When deploying to public production:
 
 ---
 
-## 6. Backup & Recovery
+## 6. Backup, Recovery & SQLite Safety on PythonAnywhere
 
+- **CRITICAL — Never overwrite a live SQLite database with `git pull`:**
+  - `db.sqlite3` is a live binary database. Pulling a modified `db.sqlite3` from Git while PythonAnywhere WSGI workers are running can corrupt the database (`database disk image is malformed`) or overwrite production data.
+  - Keep `DATABASES['default']['OPTIONS']['timeout'] = 20` and leave SQLite in its default `DELETE` journal mode (`synchronous = FULL`). **Do not enable `WAL` mode on PythonAnywhere's networked filesystem (NFS).**
+  - Before any deployment or schema migration on PythonAnywhere:
+    1. Create an online consistent backup outside the repository:
+       ```bash
+       sqlite3 /home/<user>/ERP/db.sqlite3 ".backup '/home/<user>/backups/db_backup_$(date +%Y%m%d_%H%M%S).sqlite3'"
+       sqlite3 /home/<user>/backups/db_backup_<timestamp>.sqlite3 "PRAGMA integrity_check;"
+       ```
+    2. Never commit local `db.sqlite3` changes when pushing code updates. If untrack-ing `db.sqlite3` from Git in the future, always back up the production `db.sqlite3` outside the repo first, run `git pull`, restore the backup if Git removed the tracked file, run `python manage.py migrate`, and then reload the web app.
+- **HTTPS CSRF Configuration:**
+  - Always set `CSRF_TRUSTED_ORIGINS=https://<your-domain>` (e.g. `https://projecting.pythonanywhere.com`) in production `.env` / WSGI environment alongside `ALLOWED_HOSTS`.
 - **SQLite Database Backup**:
   ```bash
   sqlite3 db.sqlite3 ".backup 'backups/db_backup_$(date +%Y%m%d_%H%M%S).sqlite3'"

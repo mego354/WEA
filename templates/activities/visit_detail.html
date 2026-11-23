@@ -74,8 +74,7 @@
 
         <!-- Top Header Action Buttons -->
         <div class="flex flex-wrap items-center gap-2">
-            {% if can_approve %}
-                {% if visit.approval_status != 'approved' %}
+            {% if can_approve and visit.approval_status == 'pending' %}
                 <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="inline">
                     {% csrf_token %}
                     <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
@@ -83,14 +82,11 @@
                         <span>اعتماد الزيارة</span>
                     </button>
                 </form>
-                {% endif %}
 
-                {% if visit.approval_status != 'disapproved' and visit.approval_status != 'approved' %}
                 <button type="button" onclick="openDisapproveModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
                     <span class="material-symbols-outlined text-base">cancel</span>
                     <span>رفض الزيارة</span>
                 </button>
-                {% endif %}
             {% endif %}
 
             <!-- Start Visit Action (planned + approved only) -->
@@ -180,7 +176,7 @@
                 </p>
             </div>
         </div>
-        {% if can_approve %}
+        {% if can_approve and visit.approval_status == 'pending' %}
         <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="shrink-0">
             {% csrf_token %}
             <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">
@@ -214,7 +210,7 @@
                 {% endif %}
             </div>
         </div>
-        {% if can_approve %}
+        {% if can_approve and visit.approval_status == 'pending' %}
         <form method="POST" action="{% url 'visit_action' visit.pk 'approve' %}" class="shrink-0">
             {% csrf_token %}
             <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors min-h-[44px]">

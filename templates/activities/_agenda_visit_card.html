@@ -64,7 +64,7 @@
         {% endif %}
 
         <div class="flex items-center gap-2">
-            {% if item.can_approve and item.visit and item.visit.status == 'finished' and item.approval_status != 'approved' %}
+            {% if item.can_approve and item.visit and item.visit.status == 'finished' and item.approval_status == 'pending' %}
             <!-- Quick Approve Form -->
             <form method="POST" action="{% url 'visit_action' item.visit.id 'approve' %}" class="inline">
                 {% csrf_token %}

@@ -4,6 +4,9 @@ from django.db import models
 from django.db.models import Q, Count
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.conf import settings as django_settings
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import messages
@@ -49,9 +52,19 @@ def _get_client_ip(request):
     return ip
 
 
+def _apply_no_store_headers(response):
+    """Prevent browser, proxy, and WebView bfcache from serving stale auth/CSRF pages."""
+    response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
+
+
+@never_cache
+@ensure_csrf_cookie
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('home')
+        return _apply_no_store_headers(redirect('home'))
 
     if request.method == 'POST':
         from django.core.cache import cache
@@ -72,7 +85,7 @@ def login_view(request):
                 request=request
             )
             messages.error(request, "تم تجاوز الحد المسموح لمحاولات تسجيل الدخول. يرجى المحاولة بعد 5 دقائق.")
-            return render(request, 'accounts/login.html', status=429)
+            return _apply_no_store_headers(render(request, 'accounts/login.html', status=429))
 
         # 1. Try direct authenticate by username or exact email
         user = authenticate(request, username=login_input, password=password)
@@ -105,7 +118,7 @@ def login_view(request):
                     request=request
                 )
                 messages.error(request, "هذا الحساب معطل حالياً. يرجى التواصل مع إدارة النظام.")
-                return render(request, 'accounts/login.html')
+                return _apply_no_store_headers(render(request, 'accounts/login.html'))
             cache.delete(throttle_key)
             login(request, user)
             AuditLogService.log(
@@ -122,8 +135,8 @@ def login_view(request):
             if raw_next and url_has_allowed_host_and_scheme(
                 raw_next, allowed_hosts={request.get_host()}, require_https=request.is_secure()
             ):
-                return redirect(raw_next)
-            return redirect('home')
+                return _apply_no_store_headers(redirect(raw_next))
+            return _apply_no_store_headers(redirect('home'))
         else:
             cache.set(throttle_key, fail_count + 1, timeout=300)
             AuditLogService.log(
@@ -135,9 +148,10 @@ def login_view(request):
             )
             messages.error(request, "البريد الإلكتروني أو كلمة المرور غير صحيحة.")
 
-    return render(request, 'accounts/login.html')
+    return _apply_no_store_headers(render(request, 'accounts/login.html'))
 
 
+@never_cache
 def logout_view(request):
     if request.user.is_authenticated:
         device_token = (
@@ -162,7 +176,7 @@ def logout_view(request):
         )
     logout(request)
     messages.info(request, "تم تسجيل الخروج بنجاح.")
-    return redirect('login')
+    return _apply_no_store_headers(redirect(getattr(django_settings, 'LOGIN_URL', '/auth/login/')))
 
 
 # ==========================================

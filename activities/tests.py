@@ -6768,3 +6768,213 @@ class VisitGpsIntegrityAndPermissionTests(TestCase):
         self.assertEqual(res_ag.context['total_count'], 1)
 
 
+class PlannedVisitDeletionAndApprovalStateTests(TestCase):
+    """
+    Regression tests for:
+    1. Deleting a planned visit from /planned-visits/ is blocked while pending approval,
+       and when allowed (approved/disapproved & unstarted), removes the item, linked visit,
+       and empty parent VisitPlan.
+    2. Declining (disapproving) a VisitPlan or Visit locks further approve/decline actions
+       and hides approve/decline buttons across planned_visits_list, agenda, visits_list,
+       and visit_detail until a rejected visit is explicitly resubmitted.
+    """
+
+    def setUp(self):
+        self.cairo = Area.objects.create(name='القاهرة', code='CAI-PVD', area_type='governorate')
+        self.nasr = Area.objects.create(name='مدينة نصر', code='NSR-PVD', area_type='subarea', parent=self.cairo)
+        self.contact = Contact.objects.create(
+            name='د. أحمد مخطط', code='DR-PVD-1', is_customer=True, account_type='Clinic',
+            area=self.cairo, brick=self.nasr, status='active'
+        )
+        self.rep_role = Role.objects.get(name='medical_rep')
+        self.mgr_role = Role.objects.get(name='manager')
+
+        self.rep = User.objects.create_user(
+            username='rep_pvd', email='rep_pvd@wea.com', password='Password123!',
+            role=self.rep_role
+        )
+        self.rep.assigned_areas.add(self.nasr)
+
+        self.mgr = User.objects.create_user(
+            username='mgr_pvd', email='mgr_pvd@wea.com', password='Password123!',
+            role=self.mgr_role
+        )
+        self.mgr.assigned_areas.add(self.cairo)
+
+        self.template = VisitTemplate.objects.create(name='زيارة عيادة')
+
+    def test_planned_visit_delete_blocked_when_pending_and_cleans_empty_plan_when_allowed(self):
+        from activities.models import VisitPlan
+        today = timezone.localdate()
+        plan = VisitPlan.objects.create(
+            date=today, assignee=self.rep, created_by=self.rep, approval_status='pending'
+        )
+        pday = PlannedVisitDay.objects.create(assignee=self.rep, date=today, created_by=self.rep)
+        visit = Visit.objects.create(
+            contact=self.contact, template=self.template, owner=self.rep, created_by=self.rep,
+            date=today, status='planned', is_planned=True, plan=plan, approval_status='pending'
+        )
+        item = PlannedVisitItem.objects.create(
+            plan=plan, plan_day=pday, order=1, contact=self.contact, template=self.template, visit=visit
+        )
+
+        # 1. While pending approval, delete button is hidden in /planned-visits/ and POST delete is blocked (400)
+        self.client.force_login(self.mgr)
+        list_res = self.client.get(reverse('planned_visits_list'))
+        self.assertEqual(list_res.status_code, 200)
+        self.assertNotContains(list_res, reverse('planned_visit_item_delete', args=[item.pk]))
+
+        del_pending = self.client.post(
+            reverse('planned_visit_item_delete', args=[item.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(del_pending.status_code, 400)
+        self.assertTrue(PlannedVisitItem.objects.filter(pk=item.pk).exists())
+        self.assertTrue(Visit.objects.filter(pk=visit.pk).exists())
+
+        # 2. Once approved (or disapproved) and still unstarted, delete button appears and removes item, visit, and empty plan
+        plan.approval_status = 'approved'
+        plan.save(update_fields=['approval_status'])
+        visit.approval_status = 'approved'
+        visit.save(update_fields=['approval_status'])
+
+        list_res_ok = self.client.get(reverse('planned_visits_list'))
+        self.assertEqual(list_res_ok.status_code, 200)
+        self.assertContains(list_res_ok, reverse('planned_visit_item_delete', args=[item.pk]))
+
+        del_ok = self.client.post(
+            reverse('planned_visit_item_delete', args=[item.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(del_ok.status_code, 200)
+        self.assertTrue(del_ok.json()['success'])
+        self.assertFalse(PlannedVisitItem.objects.filter(pk=item.pk).exists())
+        self.assertFalse(Visit.objects.filter(pk=visit.pk).exists())
+        self.assertFalse(VisitPlan.objects.filter(pk=plan.pk).exists())
+
+    def test_declined_plan_hides_buttons_and_blocks_redecision(self):
+        from activities.models import VisitPlan
+        today = timezone.localdate()
+        plan = VisitPlan.objects.create(
+            date=today, assignee=self.rep, created_by=self.rep, approval_status='pending'
+        )
+        pday = PlannedVisitDay.objects.create(assignee=self.rep, date=today, created_by=self.rep)
+        visit = Visit.objects.create(
+            contact=self.contact, template=self.template, owner=self.rep, created_by=self.rep,
+            date=today, status='planned', is_planned=True, plan=plan, approval_status='pending'
+        )
+        PlannedVisitItem.objects.create(
+            plan=plan, plan_day=pday, order=1, contact=self.contact, template=self.template, visit=visit
+        )
+
+        self.client.force_login(self.mgr)
+
+        # Before decision: approve/decline buttons are visible on /planned-visits/
+        res_before = self.client.get(reverse('planned_visits_list'))
+        self.assertEqual(res_before.status_code, 200)
+        self.assertContains(res_before, reverse('plan_action', args=[plan.pk, 'approve']))
+        self.assertContains(res_before, reverse('plan_action', args=[plan.pk, 'disapprove']))
+
+        # Decline plan
+        res_decline = self.client.post(
+            reverse('plan_action', args=[plan.pk, 'disapprove']),
+            {'reason': 'خطة غير مناسبة'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_decline.status_code, 200)
+        plan.refresh_from_db()
+        visit.refresh_from_db()
+        self.assertEqual(plan.approval_status, 'disapproved')
+        self.assertEqual(visit.approval_status, 'disapproved')
+
+        # After decline: buttons are hidden on /planned-visits/ and /agenda/
+        res_after = self.client.get(reverse('planned_visits_list'))
+        self.assertNotContains(res_after, reverse('plan_action', args=[plan.pk, 'approve']))
+        self.assertNotContains(res_after, reverse('plan_action', args=[plan.pk, 'disapprove']))
+
+        res_agenda = self.client.get(reverse('agenda'))
+        self.assertNotContains(res_agenda, reverse('plan_action', args=[plan.pk, 'approve']))
+        self.assertNotContains(res_agenda, reverse('plan_action', args=[plan.pk, 'disapprove']))
+
+        # Backend rejects subsequent approve or disapprove on the already-decided plan
+        res_reapprove = self.client.post(
+            reverse('plan_action', args=[plan.pk, 'approve']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_reapprove.status_code, 400)
+        plan.refresh_from_db()
+        self.assertEqual(plan.approval_status, 'disapproved')
+
+        res_redecline = self.client.post(
+            reverse('plan_action', args=[plan.pk, 'disapprove']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_redecline.status_code, 400)
+
+    def test_declined_visit_hides_buttons_and_blocks_redecision_until_resubmitted(self):
+        today = timezone.localdate()
+        visit = Visit.objects.create(
+            contact=self.contact, template=self.template, owner=self.rep, created_by=self.rep,
+            date=today, status='planned', is_planned=False, approval_status='pending'
+        )
+
+        self.client.force_login(self.mgr)
+
+        # Decline visit
+        res_decline = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'disapprove']),
+            {'reason': 'بيانات ناقصة'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_decline.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'disapproved')
+
+        # Detail & list pages must NOT show approve or decline buttons
+        detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
+        self.assertEqual(detail_res.status_code, 200)
+        self.assertNotContains(detail_res, reverse('visit_action', args=[visit.pk, 'approve']))
+        self.assertNotContains(detail_res, reverse('visit_action', args=[visit.pk, 'disapprove']))
+        self.assertNotContains(detail_res, 'onclick="openDisapproveModal()"')
+
+        list_res = self.client.get(reverse('visits_list'))
+        self.assertEqual(list_res.status_code, 200)
+        self.assertNotContains(list_res, reverse('visit_action', args=[visit.pk, 'approve']))
+
+        # Backend blocks approving or re-declining an already declined visit
+        res_reapprove = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'approve']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_reapprove.status_code, 400)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'disapproved')
+
+        res_redecline = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'disapprove']),
+            {'reason': 'رفض مكرر'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_redecline.status_code, 400)
+
+        # Rep resubmits -> returns to pending -> manager can now approve
+        self.client.force_login(self.rep)
+        res_resubmit = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'resubmit']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_resubmit.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'pending')
+
+        self.client.force_login(self.mgr)
+        res_approve = self.client.post(
+            reverse('visit_action', args=[visit.pk, 'approve']),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_approve.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.approval_status, 'approved')
+
+
+

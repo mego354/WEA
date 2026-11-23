@@ -105,10 +105,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
+# Note: SQLite uses default DELETE journal mode (safe on PythonAnywhere NFS; do NOT enable WAL on NFS).
+# Busy timeout is raised to 20s to avoid transient lock errors under concurrent WSGI requests.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 20,
+        },
     }
 }
 

@@ -3341,3 +3341,125 @@ class AuditSecurityHardeningRegressionTests(TestCase):
             full_path = os.path.join(settings.BASE_DIR, rel_path)
             self.assertFalse(os.path.exists(full_path), f"Obsolete template should not exist: {rel_path}")
 
+
+class AuthLoginCsrfAndSessionSafetyTests(TestCase):
+    """
+    Verifies login/logout CSRF protection, no-store cache headers, bfcache/double-submit
+    protections, repeated rapid account switching, session isolation, and SQLite timeout safety.
+    """
+
+    def setUp(self):
+        self.rep_role, _ = Role.objects.get_or_create(
+            name=Role.ROLE_REP,
+            defaults={'display_name': 'مندوب مبيعات', 'is_rep': True, 'is_system': True, 'is_active': True}
+        )
+        self.user_a = User.objects.create_user(
+            username='csrf_user_a', email='csrf_a@wea.com', password='Password123!',
+            name='User A', role=self.rep_role
+        )
+        self.user_b = User.objects.create_user(
+            username='csrf_user_b', email='csrf_b@wea.com', password='Password123!',
+            name='User B', role=self.rep_role
+        )
+
+    @staticmethod
+    def _extract_csrf_token(html: str) -> str:
+        import re
+        m = re.search(r'name="csrfmiddlewaretoken"\s+value="([^"]+)"', html)
+        return m.group(1) if m else ''
+
+    def test_login_and_logout_headers_and_canonical_redirect(self):
+        client = Client(enforce_csrf_checks=True)
+        resp = client.get('/auth/login/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('no-store', resp.get('Cache-Control', ''))
+        self.assertEqual(resp.get('Pragma'), 'no-cache')
+        self.assertIn('csrftoken', resp.cookies)
+        html = resp.content.decode('utf-8')
+        self.assertIn('event.persisted', html)
+        self.assertIn('login-submit-btn', html)
+
+        out_resp = client.get('/auth/logout/')
+        self.assertEqual(out_resp.status_code, 302)
+        self.assertEqual(out_resp.get('Location'), '/auth/login/')
+        self.assertIn('no-store', out_resp.get('Cache-Control', ''))
+
+    def test_rapid_account_switching_and_session_isolation_with_csrf_enforced(self):
+        client = Client(enforce_csrf_checks=True)
+        accounts_cycle = [
+            (self.user_a, 'csrf_a@wea.com', 'Password123!'),
+            (self.user_b, 'csrf_b@wea.com', 'Password123!'),
+            (self.user_a, 'csrf_a@wea.com', 'Password123!'),
+            (self.user_b, 'csrf_b@wea.com', 'Password123!'),
+        ]
+        prev_session_key = None
+
+        for user_obj, email, pwd in accounts_cycle:
+            get_res = client.get('/auth/login/')
+            self.assertEqual(get_res.status_code, 200)
+            token_before = self._extract_csrf_token(get_res.content.decode('utf-8'))
+            self.assertTrue(token_before)
+            cookie_before = client.cookies['csrftoken'].value
+
+            post_res = client.post('/auth/login/', {
+                'csrfmiddlewaretoken': token_before,
+                'email': email,
+                'password': pwd,
+            })
+            self.assertEqual(post_res.status_code, 302)
+            self.assertEqual(str(client.session.get('_auth_user_id')), str(user_obj.pk))
+            # CSRF token must rotate on login
+            self.assertNotEqual(client.cookies['csrftoken'].value, cookie_before)
+            if prev_session_key is not None:
+                self.assertNotEqual(client.session.session_key, prev_session_key)
+            prev_session_key = client.session.session_key
+
+            # Logout must flush session and redirect to /auth/login/
+            out_res = client.get('/auth/logout/')
+            self.assertEqual(out_res.status_code, 302)
+            self.assertEqual(out_res.get('Location'), '/auth/login/')
+            self.assertNotIn('_auth_user_id', client.session)
+
+    def test_invalid_credentials_never_authenticate_and_stale_csrf_rejected(self):
+        client = Client(enforce_csrf_checks=True)
+        get_res = client.get('/auth/login/')
+        stale_token = self._extract_csrf_token(get_res.content.decode('utf-8'))
+
+        # Invalid password fails cleanly without authenticating
+        bad_res = client.post('/auth/login/', {
+            'csrfmiddlewaretoken': stale_token,
+            'email': 'csrf_a@wea.com',
+            'password': 'WrongPassword!',
+        })
+        self.assertEqual(bad_res.status_code, 200)
+        self.assertNotIn('_auth_user_id', client.session)
+        self.assertIn('no-store', bad_res.get('Cache-Control', ''))
+
+        # Valid login rotates CSRF token
+        ok_res = client.post('/auth/login/', {
+            'csrfmiddlewaretoken': stale_token,
+            'email': 'csrf_a@wea.com',
+            'password': 'Password123!',
+        })
+        self.assertEqual(ok_res.status_code, 302)
+        self.assertEqual(str(client.session.get('_auth_user_id')), str(self.user_a.pk))
+
+        # Replaying the pre-rotation CSRF token must still be rejected with 403 (CSRF stays strict)
+        replay_res = client.post('/auth/login/', {
+            'csrfmiddlewaretoken': stale_token,
+            'email': 'csrf_a@wea.com',
+            'password': 'Password123!',
+        })
+        self.assertEqual(replay_res.status_code, 403)
+
+    def test_sqlite_timeout_option_configured_and_db_integrity_ok(self):
+        from django.conf import settings
+        from django.db import connection
+        db_cfg = settings.DATABASES['default']
+        self.assertGreaterEqual(db_cfg.get('OPTIONS', {}).get('timeout', 0), 20)
+        with connection.cursor() as cur:
+            cur.execute('PRAGMA integrity_check;')
+            rows = cur.fetchall()
+        self.assertEqual(rows, [('ok',)])
+
+

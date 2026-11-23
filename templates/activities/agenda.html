@@ -159,7 +159,7 @@
                         </div>
 
                         <!-- Plan-Level Approval Actions -->
-                        {% if pl_group.can_approve and pl_group.plan and pl_group.approval_status != 'approved' %}
+                        {% if pl_group.can_approve and pl_group.plan and pl_group.approval_status == 'pending' %}
                         <div class="flex items-center gap-1.5">
                             <form method="POST" action="{% url 'plan_action' pl_group.plan.pk 'approve' %}" class="inline">
                                 {% csrf_token %}
