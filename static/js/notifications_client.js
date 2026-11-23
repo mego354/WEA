@@ -42,6 +42,7 @@
         constructor(options = {}) {
             this.apiBase = (options.apiBase || '/api/v1/notifications').replace(/\/$/, '');
             this.pollIntervalMs = options.pollIntervalMs || 45000;
+            this.userId = String(options.userId || '').trim();
             this.state = {
                 unreadCount: 0,
                 items: [],
@@ -248,6 +249,16 @@
             this.state.nativePush.registered = true;
             this.state.nativePush.maskedToken = data.masked_token || maskToken(cleanToken);
             this.state.nativePush.lastError = null;
+            try {
+                if (global.sessionStorage) {
+                    global.sessionStorage.setItem('wea_erp_push_reg_v1', JSON.stringify({
+                        userId: this.userId,
+                        token: cleanToken,
+                        deviceUid: deviceUid || this._getOrCreateDeviceUid(),
+                        ts: Date.now(),
+                    }));
+                }
+            } catch (e) {}
             this._notify();
             console.info('[ERPNotifications Push] Device registered with Django:', this.state.nativePush.maskedToken);
             return data;
@@ -338,10 +349,33 @@
                     if (global.AndroidPush && typeof global.AndroidPush.getDeviceMetadataJson === 'function') {
                         try { meta = JSON.parse(global.AndroidPush.getDeviceMetadataJson() || '{}'); } catch (e) {}
                     }
+                    const uid = this._getOrCreateDeviceUid(meta);
+                    // Skip redundant POST /devices/register/ on every page navigation when the exact
+                    // same (userId, token, deviceUid) was already registered in this browser session.
+                    try {
+                        const cachedRaw = global.sessionStorage && global.sessionStorage.getItem('wea_erp_push_reg_v1');
+                        if (cachedRaw) {
+                            const cached = JSON.parse(cachedRaw);
+                            if (
+                                cached &&
+                                cached.userId === this.userId &&
+                                cached.token === tokenVal &&
+                                cached.deviceUid === uid &&
+                                (Date.now() - Number(cached.ts || 0)) < (6 * 60 * 60 * 1000)
+                            ) {
+                                this._currentToken = tokenVal;
+                                this.state.nativePush.registered = true;
+                                this.state.nativePush.maskedToken = maskToken(tokenVal);
+                                this.state.nativePush.lastError = null;
+                                this._notify();
+                                return;
+                            }
+                        }
+                    } catch (e) {}
                     try {
                         await this.registerDevice({
                             deviceToken: tokenVal,
-                            deviceUid: this._getOrCreateDeviceUid(meta),
+                            deviceUid: uid,
                             platform,
                             provider,
                             deviceName: meta.deviceName || navigator.userAgent.slice(0, 80),
@@ -557,6 +591,9 @@
             const triggerUnregister = () => {
                 try {
                     this.stopPolling();
+                    if (global.sessionStorage) {
+                        global.sessionStorage.removeItem('wea_erp_push_reg_v1');
+                    }
                     if (global.AndroidPush && typeof global.AndroidPush.unregisterDevice === 'function') {
                         global.AndroidPush.unregisterDevice();
                     }

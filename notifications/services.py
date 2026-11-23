@@ -488,6 +488,26 @@ class NotificationService:
         if is_bad:
             raise ValueError(bad_reason)
 
+        clean_perm = (permission_status or 'granted')[:30]
+
+        # Read-only fast path: if this exact device token is already active for this user
+        # with unchanged metadata and was seen recently, avoid unnecessary SQLite writes
+        # on every page load or concurrent multi-device session.
+        existing = NotificationDevice.objects.filter(device_token=token).first()
+        if (
+            existing is not None
+            and existing.user_id == user.pk
+            and existing.is_active
+            and existing.platform == platform
+            and existing.provider == provider
+            and existing.permission_status == clean_perm
+            and existing.failure_count == 0
+            and (not clean_uid or existing.device_uid == clean_uid)
+            and existing.last_seen_at
+            and (timezone.now() - existing.last_seen_at) < timedelta(hours=1)
+        ):
+            return existing
+
         defaults = {
             'user': user,
             'platform': platform,
@@ -495,7 +515,7 @@ class NotificationService:
             'device_name': (device_name or '')[:150],
             'app_version': (app_version or '')[:40],
             'app_id': (app_id or '')[:120],
-            'permission_status': (permission_status or 'granted')[:30],
+            'permission_status': clean_perm,
             'is_active': True,
             'deactivated_reason': '',
             'failure_count': 0,
@@ -503,29 +523,30 @@ class NotificationService:
         if clean_uid:
             defaults['device_uid'] = clean_uid
 
-        device, created = NotificationDevice.objects.update_or_create(
-            device_token=token,
-            defaults=defaults,
-        )
-
-        # Safe token rotation: if device_uid is supplied, deactivate ONLY previous tokens
-        # belonging to the SAME physical installation (user + platform + device_uid),
-        # never touching other devices owned by the user.
-        if clean_uid:
-            rotated = NotificationDevice.objects.filter(
-                user=user,
-                platform=platform,
-                device_uid=clean_uid,
-                is_active=True,
-            ).exclude(pk=device.pk).update(
-                is_active=False,
-                deactivated_reason='token_rotated',
+        with transaction.atomic():
+            device, created = NotificationDevice.objects.update_or_create(
+                device_token=token,
+                defaults=defaults,
             )
-            if rotated:
-                logger.info(
-                    "[NotificationService] Rotated %s old token(s) for user=%s device_uid=%s",
-                    rotated, user.pk, clean_uid[:16],
+
+            # Safe token rotation: if device_uid is supplied, deactivate ONLY previous tokens
+            # belonging to the SAME physical installation (user + platform + device_uid),
+            # never touching other devices owned by the user.
+            if clean_uid:
+                rotated = NotificationDevice.objects.filter(
+                    user=user,
+                    platform=platform,
+                    device_uid=clean_uid,
+                    is_active=True,
+                ).exclude(pk=device.pk).update(
+                    is_active=False,
+                    deactivated_reason='token_rotated',
                 )
+                if rotated:
+                    logger.info(
+                        "[NotificationService] Rotated %s old token(s) for user=%s device_uid=%s",
+                        rotated, user.pk, clean_uid[:16],
+                    )
 
         logger.info(
             "[NotificationService] Device %s: id=%s user=%s platform=%s provider=%s token=%s app_id=%s",

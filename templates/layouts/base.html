@@ -1517,6 +1517,7 @@
             const client = new window.ERPNotificationsClient({
                 apiBase: '/api/v1/notifications',
                 pollIntervalMs: 45000,
+                userId: '{{ request.user.pk }}',
             });
             window._erpNotifClient = client;
 
