@@ -601,7 +601,7 @@ class PurchaseReturnOrderWorkflowTests(TestCase):
 
         self.wh = Warehouse.objects.create(name='مخزن الإسكندرية المركزي', code='WH-ALX-PRET', area=self.alex, is_active=True)
         self.supplier = Contact.objects.create(
-            name='شركة الدلتا للأدوية', code='SUP-DELTA-01', is_supplier=True, area=self.alex, status='active'
+            name='شركة الدلتا للأدوية', code='SUP-DELTA-01', is_supplier=True, area=self.alex, status='customer'
         )
         self.vendor_acc = VendorAccount.get_or_create_for_supplier(self.supplier)
 
@@ -941,7 +941,7 @@ class PurchasesPhase2ImprovementsTests(TestCase):
             serial_num=88001,
             name='شركة فارما للتوزيع',
             is_supplier=True,
-            status='supplier',
+            status='customer',
             area=self.cairo,
             created_by=self.superadmin
         )

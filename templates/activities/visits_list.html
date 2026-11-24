@@ -23,26 +23,12 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-            <!-- View Toggle: Table / Cards (preserves all active filters) -->
-            <div class="inline-flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                <a href="{% url_replace view='table' %}"
-                   class="p-2 {% if view_mode == 'table' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض جدولي">
-                    <span class="material-symbols-outlined text-base">table_chart</span>
-                </a>
-                <a href="{% url_replace view='cards' %}"
-                   class="p-2 {% if view_mode == 'cards' %}bg-[#27bebe] text-white{% else %}text-slate-500 hover:text-slate-800{% endif %}" title="عرض بطاقات">
-                    <span class="material-symbols-outlined text-base">view_agenda</span>
-                </a>
-            </div>
-
             <!-- Export via Unified Excel Toolbar -->
             {% url 'visits_export' as export_url %}
             {% include 'components/excel_toolbar_actions.html' with export_url=export_url export_perm='activities:visits/export' %}
 
-            <!-- Column Picker (Table View Only) -->
-            {% if view_mode == 'table' %}
+            <!-- Column Picker (Unified Desktop & Mobile Table) -->
             {% include 'components/table_column_picker.html' with table_id='visits_table' %}
-            {% endif %}
 
             <!-- Create Visit Button (Permission-Gated) -->
             {% if request.user|has_permission:'activities:visits/create' %}
@@ -118,7 +104,6 @@
     <div class="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs mb-6">
         <div class="flex items-center justify-between gap-3">
             <form method="GET" class="flex items-center gap-2 flex-1 min-w-0">
-                <input type="hidden" name="view" value="{{ view_mode }}">
                 {% for s in selected_statuses %}<input type="hidden" name="status" value="{{ s }}">{% endfor %}
                 {% for a in selected_approval_statuses %}<input type="hidden" name="approval_status" value="{{ a }}">{% endfor %}
                 {% if selected_plan_type %}<input type="hidden" name="plan_type" value="{{ selected_plan_type }}">{% endif %}
@@ -159,10 +144,8 @@
     <!-- Active Filter Chips Bar -->
     {% include 'components/active_filters.html' %}
 
-    <!-- TABLE VIEW (Option A: Desktop Table + Mobile Cards) -->
-    {% if view_mode == 'table' %}
+    <!-- UNIFIED RESPONSIVE VISITS LIST (Single Presentation Across Desktop & Mobile) -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        <!-- Desktop Table (hidden on <768px) -->
         <div class="overflow-x-auto scrollbar-thin">
             <table id="visits_table" data-col-table="visits_table" class="min-w-[1000px] w-full text-right border-collapse">
                 <thead>
@@ -318,16 +301,16 @@
                         <td data-col="actions" class="py-3 px-4 text-center" onclick="event.stopPropagation()">
                             <div data-row-menu-host class="inline-flex items-center justify-center">
                                 <button type="button" data-row-menu-trigger onclick="openRowActionMenu(this, event)" aria-haspopup="true" aria-expanded="false"
-                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
+                                        class="inline-flex items-center justify-center min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors" title="إجراءات">
                                     <span class="material-symbols-outlined text-lg">more_vert</span>
                                 </button>
                                 <template class="row-menu-items">
-                                    <a href="{% url 'visit_detail' v.pk %}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 flex items-center gap-2">
+                                    <a href="{% url 'visit_detail' v.pk %}" class="w-full text-right px-3.5 py-2.5 sm:py-2 hover:bg-slate-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-slate-500">visibility</span>
                                         <span>عرض التفاصيل</span>
                                     </a>
                                     {% if v.qa_display_list %}
-                                    <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="w-full text-right px-3.5 py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
+                                    <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="w-full text-right px-3.5 py-2.5 sm:py-2 hover:bg-teal-50 hover:text-[#27bebe] flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base text-[#27bebe]">quiz</span>
                                         <span>عرض إجابات الاستبيان</span>
                                     </button>
@@ -337,19 +320,19 @@
                                     <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}">
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="w-full text-right px-3.5 py-2 text-emerald-700 hover:bg-emerald-50 flex items-center gap-2">
+                                        <button type="submit" class="w-full text-right px-3.5 py-2.5 sm:py-2 text-emerald-700 hover:bg-emerald-50 flex items-center gap-2">
                                             <span class="material-symbols-outlined text-base">check_circle</span>
                                             <span>اعتماد الزيارة</span>
                                         </button>
                                     </form>
-                                    <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                    <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="w-full text-right px-3.5 py-2.5 sm:py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base">cancel</span>
                                         <span>رفض الزيارة</span>
                                     </button>
                                     {% endif %}
                                     {% if v.user_can_delete %}
                                     <div class="h-px bg-slate-100 my-1"></div>
-                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="w-full text-right px-3.5 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
+                                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="w-full text-right px-3.5 py-2.5 sm:py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2">
                                         <span class="material-symbols-outlined text-base">delete</span>
                                         <span>حذف الزيارة</span>
                                     </button>
@@ -372,129 +355,8 @@
             </table>
         </div>
     </div>
-    {% else %}
-    <!-- CARDS VIEW (view_agenda) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {% for v in visits %}
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#27bebe]/50 transition-all space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <div class="flex items-center gap-1.5">
-                    <span class="font-mono font-bold text-slate-900 text-sm">#{{ v.serial_num }}</span>
-                    {% if v.verification_status == 'verified' %}
-                    <span class="material-symbols-outlined text-xs text-emerald-500" title="تم التحقق من الموقع">gpp_good</span>
-                    {% elif v.verification_status == 'force_bypassed' %}
-                    <span class="material-symbols-outlined text-xs text-amber-500" title="تم تجاوز التحقق">gpp_maybe</span>
-                    {% endif %}
-                    {% if v.gps_forced_start %}
-                    <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند بدء الزيارة">near_me_disabled</span>
-                    {% endif %}
-                    {% if v.gps_forced_end %}
-                    <span class="material-symbols-outlined text-xs text-amber-600" title="تم تجاوز قيد المسافة عند إنهاء الزيارة">wrong_location</span>
-                    {% endif %}
-                    {% if v.edited_by_creator %}
-                    <span class="material-symbols-outlined text-xs text-sky-600" title="تم تعديل الزيارة بواسطة المنشئ">edit_note</span>
-                    {% endif %}
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border {{ v.plan_type_badge_class }}">
-                        {{ v.plan_type_display_ar }}
-                    </span>
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ v.approval_badge_class }}">
-                        {{ v.approval_display_ar }}
-                    </span>
-                </div>
-            </div>
 
-            <div>
-                <a href="{% url 'visit_detail' v.pk %}" class="font-bold text-slate-900 hover:text-[#27bebe] text-sm block">
-                    {{ v.contact.name }}
-                </a>
-                <p class="text-xs text-slate-500 mt-0.5">
-                    {{ v.contact.specialty|default:v.contact.account_type }} • {{ v.contact.area.name|default:'' }}
-                </p>
-            </div>
-
-            <div class="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl font-mono">
-                <div class="flex justify-between items-center">
-                    <span class="text-slate-400">التاريخ:</span>
-                    <span class="font-bold text-slate-800">{{ v.date|date:"d/m/Y" }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-slate-400">المدة:</span>
-                    <span class="font-bold text-slate-700">{{ v.duration_formatted|default:"–" }}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-400">المسؤول:</span>
-                    <span class="font-sans font-bold">{{ v.owner.get_full_name|default:v.owner.username }}</span>
-                </div>
-                {% if v.template %}
-                <div class="flex justify-between">
-                    <span class="text-slate-400">القالب:</span>
-                    <span class="font-sans text-[#27bebe]">{{ v.template.display_name_ar }}</span>
-                </div>
-                {% endif %}
-                <div class="flex justify-between items-center">
-                    <span class="text-slate-400">تجاوز المسافة:</span>
-                    <div>
-                        {% if v.gps_forced_start and v.gps_forced_end %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">تجاوز (بدء وإنهاء)</span>
-                        {% elif v.gps_forced_start %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">تجاوز (بدء)</span>
-                        {% elif v.gps_forced_end %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">تجاوز (إنهاء)</span>
-                        {% elif v.verification_status == 'verified' %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ضمن النطاق</span>
-                        {% else %}
-                        <span class="text-slate-400 text-xs">—</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
-                <div class="flex items-center gap-1.5">
-                    {% if v.user_can_approve and v.approval_status == 'pending' %}
-                    <form method="POST" action="{% url 'visit_action' v.pk 'approve' %}" class="inline">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="اعتماد الزيارة">
-                            <span class="material-symbols-outlined text-sm">check_circle</span>
-                            <span>اعتماد</span>
-                        </button>
-                    </form>
-                    <button type="button" onclick="openVisitListRejectModal('{{ v.pk }}', '{{ v.serial_num }}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 shadow-2xs transition-colors" title="رفض الزيارة">
-                        <span class="material-symbols-outlined text-sm">cancel</span>
-                        <span>رفض</span>
-                    </button>
-                    {% endif %}
-                    {% if v.qa_display_list %}
-                    <button type="button" onclick="openVisitAnswersModal('{{ v.pk }}')" class="p-1 rounded-md text-slate-400 hover:text-teal-600 hover:bg-slate-100 inline-flex items-center" title="عرض إجابات الاستبيان">
-                        <span class="material-symbols-outlined text-lg">quiz</span>
-                    </button>
-                    {% endif %}
-                    {% if v.user_can_delete %}
-                    <button type="button" onclick="showConfirmDeleteModal({ action: '{% url 'visit_delete' v.pk %}', title: 'حذف الزيارة غير المنتهية', itemName: 'زيارة #{{ v.serial_num }} ({{ v.contact.name|escapejs }})' })" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors" title="حذف الزيارة غير المنتهية">
-                        <span class="material-symbols-outlined text-sm">delete</span>
-                        <span>حذف</span>
-                    </button>
-                    {% endif %}
-                </div>
-                <a href="{% url 'visit_detail' v.pk %}" class="inline-flex items-center gap-1 text-xs font-bold text-[#27bebe] hover:underline">
-                    <span>عرض التفاصيل</span>
-                    <span class="material-symbols-outlined text-sm">arrow_back</span>
-                </a>
-            </div>
-        </div>
-        {% empty %}
-        <div class="col-span-full py-12 text-center text-slate-400">
-            <span class="material-symbols-outlined text-4xl text-slate-300">directions_walk</span>
-            <p class="text-sm font-medium mt-2">لا توجد زيارات مسجلة.</p>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- Shared Questionnaire Answers Data Containers (Table & Cards) -->
+    <!-- Shared Questionnaire Answers Data Containers -->
     {% for v in visits %}
     {% with qa_list=v.qa_display_list %}
     {% if qa_list %}
@@ -539,7 +401,6 @@
     </div>
     <form method="GET" class="p-5 space-y-4 flex-1 overflow-y-auto">
                 {% if selected_q %}<input type="hidden" name="search" value="{{ selected_q }}">{% endif %}
-                <input type="hidden" name="view" value="{{ view_mode }}">
 
                 {% if can_filter_owner %}
                 {% include 'components/choice_multiselect.html' with component_id='visits_owner' field_name='owner' label='المسؤول (اختيار متعدد)' options=owner_options selected_items=selected_owner_items selected_values=selected_owners placeholder='اختر المسؤول...' %}

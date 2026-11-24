@@ -551,7 +551,7 @@ class SalesReturnOrderWorkflowTests(TestCase):
         )
 
         self.customer = Contact.objects.create(
-            name='صيدلية السلامة', code='CUST-RET-01', is_customer=True, area=self.nasr, status='active'
+            name='صيدلية السلامة', code='CUST-RET-01', is_customer=True, area=self.nasr, status='customer'
         )
         self.cust_acc, _ = CustomerAccount.objects.get_or_create(
             customer=self.customer,
@@ -763,7 +763,7 @@ class SalesCustomerScopingAndSmartSearchTests(TestCase):
             area=self.cairo, brick=self.nasr, code='CN1', created_by=self.superadmin
         )
         self.c_maadi = Contact.objects.create(
-            serial_num=70002, name='صيدلية المعادي النشطة', is_customer=True, status='active',
+            serial_num=70002, name='صيدلية المعادي النشطة', is_customer=True, status='customer',
             area=self.cairo, brick=self.maadi, code='CM1', created_by=self.superadmin
         )
         self.c_dokki = Contact.objects.create(

@@ -271,13 +271,13 @@ Because the Capacitor app loads `https://projecting.pythonanywhere.com` directly
 
 ## 10. Destination Mapping (`route_key` → Internal Screen)
 
-All 60 events map via `notifications/formatters.py` (`DESTINATION_ROUTES` & `EVENT_DEFAULT_ROUTE_KEY`):
+All 61 events map via `notifications/formatters.py` (`DESTINATION_ROUTES` & `EVENT_DEFAULT_ROUTE_KEY`):
 
 - **Sales:** `sales.order_detail` (`/sales/<pk>/`), `sales.orders_list`, `sales.return_detail`, `sales.returns_list`, `sales.collections_list`, `sales.customer_transactions` (`/sales/customer-transactions/?customer_id=<id>`).
 - **Purchases:** `purchases.order_detail` (`/purchases/<pk>/`), `purchases.orders_list`, `purchases.return_detail`, `purchases.returns_list`.
 - **Treasury:** `treasury.vendor_payments`, `treasury.payment_request_detail`, `treasury.vault_detail`, `treasury.vault_transactions`, `treasury.vendor_transactions`.
 - **Inventory:** `inventory.transfer_detail`, `inventory.memo_detail`, `inventory.stock_list`.
-- **Activities:** `activities.visit_detail`, `activities.planned_visits`, `activities.agreement_detail`.
+- **Activities:** `activities.visit_detail` (including `activities.visit_created` for standalone visit creation), `activities.planned_visits` (single `activities.plan_submitted` per bulk plan; individual visit creation notifications suppressed), `activities.agreement_detail`.
 - **Contacts:** `contacts.detail` (`/contacts/<pk>/`), `contacts.detail_todos` (`/contacts/<pk>/?tab=todos`).
 - **Catalog / Accounts / Settings / Performance:** `catalog.product_detail`, `catalog.products_list`, `accounts.user_detail`, `accounts.roles_list`, `settings.*`, `performance.overview`, `performance.detailed`, `notifications.inbox`.
 

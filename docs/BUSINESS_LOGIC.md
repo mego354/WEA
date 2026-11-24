@@ -30,9 +30,12 @@ stateDiagram-v2
   - Generated via bulk daily planning (`/planned-visits/bulk-add/`).
   - Each submission creates a distinct `VisitPlan` with a unique ID (`plan_id`, e.g. `PLAN-YYYYMMDD-0001`) and links all planned visits to it.
   - Form notes/comments are stored strictly as the plan comment (`plan.comment`), displayed directly above each plan in `planned-visits/` and `agenda/`.
+  - **Notifications**: Bulk planning suppresses individual visit-creation notifications at source (`plan_id` / `_suppress_creation_notification`) and emits one single plan-level notification (`activities.plan_submitted`).
   - **Approval Workflow**: If the plan creator lacks `activities:visits/approve`, the plan and its visits are created with `approval_status='pending'`. Authorized managers within the data scope can approve/reject the entire plan via `/planned-visits/plan/<pk>/action/<action>/` or approve individual visits.
-- **Unplanned Visits**: Initiated via `/visits/create/`. The backend sets `is_planned=False`. Unplanned visits are **auto-approved upon creation** (`approval_status='approved'`) and can be started immediately without manager approval.
+- **Unplanned Visits (Atomic Create + Start)**: Initiated via `/visits/create/` (when not `planned_item_id`). Backend forces `is_planned=False`, locks `date=timezone.localdate()`, auto-approves (`approval_status='approved'`), and executes creation + `start_visit` inside `transaction.atomic()` (`create_and_start_unplanned_visit`)—rolling back completely (0 unstarted visits, 0 notifications) if GPS verification, required `start_only` questions, or single-open-visit validation fails.
+- **Single Open Visit per Owner**: A partial DB `UniqueConstraint` (`unique_open_visit_per_owner` on `owner` where `status='started'` and `ended_at IS NULL`) and service/model validation enforce at most one open visit per `visit.owner` across all roles (no SuperAdmin/Manager bypass).
 - **Date Restriction**: Visits can only be started when the visit date matches the actual current local date (`visit.date == timezone.localdate()`). Visit time fields have been completely removed.
+- **Agenda Counts**: `agenda_view` computes separate `planned_visits_count` (`is_planned=True` / plan items), `unplanned_visits_count` (`is_planned=False`), and `total_visits_count`.
 - **Re-approval Trigger on Edits**: Any permitted edit to a visit's date or template (pre-start/pre-end) or questionnaire answers (post-end) immediately invalidates existing approval: sets `approval_status='pending'`, `waiting_for_reapproval=True`, clears prior approver info, and writes structured changes with `approval_required=True` to the Complete Visit Timeline.
 
 ### 1.2 GPS Distance Validation, Geofencing, & Forced Bypass Tracking
@@ -42,7 +45,7 @@ stateDiagram-v2
 - **Coordinate Handling & Decimal Separator Resilience**:
   - The distance calculation engine (`calculate_haversine_distance`) and verification services sanitize input coordinates by converting comma decimal separators to standard dots prior to float and Decimal conversion, preventing localization crashes.
 - **Stage-Specific Validation (`verify_visit_location`)**:
-  - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user with `activities:visits/bypass_gps`.
+  - **Start (`stage='start'`)**: Mandatory when starting a visit (`start_visit` or atomic unplanned `visit_create`) if `LocationSettings.verify_visits=True`. Missing or out-of-range coordinates are strictly rejected unless bypassed by an authorized user with `activities:visits/bypass_gps` (bypass UI stays hidden unless distance exceeds tolerance or GPS fails/is denied, and stale modal bypass state is reset when opening or back within tolerance).
   - **Completion (`stage='end'`)**: Mandatory when ending a visit (`end_visit`) if `LocationSettings.verify_end_visit_distance=True`.
 - **Forced GPS Start & End Separation**:
   - Forced GPS bypass at start is recorded distinctly in `gps_forced_start`, `gps_forced_start_by`, and `gps_forced_start_at`.
@@ -74,11 +77,12 @@ stateDiagram-v2
   - Supports all question types including `suggested_products`, plus legacy `detailed_products` (`detailed_products_present=1`) on templates without a `suggested_products` question.
   - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs (with readable product names) in `ApprovalAuditLog` and `SecurityAuditLog`, updates `edited_by_creator` / `last_edited_by` / `last_edited_at`, and appears in the Complete Visit Timeline.
 - **Agenda Start-Visit Execution**:
-  - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying bypass/exception options, and answering check-in questions), rather than merely redirecting.
+  - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying authorized bypass options when out of range, and answering check-in questions), rather than merely redirecting.
 - **Removal of Cancellation Actions & Strict Deletion Rules**:
   - Visit cancellation buttons and actions have been completely removed from the UI.
   - Finished visits cannot be deleted under any circumstances (`status == 'finished'` or `ended_at is not None`).
-  - Unended visits may only be deleted by authorized users holding `activities:visits/delete` when `LocationSettings.allow_visit_deletion_before_end=True`. Deletion unbinds any linked `PlannedVisitItem` to preserve the planned slot.
+  - Unended visits can be deleted by authorized users holding `activities:visits/delete` (`حذف الزيارات`) within DataScope, decoupled from `LocationSettings`. Deletion removes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), safely cleans up `ERPAttachment` / `Visit.photo` files, and preserves a complete snapshot + `ApprovalAuditLog` history in `SecurityAuditLog`.
+  - Permission and DataScope are checked before revealing visit existence or finished status.
 - **Visit Detail Actions**:
   - Direct manual status overrides (`change_status` / `manage_status`) are prohibited; visits progress exclusively through `approve`, `disapprove` (only while `approval_status != 'approved'`), `start`, and `complete`.
 

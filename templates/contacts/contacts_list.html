@@ -244,8 +244,8 @@
             {% endfor %}
         </div>
 
-        <!-- Kanban Board Columns: Desktop (flex 5 columns) & Mobile (single active column) -->
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        <!-- Kanban Board Columns: Desktop (3 canonical columns) & Mobile (single active column) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
             {% for col in kanban_columns %}
             <div id="kanban-col-{{ col.id }}"
                  data-column-id="{{ col.id }}"
@@ -339,12 +339,10 @@
                                 <select onchange="updateContactStage('{{ c.id }}', this.value)"
                                         onclick="event.stopPropagation();"
                                         class="text-[10px] font-bold py-1 px-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#27bebe]">
-                                    <option value="" disabled selected>تغيير المرحلة...</option>
-                                    <option value="lead" {% if col.id == 'lead' %}disabled{% endif %}>عميل محتمل</option>
-                                    <option value="customer" {% if col.id == 'customer' %}disabled{% endif %}>عميل معتمد</option>
-                                    <option value="active" {% if col.id == 'active' %}disabled{% endif %}>عميل نشط</option>
-                                    <option value="supplier" {% if col.id == 'supplier' %}disabled{% endif %}>مورد</option>
-                                    <option value="inactive" {% if col.id == 'inactive' %}disabled{% endif %}>غير نشط</option>
+                                    <option value="" disabled selected>تغيير الحالة...</option>
+                                    <option value="customer" {% if col.id == 'customer' %}disabled{% endif %}>Customer</option>
+                                    <option value="lead" {% if col.id == 'lead' %}disabled{% endif %}>Lead</option>
+                                    <option value="inactive" {% if col.id == 'inactive' %}disabled{% endif %}>Inactive</option>
                                 </select>
                             </div>
                         </div>
@@ -404,7 +402,7 @@
 
                         <!-- Customer Status Badge -->
                         <td data-col="status" class="py-3 px-3">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {% if c.status == 'customer' or c.status == 'active' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {% if c.status == 'customer' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif c.status == 'lead' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-slate-100 text-slate-600{% endif %}">
                                 {{ c.status_label }}
                             </span>
                         </td>
@@ -649,10 +647,9 @@
             <label class="mat-like-label">حالة العميل</label>
             <select name="status" class="mat-like-control">
                 <option value="all" {% if current_status == 'all' %}selected{% endif %}>الكل</option>
-                <option value="lead" {% if current_status == 'lead' %}selected{% endif %}>عميل محتمل</option>
-                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>عميل معتمد</option>
-                <option value="active" {% if current_status == 'active' %}selected{% endif %}>نشط</option>
-                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>غير نشط</option>
+                <option value="customer" {% if current_status == 'customer' %}selected{% endif %}>Customer</option>
+                <option value="lead" {% if current_status == 'lead' %}selected{% endif %}>Lead</option>
+                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>Inactive</option>
             </select>
         </div>
 

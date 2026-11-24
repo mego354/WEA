@@ -51,7 +51,7 @@ class LocationSettingsAdmin(SingletonSettingsAdminMixin, admin.ModelAdmin):
         'allow_template_distance_override', 'verify_unplanned_visit_distance',
         'verify_end_visit_distance', 'bypass_reason_mandatory',
         'distance_bypass_requires_approval', 'require_manager_approval_for_visits',
-        'allow_visit_deletion_before_end', 'require_manager_approval_for_agreements',
+        'require_manager_approval_for_agreements',
         'enable_product_suggestions', 'suggested_products_count'
     )
     filter_horizontal = (

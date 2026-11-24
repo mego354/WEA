@@ -163,11 +163,7 @@
                 {% if can_edit_contact %}
                 <div class="relative" id="contactStatusDropdownWrap">
                     <button type="button" onclick="toggleStatusDropdown(event)" id="statusDropdownBtn" aria-haspopup="true" aria-expanded="false" class="px-3.5 py-2 rounded-xl bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-colors min-h-[40px]">
-                        <span>
-                            {% if contact.status == 'lead' %}عميل محتمل
-                            {% elif contact.status == 'inactive' %}غير نشط
-                            {% else %}عميل{% endif %}
-                        </span>
+                        <span>{{ contact.status_label }}</span>
                         <span class="material-symbols-outlined text-sm">expand_more</span>
                     </button>
                     <div id="statusDropdownMenu" class="hidden absolute left-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-right">
@@ -175,15 +171,15 @@
                             {% csrf_token %}
                             <input type="hidden" name="status" id="contactStatusInput" value="">
                             <button type="button" onclick="submitContactStatus('customer')" class="w-full text-right px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                                <span>عميل</span>
-                                {% if contact.status == 'customer' or contact.status == 'active' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
+                                <span>Customer</span>
+                                {% if contact.status == 'customer' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
                             </button>
                             <button type="button" onclick="submitContactStatus('lead')" class="w-full text-right px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between">
-                                <span>عميل محتمل</span>
+                                <span>Lead</span>
                                 {% if contact.status == 'lead' %}<span class="text-brand-600 font-bold">✓</span>{% endif %}
                             </button>
                             <button type="button" onclick="submitContactStatus('inactive')" class="w-full text-right px-3.5 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center justify-between">
-                                <span>غير نشط</span>
+                                <span>Inactive</span>
                                 {% if contact.status == 'inactive' %}<span class="text-rose-600 font-bold">✓</span>{% endif %}
                             </button>
                         </form>
@@ -191,9 +187,7 @@
                 </div>
                 {% else %}
                 <span class="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold min-h-[40px] inline-flex items-center">
-                    {% if contact.status == 'lead' %}عميل محتمل
-                    {% elif contact.status == 'inactive' %}غير نشط
-                    {% else %}عميل{% endif %}
+                    {{ contact.status_label }}
                 </span>
                 {% endif %}
 

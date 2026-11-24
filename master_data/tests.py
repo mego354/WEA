@@ -1069,7 +1069,7 @@ class DashboardVendorScopingTests(TestCase):
             code='SUP-CAI-01',
             is_supplier=True,
             area=self.nasr,
-            status='active'
+            status='customer'
         )
         self.vendor_acc, _ = VendorAccount.objects.get_or_create(
             supplier=self.vendor_cairo,
@@ -1152,8 +1152,8 @@ class ArabicSearchNormalizationTests(TestCase):
         from master_data.search_utils import filter_by_arabic_search
 
         area = Area.objects.create(name='منطقة البحث', code='SRCH-01')
-        c1 = Contact.objects.create(name='صيدلية الأهرام الكبرى', area=area, status='active')
-        c2 = Contact.objects.create(name='مستشفى الشروق التخصصي', area=area, status='active')
+        c1 = Contact.objects.create(name='صيدلية الأهرام الكبرى', area=area, status='customer')
+        c2 = Contact.objects.create(name='مستشفى الشروق التخصصي', area=area, status='customer')
 
         # Search with different letter forms
         res1 = filter_by_arabic_search(Contact.objects.all(), ['name'], 'صيدليه الاهرام')
@@ -1186,10 +1186,10 @@ class R2StorageAndAttachmentsTests(TestCase):
         )
         cls.rep_giz.assigned_areas.add(cls.giza)
         cls.customer_cai = Contact.objects.create(
-            name='صيدلية R2 القاهرة', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='active'
+            name='صيدلية R2 القاهرة', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='customer'
         )
         cls.customer_cai2 = Contact.objects.create(
-            name='صيدلية R2 القاهرة 2', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='active'
+            name='صيدلية R2 القاهرة 2', area=cls.cairo, is_customer=True, created_by=cls.rep_cai, status='customer'
         )
 
     def test_r2_cost_calculator_and_settings_protection(self):
@@ -1290,10 +1290,10 @@ class PDFInvoicesAndStatementsTests(TestCase):
 
         cls.cat = ProductCategory.objects.create(name='فئة PDF')
         cls.customer = Contact.objects.create(
-            name='عميل PDF القاهرة', area=cls.cairo, is_customer=True, created_by=cls.admin, status='active'
+            name='عميل PDF القاهرة', area=cls.cairo, is_customer=True, created_by=cls.admin, status='customer'
         )
         cls.supplier = Contact.objects.create(
-            name='مورد PDF القاهرة', area=cls.cairo, is_supplier=True, created_by=cls.admin, status='active'
+            name='مورد PDF القاهرة', area=cls.cairo, is_supplier=True, created_by=cls.admin, status='customer'
         )
         cls.wh = Warehouse.objects.create(name='مخزن PDF', code='WH-PDF', area=cls.cairo, is_active=True)
         cls.prod = Product.objects.create(
@@ -1412,8 +1412,8 @@ class StandardizedFilteringUtilitiesTests(TestCase):
         from sales.models import CustomerAccount
         cairo = Area.objects.create(name='القاهرة', code='AR-CAI', area_type='governorate')
         giza = Area.objects.create(name='الجيزة', code='AR-GIZ', area_type='governorate')
-        c1 = Contact.objects.create(name='عميل القاهرة', code='C-AR-1', is_customer=True, area=cairo, status='active')
-        c2 = Contact.objects.create(name='عميل الجيزة', code='C-AR-2', is_customer=True, area=giza, status='active')
+        c1 = Contact.objects.create(name='عميل القاهرة', code='C-AR-1', is_customer=True, area=cairo, status='customer')
+        c2 = Contact.objects.create(name='عميل الجيزة', code='C-AR-2', is_customer=True, area=giza, status='customer')
         CustomerAccount.objects.update_or_create(customer=c1, defaults={'current_balance': Decimal('1000.00'), 'overdue_balance': Decimal('500.00')})
         CustomerAccount.objects.update_or_create(customer=c2, defaults={'current_balance': Decimal('2000.00'), 'overdue_balance': Decimal('0.00')})
 
@@ -1492,7 +1492,7 @@ class SidebarActiveNavigationTests(TestCase):
         self.brick = Area.objects.create(name='نصر nav', code='NAV-NSR', area_type='subarea', parent=self.cairo)
         self.customer = Contact.objects.create(
             name='عميل nav', is_customer=True, account_type='Pharmacy',
-            area=self.cairo, brick=self.brick, status='active'
+            area=self.cairo, brick=self.brick, status='customer'
         )
 
     def test_resolve_active_nav_routes_and_rendered_sidebar_isolation(self):

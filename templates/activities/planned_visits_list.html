@@ -264,6 +264,15 @@
                 {% include 'components/area_brick_multiselect.html' with component_id='planned' area_field_name='main_area' brick_field_name='area' areas_api_url=planned_areas_url bricks_api_url=planned_bricks_url selected_areas=selected_main_areas_chips selected_bricks=selected_bricks_chips on_change_callback='applyDrawerFilterAjax' %}
 
                 <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-0.5">حالة العميل</label>
+                    <select name="contact_status" id="filter_contact_status" onchange="applyDrawerFilterAjax(event)" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
+                        <option value="">الكل (Customer / Lead)</option>
+                        <option value="customer" {% if selected_contact_status == 'customer' %}selected{% endif %}>Customer</option>
+                        <option value="lead" {% if selected_contact_status == 'lead' %}selected{% endif %}>Lead</option>
+                    </select>
+                </div>
+
+                <div>
                     <label class="block text-[10px] font-bold text-slate-500 mb-0.5">تصنيف العميل</label>
                     <select name="customer_category" id="filter_customer_category" onchange="applyDrawerFilterAjax(event)" class="w-full rounded-xl border border-slate-200 px-2 py-1 text-xs font-medium">
                         <option value="">الكل (A+, A, B, C)</option>
@@ -796,6 +805,7 @@ function updateActiveFilterBadge() {
     const toggleBtn = document.querySelector('[data-filter-drawer-toggle="customer-drawer"]');
     const search = document.getElementById('filter_contact_search')?.value?.trim();
     const accTypesCount = document.querySelectorAll('#drawer-filter-form input[name="account_type"]').length;
+    const contactStatus = document.getElementById('filter_contact_status')?.value?.trim();
     const cat = document.getElementById('filter_customer_category')?.value?.trim();
     const mainAreasCount = document.querySelectorAll('#planned_selected_main_areas_chips input[name="main_area"]').length;
     const areasCount = document.querySelectorAll('#planned_selected_bricks_chips input[name="area"]').length;
@@ -803,6 +813,7 @@ function updateActiveFilterBadge() {
     let activeCount = 0;
     if (search) activeCount++;
     if (accTypesCount > 0) activeCount += accTypesCount;
+    if (contactStatus) activeCount++;
     if (cat) activeCount++;
     if (mainAreasCount > 0) activeCount += mainAreasCount;
     if (areasCount > 0) activeCount += areasCount;

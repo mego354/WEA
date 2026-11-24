@@ -49,6 +49,13 @@ def _parse_coord_pair(post_data):
     return None, None
 
 
+CANONICAL_CONTACT_STATUSES = {
+    'customer': 'Customer',
+    'lead': 'Lead',
+    'inactive': 'Inactive',
+}
+
+
 def _resolve_is_main_flags(post_data, card_count):
     """Resolve positional boolean list for which address card is main."""
     if card_count <= 0:
@@ -151,7 +158,12 @@ def contacts_list(request):
         active_filters_count += 1
 
     if status and status != 'all':
-        qs = qs.filter(status=status)
+        status_norm = status.lower()
+        if status_norm in CANONICAL_CONTACT_STATUSES:
+            status = status_norm
+            qs = qs.filter(status=status_norm)
+        else:
+            qs = qs.none()
         active_filters_count += 1
 
     if area_ids:
@@ -230,7 +242,7 @@ def contacts_list(request):
         rel_labels = {'vendor': 'مورد', 'customer': 'عميل', 'other': 'أخرى'}
         active_filters.append({'label': 'العلاقة', 'value': rel_labels.get(relation, relation), 'param': 'relation'})
     if status and status != 'all':
-        active_filters.append({'label': 'الحالة', 'value': status, 'param': 'status'})
+        active_filters.append({'label': 'الحالة', 'value': CANONICAL_CONTACT_STATUSES.get(status, status), 'param': 'status'})
     if area_ids:
         for area_obj in Area.objects.filter(pk__in=area_ids).order_by('name'):
             active_filters.append({'label': 'المحافظة/المنطقة', 'value': area_obj.name, 'param': 'area_id', 'remove_value': str(area_obj.id)})
@@ -260,12 +272,12 @@ def contacts_list(request):
         del get_params['page']
     filter_querystring = get_params.urlencode()
 
-    # Define standard Kanban pipeline stages
+    # Define standard Kanban pipeline stages (strictly canonical Customer / Lead / Inactive)
     kanban_columns = [
         {
             'id': 'lead',
-            'title': 'عملاء محتملون',
-            'subtitle': 'Leads',
+            'title': 'Lead',
+            'subtitle': 'Lead',
             'icon': 'person_search',
             'border_color': 'border-amber-200',
             'badge_bg': 'bg-amber-100 text-amber-800',
@@ -274,8 +286,8 @@ def contacts_list(request):
         },
         {
             'id': 'customer',
-            'title': 'عملاء معتمدون',
-            'subtitle': 'Customers',
+            'title': 'Customer',
+            'subtitle': 'Customer',
             'icon': 'verified',
             'border_color': 'border-teal-200',
             'badge_bg': 'bg-teal-100 text-[#196e6e]',
@@ -283,28 +295,8 @@ def contacts_list(request):
             'col_bg': 'bg-teal-50/40',
         },
         {
-            'id': 'active',
-            'title': 'عملاء نشطون',
-            'subtitle': 'Active',
-            'icon': 'store',
-            'border_color': 'border-emerald-200',
-            'badge_bg': 'bg-emerald-100 text-emerald-800',
-            'count_bg': 'bg-emerald-600 text-white',
-            'col_bg': 'bg-emerald-50/40',
-        },
-        {
-            'id': 'supplier',
-            'title': 'موردون وشركات',
-            'subtitle': 'Suppliers',
-            'icon': 'domain',
-            'border_color': 'border-blue-200',
-            'badge_bg': 'bg-blue-100 text-blue-800',
-            'count_bg': 'bg-blue-600 text-white',
-            'col_bg': 'bg-blue-50/40',
-        },
-        {
             'id': 'inactive',
-            'title': 'غير نشط',
+            'title': 'Inactive',
             'subtitle': 'Inactive',
             'icon': 'cancel',
             'border_color': 'border-slate-200',
@@ -322,14 +314,6 @@ def contacts_list(request):
                 stage = 'inactive'
             elif c.status == 'lead':
                 stage = 'lead'
-            elif c.status == 'active':
-                stage = 'active'
-            elif c.status == 'supplier' or (c.is_supplier and not c.is_customer):
-                stage = 'supplier'
-            elif c.status == 'customer':
-                stage = 'customer'
-            elif c.is_supplier:
-                stage = 'supplier'
             else:
                 stage = 'customer'
             kanban_data[stage].append(c)
@@ -593,10 +577,15 @@ def contact_create(request):
         # Coordinates (normalized & validated, ignoring empty clones)
         lat_val, lng_val = _parse_coord_pair(request.POST)
 
-        # Status: Newly created contact defaults to Customer (Requirement E)
-        status_input = (request.POST.get('status') or '').strip().lower()
-        if status_input in ['customer', 'lead', 'active', 'inactive']:
-            status_val = status_input
+        # Status: Only canonical Customer / Lead / Inactive accepted (defaults to customer when omitted)
+        raw_status = (request.POST.get('status') or '').strip()
+        status_input = raw_status.lower()
+        if raw_status:
+            if status_input in CANONICAL_CONTACT_STATUSES:
+                status_val = status_input
+            else:
+                messages.error(request, "حالة جهة الاتصال غير صالحة. الحالات المعتمدة هي: Customer, Lead, Inactive فقط.")
+                return render_create_form(request, errors={'status': 'حالة جهة الاتصال غير صالحة'})
         else:
             status_val = 'customer'
 
@@ -885,9 +874,14 @@ def contact_edit(request, pk):
             except Exception:
                 pass
 
-        status_input = (request.POST.get('status') or '').strip().lower()
-        if status_input in ['lead', 'customer', 'active', 'inactive']:
-            contact.status = status_input
+        raw_status = (request.POST.get('status') or '').strip()
+        status_input = raw_status.lower()
+        if raw_status:
+            if status_input in CANONICAL_CONTACT_STATUSES:
+                contact.status = status_input
+            else:
+                messages.error(request, "حالة جهة الاتصال غير صالحة. الحالات المعتمدة هي: Customer, Lead, Inactive فقط.")
+                return render_edit_form(request, contact, errors={'status': 'حالة جهة الاتصال غير صالحة'})
 
         if 'parent_org' in request.POST:
             parent_org_id = (request.POST.get('parent_org') or '').strip()
@@ -1251,28 +1245,16 @@ def contact_update_status(request, pk):
         return render_forbidden_response(request, "لا يمكنك تعديل حالة جهة الاتصال.")
 
     if request.method == 'POST':
-        status_ar_map = {
-            'customer': 'عميل',
-            'active': 'نشط',
-            'lead': 'عميل محتمل',
-            'inactive': 'غير نشط',
-            'supplier': 'مورد',
-        }
         old_status = contact.status
         new_status = (request.POST.get('status') or '').strip().lower()
-        if new_status in ['lead', 'customer', 'inactive', 'active', 'supplier']:
-            if new_status == 'supplier':
-                contact.is_supplier = True
-                if contact.status == 'inactive':
-                    contact.status = 'active'
-            else:
-                contact.status = new_status
-                if new_status in ['lead', 'customer', 'active'] and not contact.is_customer:
-                    contact.is_customer = True
+        if new_status in CANONICAL_CONTACT_STATUSES:
+            contact.status = new_status
+            if new_status in ['lead', 'customer'] and not contact.is_customer and not contact.is_supplier:
+                contact.is_customer = True
             contact.save()
 
-            old_ar = status_ar_map.get(old_status, old_status)
-            new_ar = status_ar_map.get(contact.status, contact.status)
+            old_label = CANONICAL_CONTACT_STATUSES.get(old_status, old_status)
+            new_label = CANONICAL_CONTACT_STATUSES.get(contact.status, contact.status_label)
 
             AuditLogService.log(
                 action='update',
@@ -1288,17 +1270,17 @@ def contact_update_status(request, pk):
             ContactActivity.objects.create(
                 contact=contact,
                 activity_type='update',
-                title=f"تغيير الحالة إلى {new_ar}",
-                notes=f"تم تعديل حالة جهة الاتصال من {old_ar} إلى {new_ar}",
+                title=f"تغيير الحالة إلى {new_label}",
+                notes=f"تم تعديل حالة جهة الاتصال من {old_label} إلى {new_label}",
                 performed_by=request.user
             )
 
-            messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {new_ar}.")
+            messages.success(request, f"تم تغيير حالة جهة الاتصال إلى {new_label}.")
             if is_ajax:
                 return JsonResponse({
                     'status': 'ok',
                     'new_status': contact.status_label,
-                    'new_status_ar': new_ar,
+                    'new_status_ar': new_label,
                     'stage': contact.status,
                     'status_label': contact.status_label,
                     'contact_id': contact.id,
@@ -1873,7 +1855,11 @@ def contacts_export(request):
     qs = get_scoped_queryset(qs, request.user, 'contact')
 
     if status != 'all' and status:
-        qs = qs.filter(status=status)
+        status_norm = status.lower()
+        if status_norm in CANONICAL_CONTACT_STATUSES:
+            qs = qs.filter(status=status_norm)
+        else:
+            qs = qs.none()
     show_inactive = request.GET.get('inactive', 'no').strip()
     if show_inactive != 'yes' and status != 'inactive':
         qs = qs.exclude(status='inactive')
@@ -2018,7 +2004,7 @@ def customers_search_api(request):
         from master_data.search_utils import filter_by_arabic_search
         qs = filter_by_arabic_search(
             qs,
-            ['name', 'code', 'mobile', 'area__name', 'brick__name', 'specialty'],
+            ['name', 'code', 'mobile', 'specialty'],
             q,
             raw_fields=['code', 'mobile'],
             numeric_id_field='serial_num'

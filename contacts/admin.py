@@ -44,7 +44,7 @@ class ContactAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     filter_horizontal = ('assigned_team',)
     inlines = [ContactCommunicationMethodInline, ContactAddressInline, ContactCommentInline, ContactTodoInline]
     date_hierarchy = 'created_at'
-    actions = ['mark_active', 'mark_inactive']
+    actions = ['mark_customer', 'mark_lead', 'mark_inactive']
 
     fieldsets = (
         ('المعلومات الأساسية', {
@@ -90,24 +90,27 @@ class ContactAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
 
     def status_badge(self, obj):
         mapping = {
-            'customer': 'admin-pill-success',
-            'active': 'admin-pill-info',
-            'lead': 'admin-pill-warning',
-            'inactive': 'admin-pill-danger',
+            'customer': ('admin-pill-success', 'Customer'),
+            'lead': ('admin-pill-warning', 'Lead'),
+            'inactive': ('admin-pill-danger', 'Inactive'),
         }
-        cls = mapping.get(obj.status, 'admin-pill-neutral')
-        return format_html('<span class="admin-pill {}">{}</span>', cls, obj.get_status_display())
+        cls, label = mapping.get(obj.status, ('admin-pill-neutral', obj.status_label))
+        return format_html('<span class="admin-pill {}">{}</span>', cls, label)
     status_badge.short_description = "الحالة"
 
     def credit_limit_display(self, obj):
         return f"{obj.credit_limit:,.2f} ج.م"
     credit_limit_display.short_description = "حد الائتمان"
 
-    @admin.action(description="تفعيل جهات الاتصال المحددة")
-    def mark_active(self, request, queryset):
-        queryset.update(status='active')
+    @admin.action(description="تعيين الحالة إلى Customer")
+    def mark_customer(self, request, queryset):
+        queryset.update(status='customer')
 
-    @admin.action(description="تعطيل جهات الاتصال المحددة")
+    @admin.action(description="تعيين الحالة إلى Lead")
+    def mark_lead(self, request, queryset):
+        queryset.update(status='lead')
+
+    @admin.action(description="تعيين الحالة إلى Inactive")
     def mark_inactive(self, request, queryset):
         queryset.update(status='inactive')
 

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 from master_data.models import Area
@@ -11,9 +12,8 @@ class Contact(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('lead', 'Lead'),
         ('customer', 'Customer'),
-        ('active', 'Active'),
+        ('lead', 'Lead'),
         ('inactive', 'Inactive'),
     ]
 
@@ -136,13 +136,18 @@ class Contact(models.Model):
 
     @property
     def status_label(self):
-        if self.status in ['customer', 'active']:
-            return 'Customer'
-        elif self.status == 'lead':
-            return 'Lead'
-        elif self.status == 'inactive':
-            return 'Inactive'
-        return self.status.capitalize()
+        return {
+            'customer': 'Customer',
+            'lead': 'Lead',
+            'inactive': 'Inactive',
+        }.get(self.status, 'Customer')
+
+    def clean(self):
+        super().clean()
+        if self.status not in ('customer', 'lead', 'inactive'):
+            raise ValidationError({
+                'status': "Invalid contact status. Allowed values are: Customer, Lead, Inactive."
+            })
 
     @property
     def relation_display(self):

@@ -9,7 +9,7 @@
                 </span>
                 {% endif %}
                 <span class="text-xs font-bold px-2.5 py-0.5 rounded-md {% if item.type == 'planned' %}bg-blue-50 text-blue-700 border border-blue-200{% else %}bg-purple-50 text-purple-700 border border-purple-200{% endif %}">
-                    {% if item.type == 'planned' %}من الخطة{% else %}خارج الخطة{% endif %}
+                    {% if item.type == 'planned' %}من الخطة{% else %}مباشرة{% endif %}
                 </span>
                 <span class="text-xs font-bold px-2 py-0.5 rounded-md border {{ item.approval_badge_class }}">
                     {{ item.approval_display }}

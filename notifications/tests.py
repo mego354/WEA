@@ -445,10 +445,9 @@ class ArabicNotificationAndDeepLinkingTests(TestCase):
             extra={'old_status': 'lead', 'new_status': 'customer'},
         )
         self.assertEqual(fmt['route_key'], 'contacts.detail')
-        self.assertIn('عميل محتمل', fmt['body'])
-        self.assertIn('عميل', fmt['body'])
-        self.assertNotIn('lead', fmt['body'])
-        self.assertNotIn('customer', fmt['body'])
+        self.assertIn('Lead', fmt['body'])
+        self.assertIn('Customer', fmt['body'])
+        self.assertNotIn('عميل محتمل', fmt['body'])
 
     def test_unauthenticated_api_returns_401_json_not_302_redirect(self):
         for url in [

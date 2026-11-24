@@ -465,7 +465,7 @@ def home_view(request):
 
     if can_view_activities:
         visits_lead_count = vis_qs.filter(contact__status='lead').count()
-        visits_cust_count = vis_qs.filter(contact__status__in=['customer', 'active']).count()
+        visits_cust_count = vis_qs.filter(contact__status='customer').count()
         if visits_lead_count == 0 and visits_cust_count == 0:
             visits_cust_count = vis_qs.count()
         kpi_cards.extend([
@@ -610,7 +610,6 @@ def geofence_settings_api(request):
             'verify_end_visit_distance': loc_settings.verify_end_visit_distance,
             'bypass_reason_mandatory': loc_settings.bypass_reason_mandatory,
             'distance_bypass_requires_approval': loc_settings.distance_bypass_requires_approval,
-            'allow_visit_deletion_before_end': loc_settings.allow_visit_deletion_before_end,
             'can_user_bypass_creation': loc_settings.can_user_bypass_without_approval(request.user, stage='create'),
             'can_user_bypass_starting': loc_settings.can_user_bypass_without_approval(request.user, stage='start'),
             'can_user_bypass_ending': loc_settings.can_user_bypass_without_approval(request.user, stage='end'),

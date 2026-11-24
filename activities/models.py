@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -603,6 +604,25 @@ class Visit(models.Model):
         verbose_name = "زيارة"
         verbose_name_plural = "الزيارات"
         ordering = ['-date', '-serial_num']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['owner'],
+                condition=models.Q(status='started', ended_at__isnull=True),
+                name='unique_open_visit_per_owner',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.status == 'started' and self.ended_at is None and self.owner_id:
+            qs = Visit.objects.filter(owner_id=self.owner_id, status='started', ended_at__isnull=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            conflict = qs.first()
+            if conflict:
+                raise ValidationError({
+                    'status': f"لا يمكن فتح أكثر من زيارة نشطة للمسؤول في نفس الوقت (الزيارة المفتوحة حالياً #{conflict.serial_num})."
+                })
 
     def __str__(self):
         return f"Visit #{self.serial_num} - {self.contact.name}"

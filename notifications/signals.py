@@ -46,7 +46,11 @@ def on_visit_saved(sender, instance, created, raw=False, **kwargs):
         return
     try:
         url = _safe_url('visit_detail', pk=instance.pk)
-        if created and instance.approval_status == 'pending':
+        suppress_creation = bool(
+            getattr(instance, 'plan_id', None)
+            or getattr(instance, '_suppress_creation_notification', False)
+        )
+        if created and instance.approval_status == 'pending' and not suppress_creation:
             fmt = build_arabic_notification(
                 event_code='activities.visit_pending_approval',
                 target_obj=instance,

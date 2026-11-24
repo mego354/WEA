@@ -341,14 +341,14 @@ class Phase2ReportsScopingAndColumnPickerTests(TestCase):
         mgr_role = Role.objects.get(name=Role.ROLE_MANAGER)
         mgr_cairo = User.objects.create_user(username='rep_mgr_cai_t', password='Password123!', name='Mgr Cai', role=mgr_role)
         mgr_cairo.assigned_areas.add(self.cairo)
-        giza_cust = Contact.objects.create(name='عميل الجيزة تخطيط', area=self.giza, is_customer=True, status='active')
+        giza_cust = Contact.objects.create(name='عميل الجيزة تخطيط', area=self.giza, is_customer=True, status='customer')
         pday = PlannedVisitDay.objects.create(assignee=self.mgr_giza, date=today, created_by=self.superadmin)
         PlannedVisitItem.objects.create(plan_day=pday, contact=giza_cust, order=1)
         daily_cai = get_performance_daily_data(mgr_cairo, today)
         self.assertFalse(any(t.contact_id == giza_cust.id for t in daily_cai['subtabs']['tasks']))
 
         # AR Aging FIFO capping: even if debit > current_balance, buckets cannot exceed current_balance
-        cairo_cust = Contact.objects.create(name='عميل القاهرة FIFO', area=self.cairo, is_customer=True, status='active')
+        cairo_cust = Contact.objects.create(name='عميل القاهرة FIFO', area=self.cairo, is_customer=True, status='customer')
         acc_c, _ = CustomerAccount.objects.get_or_create(customer=cairo_cust, defaults={'current_balance': Decimal('100.00')})
         acc_c.current_balance = Decimal('100.00')
         acc_c.overdue_balance = Decimal('100.00')

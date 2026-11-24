@@ -20,7 +20,7 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Method**: `GET`
 - **Scoping**: Strictly scoped via `get_visit_eligible_contacts_queryset(request.user)`.
 - **Query Parameters**:
-  - `q` (string, optional): Search query (name, code, phone).
+  - `q` (string, optional): Arabic-normalized text search across `name`, `code`, `mobile`, `specialty`, and numeric `serial_num` (`area__name` and `brick__name` are excluded; no area/brick query parameters are accepted).
   - `type` (string, optional): Filter by account type (`pharmacy`, `clinic`, `hospital`, etc.).
 - **Response Format**:
   ```json
@@ -142,15 +142,15 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
   }
   ```
 
-### 3.3 Planned Visits Selection & Bulk Creation
-- `GET /planned-visits/?action=select_all_ids` (with active filters): returns `{ "success": true, "total_count": N, "contacts": [{"id": 1, "account_type": "..."}] }` across all filtered scoped results.
+### 3.3 Planned Visits Selection, Filtering & Bulk Creation
+- `GET /planned-visits/` & `GET /planned-visits/?action=select_all_ids` / `action=load_contacts`: supports `contact_status` (`customer` or `lead`; invalid values ignored and `inactive` always excluded) alongside search, account types, areas/bricks, category, and specialty within user DataScope. Returns `{ "success": true, "total_count": N, "contacts": [{"id": 1, "account_type": "..."}] }` across all filtered scoped results.
 - `GET /planned-visits/?action=load_contacts&show_all=1`: returns all matching scoped contacts in one batch for "عرض جميع العملاء المؤهلين".
-- `POST /planned-visits/bulk-add/`: atomically creates a `VisitPlan` entity (with unique `plan_id` and plan-level comment), `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records. Visits are created as `pending` approval if the creator lacks `activities:visits/approve`. Returns `plan_id`, `created_count`, and `created_visit_ids`.
+- `POST /planned-visits/bulk-add/`: atomically creates a `VisitPlan` entity (with unique `plan_id` and plan-level comment), `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records. Individual visit-creation notifications are suppressed; only a single plan-level notification (`activities.plan_submitted`) is emitted per submission. Visits are created as `pending` approval if the creator lacks `activities:visits/approve`. Returns `plan_id`, `created_count`, and `created_visit_ids`.
 
 ### 3.4 Unended Visit Deletion (`visit_delete`)
 - **URL**: `POST /visits/<pk>/delete/`
-- **Permission**: Controlled by `LocationSettings.allow_visit_deletion_before_end` and `activities:visits/delete` (`can_delete_unended_visit`) plus object-level scope (`can_user_access_object(request.user, visit, 'delete')`).
-- **Behavior**: Deletes only visits that have not ended (`status != 'finished'` and `ended_at is None`) and writes `VISIT_DELETED` to `SecurityAuditLog`. Returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests.
+- **Permission**: Controlled strictly by `activities:visits/delete` (`can_delete_unended_visit`) plus object-level scope (`can_user_access_object(request.user, visit, 'delete')`), decoupled from `LocationSettings`. DataScope/permission checks run before exposing visit existence or finished status.
+- **Behavior**: Deletes only visits that have not ended (`status != 'finished'` and `ended_at is None`), deletes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), cleans up linked `ERPAttachment` and unshared `Visit.photo` files, preserves a full snapshot + `ApprovalAuditLog` history inside `SecurityAuditLog(action_type='VISIT_DELETED')`, and returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests. Finished visits return HTTP 400.
 
 ### 3.5 Visit Questionnaire Answers Update (`visit_update_answers`)
 - **URLs**:
@@ -173,14 +173,14 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **URL**: `POST /activities/visits/<pk>/action/<action_type>/` (where `action_type` in `start`, `end`, `cancel`)
 - **Method**: `POST`
 - **Actions**:
-  - `start`: Starts an unstarted visit (`status='planned'|'unplanned'`).
-    - Validates GBS coordinates against client coordinates within tolerance (unless distance bypass is authorized for the user's role).
-    - Checks `request_distance_exception`: strictly verified against `settings.can_user_request_distance_exception(user)`. If requested, flags `is_distance_exception_requested=True` and enforces manager approval upon visit end.
-    - Handles start-only question answers.
-    - Transitions `status='in_progress'`, sets `started_at=now()`, `start_latitude`, `start_longitude`.
-    - Both Agenda and Visit Detail view use this unified endpoint.
-  - `end`: Ends an in-progress visit (`status='in_progress'`).
-    - Validates end GBS coordinates and end questionnaire answers.
+  - `start`: Starts an unstarted visit (`status='planned'`).
+    - Validates GPS coordinates against client coordinates within tolerance (unless `force_bypass_location` is submitted by a user with `activities:visits/bypass_gps` and a valid bypass reason when out of range or GPS is unavailable).
+    - Enforces a single open visit (`status='started'`, `ended_at IS NULL`) per `visit.owner` across all roles.
+    - Handles `stage='start_only'` check-in question answers.
+    - Transitions `status='started'`, sets `started_at=now()`, `latitude`, `longitude`.
+    - Both Agenda and Visit Detail view use this unified endpoint; direct unplanned creation via `POST /visits/create/` (without `planned_item_id`) executes this atomically inside `create_and_start_unplanned_visit`.
+  - `end`: Ends an in-progress visit (`status='started'`).
+    - Validates end GPS coordinates and completion questionnaire answers.
     - Transitions `status='finished'`, sets `ended_at=now()`.
     - Evaluates approval: if unplanned, or distance exception requested, or questionnaire answered, flags for approval (`pending`); if planned without exceptions, auto-approves (`approved`).
   - `cancel`: Legacy cancellation action (retained for backward compatibility; unended visits are deleted via `/visits/<pk>/delete/` per Requirement J).

@@ -647,7 +647,7 @@ class WeaDataIntegrationService:
                     notes=info['notes'],
                     area=gov,
                     brick=brick,
-                    status='active',
+                    status='customer',
                     created_by=self.default_admin,
                 )
                 self.contact_by_serial[ser] = c

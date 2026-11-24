@@ -77,6 +77,14 @@ def _extract_target_main_area_ids(target_obj) -> Set[int]:
         if rel is not None and getattr(rel, 'area', None):
             areas.append(rel.area)
 
+    # Fallback to user/assignee/owner areas (e.g. VisitPlan has assignee without direct contact/area)
+    if not areas:
+        for user_attr in ('assignee', 'owner', 'created_by'):
+            u = getattr(target_obj, user_attr, None)
+            if u is not None and hasattr(u, 'assigned_areas'):
+                areas.extend(list(u.assigned_areas.all()))
+                break
+
     main_ids: Set[int] = set()
     for a in areas:
         root = ScopeResolutionService.get_main_area(a)

@@ -108,7 +108,7 @@ erDiagram
 
 3. **Contact (`contacts.Contact`)**:
    - Real database ForeignKeys to both `area` (governorate) and `brick` (subarea).
-   - Dynamic classification (`lead`, `customer`, `vendor`).
+   - Strictly standardized status choices (`customer`, `lead`, `inactive`) with English display labels (`Customer`, `Lead`, `Inactive`).
    - Support for dynamic User-Defined Fields (UDF), customer todos, and interaction timeline.
 
 4. **Visit Plan (`activities.VisitPlan`)**:
@@ -118,13 +118,14 @@ erDiagram
    - Enforces approval workflow: plans created by representatives lacking `activities:visits/approve` are created as `pending` approval and can be approved/rejected at the plan level (`/planned-visits/plan/<pk>/action/<action>/`).
 
 5. **Visit (`activities.Visit`)**:
-   - Workflow state: `planned` → `started` → `finished`.
+   - Workflow state: `planned` → `started` → `finished` (or `cancelled`).
    - Approval state: `pending` → `approved` / `disapproved`.
-   - Unplanned visits created directly via `/visits/create/` (`is_planned=False`) are auto-approved (`'approved'`) and can be started immediately.
+   - Unplanned visits created directly via `/visits/create/` (`is_planned=False`) lock `date` to `timezone.localdate()`, auto-approve (`'approved'`), and atomically create and start (`create_and_start_unplanned_visit`) in a single transaction—rolling back completely on GPS/answer/conflict failure.
+   - Database partial `UniqueConstraint` (`unique_open_visit_per_owner`) guarantees at most one open visit (`status='started'`, `ended_at IS NULL`) per `owner` across all roles.
    - Planned visits created via bulk planning (`is_planned=True`) require manager approval (`pending`) if creator lacks `activities:visits/approve`.
    - Date validation: Visits can only be started when `visit.date == timezone.localdate()`. Time fields and time setting have been completely removed.
    - Outcome and comments: `visit_outcome` and `feedback` removed from direct model fields; outcome is collected via Question #1 (`نتيجة الزيارة`) in every `VisitTemplate` and accessed via `visit.outcome_display`.
-   - GPS verification & forced bypass: Enforces `activities:visits/bypass_gps` for starting and ending visits outside tolerance; records separate forced GPS tracking (`gps_forced_start`, `gps_forced_end`) with audit logs.
+   - GPS verification & forced bypass: Enforces `activities:visits/bypass_gps` for starting and ending visits outside tolerance (shown only when out of range or GPS unavailable); records separate forced GPS tracking (`gps_forced_start`, `gps_forced_end`) with audit logs.
    - Evidence photo capture completely removed: `location_photo`, `photo_captured_at`, and `activities:visits/evidence` removed across the application.
 
 6. **Agreement (`activities.Agreement`)**:

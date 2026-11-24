@@ -77,6 +77,7 @@ AUDIT_ACTION_MAP = {
     'STOCK_IN': ('inventory.memo_created', 'inventory.InventoryMemo', 'inventory_memo_detail', 'inventory_memos_list'),
     'STOCK_OUT': ('inventory.memo_created', 'inventory.InventoryMemo', 'inventory_memo_detail', 'inventory_memos_list'),
     # Activities
+    'VISIT_CREATED': ('activities.visit_created', 'activities.Visit', 'visit_detail', 'visits_list'),
     'VISIT_APPROVED': ('activities.visit_approved', 'activities.Visit', 'visit_detail', 'visits_list'),
     'VISIT_REJECTED': ('activities.visit_rejected', 'activities.Visit', 'visit_detail', 'visits_list'),
     'VISIT_DISTANCE_BYPASSED': ('activities.visit_gps_suspicious', 'activities.Visit', 'visit_detail', 'visits_list'),
@@ -120,6 +121,10 @@ def dispatch_from_audit_log(log_entry) -> None:
             target_obj = log_entry.target_user
         elif model_path:
             target_obj = _fetch_instance(model_path, getattr(log_entry, 'record_id', ''))
+
+        if action_type == 'VISIT_CREATED':
+            if target_obj is None or getattr(target_obj, 'plan_id', None) or getattr(target_obj, 'approval_status', '') == 'pending':
+                return
 
         action_url = ''
         if detail_url_name and target_obj is not None:

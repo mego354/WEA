@@ -128,12 +128,12 @@ class Phase2ComprehensiveVerificationTests(TestCase):
 
         # Contacts
         self.contact_cairo = Contact.objects.create(
-            name='صيدلية نصر الحديثة', is_customer=True, status='active', account_type='Pharmacy',
+            name='صيدلية نصر الحديثة', is_customer=True, status='customer', account_type='Pharmacy',
             area=self.cairo, brick=self.nasr_city, latitude=Decimal('30.0444'), longitude=Decimal('31.2357'),
             created_by=self.mgr_cairo
         )
         self.contact_giza = Contact.objects.create(
-            name='صيدلية الدقي التخصصية', is_customer=True, status='active', account_type='Pharmacy',
+            name='صيدلية الدقي التخصصية', is_customer=True, status='customer', account_type='Pharmacy',
             area=self.giza, brick=self.dokki, latitude=Decimal('30.0380'), longitude=Decimal('31.2120'),
             created_by=self.mgr_giza
         )
@@ -255,7 +255,7 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         self.assertEqual(planned_visit.approval_status, 'approved')
         self.assertFalse(planned_visit.waiting_for_reapproval)
 
-        # 2. Unplanned visit creation -> auto-approved
+        # 2. Unplanned visit creation -> auto-approved & started immediately (validating start_only questions)
         self.client.force_login(self.rep_cairo)
         res_unplanned = self.client.post(reverse('visit_create'), {
             'contact': self.contact_cairo.id,
@@ -264,10 +264,12 @@ class Phase2ComprehensiveVerificationTests(TestCase):
             'latitude': '30.0444',
             'longitude': '31.2357',
             'device_accuracy': '10',
+            f'question_{self.q_start.id}': 'هدف زيارة ميدانية',
         })
         self.assertEqual(res_unplanned.status_code, 302)
         unplanned_visit = Visit.objects.filter(contact=self.contact_cairo, is_planned=False).first()
         self.assertIsNotNone(unplanned_visit)
+        self.assertEqual(unplanned_visit.status, 'started')
         self.assertEqual(unplanned_visit.approval_status, 'approved')
 
         # 3. Editing planned visit triggers re-approval
@@ -467,7 +469,7 @@ class Phase2ComprehensiveVerificationTests(TestCase):
     # REQ J: Visit Deletion Rules
     # =========================================================================
     def test_req_j_finished_visits_cannot_be_deleted_and_unended_unlinks_plan(self):
-        """Finished visits cannot be deleted under any circumstances; unended visits unlink planned items."""
+        """Finished visits cannot be deleted; unended visit deletion removes associated PlannedVisitItem records."""
         today = timezone.now().date()
         pday = PlannedVisitDay.objects.create(assignee=self.rep_cairo, date=today, created_by=self.rep_cairo)
         visit_unended = Visit.objects.create(
@@ -476,13 +478,12 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         )
         pitem = PlannedVisitItem.objects.create(plan_day=pday, order=1, contact=self.contact_cairo, template=self.template, visit=visit_unended)
 
-        # Delete unended visit -> succeeds and unlinks pitem
+        # Delete unended visit -> succeeds and deletes associated PlannedVisitItem
         self.client.force_login(self.superadmin)
         res_del = self.client.post(reverse('visit_delete', args=[visit_unended.pk]))
         self.assertEqual(res_del.status_code, 302)
         self.assertFalse(Visit.objects.filter(pk=visit_unended.pk).exists())
-        pitem.refresh_from_db()
-        self.assertIsNone(pitem.visit)  # Planned item preserved
+        self.assertFalse(PlannedVisitItem.objects.filter(pk=pitem.pk).exists())
 
         # Finished visit -> delete is strictly rejected
         visit_finished = Visit.objects.create(
@@ -522,7 +523,7 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         """
         # Supplier in Giza
         supplier_giza = Contact.objects.create(
-            name='شركة أدوية الجيزة', is_supplier=True, status='active',
+            name='شركة أدوية الجيزة', is_supplier=True, status='customer',
             area=self.giza, brick=self.dokki, created_by=self.mgr_giza
         )
 
@@ -579,7 +580,7 @@ class Phase2QuestionnaireDoubleVisitAndCleanupTests(TestCase):
             role=self.rep_role, is_active=True
         )
         self.rep.assigned_areas.add(self.brick)
-        self.contact = Contact.objects.create(name='د. اختبار', is_customer=True, area=self.cairo, brick=self.brick, status='active')
+        self.contact = Contact.objects.create(name='د. اختبار', is_customer=True, area=self.cairo, brick=self.brick, status='customer')
         self.tpl = VisitTemplate.objects.create(name='Single visit (DR)', display_name_ar='زيارة طبيب فردية', active=True)
         self.q1 = VisitTemplateQuestion.objects.create(
             template=self.tpl, text_ar='نتيجة الزيارة', question_type='single_choice',
@@ -723,15 +724,15 @@ class Phase3VisitsAgreementsAndNavTests(TestCase):
 
         self.contact_nasr = Contact.objects.create(
             name='صيدلية مدينة نصر 3', is_customer=True, account_type='Pharmacy',
-            area=self.cairo, brick=self.nasr, status='active'
+            area=self.cairo, brick=self.nasr, status='customer'
         )
         self.contact_maadi = Contact.objects.create(
             name='صيدلية المعادي 3', is_customer=True, account_type='Pharmacy',
-            area=self.cairo, brick=self.maadi, status='active'
+            area=self.cairo, brick=self.maadi, status='customer'
         )
         self.contact_dokki = Contact.objects.create(
             name='صيدلية الدقي 3', is_customer=True, account_type='Pharmacy',
-            area=self.giza, brick=self.dokki, status='active'
+            area=self.giza, brick=self.dokki, status='customer'
         )
 
         self.cat = ProductCategory.objects.create(name='أدوية 3', code='PH3-CAT')

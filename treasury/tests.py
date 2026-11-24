@@ -540,7 +540,7 @@ class VendorPaymentRequestWorkflowTests(TestCase):
             name='خزينة القاهرة المركزية', vault_type='cash', current_balance=Decimal('100000.00'), is_active=True
         )
         self.supplier = Contact.objects.create(
-            name='شركة الدواء الحديث للتوريدات', code='SUP-MOD-01', is_supplier=True, area=self.cairo, status='active'
+            name='شركة الدواء الحديث للتوريدات', code='SUP-MOD-01', is_supplier=True, area=self.cairo, status='customer'
         )
         self.vendor_acc = VendorAccount.get_or_create_for_supplier(self.supplier)
 

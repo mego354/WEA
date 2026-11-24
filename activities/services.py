@@ -112,6 +112,14 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         client_telemetry=kwargs.get('client_telemetry'),
     )
 
+    # If user is strictly within effective distance tolerance, no bypass is needed or recorded
+    if dist is not None and dist <= tolerance:
+        visit.location_verified = True
+        visit.verification_status = 'verified'
+        visit.location_status = 'ضمن النطاق المحدد'
+        visit.distance_discrepancy = Decimal('0.00')
+        return visit
+
     # Handle explicit bypass:
     # All users who have activities:visits/bypass_gps (or superadmin) can ignore distance.
     # Bypassing distance will NOT make the visit need an approval.
@@ -437,6 +445,47 @@ def can_delete_agreement(user, agreement):
 # STANDARDIZED VISIT LIFECYCLE SERVICE FUNCTIONS (STATE MACHINE)
 # =============================================================================
 
+def get_open_visit_for_owner(owner_or_id, exclude_visit_id=None):
+    """
+    Returns an active open visit (status='started', ended_at IS NULL) owned by `owner_or_id`,
+    or None if no open visit exists. Applies strictly per `visit.owner`.
+    """
+    from activities.models import Visit
+    owner_id = getattr(owner_or_id, 'pk', owner_or_id)
+    if not owner_id:
+        return None
+    qs = Visit.objects.filter(
+        owner_id=owner_id, status='started', ended_at__isnull=True
+    ).select_related('contact')
+    if exclude_visit_id:
+        qs = qs.exclude(pk=exclude_visit_id)
+    return qs.first()
+
+
+def extract_checkin_answers_from_post(post_data, template):
+    """
+    Extracts check-in (`stage='start_only'`) questionnaire answers from POST data.
+    Shared by both `visit_action('start')` and combined unplanned `visit_create`.
+    """
+    checkin_answers = {}
+    if not template or post_data is None:
+        return checkin_answers
+    for q in template.get_active_questions().filter(stage='start_only'):
+        field_name = f'question_{q.id}'
+        if q.question_type == 'suggested_products':
+            val = post_data.getlist(field_name) if hasattr(post_data, 'getlist') else post_data.get(field_name, [])
+        elif q.question_type == 'multiple_choice':
+            val = post_data.getlist(field_name) if hasattr(post_data, 'getlist') else post_data.get(field_name, [])
+        else:
+            val = post_data.get(field_name)
+            if val is None and hasattr(post_data, 'getlist'):
+                lst = post_data.getlist(field_name)
+                val = lst[0] if len(lst) == 1 else (lst if lst else '')
+        if val:
+            checkin_answers[str(q.id)] = val
+    return checkin_answers
+
+
 def can_start_visit(visit, user):
     """
     Validates whether a user is authorized to start the visit (Check-in).
@@ -446,6 +495,7 @@ def can_start_visit(visit, user):
     3. Visit date must be today (visit.date == timezone.localdate()).
     4. User must be the assigned owner or creator (or superuser / authorized supervisor).
     5. User's role must be eligible for the visit's template.
+    6. Visit owner must NOT already have another open visit (`status='started'`, `ended_at IS NULL`) — zero role bypass.
     """
     if not user or not user.is_authenticated:
         return False, "يجب تسجيل الدخول لبدء الزيارة."
@@ -468,6 +518,13 @@ def can_start_visit(visit, user):
     if visit.approval_status != 'approved':
         return False, "لا يمكن بدء الزيارة قبل اعتمادها رسمياً من المدير المسؤول."
 
+    open_conflict = get_open_visit_for_owner(visit.owner_id, exclude_visit_id=visit.pk)
+    if open_conflict:
+        return False, (
+            f"لا يمكن بدء الزيارة لوجود زيارة مفتوحة حالياً للمسؤول "
+            f"(#{open_conflict.serial_num} - {open_conflict.contact.name}). يرجى إنهاء الزيارة المفتوحة أولاً."
+        )
+
     return True, ""
 
 
@@ -478,12 +535,17 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
     planned (approved) -> started
     Captures server-side started_at timestamp, applies GPS check-in verification,
     validates and saves check-in questionnaire answers (stage='start_only'),
+    enforces one open visit per owner (via owner lock + DB constraint),
     and records an audit log entry.
     """
-    from django.db import transaction
+    from django.contrib.auth import get_user_model
+    from django.db import IntegrityError, transaction
     from activities.models import Visit, ApprovalAuditLog
 
+    UserModel = get_user_model()
     with transaction.atomic():
+        if visit.owner_id:
+            UserModel.objects.select_for_update().get(pk=visit.owner_id)
         visit = Visit.objects.select_for_update().get(pk=visit.pk)
         can_start, err = can_start_visit(visit, user)
         if not can_start:
@@ -543,8 +605,14 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
         status_before = visit.status
         visit.status = 'started'
         visit.started_at = timezone.now()
+        visit.ended_at = None
         visit.questionnaire_answers = saved_answers
-        visit.save()
+        try:
+            visit.save()
+        except IntegrityError:
+            raise ValidationError(
+                "لا يمكن بدء الزيارة لوجود زيارة أخرى مفتوحة حالياً لنفس المسؤول. يرجى إنهاء الزيارة الجارية أولاً."
+            )
 
         ip = request.META.get('REMOTE_ADDR') if request else None
         if force_bypass or visit.gps_forced_start:
@@ -581,6 +649,189 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
             new_values={'status': 'started'},
             status='SUCCESS',
         )
+        return visit
+
+
+def create_and_start_unplanned_visit(
+    user,
+    contact,
+    template,
+    *,
+    owner=None,
+    doubled=False,
+    is_successful=True,
+    post_data=None,
+    lat=None,
+    lng=None,
+    accuracy=None,
+    photo_file=None,
+    force_bypass=False,
+    bypass_reason='',
+    checkin_answers=None,
+    detailed_product_ids=None,
+    request=None,
+):
+    """
+    Atomically creates an unplanned Visit dated today (`timezone.localdate()`)
+    and immediately starts it via `start_visit()`.
+    If ANY validation, open-visit conflict, GPS rule, or start question fails,
+    the entire `transaction.atomic()` block rolls back so zero unstarted or
+    orphaned visits/logs remain in the database.
+    """
+    from django.contrib.auth import get_user_model
+    from django.db import IntegrityError, transaction
+    from activities.models import Visit, ApprovalAuditLog
+    from catalog.models import Product
+    from accounts.permissions import can_user_access_contact_for_visit
+    from accounts.services import AuditLogService
+
+    if not user or not getattr(user, 'is_authenticated', False):
+        raise ValidationError("يجب تسجيل الدخول لتسجيل وبدء الزيارة.")
+
+    target_owner = owner or user
+    UserModel = get_user_model()
+    loc_settings = LocationSettings.get_settings()
+
+    with transaction.atomic():
+        UserModel.objects.select_for_update().get(pk=target_owner.pk)
+
+        if not contact:
+            raise ValidationError("يرجى اختيار جهة الاتصال (العميل).")
+        if not can_user_access_contact_for_visit(user, contact):
+            raise ValidationError("غير مصرح لك بإنشاء زيارة لهذا العميل خارج نطاق منطقتك الجغرافية.")
+        if not template:
+            raise ValidationError("اختيار قالب الزيارة إلزامي لإتمام العملية.")
+        if not template.is_user_eligible(user):
+            raise ValidationError(f"دورك الوظيفي غير مصرح له باستخدام قالب الزيارة '{template.display_name_ar}'.")
+        if not template.is_contact_eligible(contact, user=user):
+            allowed_str = ", ".join(template.restrict_account_types) if template.restrict_account_types else "الكل"
+            raise ValidationError(
+                f"قالب الزيارة '{template.display_name_ar}' غير مصرح به لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
+            )
+
+        open_conflict = get_open_visit_for_owner(target_owner.pk)
+        if open_conflict:
+            raise ValidationError(
+                f"لا يمكن إنشاء وبدء زيارة جديدة لوجود زيارة مفتوحة حالياً للمسؤول "
+                f"(#{open_conflict.serial_num} - {open_conflict.contact.name}). يرجى إنهاء الزيارة المفتوحة أولاً."
+            )
+
+        visit_date = timezone.localdate()
+        now_ts = timezone.now()
+
+        visit = Visit(
+            contact=contact,
+            template=template,
+            owner=target_owner,
+            created_by=user,
+            is_planned=False,
+            date=visit_date,
+            status='planned',
+            started_at=None,
+            ended_at=None,
+            is_successful=bool(is_successful),
+            doubled=bool(doubled),
+            allowed_distance=loc_settings.get_effective_tolerance(template),
+            approval_status='approved',
+            approved_by=user,
+            approved_at=now_ts,
+            location_verified=False,
+            verification_status='unverified',
+            location_status='بانتظار بدء الزيارة والتحقق من الموقع الجغرافي',
+            requires_approval_due_to_distance=False,
+        )
+        visit.save()
+
+        # Persist optional suggested_products / product detailing submitted at creation
+        if template and post_data is not None:
+            sp_answers = dict(visit.questionnaire_answers or {})
+            sp_changed = False
+            for q in template.get_active_questions().filter(question_type='suggested_products'):
+                fname = f'question_{q.id}'
+                if fname in post_data:
+                    eligible_qs, _, _ = get_question_product_choices(template, question=q)
+                    allowed_ids = set(eligible_qs.values_list('id', flat=True))
+                    parsed_sp = parse_suggested_products_submission(post_data, fname, allowed_ids, strict=False)
+                    if parsed_sp:
+                        sp_answers[str(q.id)] = parsed_sp
+                        sp_changed = True
+            if sp_changed:
+                visit.questionnaire_answers = sp_answers
+                visit.save(update_fields=['questionnaire_answers'])
+
+        if template and template.is_product_detailing_supported():
+            raw_det_ids = detailed_product_ids
+            if raw_det_ids is None and post_data is not None:
+                raw_det_ids = post_data.getlist('detailed_products') if hasattr(post_data, 'getlist') else post_data.get('detailed_products', [])
+            if raw_det_ids:
+                eligible_ids = set(Product.get_eligible_for_visits().values_list('id', flat=True))
+                valid_ids = [int(pid) for pid in raw_det_ids if str(pid).isdigit() and int(pid) in eligible_ids]
+                visit.detailed_products.set(valid_ids)
+            elif template.has_suggested_products_question() and visit.questionnaire_answers:
+                sp_union = []
+                for q in template.get_active_questions().filter(question_type='suggested_products'):
+                    for pid in (visit.questionnaire_answers.get(str(q.id)) or []):
+                        if str(pid).isdigit() and int(pid) not in sp_union:
+                            sp_union.append(int(pid))
+                if sp_union:
+                    visit.detailed_products.set(sp_union)
+
+        ip = request.META.get('REMOTE_ADDR') if request else None
+        ApprovalAuditLog.objects.create(
+            record_type='visit',
+            visit=visit,
+            action='created',
+            actor=user,
+            status_before='',
+            status_after=visit.approval_status,
+            reason=f"إنشاء زيارة خارج الخطة للعميل {contact.name}",
+            ip_address=ip,
+        )
+
+        AuditLogService.log(
+            action='create',
+            action_type='VISIT_CREATED',
+            module='visits',
+            user=user,
+            request=request,
+            record_id=visit.pk,
+            object_repr=f"Visit #{visit.serial_num}",
+            new_values={
+                'serial_num': visit.serial_num,
+                'contact_id': contact.id,
+                'contact_name': contact.name,
+                'is_planned': False,
+                'date': str(visit.date),
+                'owner_id': target_owner.id,
+                'template_id': template.id,
+                'doubled': visit.doubled,
+                'allowed_distance': float(visit.allowed_distance) if visit.allowed_distance is not None else None,
+                'verification_status': visit.verification_status,
+                'approval_status': visit.approval_status,
+            },
+        )
+
+        resolved_checkin = checkin_answers
+        if resolved_checkin is None and post_data is not None:
+            resolved_checkin = extract_checkin_answers_from_post(post_data, template)
+
+        try:
+            visit = start_visit(
+                visit,
+                user,
+                request=request,
+                lat=lat,
+                lng=lng,
+                accuracy=accuracy,
+                photo_file=photo_file,
+                force_bypass=force_bypass,
+                bypass_reason=bypass_reason,
+                checkin_answers=resolved_checkin,
+            )
+        except IntegrityError:
+            raise ValidationError(
+                "لا يمكن بدء الزيارة لوجود زيارة أخرى مفتوحة حالياً لنفس المسؤول. يرجى إنهاء الزيارة الجارية أولاً."
+            )
         return visit
 
 
@@ -1125,24 +1376,19 @@ def build_visit_timeline(visit):
 def can_delete_unended_visit(visit, user):
     """
     Validates whether a user is authorized to delete a visit:
-    1. Visit must NOT be ended (`visit.status != 'finished'` and `visit.ended_at is None`).
-    2. `LocationSettings.allow_visit_deletion_before_end` must be enabled and user must have `activities:visits/delete`.
-    3. User must have data scope access (`can_user_access_object(user, visit, 'delete')`).
+    1. User must be authenticated and hold `activities:visits/delete` (or SuperAdmin).
+    2. User must pass object-level DataScope (`can_user_access_object(user, visit, 'delete')`)
+       BEFORE inspecting or exposing visit lifecycle status.
+    3. Visit must NOT be ended (`visit.status != 'finished'` and `visit.ended_at is None`).
+    Note: Decoupled from LocationSettings.allow_visit_deletion_before_end.
     """
     if not user or not getattr(user, 'is_authenticated', False):
         return False, "يجب تسجيل الدخول لحذف الزيارة."
 
-    if visit.status == 'finished' or visit.ended_at is not None:
-        return False, "لا يمكن حذف زيارة منتهية (مكتملة) حفاظاً على سلامة السجل التاريخي والتدقيق."
+    from accounts.permissions import has_perm_or_admin, can_user_access_object
+    if not has_perm_or_admin(user, 'activities:visits/delete'):
+        return False, "عذراً، لا تملك صلاحية حذف الزيارات."
 
-    loc_settings = LocationSettings.get_settings()
-    if not loc_settings.allow_visit_deletion_before_end:
-        return False, "خاصية حذف الزيارات غير المنتهية معطلة حالياً في إعدادات النظام."
-
-    if not loc_settings.can_user_delete_visit(user):
-        return False, "عذراً، لا تملك صلاحية حذف الزيارات غير المنتهية."
-
-    from accounts.permissions import can_user_access_object
     if not can_user_access_object(user, visit, 'delete'):
         return False, "غير مصرح لك بحذف هذه الزيارة خارج نطاق صلاحياتك أو منطقتك الجغرافية."
 
@@ -1151,22 +1397,46 @@ def can_delete_unended_visit(visit, user):
 
 def delete_unended_visit(visit, user, request=None):
     """
-    Deletes an unended visit after verifying permissions, settings, status, and data scope.
-    Unlinks any associated PlannedVisitItem so the planned slot remains intact,
-    and writes a comprehensive SecurityAuditLog entry (`VISIT_DELETED`).
+    Deletes an unended visit after verifying permissions and data scope.
+    - Deletes associated PlannedVisitItem records (and empty parent VisitPlan if orphaned).
+    - Cleans up linked ERPAttachment records and Visit.photo safely post-commit.
+    - Preserves full audit snapshot (including ApprovalAuditLog history) in SecurityAuditLog.
     """
+    from django.contrib.contenttypes.models import ContentType
     from django.db import transaction
-    from activities.models import Visit, PlannedVisitItem
+    from activities.models import Visit, PlannedVisitItem, VisitPlan
     from accounts.services import AuditLogService
+    from master_data.models import ERPAttachment
+    from master_data.media_service import delete_attachment, schedule_storage_deletion
 
     with transaction.atomic():
-        visit = Visit.objects.select_for_update().select_related('contact', 'owner', 'template').get(pk=visit.pk)
+        visit = Visit.objects.select_for_update().select_related('contact', 'owner', 'template', 'plan').get(pk=visit.pk)
         allowed, reason = can_delete_unended_visit(visit, user)
         if not allowed:
             raise ValidationError(reason)
 
         visit_pk = visit.pk
         serial_num = visit.serial_num
+        linked_items = list(PlannedVisitItem.objects.filter(visit=visit).select_related('plan'))
+        parent_plan_ids = {it.plan_id for it in linked_items if it.plan_id}
+        if visit.plan_id:
+            parent_plan_ids.add(visit.plan_id)
+
+        approval_logs = [
+            {
+                'id': log.id,
+                'action': log.action,
+                'actor_id': log.actor_id,
+                'actor_username': log.actor.username if log.actor else '',
+                'status_before': log.status_before,
+                'status_after': log.status_after,
+                'reason': log.reason,
+                'ip_address': log.ip_address,
+                'created_at': log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in visit.approval_history.select_related('actor').order_by('created_at', 'id')
+        ]
+
         snapshot = {
             'id': visit_pk,
             'serial_num': serial_num,
@@ -1174,17 +1444,44 @@ def delete_unended_visit(visit, user, request=None):
             'contact_name': visit.contact.name if visit.contact else '',
             'owner_id': visit.owner_id,
             'owner_username': visit.owner.username if visit.owner else '',
+            'created_by_id': visit.created_by_id,
             'template_id': visit.template_id,
+            'plan_id': visit.plan_id,
+            'deleted_planned_item_ids': [it.id for it in linked_items],
             'date': str(visit.date),
             'status': visit.status,
             'approval_status': visit.approval_status,
             'is_planned': visit.is_planned,
+            'started_at': visit.started_at.isoformat() if visit.started_at else None,
+            'latitude': str(visit.latitude) if visit.latitude is not None else None,
+            'longitude': str(visit.longitude) if visit.longitude is not None else None,
+            'distance': str(visit.distance) if visit.distance is not None else None,
+            'verification_status': visit.verification_status,
+            'questionnaire_answers': visit.questionnaire_answers or {},
+            'approval_history': approval_logs,
         }
 
-        # Unlink any associated PlannedVisitItem before deleting the visit
-        PlannedVisitItem.objects.filter(visit=visit).update(visit=None, is_executed=False)
+        # Clean up any linked ERPAttachment records and optional photo field safely
+        ct_visit = ContentType.objects.get_for_model(Visit)
+        for att in ERPAttachment.objects.filter(content_type=ct_visit, object_id=visit.pk):
+            delete_attachment(att, user, request=request)
+
+        photo_field = getattr(visit, 'photo', None)
+        photo_key = photo_field.name if photo_field and getattr(photo_field, 'name', '') else ''
+
+        # Delete associated PlannedVisitItem records (nothing related remains in planned items)
+        PlannedVisitItem.objects.filter(visit=visit).delete()
 
         visit.delete()
+
+        # Remove parent VisitPlan only if it now has zero items and zero visits left
+        if parent_plan_ids:
+            for plan_obj in VisitPlan.objects.filter(id__in=parent_plan_ids):
+                if not plan_obj.planned_items.exists() and not plan_obj.visits.exists():
+                    plan_obj.delete()
+
+        if photo_key:
+            schedule_storage_deletion(photo_key, size_bytes=0)
 
         AuditLogService.log(
             action='delete',
@@ -1194,7 +1491,7 @@ def delete_unended_visit(visit, user, request=None):
             request=request,
             record_id=visit_pk,
             record_name=f"Visit #{serial_num}",
-            description=f"حذف الزيارة غير المنتهية رقم #{serial_num} للعميل {snapshot['contact_name']}",
+            description=f"حذف الزيارة رقم #{serial_num} للعميل {snapshot['contact_name']}",
             previous_values=snapshot,
             new_values=None,
             status='SUCCESS',

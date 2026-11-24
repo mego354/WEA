@@ -176,6 +176,7 @@ def is_storage_key_referenced(storage_key):
     from accounts.models import User
     from contacts.models import ContactAttachment
     from purchases.models import PurchaseOrderAttachment
+    from activities.models import Visit
 
     if ERPAttachment.objects.filter(storage_key=storage_key).exists():
         return True
@@ -190,6 +191,8 @@ def is_storage_key_referenced(storage_key):
     if ContactAttachment.objects.filter(file=storage_key).exists():
         return True
     if PurchaseOrderAttachment.objects.filter(file=storage_key).exists():
+        return True
+    if hasattr(Visit, 'photo') and Visit.objects.filter(photo=storage_key).exists():
         return True
     return False
 

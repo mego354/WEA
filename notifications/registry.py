@@ -402,7 +402,17 @@ NOTIFICATION_EVENTS_CATALOG: List[Dict[str, Any]] = [
         'default_roles': ['superadmin', 'manager'],
     },
 
-    # --- 5. ACTIVITIES (9 events) ---
+    # --- 5. ACTIVITIES (10 events) ---
+    {
+        'code': 'activities.visit_created',
+        'module': 'activities',
+        'name_ar': 'تسجيل زيارة ميدانية جديدة',
+        'target_model': 'visit',
+        'required_permission': 'activities:visits/view',
+        'default_severity': 'info',
+        'default_delivery_mode': 'all_in_scope',
+        'default_roles': ['superadmin', 'manager'],
+    },
     {
         'code': 'activities.visit_pending_approval',
         'module': 'activities',

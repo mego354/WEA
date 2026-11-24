@@ -32,12 +32,9 @@ SEVERITY_LABELS_AR: Dict[str, str] = {
 }
 
 CONTACT_STATUS_LABELS_AR: Dict[str, str] = {
-    'lead': 'عميل محتمل',
-    'customer': 'عميل',
-    'active': 'نشط',
-    'supplier': 'مورد',
-    'vendor': 'مورد',
-    'inactive': 'غير نشط',
+    'lead': 'Lead',
+    'customer': 'Customer',
+    'inactive': 'Inactive',
 }
 
 SETTINGS_ACTION_LABELS_AR: Dict[str, Tuple[str, str]] = {
@@ -61,7 +58,7 @@ def get_severity_label_ar(severity: str) -> str:
 
 def localize_contact_status(status: Optional[str]) -> str:
     key = (status or '').strip().lower()
-    return CONTACT_STATUS_LABELS_AR.get(key, 'غير محدد')
+    return CONTACT_STATUS_LABELS_AR.get(key, 'Customer')
 
 
 def format_egp(amount: Any) -> str:
@@ -84,7 +81,7 @@ def contact_relation_label(contact) -> str:
     is_sup = bool(getattr(contact, 'is_supplier', False))
     status = (getattr(contact, 'status', '') or '').strip().lower()
     if status == 'lead':
-        return 'عميل محتمل'
+        return 'Lead'
     if is_cust and is_sup:
         return 'عميل ومورد'
     if is_sup:
@@ -190,6 +187,7 @@ EVENT_DEFAULT_ROUTE_KEY: Dict[str, str] = {
     'inventory.memo_created': 'inventory.memo_detail',
     'inventory.low_stock_alert': 'inventory.stock_list',
     # Activities (11)
+    'activities.visit_created': 'activities.visit_detail',
     'activities.visit_pending_approval': 'activities.visit_detail',
     'activities.visit_approved': 'activities.visit_detail',
     'activities.visit_rejected': 'activities.visit_detail',
@@ -543,8 +541,11 @@ def build_arabic_notification(
         cust_name = getattr(getattr(target_obj, 'contact', None), 'name', '') or ''
         visit_serial = getattr(target_obj, 'serial_num', None) or getattr(target_obj, 'pk', None) or ''
         visit_date = getattr(target_obj, 'date', None)
-        date_str = visit_date.strftime('%Y-%m-%d') if visit_date else ''
-        if event_code == 'activities.visit_pending_approval':
+        date_str = visit_date.strftime('%Y-%m-%d') if hasattr(visit_date, 'strftime') else (str(visit_date) if visit_date else '')
+        if event_code == 'activities.visit_created':
+            title = f"تسجيل زيارة للعميل {cust_name}" if cust_name else "تسجيل زيارة ميدانية جديدة"
+            body = f"أنشأ {actor_name} زيارة (#{visit_serial}) للعميل {cust_name}" + (f" بتاريخ {date_str}" if date_str else "") + "."
+        elif event_code == 'activities.visit_pending_approval':
             meta['requires_action'] = True
             title = f"زيارة للعميل {cust_name} بانتظار اعتمادك" if cust_name else "زيارة ميدانية بانتظار اعتمادك"
             body = f"سجّل {actor_name} زيارة للعميل {cust_name}" + (f" بتاريخ {date_str}" if date_str else "") + "، وتتطلب مراجعتك واعتمادك."
@@ -566,10 +567,16 @@ def build_arabic_notification(
 
     elif event_code.startswith('activities.plan_'):
         plan_id = getattr(target_obj, 'plan_id', None) or record_name or ''
+        plan_approval = getattr(target_obj, 'approval_status', '')
         if event_code == 'activities.plan_submitted':
-            meta['requires_action'] = True
-            title = f"خطة زيارات #{plan_id} بانتظار الاعتماد" if plan_id else "تقديم خطة زيارات للاعتماد"
-            body = f"قدّم {actor_name} خطة زيارات" + (f" #{plan_id}" if plan_id else "") + "، وتتطلب مراجعتك واعتمادك."
+            if plan_approval == 'approved':
+                meta['requires_action'] = False
+                title = f"تم إنشاء خطة زيارات #{plan_id}" if plan_id else "تم إنشاء خطة زيارات جديدة"
+                body = f"أنشأ {actor_name} خطة زيارات" + (f" #{plan_id}" if plan_id else "") + "."
+            else:
+                meta['requires_action'] = True
+                title = f"خطة زيارات #{plan_id} بانتظار الاعتماد" if plan_id else "تقديم خطة زيارات للاعتماد"
+                body = f"قدّم {actor_name} خطة زيارات" + (f" #{plan_id}" if plan_id else "") + "، وتتطلب مراجعتك واعتمادك."
         elif event_code == 'activities.plan_approved':
             title = f"تم اعتماد خطة الزيارات #{plan_id}" if plan_id else "تم اعتماد خطة الزيارات"
             body = f"اعتمد {actor_name} خطة الزيارات" + (f" #{plan_id}" if plan_id else "") + "."

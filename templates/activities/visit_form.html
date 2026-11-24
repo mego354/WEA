@@ -134,6 +134,18 @@
             </div>
             {% endif %}
 
+            {% if not visit and not is_planned_visit and not planned_item and active_open_visit %}
+            <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-amber-600 text-lg shrink-0">warning</span>
+                    <span>توجد زيارة مفتوحة حالياً (<strong>#{{ active_open_visit.serial_num }}</strong> - {{ active_open_visit.contact.name }}). يجب إنهاؤها قبل بدء زيارة جديدة.</span>
+                </div>
+                <a href="{% url 'visit_detail' active_open_visit.pk %}" class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors">
+                    عرض الزيارة المفتوحة
+                </a>
+            </div>
+            {% endif %}
+
             {% if not visit %}
             <!-- VISIT WORKFLOW BADGE (Automatically Determined by Entry Point) -->
             <div class="pb-4 border-b border-slate-100 flex items-center justify-between">
@@ -251,11 +263,20 @@
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">
                         <span>تاريخ الزيارة *</span>
                     </label>
+                    {% if not visit and not is_planned_visit and not planned_item %}
+                    <input type="hidden" name="date" id="id_date" value="{{ today_str }}">
+                    <div class="w-full rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-2 text-xs font-bold text-teal-800 flex items-center justify-between">
+                        <span class="dir-ltr">{{ today_str }}</span>
+                        <span class="text-[11px] font-semibold text-teal-700">تاريخ اليوم (بدء فوري)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">تُسجّل الزيارة خارج الخطة بتاريخ اليوم وتبدأ فور الحفظ.</p>
+                    {% else %}
                     <input type="date" name="date" id="id_date"
                            value="{{ form.date.value|date:'Y-m-d'|default:form.date.value|default:today_str }}"
                            {% if not visit %}min="{{ today_str }}"{% endif %}
                            onchange="checkDuplicateVisitOnDate()"
                            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none">
+                    {% endif %}
                     {% if form.date.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.date.errors.0 }}</p>{% endif %}
                 </div>
             </div>
@@ -293,11 +314,94 @@
                 {% if form.doubled.errors %}<p class="text-xs text-rose-500 mt-1">{{ form.doubled.errors.0 }}</p>{% endif %}
             </div>
 
+            {% if not visit and not is_planned_visit and not planned_item %}
+            <!-- EMBEDDED UNPLANNED CHECK-IN: GPS VERIFICATION + START QUESTIONS -->
+            <div id="unplanned-checkin-card" class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base text-[#27bebe]">my_location</span>
+                        <h3 class="text-xs font-black text-slate-800">التحقق الجغرافي وبدء الزيارة</h3>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="gps-quick-text" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">جاري الالتقاط...</span>
+                        <button type="button" onclick="acquireDeviceLocation(true)" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs">refresh</span>
+                            <span>تحديث الموقع</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div class="rounded-xl bg-white border border-slate-200 p-3 space-y-1">
+                        <div class="flex items-center gap-2">
+                            <span id="gps-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                            <span class="font-bold text-slate-700">موقعك الحالي</span>
+                        </div>
+                        <p id="user-gps-display" class="font-mono text-[11px] text-slate-800 dir-ltr">جاري الالتقاط...</p>
+                        <p id="gps-status-label" class="text-[11px] text-slate-500">جاري الاتصال بخدمة تحديد الموقع...</p>
+                    </div>
+                    <div class="rounded-xl bg-white border border-slate-200 p-3 space-y-1">
+                        <div class="font-bold text-slate-700">موقع العميل المسجل</div>
+                        <p id="client-gps-display" class="font-mono text-[11px] text-slate-800 dir-ltr">—</p>
+                        <p id="client-gps-subtext" class="text-[11px] text-slate-500">بانتظار تحديد العميل</p>
+                    </div>
+                    <div class="rounded-xl bg-white border border-slate-200 p-3 flex items-center justify-between gap-2">
+                        <div>
+                            <div class="text-[11px] text-slate-500 font-semibold">النطاق المسموح</div>
+                            <div id="allowed-distance-display" class="font-bold text-slate-800">{{ gps_tolerance|default:300 }} متر</div>
+                        </div>
+                        <span id="allowed-distance-source" class="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-teal-50 text-teal-700 border border-teal-200">الإعداد الافتراضي</span>
+                    </div>
+                    <div class="rounded-xl bg-white border border-slate-200 p-3 flex items-center justify-between gap-2">
+                        <div>
+                            <div class="text-[11px] text-slate-500 font-semibold">المسافة الفعلية</div>
+                            <div id="actual-distance-display" class="font-bold text-slate-800">—</div>
+                        </div>
+                        <span id="distance-feedback-badge" class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600">بانتظار الحساب</span>
+                    </div>
+                </div>
+
+                <div id="gps-permission-alert" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1">
+                    <div id="gps-alert-title" class="font-bold text-rose-800"></div>
+                    <div id="gps-alert-desc" class="text-rose-700"></div>
+                </div>
+
+                {% if can_bypass_gps %}
+                <div id="distance-bypass-container" class="hidden p-3.5 rounded-xl bg-amber-50 border border-amber-300 space-y-2.5">
+                    <label class="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" name="force_bypass_location" id="unplanned-force-bypass-chk" value="1"
+                               onchange="toggleUnplannedBypassReason()"
+                               class="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500">
+                        <span class="text-xs font-bold text-amber-900">تجاوز التحقق من الموقع الجغرافي (يتطلب سبباً لا يقل عن 10 أحرف)</span>
+                    </label>
+                    <div id="unplanned-bypass-reason-box" class="hidden">
+                        <textarea name="bypass_reason" id="unplanned-bypass-reason-input" rows="2"
+                                  placeholder="اذكر سبب التجاوز (10 أحرف على الأقل)..."
+                                  class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs focus:border-amber-500 focus:outline-none"></textarea>
+                    </div>
+                </div>
+                {% else %}
+                <div id="distance-error-banner" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-bold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-rose-600">location_off</span>
+                    <span id="distance-error-banner-text">الموقع خارج النطاق المسموح أو غير متاح؛ لا يمكن بدء الزيارة دون صلاحية التجاوز.</span>
+                </div>
+                {% endif %}
+
+                <div id="unplanned-start-questions-wrapper" class="hidden pt-3 border-t border-slate-200 space-y-3">
+                    <div class="flex items-center gap-1.5 text-xs font-black text-slate-800">
+                        <span class="material-symbols-outlined text-sm text-[#27bebe]">quiz</span>
+                        <span>أسئلة بدء الزيارة</span>
+                    </div>
+                    <div id="unplanned-start-questions-list" class="space-y-3"></div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- SUBMISSION BUTTONS -->
             <div class="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100">
                 <button type="submit" id="submit-visit-btn" class="w-full sm:w-auto px-8 py-3 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-base">{% if visit %}save{% else %}add_circle{% endif %}</span>
-                    <span id="submit-btn-text">{% if visit %}حفظ التعديلات{% elif is_planned_visit or planned_item %}تسجيل وإنشاء الزيارة المخططة{% else %}تسجيل وإنشاء الزيارة خارج الخطة{% endif %}</span>
+                    <span class="material-symbols-outlined text-base">{% if visit %}save{% else %}{% if is_planned_visit or planned_item %}add_circle{% else %}play_circle{% endif %}{% endif %}</span>
+                    <span id="submit-btn-text">{% if visit %}حفظ التعديلات{% elif is_planned_visit or planned_item %}تسجيل وإنشاء الزيارة المخططة{% else %}إنشاء وبدء الزيارة الآن{% endif %}</span>
                 </button>
                 <a href="{% if visit %}{% url 'visit_detail' visit.pk %}{% else %}{% url 'visits_list' %}{% endif %}" class="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl text-center transition-colors">
                     إلغاء
@@ -467,6 +571,7 @@
 
         // Reset previous state on fresh attempt / retry
         currentDeviceCoords = null;
+        gpsAcquireFailed = false;
         const latInput = document.getElementById('id_latitude') || document.querySelector('input[name="latitude"]');
         const lngInput = document.getElementById('id_longitude') || document.querySelector('input[name="longitude"]');
         const accInput = document.getElementById('id_device_accuracy') || document.querySelector('input[name="device_accuracy"]');
@@ -480,6 +585,7 @@
         if (quickText) quickText.textContent = "جاري الالتقاط...";
 
         if (!navigator.geolocation) {
+            gpsAcquireFailed = true;
             if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
             if (userGpsEl) userGpsEl.textContent = "غير مدعوم";
             if (label) label.textContent = "متصفحك لا يدعم تحديد الموقع الجغرافي (Geolocation).";
@@ -515,6 +621,7 @@
 
                 // Validate coordinate ranges
                 if (isNaN(rawLat) || isNaN(rawLng) || rawLat < -90 || rawLat > 90 || rawLng < -180 || rawLng > 180 || (rawLat === 0 && rawLng === 0)) {
+                    gpsAcquireFailed = true;
                     if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
                     if (userGpsEl) userGpsEl.textContent = "إحداثيات غير صالحة";
                     if (label) label.textContent = "تم استلام إحداثيات جغرافية غير صالحة من جهازك.";
@@ -527,6 +634,7 @@
                     return;
                 }
 
+                gpsAcquireFailed = false;
                 const lat = Number(rawLat.toFixed(6));
                 const lng = Number(rawLng.toFixed(6));
                 const acc = Math.round(rawAcc);
@@ -571,20 +679,54 @@
                 if (label) label.textContent = errorTitle;
                 if (quickText) quickText.textContent = shortError;
 
+                gpsAcquireFailed = true;
                 if (alertBox) {
                     alertBox.classList.remove('hidden');
                     if (alertTitle) alertTitle.textContent = errorTitle;
                     if (alertDesc) alertDesc.textContent = errorDesc;
                 }
 
-                const bypassBox = document.getElementById('distance-bypass-container');
-                if (bypassBox && currentVisitType === 'unplanned') {
-                    bypassBox.classList.remove('hidden');
-                }
                 updateGeofenceCheck();
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
+    }
+
+    let gpsAcquireFailed = false;
+
+    function toggleUnplannedBypassReason() {
+        const chk = document.getElementById('unplanned-force-bypass-chk');
+        const box = document.getElementById('unplanned-bypass-reason-box');
+        if (box) {
+            if (chk && chk.checked) {
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+    }
+
+    function resetUnplannedBypassState() {
+        const bypassContainer = document.getElementById('distance-bypass-container');
+        const errorBanner = document.getElementById('distance-error-banner');
+        const chk = document.getElementById('unplanned-force-bypass-chk');
+        const reasonInput = document.getElementById('unplanned-bypass-reason-input');
+        const reasonBox = document.getElementById('unplanned-bypass-reason-box');
+        if (bypassContainer) bypassContainer.classList.add('hidden');
+        if (errorBanner) errorBanner.classList.add('hidden');
+        if (chk) chk.checked = false;
+        if (reasonInput) reasonInput.value = '';
+        if (reasonBox) reasonBox.classList.add('hidden');
+    }
+
+    function showUnplannedOutOfRangeState() {
+        const bypassContainer = document.getElementById('distance-bypass-container');
+        const errorBanner = document.getElementById('distance-error-banner');
+        if (bypassContainer) {
+            bypassContainer.classList.remove('hidden');
+        } else if (errorBanner) {
+            errorBanner.classList.remove('hidden');
+        }
     }
 
     function updateAllowedDistanceDisplay() {
@@ -621,7 +763,7 @@
         const clientSubEl = document.getElementById('client-gps-subtext');
         const actualDistEl = document.getElementById('actual-distance-display');
         const feedbackBadge = document.getElementById('distance-feedback-badge');
-        const bypassContainer = document.getElementById('distance-bypass-container');
+        const requireGps = currentVisitType === 'unplanned' && verifyVisitsEnabled && verifyUnplannedDistance;
 
         if (!currentCustomer) {
             if (clientGpsEl) clientGpsEl.textContent = "اختر العميل أولاً";
@@ -631,7 +773,11 @@
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600";
                 feedbackBadge.textContent = "بانتظار اختيار العميل";
             }
-            if (bypassContainer) bypassContainer.classList.add('hidden');
+            if (requireGps && gpsAcquireFailed) {
+                showUnplannedOutOfRangeState();
+            } else {
+                resetUnplannedBypassState();
+            }
             return;
         }
 
@@ -643,7 +789,11 @@
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200";
                 feedbackBadge.textContent = "سيتم حفظ الموقع تلقائياً";
             }
-            if (bypassContainer) bypassContainer.classList.add('hidden');
+            if (requireGps && gpsAcquireFailed) {
+                showUnplannedOutOfRangeState();
+            } else {
+                resetUnplannedBypassState();
+            }
             return;
         }
 
@@ -651,10 +801,15 @@
         if (clientSubEl) clientSubEl.textContent = "إحداثيات العميل المسجلة";
 
         if (!currentDeviceCoords) {
-            if (actualDistEl) actualDistEl.textContent = "جاري الحساب...";
+            if (actualDistEl) actualDistEl.textContent = gpsAcquireFailed ? "غير متاح" : "جاري الحساب...";
             if (feedbackBadge) {
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-600";
-                feedbackBadge.textContent = "بانتظار إشارة GPS";
+                feedbackBadge.textContent = gpsAcquireFailed ? "تعذر تحديد GPS" : "بانتظار إشارة GPS";
+            }
+            if (requireGps && gpsAcquireFailed) {
+                showUnplannedOutOfRangeState();
+            } else {
+                resetUnplannedBypassState();
             }
             return;
         }
@@ -672,17 +827,17 @@
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
                 feedbackBadge.textContent = `ضمن النطاق المسموح (${currentAllowedDistance}م) ✓`;
             }
-            if (bypassContainer) bypassContainer.classList.add('hidden');
+            resetUnplannedBypassState();
         } else {
             const diff = Math.round(dist - currentAllowedDistance);
             if (feedbackBadge) {
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200";
                 feedbackBadge.textContent = `خارج النطاق بـ ${diff} متر ⚠️`;
             }
-            if (bypassContainer && currentVisitType === 'unplanned') {
-                bypassContainer.classList.remove('hidden');
-            } else if (bypassContainer && currentVisitType === 'planned') {
-                bypassContainer.classList.add('hidden');
+            if (requireGps) {
+                showUnplannedOutOfRangeState();
+            } else {
+                resetUnplannedBypassState();
             }
         }
     }
@@ -872,6 +1027,18 @@
             return false;
         }
 
+        const bypassChk = document.getElementById('unplanned-force-bypass-chk');
+        const bypassReason = document.getElementById('unplanned-bypass-reason-input');
+        if (!isEditMode && currentVisitType === 'unplanned' && bypassChk && bypassChk.checked) {
+            const reasonVal = (bypassReason ? bypassReason.value : '').trim();
+            if (reasonVal.length < 10) {
+                window.ERPToast.warning('يرجى كتابة سبب تجاوز الموقع (10 أحرف على الأقل).');
+                if (bypassReason) bypassReason.focus();
+                if (e) e.preventDefault();
+                return false;
+            }
+        }
+
         const btn = document.getElementById('submit-visit-btn');
         const btnText = document.getElementById('submit-btn-text');
         if (btn) {
@@ -891,6 +1058,7 @@
                 templateSelect.innerHTML = '<option value="">-- يرجى اختيار العميل أولاً لعرض القوالب المتاحة --</option>';
                 templateSelect.disabled = true;
             }
+            renderUnplannedStartQuestions(null);
         }
     }
 
@@ -909,6 +1077,7 @@
             }
             if (matchBadge) matchBadge.classList.add('hidden');
             currentTemplate = null;
+            renderUnplannedStartQuestions(null);
             updateGeofenceCheck();
             return;
         }
@@ -989,6 +1158,115 @@
         onTemplateSelected(templateSelect.value);
     }
 
+    function updateConditionalUnplannedQuestions() {
+        const listEl = document.getElementById('unplanned-start-questions-list');
+        if (!listEl) return;
+        listEl.querySelectorAll('[data-conditional-parent]').forEach(block => {
+            const parentId = block.getAttribute('data-conditional-parent');
+            const expectedVal = (block.getAttribute('data-conditional-trigger') || '').trim();
+            const parentInputs = listEl.querySelectorAll(`[name="question_${parentId}"]`);
+            let matched = false;
+            parentInputs.forEach(inp => {
+                if (inp.type === 'checkbox' || inp.type === 'radio') {
+                    if (inp.checked && (!expectedVal || String(inp.value).trim() === expectedVal)) {
+                        matched = true;
+                    }
+                } else {
+                    const actual = String(inp.value || '').trim();
+                    if (expectedVal ? actual === expectedVal : actual !== '') {
+                        matched = true;
+                    }
+                }
+            });
+            block.classList.toggle('hidden', !matched);
+            block.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = !matched;
+            });
+        });
+    }
+
+    function renderUnplannedStartQuestions(templateObj) {
+        if (isEditMode || currentVisitType !== 'unplanned') return;
+        const wrapper = document.getElementById('unplanned-start-questions-wrapper');
+        const listEl = document.getElementById('unplanned-start-questions-list');
+        if (!wrapper || !listEl) return;
+
+        const startQuestions = (templateObj && Array.isArray(templateObj.questions))
+            ? templateObj.questions.filter(q => q.stage === 'start_only')
+            : [];
+
+        listEl.innerHTML = '';
+        if (!startQuestions.length) {
+            wrapper.classList.add('hidden');
+            return;
+        }
+
+        const esc = window.erpEscapeHtml || (s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])));
+        const suggestedPool = Array.isArray(templateObj.suggested_products) ? templateObj.suggested_products : [];
+
+        startQuestions.forEach(q => {
+            const qId = String(q.id);
+            const fname = `question_${qId}`;
+            const savedVal = savedAnswers && Object.prototype.hasOwnProperty.call(savedAnswers, qId) ? savedAnswers[qId] : '';
+            const reqStar = q.is_required ? ' <span class="text-rose-500">*</span>' : '';
+            const condAttrs = q.is_conditional && q.conditional_parent_id
+                ? `data-conditional-parent="${esc(q.conditional_parent_id)}" data-conditional-trigger="${esc(q.conditional_trigger_value || '')}"`
+                : '';
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'rounded-xl bg-white border border-slate-200 p-3 space-y-2';
+            if (q.is_conditional && q.conditional_parent_id) {
+                itemDiv.setAttribute('data-conditional-parent', String(q.conditional_parent_id));
+                itemDiv.setAttribute('data-conditional-trigger', q.conditional_trigger_value || '');
+            }
+
+            let controlHtml = '';
+            const qType = q.question_type || 'text';
+            if (qType === 'suggested_products') {
+                const selectedSet = new Set(Array.isArray(savedVal) ? savedVal.map(String) : (savedVal ? [String(savedVal)] : []));
+                if (!suggestedPool.length) {
+                    controlHtml = '<p class="text-[11px] text-slate-400">لا توجد منتجات مقترحة متاحة في هذا القالب.</p>';
+                } else {
+                    controlHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">' + suggestedPool.map(p => {
+                        const checked = selectedSet.has(String(p.id)) ? 'checked' : '';
+                        return `<label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer p-1.5 rounded-lg border border-slate-100 hover:bg-slate-50"><input type="checkbox" name="${fname}" value="${esc(p.id)}" ${checked} class="rounded text-[#27bebe]"><span>${esc(p.name)}</span></label>`;
+                    }).join('') + '</div>';
+                }
+            } else if (qType === 'multiple_choice') {
+                const selectedSet = new Set(Array.isArray(savedVal) ? savedVal.map(String) : (savedVal ? [String(savedVal)] : []));
+                const opts = Array.isArray(q.options) ? q.options : [];
+                controlHtml = '<div class="flex flex-wrap gap-2">' + opts.map(opt => {
+                    const checked = selectedSet.has(String(opt)) ? 'checked' : '';
+                    return `<label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50"><input type="checkbox" name="${fname}" value="${esc(opt)}" ${checked} onchange="updateConditionalUnplannedQuestions()" class="rounded text-[#27bebe]"><span>${esc(opt)}</span></label>`;
+                }).join('') + '</div>';
+            } else if (qType === 'single_choice') {
+                const opts = Array.isArray(q.options) ? q.options : [];
+                const reqAttr = (q.is_required && !q.is_conditional) ? 'required' : '';
+                controlHtml = `<select name="${fname}" ${reqAttr} onchange="updateConditionalUnplannedQuestions()" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none"><option value="">-- اختر --</option>` +
+                    opts.map(opt => `<option value="${esc(opt)}" ${String(savedVal) === String(opt) ? 'selected' : ''}>${esc(opt)}</option>`).join('') +
+                    '</select>';
+            } else if (qType === 'yes_no') {
+                const reqAttr = (q.is_required && !q.is_conditional) ? 'required' : '';
+                controlHtml = `<select name="${fname}" ${reqAttr} onchange="updateConditionalUnplannedQuestions()" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none"><option value="">-- اختر --</option><option value="نعم" ${String(savedVal) === 'نعم' ? 'selected' : ''}>نعم</option><option value="لا" ${String(savedVal) === 'لا' ? 'selected' : ''}>لا</option></select>`;
+            } else if (qType === 'number') {
+                const reqAttr = (q.is_required && !q.is_conditional) ? 'required' : '';
+                controlHtml = `<input type="number" step="any" name="${fname}" value="${esc(savedVal || '')}" ${reqAttr} oninput="updateConditionalUnplannedQuestions()" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none">`;
+            } else if (qType === 'date') {
+                const reqAttr = (q.is_required && !q.is_conditional) ? 'required' : '';
+                controlHtml = `<input type="date" name="${fname}" value="${esc(savedVal || '')}" ${reqAttr} onchange="updateConditionalUnplannedQuestions()" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none">`;
+            } else {
+                const reqAttr = (q.is_required && !q.is_conditional) ? 'required' : '';
+                controlHtml = `<input type="text" name="${fname}" value="${esc(savedVal || '')}" ${reqAttr} oninput="updateConditionalUnplannedQuestions()" placeholder="اكتب الإجابة..." class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-[#27bebe] focus:outline-none">`;
+            }
+
+            itemDiv.innerHTML = `<label class="block text-xs font-bold text-slate-700">${esc(q.text_ar || '')}${reqStar}</label>${controlHtml}`;
+            listEl.appendChild(itemDiv);
+        });
+
+        wrapper.classList.remove('hidden');
+        updateConditionalUnplannedQuestions();
+    }
+
     function onTemplateSelected(templateId) {
         currentTemplate = (allTemplates || []).find(t => String(t.id) === String(templateId)) || null;
         const matchBadge = document.getElementById('template-match-badge');
@@ -999,6 +1277,7 @@
                 matchBadge.classList.add('hidden');
             }
         }
+        renderUnplannedStartQuestions(currentTemplate);
         updateGeofenceCheck();
     }
 </script>

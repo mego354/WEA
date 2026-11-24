@@ -144,12 +144,12 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | User & Role RBAC Management | Yes | Subordinate Reps Only | No | Self Profile Only |
 | Audit Log UI | Yes (`settings:auditLogs/view`) | If granted | If granted | No |
 | Contact Directory | All Areas | Assigned Main Area | All Areas | Assigned Brick(s) |
-| Visit Creation (Unplanned) | Yes | Yes (Auto-approved) | If granted (Auto-approved) | Own (Assigned Brick, Auto-approved) |
+| Visit Creation (Unplanned) | Yes | Yes (Auto-approved, Atomic start) | If granted (Auto-approved, Atomic start) | Own (Assigned Brick, Auto-approved, Atomic start) |
 | Visit Planning & Bulk Plans | Yes | Subordinates (Auto-approved) | If granted | Own (Assigned Brick, Pending manager approval) |
 | Visit & Plan Approval | Yes | Subordinates in Main Area (Not Self) | No | No |
-| Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted | Own Unended (If granted / setting enabled) |
+| Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted (`activities:visits/delete`) | Own Unended (If granted `activities:visits/delete`) |
 | Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
-| GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | If granted (`activities:visits/bypass_gps`) / exception via `activities:visits/gps_request_exception` |
+| GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | If granted (`activities:visits/bypass_gps`) |
 | GPS Suspicious / Fake Location Visibility & Filter | Yes (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | No (never exposed to rep without permission) |
 | Agreement Creation & Edit | Yes | Subordinates (`activities:agreements/create`, `_edit`) | If granted | Own (Assigned Brick) |
 | Agreement Deletion | Yes (`activities:agreements/delete`) | Subordinates | If granted | Own |

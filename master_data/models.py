@@ -230,12 +230,10 @@ class LocationSettings(models.Model):
 
     def can_user_delete_visit(self, user) -> bool:
         """
-        Check if user is permitted to delete an unended visit under current LocationSettings
-        and RBAC permissions (`activities:visits/delete`).
+        Check if user is permitted to delete an unended visit strictly via RBAC
+        permissions (`activities:visits/delete`). Decoupled from LocationSettings.
         """
         if not user or not getattr(user, 'is_authenticated', False):
-            return False
-        if not self.allow_visit_deletion_before_end:
             return False
         from accounts.permissions import has_perm_or_admin
         return has_perm_or_admin(user, 'activities:visits/delete')

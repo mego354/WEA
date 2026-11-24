@@ -901,21 +901,21 @@ class ConfigurableAuthorizationScopeTests(TestCase):
         # 4. Contacts (Territorial Customers & Suppliers)
         self.contact_nasr = Contact.objects.create(
             name='صيدلية الأمل - نصر', area=self.cairo, brick=self.nasr_city,
-            is_customer=True, status='active', created_by=self.rep_nasr
+            is_customer=True, status='customer', created_by=self.rep_nasr
         )
         self.contact_maadi = Contact.objects.create(
             name='صيدلية المعادي الكبرى', area=self.cairo, brick=self.maadi,
-            is_customer=True, status='active', created_by=self.rep_maadi
+            is_customer=True, status='customer', created_by=self.rep_maadi
         )
         self.contact_dokki = Contact.objects.create(
             name='صيدلية الدقي المركزية', area=self.giza, brick=self.dokki,
-            is_customer=True, status='active', created_by=self.rep_dokki
+            is_customer=True, status='customer', created_by=self.rep_dokki
         )
 
         # Territorial Supplier in Giza
         self.supplier_giza = Contact.objects.create(
             name='شركة الأهرام للتوريدات - الجيزة', area=self.giza, brick=self.dokki,
-            is_supplier=True, status='active', created_by=self.giza_manager
+            is_supplier=True, status='customer', created_by=self.giza_manager
         )
 
         # 5. Warehouses
@@ -1012,7 +1012,7 @@ class ConfigurableAuthorizationScopeTests(TestCase):
             area=None,
             brick=None,
             is_customer=True,
-            status='active',
+            status='customer',
             created_by=self.rep_nasr
         )
         visit_no_area = Visit.objects.create(

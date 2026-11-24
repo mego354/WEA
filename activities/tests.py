@@ -389,28 +389,22 @@ class VisitAndLocationParityTestCase(TestCase):
         self.assertAlmostEqual(float(item['latitude']), 31.2000, places=3)
 
     def test_location_verification_within_geofence(self):
-        """Visit creation requires no GPS. Starting visit within 300m tolerance receives verified status."""
+        """Starting unplanned visit at creation within 300m tolerance starts it with verified status."""
         today = timezone.now().date()
         res = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
             'template': self.template.id,
             'owner': self.superuser.id,
             'date': today.strftime('%Y-%m-%d'),
-            'feedback': 'تسجيل الزيارة'
+            'latitude': '31.2001000',
+            'longitude': '29.9101000',
+            'device_accuracy': '15.0',
         })
         self.assertEqual(res.status_code, 302)
         visit = Visit.objects.filter(contact=self.customer).first()
         self.assertIsNotNone(visit)
-        self.assertEqual(visit.status, 'planned')
-        # Verification happens at start
-        start_res = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
-            'latitude': '31.2001000',
-            'longitude': '29.9101000',
-            'device_accuracy': '15.0',
-        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(start_res.status_code, 200)
-        visit.refresh_from_db()
         self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
         self.assertTrue(visit.location_verified)
         self.assertEqual(visit.verification_status, 'verified')
         self.assertLess(float(visit.distance), 300.0)
@@ -420,21 +414,24 @@ class VisitAndLocationParityTestCase(TestCase):
         """Starting visit outside 300m without bypass permission is blocked. With bypass permission it starts without requiring approval."""
         self.client.login(username='rep_user', password='RepPassword123!')
         today = timezone.now().date()
-        # 1. Visit creation succeeds without distance verification
-        res_create = self.client.post(reverse('visit_create'), {
+        # 1. Unplanned visit creation outside geofence without bypass -> blocked & rolled back
+        res_create_blocked = self.client.post(reverse('visit_create'), {
             'contact': self.customer.id,
             'template': self.template.id,
             'owner': self.rep.id,
             'date': today.strftime('%Y-%m-%d'),
-            'feedback': 'زيارة ميدانية'
+            'latitude': '30.0444000',
+            'longitude': '31.2357000',
+            'device_accuracy': '20.0',
         })
-        self.assertEqual(res_create.status_code, 302)
-        visit = Visit.objects.filter(contact=self.customer, owner=self.rep).first()
-        self.assertIsNotNone(visit)
-        visit.approval_status = 'approved'
-        visit.save()
+        self.assertEqual(res_create_blocked.status_code, 200)
+        self.assertFalse(Visit.objects.filter(contact=self.customer, owner=self.rep).exists())
 
-        # 2. Starting outside distance without bypass permission -> blocked with error (status 400)
+        # 2. Planned visit outside distance without bypass permission on start -> blocked (status 400)
+        visit = Visit.objects.create(
+            contact=self.customer, template=self.template, owner=self.rep,
+            created_by=self.rep, date=today, status='planned', is_planned=True, approval_status='approved'
+        )
         res_blocked = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
             'latitude': '30.0444000',
             'longitude': '31.2357000',
@@ -1090,14 +1087,10 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
 
         visit = Visit.objects.filter(contact=self.clinic_customer).first()
         self.assertIsNotNone(visit)
-        # Superuser creator is auto-approved; status is planned until explicitly started
+        # Superuser creator is auto-approved and unplanned visit starts atomically
         self.assertEqual(visit.approval_status, 'approved')
-        self.assertEqual(visit.status, 'planned')
-
-        # Start visit explicitly
-        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
-        visit.refresh_from_db()
         self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
 
         # Submit answers and complete visit
         self.client.post(reverse('visit_detail', args=[visit.pk]), {
@@ -1132,7 +1125,7 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
     def test_unplanned_visit_validation_enforces_required_fields(self):
         today = timezone.now().date()
 
-        # Step 1: Create visit first with minimal information (Create First, Answer Later)
+        # Step 1: Create & immediately start unplanned visit
         create_res = self.client.post(reverse('visit_create'), {
             'contact': self.clinic_customer.id,
             'template': self.tmpl_dr.id,
@@ -1142,14 +1135,8 @@ class VisitTemplatesWorkflowIntegrationTestCase(TestCase):
         self.assertEqual(create_res.status_code, 302)
         visit = Visit.objects.filter(contact=self.clinic_customer, template=self.tmpl_dr).first()
         self.assertIsNotNone(visit)
-        self.assertEqual(visit.status, 'planned')
-
-        # Approve and start visit
-        visit.approval_status = 'approved'
-        visit.save(update_fields=['approval_status'])
-        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
-        visit.refresh_from_db()
         self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
 
         # Step 2: Attempt to complete visit without answering required question q_meet
         post_data = {
@@ -1416,15 +1403,11 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertEqual(create_res.status_code, 302)
         visit = Visit.objects.filter(contact=self.pharmacy_contact, owner=self.rep_user).first()
         self.assertIsNotNone(visit)
-        self.assertEqual(visit.status, 'planned')
+        self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
         # Unplanned visits are auto-approved per Phase 2 requirements
         self.assertEqual(visit.approval_status, 'approved')
         self.assertRedirects(create_res, reverse('visit_detail', args=[visit.pk]))
-
-        # Representative starts visit directly
-        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
-        visit.refresh_from_db()
-        self.assertEqual(visit.status, 'started')
 
         # Step 2: Open visit detail screen (answering screen)
         detail_res = self.client.get(reverse('visit_detail', args=[visit.pk]))
@@ -1964,7 +1947,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
                 code=f"BLK{i:03d}",
                 serial_num=max_s + i + 1,
                 is_customer=True,
-                status='active',
+                status='customer',
                 area=self.main_area,
                 brick=self.sub_area,
                 created_by=self.superuser
@@ -2001,7 +1984,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
             name="Outside Rep Brick Contact",
             code="OUT001",
             is_customer=True,
-            status='active',
+            status='customer',
             area=outside_area,
             brick=outside_brick,
             created_by=self.superuser
@@ -2199,43 +2182,38 @@ class VisitManagementImprovementsTestCase(TestCase):
         self.assertEqual(v_planned.owner, self.nasr_rep)
         self.assertFalse(v_planned.location_verified)
 
-        # 2. Unplanned visit creation succeeds without distance verification at creation
+        # 2. Unplanned visit creation at ~550m with 300m default template without bypass -> rolled back (not created)
         res_unplanned = self.client.post(reverse('visit_create'), {
             'visit_type': 'unplanned',
             'is_planned': '0',
             'contact': self.contact_nasr_2.id,
             'template': self.default_template.id,
             'date': today,
-        })
-        self.assertEqual(res_unplanned.status_code, 302)
-        v_unplanned = Visit.objects.filter(contact=self.contact_nasr_2, template=self.default_template).first()
-        self.assertIsNotNone(v_unplanned)
-        self.assertFalse(v_unplanned.is_planned)
-        self.assertFalse(v_unplanned.location_verified)
-
-        # 3. Starting the visit at ~550m with default 300m template without bypass -> blocked!
-        res_start_blocked = self.client.post(reverse('visit_action', args=[v_unplanned.pk, 'start']), {
             'latitude': '30.0615000',
             'longitude': '31.3305000',
         })
-        v_unplanned.refresh_from_db()
-        self.assertEqual(v_unplanned.status, 'planned')  # Not started
+        self.assertEqual(res_unplanned.status_code, 200)
+        self.assertIsNone(Visit.objects.filter(contact=self.contact_nasr_2, template=self.default_template).first())
 
-        # 4. Same ~550m distance with Custom 800m template -> succeeds starting within threshold!
-        v_custom = Visit.objects.create(
-            contact=self.contact_nasr_2,
-            template=self.custom_template,
-            owner=self.nasr_rep,
-            created_by=self.nasr_rep,
-            date=timezone.now().date(),
-            status='planned',
-            approval_status='approved',
-        )
-        res_start_custom = self.client.post(reverse('visit_action', args=[v_custom.pk, 'start']), {
+        # 3. Planned visit starting at ~550m with default 300m template without bypass -> blocked!
+        res_start_blocked = self.client.post(reverse('visit_action', args=[v_planned.pk, 'start']), {
             'latitude': '30.0615000',
             'longitude': '31.3305000',
         })
-        v_custom.refresh_from_db()
+        v_planned.refresh_from_db()
+        self.assertEqual(v_planned.status, 'planned')  # Not started
+
+        # 4. Unplanned visit creation at same ~550m distance with Custom 800m template -> succeeds & starts immediately!
+        res_start_custom = self.client.post(reverse('visit_create'), {
+            'contact': self.contact_nasr_2.id,
+            'template': self.custom_template.id,
+            'date': today,
+            'latitude': '30.0615000',
+            'longitude': '31.3305000',
+        })
+        self.assertEqual(res_start_custom.status_code, 302)
+        v_custom = Visit.objects.filter(contact=self.contact_nasr_2, template=self.custom_template).first()
+        self.assertIsNotNone(v_custom)
         self.assertEqual(v_custom.status, 'started')
         self.assertTrue(v_custom.location_verified)
         self.assertEqual(float(v_custom.allowed_distance), 800.0)
@@ -2359,20 +2337,20 @@ class VisitManagementImprovementsTestCase(TestCase):
         today = timezone.now().date()
         yesterday = today - datetime.timedelta(days=1)
 
-        # 1. Unplanned visit with past date -> rejected!
+        # 1. Planned visit item execution with past date -> rejected!
+        pday_past = PlannedVisitDay.objects.create(assignee=self.nasr_rep, date=yesterday, created_by=self.nasr_rep)
+        pitem_past = PlannedVisitItem.objects.create(plan_day=pday_past, order=1, contact=self.contact_nasr_1, template=self.default_template)
         res_past = self.client.post(reverse('visit_create'), {
-            'visit_type': 'unplanned',
+            'planned_item_id': pitem_past.id,
             'contact': self.contact_nasr_1.id,
             'template': self.default_template.id,
             'date': yesterday.strftime('%Y-%m-%d'),
-            'latitude': '30.0561000',
-            'longitude': '31.3301000',
         })
         self.assertEqual(res_past.status_code, 200)
         self.assertContains(res_past, 'لا يمكن اختيار تاريخ في الماضي')
         self.assertEqual(Visit.objects.count(), 0)
 
-        # 2. Create first visit on today -> succeeds without questions or feedback
+        # 2. Create & immediately start first visit on today -> succeeds
         res_first = self.client.post(reverse('visit_create'), {
             'visit_type': 'unplanned',
             'contact': self.contact_nasr_1.id,
@@ -2405,7 +2383,13 @@ class VisitManagementImprovementsTestCase(TestCase):
         self.assertTrue(res_dup_warn.context['duplicate_warning'])
         self.assertEqual(Visit.objects.filter(contact=self.contact_nasr_1, date=today).count(), 1)
 
-        # 5. Second visit on same date WITH confirm_duplicate='1' -> creates second visit!
+        # Finish first open visit so single-open-visit invariant permits starting the second visit
+        v_first = Visit.objects.get(contact=self.contact_nasr_1, date=today)
+        v_first.status = 'finished'
+        v_first.ended_at = timezone.now()
+        v_first.save(update_fields=['status', 'ended_at'])
+
+        # 5. Second visit on same date WITH confirm_duplicate='1' -> creates & starts second visit!
         res_dup_confirmed = self.client.post(reverse('visit_create'), {
             'visit_type': 'unplanned',
             'contact': self.contact_nasr_1.id,
@@ -2891,9 +2875,12 @@ class RefinedVisitRequirementsTestCase(TestCase):
         self.assertEqual(res_bulk_past.status_code, 400)
         self.assertIn('تاريخ سابق', res_bulk_past.json().get('message', ''))
 
-        # 3. Unplanned visit with past date -> rejected
+        # 3. Planned item execution with past date -> rejected (unplanned locks to today)
+        yesterday_date = datetime.date.fromisoformat(self.yesterday_str)
+        pday_past = PlannedVisitDay.objects.create(assignee=self.rep_user, date=yesterday_date, created_by=self.rep_user)
+        pitem_past = PlannedVisitItem.objects.create(plan_day=pday_past, order=1, contact=self.pharmacy_contact, template=self.tmpl_general)
         res_visit_past = self.client.post(reverse('visit_create'), {
-            'visit_type': 'unplanned',
+            'planned_item_id': pitem_past.id,
             'contact': self.pharmacy_contact.id,
             'template': self.tmpl_general.id,
             'date': self.yesterday_str,
@@ -3549,7 +3536,7 @@ class RoleBasedTemplatesAndRegionalApprovalsTestCase(TestCase):
         )
         self.supplier = Contact.objects.create(
             name='شركة توريد الأدوية العالمية', code='SUP001', account_type='Store',
-            area=self.subregion_a1, is_supplier=True, status='supplier'
+            area=self.subregion_a1, is_supplier=True, status='customer'
         )
 
         # 6. Create Templates
@@ -4348,7 +4335,7 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
             area=self.sub_smouha, is_customer=True, status='customer'
         )
         self.supplier_cairo = Contact.objects.create(
-            name='شركة الأدوية المتحدة', code='SUPP-001', is_supplier=True, status='supplier',
+            name='شركة الأدوية المتحدة', code='SUPP-001', is_supplier=True, status='customer',
             area=self.sub_nasr_city
         )
 
@@ -4397,17 +4384,11 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         self.assertIsNotNone(visit)
         self.assertFalse(visit.is_planned)
         self.assertFalse(visit.doubled, "Must be recorded as a single visit")
-        self.assertEqual(visit.status, 'planned')
+        self.assertEqual(visit.status, 'started', "Unplanned visit creates and starts atomically")
+        self.assertIsNotNone(visit.started_at)
         self.assertEqual(visit.approval_status, 'approved', "Unplanned visit is auto-approved upon creation")
 
-        # Step 2: Rep logs in, starts the visit, submits answers, and completes the visit
-        res_start = self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
-        self.assertEqual(res_start.status_code, 302)
-        visit.refresh_from_db()
-        self.assertEqual(visit.status, 'started', "Visit successfully transitioned to started upon explicit start action")
-        self.assertIsNotNone(visit.started_at)
-
-        # Rep saves draft answers -> status remains 'started'
+        # Step 2: Rep submits draft answers -> status remains 'started'
         res_draft = self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'save_draft',
             'feedback': 'حفظ مسودة مؤقتة',
@@ -4439,11 +4420,9 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
     def test_rep_unplanned_double_visit_full_flow(self):
         """
         Flow:
-        1. Rep creates double visit (doubled=True) for coaching/joint visit.
-        2. Visit starts in approval_status='pending', doubled=True.
-        3. Manager approves the double visit.
-        4. Rep completes the double visit.
-        5. Double flag and approved status are preserved.
+        1. Rep creates unplanned double visit (doubled=True) -> creates and starts atomically.
+        2. Rep completes the double visit.
+        3. Double flag and approved status are preserved.
         """
         self.client.login(username='rep_cairo', password='Password123!')
         res = self.client.post(reverse('visit_create'), {
@@ -4458,13 +4437,9 @@ class ComprehensiveUserWorkflowsTestCase(TestCase):
         visit = Visit.objects.filter(contact=self.customer_cairo, owner=self.rep_cairo, doubled=True).first()
         self.assertIsNotNone(visit)
         self.assertTrue(visit.doubled, "Must be recorded as a double visit")
-        self.assertEqual(visit.status, 'planned')
-        self.assertEqual(visit.approval_status, 'approved')
-
-        # Rep starts and completes
-        self.client.post(reverse('visit_action', args=[visit.pk, 'start']))
-        visit.refresh_from_db()
         self.assertEqual(visit.status, 'started')
+        self.assertIsNotNone(visit.started_at)
+        self.assertEqual(visit.approval_status, 'approved')
 
         self.client.post(reverse('visit_detail', args=[visit.pk]), {
             'action': 'complete',
@@ -6171,8 +6146,8 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
 
     def test_phase2_req_b_visit_deletion_permission_and_unended_enforcement(self):
         """
-        Visit deletion rules:
-        - Controlled by LocationSettings.allow_visit_deletion_before_end and activities:visits/delete permission.
+        Visit deletion rules (Req A):
+        - Controlled solely by activities:visits/delete permission + DataScope (decoupled from LocationSettings).
         - Only unended visits (status != 'finished' and ended_at is None) can be deleted.
         - Ended visits cannot be deleted even by users with permission or SuperAdmin.
         - Deletion is logged in SecurityAuditLog ('VISIT_DELETED').
@@ -6185,7 +6160,7 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
             created_by=self.rep_nasr, date=today, status='planned', approval_status='pending'
         )
 
-        # 1. When allow_visit_deletion_before_end is False -> 403
+        # 1. Without activities:visits/delete permission -> 403
         self.loc_settings.allow_visit_deletion_before_end = False
         self.loc_settings.save()
         self.client.force_login(self.rep_nasr)
@@ -6196,14 +6171,12 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
         self.assertEqual(res_denied.status_code, 403)
         self.assertTrue(Visit.objects.filter(pk=unended_visit.pk).exists())
 
-        # 2. Grant activities:visits/delete permission and enable allow_visit_deletion_before_end -> succeeds for unended visit
+        # 2. Grant activities:visits/delete permission -> succeeds for unended visit even when allow_visit_deletion_before_end is False
         del_perm, _ = ErpPermission.objects.get_or_create(
             codename='activities:visits/delete',
-            defaults={'name': 'حذف الزيارات غير المنتهية', 'module': 'activities'}
+            defaults={'name': 'حذف الزيارات', 'module': 'activities'}
         )
         self.rep_role.permissions.add(del_perm)
-        self.loc_settings.allow_visit_deletion_before_end = True
-        self.loc_settings.save()
 
         res_ok = self.client.post(
             reverse('visit_delete', args=[unended_visit.pk]),
@@ -6613,11 +6586,15 @@ class VisitGpsIntegrityAndPermissionTests(TestCase):
         v_none = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=today, status='started')
         verify_visit_location(v_none, self.rep, self.contact_a, visit_lat=None, visit_lng=None, strict_distance=False)
         self.assertEqual(v_none.gps_integrity_status, 'undetermined')
+        v_none.status = 'finished'
+        v_none.ended_at = timezone.now()
+        v_none.save(update_fields=['status', 'ended_at'])
 
         # 2. Normal
         from datetime import timedelta
         v_norm = Visit.objects.create(contact=self.contact_a, owner=self.rep, date=today, status='started')
         verify_visit_location(v_norm, self.rep, self.contact_a, visit_lat='30.0444000', visit_lng='31.2357000', device_accuracy='12', strict_distance=True)
+        v_norm.status = 'finished'
         v_norm.ended_at = timezone.now() - timedelta(minutes=10)
         v_norm.save()
         self.assertEqual(v_norm.gps_integrity_status, 'normal')
@@ -6629,11 +6606,15 @@ class VisitGpsIntegrityAndPermissionTests(TestCase):
         self.assertEqual(v_acc.gps_integrity_status, 'suspicious')
         self.assertIn('invalid_or_zero_accuracy', v_acc.gps_suspicion_signals)
         self.assertTrue(v_acc.location_verified)  # Distance validation preserved!
+        v_acc.status = 'finished'
+        v_acc.ended_at = timezone.now()
+        v_acc.save(update_fields=['status', 'ended_at'])
 
         # 4. Confirmed manipulation (impossible speed > 500 km/h + exact coordinate clone)
         from datetime import timedelta
         v_far = Visit.objects.create(contact=self.contact_b, owner=self.rep, date=today, status='started')
         verify_visit_location(v_far, self.rep, self.contact_b, visit_lat='30.1444000', visit_lng='31.3357000', device_accuracy='10', strict_distance=False)
+        v_far.status = 'finished'
         v_far.ended_at = timezone.now() - timedelta(seconds=30)
         v_far.save()
 
@@ -6720,7 +6701,7 @@ class VisitGpsIntegrityAndPermissionTests(TestCase):
         giza_brick = Area.objects.create(name='الدقي', code='DOK-FLT', area_type='subarea', parent=giza)
         c_giza = Contact.objects.create(
             name='صيدلية الدقي', code='PH-GIZ-1', is_customer=True, account_type='صيدلية',
-            area=giza, brick=giza_brick, status='active'
+            area=giza, brick=giza_brick, status='customer'
         )
         self.contact_a.account_type = 'عيادة'
         self.contact_a.save(update_fields=['account_type'])
@@ -6784,7 +6765,7 @@ class PlannedVisitDeletionAndApprovalStateTests(TestCase):
         self.nasr = Area.objects.create(name='مدينة نصر', code='NSR-PVD', area_type='subarea', parent=self.cairo)
         self.contact = Contact.objects.create(
             name='د. أحمد مخطط', code='DR-PVD-1', is_customer=True, account_type='Clinic',
-            area=self.cairo, brick=self.nasr, status='active'
+            area=self.cairo, brick=self.nasr, status='customer'
         )
         self.rep_role = Role.objects.get(name='medical_rep')
         self.mgr_role = Role.objects.get(name='manager')

@@ -115,7 +115,7 @@ class VisitForm(forms.ModelForm):
             'class': 'w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:ring-1 focus:ring-[#27bebe]',
             'data-smart-select': 'true',
             'data-search-url': '/contacts/api/search/',
-            'data-search-placeholder': 'ابحث باسم العميل أو الكود أو المنطقة أو التخصص...',
+            'data-search-placeholder': 'ابحث باسم العميل أو الكود أو الهاتف أو التخصص...',
             'onchange': 'onCustomerSelected(this.value)'
         }),
         label="جهة الاتصال (العميل) *"
@@ -210,6 +210,11 @@ class VisitForm(forms.ModelForm):
         self.fields['template'].required = True
         self.fields['template'].empty_label = "-- اختر قالب الزيارة (إلزامي) --"
 
+        is_editing = bool(self.instance and self.instance.pk)
+        planned_item_id = (self.data.get('planned_item_id') if self.data else None) or self.initial.get('planned_item_id')
+        if not is_editing and not planned_item_id:
+            self.fields['date'].required = False
+
     def clean(self):
         cleaned_data = super().clean()
         user = self.user
@@ -258,13 +263,18 @@ class VisitForm(forms.ModelForm):
                 f"قالب الزيارة '{template.display_name_ar}' غير مخصص لنوع حساب العميل ({contact.account_type or 'غير محدد'}). الأنواع المصرح بها: {allowed_str}."
             )
 
-        # Date Validation (Requirement 4): All visit dates must be today or a future date
-        visit_date = cleaned_data.get('date')
-        if visit_date:
-            today = timezone.now().date()
-            is_date_changed = is_editing and (self.instance.date != visit_date)
-            if (not is_editing or is_date_changed) and visit_date < today:
-                raise forms.ValidationError("لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.")
+        # Date Validation:
+        # - Unplanned immediate-start creation always forces today's local date.
+        # - Planned / edited visits must be today or future when changed.
+        if not is_editing and not is_planned_visit:
+            cleaned_data['date'] = timezone.localdate()
+        else:
+            visit_date = cleaned_data.get('date')
+            if visit_date:
+                today = timezone.localdate()
+                is_date_changed = is_editing and (self.instance.date != visit_date)
+                if (not is_editing or is_date_changed) and visit_date < today:
+                    raise forms.ValidationError("لا يمكن اختيار تاريخ في الماضي. يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.")
 
         # Planned Visit Item Backend Validation (Requirement 3)
         if planned_item_id:

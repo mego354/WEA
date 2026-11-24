@@ -692,14 +692,14 @@ class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
         self.rep_nasr.assigned_areas.add(self.nasr)
 
         self.parent_org = Contact.objects.create(
-            name='مجموعة الشفاء الأم', contact_type='organization', is_customer=True, status='active',
+            name='مجموعة الشفاء الأم', contact_type='organization', is_customer=True, status='customer',
             area=self.cairo, brick=self.nasr, created_by=self.admin
         )
 
     def test_contact_edit_prepopulates_area_brick_and_all_fields_without_address_row(self):
         # Contact created directly with area+brick but NO ContactAddress row (e.g. Excel import)
         contact = Contact.objects.create(
-            name='صيدلية الاستيراد', contact_type='organization', is_customer=True, status='active',
+            name='صيدلية الاستيراد', contact_type='organization', is_customer=True, status='customer',
             customer_category='A+', specialty='صيدلية مجتمعية', account_type='Pharmacy',
             mobile='+20 1011223344', email='imp@test.com', area=self.cairo, brick=self.nasr,
             parent_org=self.parent_org, is_kol=True, credit_limit=Decimal('15000.00'),
@@ -715,7 +715,7 @@ class ContactEditPrepopulationGPSAndMultiselectTests(TestCase):
         html = res.content.decode('utf-8')
         self.assertIn(f'<option value="{self.cairo.id}" selected>', html)
         self.assertIn(f'<option value="{self.nasr.id}" selected>', html)
-        self.assertIn('<option value="active" selected>', html)
+        self.assertIn('<option value="customer" selected>', html)
         self.assertIn(f'<option value="{self.parent_org.id}" selected>', html)
 
         # Updating brick via edit form synchronizes contact.brick and contact.area
@@ -942,7 +942,7 @@ class SupplierActivationServiceTests(TestCase):
             name='مورد اختبار كشف حساب',
             contact_type='organization',
             is_supplier=True,
-            status='supplier',
+            status='customer',
             area=cairo,
             created_by=admin,
         )
