@@ -36,6 +36,7 @@ from .services import (
     create_and_start_unplanned_visit, extract_checkin_answers_from_post, get_open_visit_for_owner,
     can_submit_answers, can_end_visit, end_visit,
     build_visit_timeline, can_delete_unended_visit, delete_unended_visit,
+    _delete_visit_and_related_records,
     can_edit_visit_answers, update_visit_questionnaire_answers,
     build_agreement_timeline, _agreement_snapshot, _diff_agreement_fields,
     get_question_product_choices, parse_suggested_products_submission,
@@ -1023,6 +1024,7 @@ def planned_visits_list(request):
     }
 
     can_manage_planned = has_perm_or_admin(request.user, 'activities:planned/manage')
+    user_can_delete_visits = has_perm_or_admin(request.user, 'activities:visits/delete')
 
     while current_date <= end_date:
         day_plans = plans_by_date.get(current_date, [])
@@ -1037,14 +1039,16 @@ def planned_visits_list(request):
             all_day_items.extend(pl_items)
             for it in pl_items:
                 covered_item_ids.add(it.id)
-                is_pending_approval = (
-                    (it.visit.approval_status == 'pending')
-                    if it.visit else (pl.approval_status == 'pending')
+                requires_visit_del = bool(
+                    it.visit and (it.visit.status != 'planned' or it.visit.ended_at is not None)
                 )
-                is_unstarted = (not it.visit) or (it.visit.status == 'planned')
                 it.can_delete_item = (
                     can_manage_planned
                     and can_user_access_object(request.user, it, 'manage')
+                    and (
+                        not requires_visit_del
+                        or (user_can_delete_visits and can_user_access_object(request.user, it.visit, 'delete'))
+                    )
                 )
             can_approve_pl = can_manage_approvals(request.user) and can_user_access_object(request.user, pl, 'approve')
             plan_groups.append({
@@ -1064,11 +1068,16 @@ def planned_visits_list(request):
         for pvd in legacy_days:
             for it in pvd.items.all():
                 if it.id not in covered_item_ids:
-                    is_pending_approval = bool(it.visit and it.visit.approval_status == 'pending')
-                    is_unstarted = (not it.visit) or (it.visit.status == 'planned')
+                    requires_visit_del = bool(
+                        it.visit and (it.visit.status != 'planned' or it.visit.ended_at is not None)
+                    )
                     it.can_delete_item = (
                         can_manage_planned
                         and can_user_access_object(request.user, it, 'manage')
+                        and (
+                            not requires_visit_del
+                            or (user_can_delete_visits and can_user_access_object(request.user, it.visit, 'delete'))
+                        )
                     )
                     unlinked_items.append(it)
                     all_day_items.append(it)
@@ -1560,6 +1569,12 @@ def planned_visit_add_item(request):
                 return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
         contact = get_object_or_404(Contact, pk=contact_id)
+        if contact.status == 'inactive':
+            msg = f"لا يمكن جدولة زيارة للعميل '{contact.name}' لأن حالته غير نشط (Inactive)."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
         if not can_user_access_contact_for_visit(request.user, contact):
             msg = f"غير مصرح لك بجدولة زيارة للعميل '{contact.name}' لأنه يقع خارج نطاق منطقتك أو خطك الجغرافي."
             if is_ajax:
@@ -1718,8 +1733,14 @@ def planned_visits_bulk_add(request):
         messages.error(request, msg)
         return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
 
-    # Enforce geographical scope for every selected client
+    # Enforce geographical scope and active contact status for every selected client
     for c in contacts:
+        if c.status == 'inactive':
+            msg = f"لا يمكن جدولة زيارة للعميل '{c.name}' لأن حالته Inactive."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=400)
+            messages.error(request, msg)
+            return redirect(request.META.get('HTTP_REFERER', '/planned-visits/'))
         if not can_user_access_contact_for_visit(request.user, c):
             msg = f"غير مصرح لك بجدولة زيارة للعميل '{c.name}' لأنه يقع خارج نطاق منطقتك أو خطك الجغرافي."
             if is_ajax:
@@ -1965,43 +1986,46 @@ def planned_visits_bulk_add(request):
 
 @require_permission('activities:planned/manage')
 def planned_visit_item_delete(request, pk):
-    """Remove a planned visit item (and its unstarted linked visit if any) from the plan."""
+    """
+    Remove a planned visit item (and its linked Visit, if any, plus empty parent VisitPlan)
+    regardless of pending-approval or visit lifecycle status.
+    If the linked visit has already started or ended, also requires `activities:visits/delete`
+    and visit-level delete DataScope.
+    """
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+    if request.method != 'POST':
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': 'MethodNotAllowed', 'message': 'POST method required.'}, status=405)
+        messages.error(request, "لا يمكن تنفيذ عملية الحذف إلا عبر طلب POST آمن.")
+        return redirect('planned_visits_list')
+
     item = get_object_or_404(
-        PlannedVisitItem.objects.select_related('plan', 'plan_day__assignee', 'contact', 'visit'),
+        PlannedVisitItem.objects.select_related('plan', 'plan_day__assignee', 'contact', 'visit', 'visit__owner', 'visit__template'),
         pk=pk
     )
-    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
     if not can_user_access_object(request.user, item, 'manage'):
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': "غير مصرح لك بحذف زيارة مخططة لمندوب أو منطقة خارج نطاقك."}, status=403)
         return render_forbidden_response(request, "غير مصرح لك بحذف زيارة مخططة لمندوب أو منطقة خارج نطاقك.")
 
-    if item.visit and item.visit.status in ('started', 'finished'):
-        msg = f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها بدأت أو انتهت بالفعل."
-        if is_ajax:
-            return JsonResponse({'success': False, 'message': msg}, status=400)
-        messages.error(request, msg)
-        return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{item.plan_day.date.strftime('%Y-%m-%d')}")
-
-    is_pending_approval = (
-        (item.visit and item.visit.approval_status == 'pending')
-        or (not item.visit and item.plan and item.plan.approval_status == 'pending')
-    )
-    if is_pending_approval:
-        msg = f"لا يمكن حذف الزيارة المخططة للعميل {item.contact.name} لأنها قيد الاعتماد حالياً."
-        if is_ajax:
-            return JsonResponse({'success': False, 'message': msg}, status=400)
-        messages.error(request, msg)
-        return redirect(f"{request.META.get('HTTP_REFERER', '/planned-visits/')}#day-{item.plan_day.date.strftime('%Y-%m-%d')}")
+    if item.visit and (item.visit.status != 'planned' or item.visit.ended_at is not None):
+        if not (has_perm_or_admin(request.user, 'activities:visits/delete') and can_user_access_object(request.user, item.visit, 'delete')):
+            msg = "عذراً، حذف زيارة مخططة بدأ تنفيذها أو اكتملت يتطلب صلاحية حذف الزيارات ضمن نطاقك."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': msg}, status=403)
+            return render_forbidden_response(request, msg)
 
     contact_name = item.contact.name
     date_str = item.plan_day.date.strftime('%Y-%m-%d')
     with transaction.atomic():
         linked_visit = item.visit
         parent_plan = item.plan
-        item.delete()
-        if linked_visit and linked_visit.status == 'planned':
-            linked_visit.delete()
-        if parent_plan and not parent_plan.planned_items.exists() and not parent_plan.visits.exists():
-            parent_plan.delete()
+        if linked_visit is not None:
+            _delete_visit_and_related_records(linked_visit, request.user, request=request)
+        else:
+            item.delete()
+            if parent_plan and not parent_plan.planned_items.exists() and not parent_plan.visits.exists():
+                parent_plan.delete()
         AuditLogService.log(
             action='delete',
             action_type='PLANNED_VISIT_ITEM_DELETED',
@@ -2397,9 +2421,12 @@ def visit_detail(request, pk):
     """
     visit = get_object_or_404(
         Visit.objects.select_related(
-            'contact', 'contact__area', 'template', 'owner',
-            'approved_by', 'created_by', 'bypassed_by', 'last_edited_by',
-        ).prefetch_related('samples__product', 'expenses', 'detailed_products', 'template__questions'),
+            'contact', 'contact__area', 'contact_address', 'contact_address__area', 'contact_address__brick',
+            'template', 'owner', 'approved_by', 'created_by', 'bypassed_by', 'last_edited_by',
+        ).prefetch_related(
+            'samples__product', 'expenses', 'detailed_products', 'template__questions',
+            'contact__addresses__area', 'contact__addresses__brick',
+        ),
         pk=pk
     )
 
@@ -2519,7 +2546,8 @@ def visit_detail(request, pk):
                         visit_lat=lat, visit_lng=lng, device_accuracy=acc,
                         force_bypass=force_bypass,
                         bypass_reason=bypass_reason, stage='end',
-                        strict_distance=bool(location_settings.verify_visits and location_settings.verify_end_visit_distance)
+                        strict_distance=bool(location_settings.verify_visits and location_settings.verify_end_visit_distance),
+                        contact_address=visit.contact_address,
                     )
                 except ValidationError as ve:
                     err_text = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
@@ -2819,9 +2847,25 @@ def visit_detail(request, pk):
     timeline_events = build_visit_timeline(visit)
     is_in_agenda = PlannedVisitItem.objects.filter(visit=visit).exists()
     effective_allowed_distance = visit.effective_allowed_distance
+    from activities.services import serialize_contact_addresses
+    contact_addresses = serialize_contact_addresses(visit.contact)
+    # Effective target coordinates for End Visit verification: selected address > immutable snapshot > legacy main address
+    if visit.contact_address_id and visit.contact_address:
+        visit_target_lat = visit.contact_address.latitude
+        visit_target_lng = visit.contact_address.longitude
+    elif visit.customer_latitude_snapshot is not None and visit.customer_longitude_snapshot is not None:
+        visit_target_lat = visit.customer_latitude_snapshot
+        visit_target_lng = visit.customer_longitude_snapshot
+    else:
+        visit_target_lat = visit.contact.latitude
+        visit_target_lng = visit.contact.longitude
 
     return render(request, 'activities/visit_detail.html', {
         'visit': visit,
+        'contact_addresses': contact_addresses,
+        'contact_addresses_json': json.dumps(contact_addresses),
+        'visit_target_lat': visit_target_lat,
+        'visit_target_lng': visit_target_lng,
         'questionnaire_responses': questionnaire_responses,
         'all_questions': all_questions,
         'start_questions': start_questions,
@@ -3040,6 +3084,7 @@ def visit_create(request):
                             force_bypass=force_bypass,
                             bypass_reason=bypass_reason,
                             checkin_answers=checkin_answers,
+                            contact_address_id=request.POST.get('contact_address_id') or None,
                             request=request,
                         )
                         msg = f"تم إنشاء وبدء الزيارة #{visit.serial_num} للعميل {contact.name} بنجاح."
@@ -3060,7 +3105,21 @@ def visit_create(request):
                         form.add_error(None, err_msg)
                         messages.error(request, err_msg)
                 else:
-                    # Existing Planned-Visit Execution Path (preserved unchanged)
+                    # Planned-Visit Creation Path (from uncreated PlannedVisitItem)
+                    from activities.services import resolve_visit_contact_address, snapshot_visit_contact_address
+                    addr_error = None
+                    selected_addr = None
+                    try:
+                        selected_addr = resolve_visit_contact_address(
+                            contact,
+                            contact_address_id=request.POST.get('contact_address_id') or None,
+                        )
+                    except ValidationError as ve:
+                        addr_error = ve.message if hasattr(ve, 'message') else (ve.messages[0] if hasattr(ve, 'messages') and ve.messages else str(ve))
+                        form.add_error(None, addr_error)
+                        messages.error(request, addr_error)
+
+                if not duplicate_warning and is_planned_visit and not addr_error:
                     with transaction.atomic():
                         visit = form.save(commit=False)
                         visit.created_by = request.user
@@ -3070,6 +3129,10 @@ def visit_create(request):
                         visit.status = 'planned'
                         visit.started_at = None
                         visit.allowed_distance = location_settings.get_effective_tolerance(template)
+                        snapshot_visit_contact_address(visit, selected_addr)
+                        if selected_addr is not None:
+                            visit.customer_latitude_snapshot = selected_addr.latitude
+                            visit.customer_longitude_snapshot = selected_addr.longitude
 
                         # Visits submitted through visit_create: resolve approval based on is_planned_visit
                         visit.approval_status, visit.approved_by, visit.approved_at = resolve_visit_creation_approval(
@@ -3233,13 +3296,23 @@ def visit_create(request):
     # Preselected customer details for rich card
     selected_contact = None
     if planned_item:
-        selected_contact = planned_item.contact
+        selected_contact = Contact.objects.filter(pk=planned_item.contact_id).select_related(
+            'area', 'area__parent', 'brick'
+        ).prefetch_related('addresses__area', 'addresses__brick').first() or planned_item.contact
     else:
         contact_id = request.POST.get('contact') or request.GET.get('contact') or request.GET.get('contact_id')
         if contact_id and str(contact_id).isdigit():
-            cand = Contact.objects.filter(pk=int(contact_id)).select_related('area', 'area__parent').first()
+            cand = Contact.objects.filter(pk=int(contact_id)).select_related(
+                'area', 'area__parent', 'brick'
+            ).prefetch_related('addresses__area', 'addresses__brick').first()
             if cand and can_user_access_contact_for_visit(request.user, cand):
                 selected_contact = cand
+
+    from activities.services import serialize_contact_addresses
+    selected_contact_addresses = serialize_contact_addresses(selected_contact) if selected_contact else []
+    selected_contact_address_id = (request.POST.get('contact_address_id') or '').strip()
+    if not selected_contact_address_id and selected_contact_addresses:
+        selected_contact_address_id = str(selected_contact_addresses[0]['id'])
 
     selected_template = None
     template_id_val = request.POST.get('template') or request.GET.get('template') or request.GET.get('template_id') or (planned_item.template_id if planned_item else None)
@@ -3263,6 +3336,9 @@ def visit_create(request):
         'products': products,
         'templates': templates,
         'selected_contact': selected_contact,
+        'selected_contact_addresses': selected_contact_addresses,
+        'selected_contact_addresses_json': json.dumps(selected_contact_addresses),
+        'selected_contact_address_id': selected_contact_address_id,
         'selected_template': selected_template,
         'planned_item': planned_item,
         'planned_item_id': planned_item.pk if planned_item else None,
@@ -3454,7 +3530,6 @@ def visit_edit(request, pk):
     from master_data.models import LocationSettings
     location_settings = LocationSettings.get_settings()
     can_bypass_gps = location_settings.can_user_bypass_without_approval(request.user, stage='end')
-    can_request_gps_exception = location_settings.can_user_request_distance_exception(request.user)
 
     saved_detailed_products = list(visit.detailed_products.values_list('id', flat=True))
     saved_answers = visit.questionnaire_answers or {}
@@ -3469,7 +3544,6 @@ def visit_edit(request, pk):
         'saved_answers_json': json.dumps(saved_answers),
         'saved_detailed_products': saved_detailed_products,
         'can_bypass_gps': can_bypass_gps,
-        'can_request_gps_exception': can_request_gps_exception,
         'is_lower_user': not is_manager_or_higher(request.user),
         'verify_visits_enabled': location_settings.verify_visits,
         'bypass_reason_mandatory': location_settings.bypass_reason_mandatory,
@@ -3484,14 +3558,15 @@ def visit_edit(request, pk):
 @login_required
 def visit_delete(request, pk):
     """
-    Permission- and DataScope-controlled deletion of unended visits (Requirement A).
+    Permission- and DataScope-controlled deletion of visits at any lifecycle stage.
     Rules:
     - POST only.
     - RBAC (`activities:visits/delete`) and object-level DataScope checked BEFORE
       inspecting or exposing visit existence/status.
-    - Visit must NOT be ended (`visit.status != 'finished'` and `visit.ended_at is None`).
-    - Deletes associated PlannedVisitItem records, cleans up attachments, and logs
-      comprehensive snapshot in `SecurityAuditLog` (`VISIT_DELETED`).
+    - Allowed across all lifecycle stages (planned, started, finished, cancelled),
+      decoupled from LocationSettings.
+    - Deletes associated PlannedVisitItem records, cleans up attachments/photo, and logs
+      comprehensive snapshot + ApprovalAuditLog history in `SecurityAuditLog` (`VISIT_DELETED`).
     """
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
     if request.method != 'POST':
@@ -3527,12 +3602,8 @@ def visit_delete(request, pk):
 
     allowed, reason = can_delete_unended_visit(visit, request.user)
     if not allowed:
-        is_finished_block = (visit.status == 'finished' or visit.ended_at is not None)
         if is_ajax:
-            return JsonResponse({'success': False, 'message': reason}, status=400 if is_finished_block else 403)
-        if is_finished_block:
-            messages.error(request, reason)
-            return redirect('visit_detail', pk=visit.pk)
+            return JsonResponse({'success': False, 'message': reason}, status=403)
         return render_forbidden_response(request, reason)
 
     try:
@@ -3778,7 +3849,8 @@ def visit_action(request, pk, action):
                 accuracy=request.POST.get('device_accuracy') or request.GET.get('device_accuracy'),
                 force_bypass=force_bypass,
                 bypass_reason=request.POST.get('bypass_reason', ''),
-                checkin_answers=checkin_answers
+                checkin_answers=checkin_answers,
+                contact_address_id=request.POST.get('contact_address_id') or None,
             )
             msg = f"تم بدء الزيارة #{visit.serial_num} بنجاح. يمكنك الآن استكمال الاستبيان والإنهاء."
             if is_ajax:
@@ -4529,73 +4601,120 @@ def agenda_view(request):
     weekday_ar = arabic_days[selected_date.weekday()]
 
     from master_data.models import LocationSettings
+    from activities.services import serialize_contact_addresses
     loc_settings = LocationSettings.get_settings()
     user_can_manage = can_manage_approvals(request.user)
     can_bypass_start_gps = loc_settings.can_user_bypass_without_approval(request.user, stage='start')
-    can_request_gps_exception = loc_settings.can_user_request_distance_exception(request.user)
 
-    # Scoped VisitPlan query for grouping visits by plan under agenda (Requirement 4)
+    def _is_agenda_entry_finished(visit_obj=None, source_item=None):
+        if visit_obj is not None:
+            return bool(visit_obj.status == 'finished' or visit_obj.ended_at is not None)
+        return bool(source_item is not None and source_item.is_executed)
+
+    agenda_visit_addresses = {}
+    start_questions_cache = {}
+    rep_open_visit = get_open_visit_for_owner(selected_rep.pk)
+
+    def _get_start_questions_for_template(tpl):
+        if not tpl:
+            return []
+        if tpl.pk not in start_questions_cache:
+            start_questions_cache[tpl.pk] = list(tpl.get_active_questions().filter(stage='start_only'))
+        return start_questions_cache[tpl.pk]
+
+    def _build_visit_card(v, entry_type, source_item=None, order_num=None, plan_label=''):
+        contact_obj = source_item.contact if source_item else v.contact
+        can_approve = bool(
+            user_can_manage and
+            v.owner_id != request.user.id and
+            can_user_access_object(request.user, v, 'approve')
+        )
+        if v.status == 'planned':
+            if rep_open_visit is not None and rep_open_visit.pk != v.pk and v.owner_id == selected_rep.pk:
+                can_start = False
+            else:
+                can_start, _ = can_start_visit(v, request.user)
+        else:
+            can_start = False
+        start_questions = _get_start_questions_for_template(v.template) if (v.status == 'planned' and can_start) else []
+        if v.status == 'planned' and can_start:
+            agenda_visit_addresses[str(v.pk)] = serialize_contact_addresses(contact_obj)
+        is_finished = _is_agenda_entry_finished(visit_obj=v, source_item=source_item)
+        effective_dist = (
+            float(v.allowed_distance)
+            if v.allowed_distance is not None
+            else loc_settings.get_effective_tolerance(v.template)
+        )
+        return {
+            'type': entry_type,
+            'source_item': source_item,
+            'visit': v,
+            'contact': contact_obj,
+            'template': (source_item.template if source_item else None) or v.template,
+            'order': order_num,
+            'plan_label': plan_label,
+            'status': v.status,
+            'status_display': v.status_display_ar,
+            'status_badge_class': v.status_badge_class,
+            'approval_status': v.approval_status,
+            'approval_display': v.approval_display_ar,
+            'approval_badge_class': v.approval_badge_class,
+            'is_executed': is_finished,
+            'is_finished': is_finished,
+            'can_approve': can_approve,
+            'can_start': can_start,
+            'start_questions': start_questions,
+            'effective_allowed_distance': effective_dist,
+            'detail_url': reverse('visit_detail', args=[v.pk]),
+            'action_url': reverse('visit_detail', args=[v.pk]),
+            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
+        }
+
+    # Scoped VisitPlan query for grouping visits by plan under agenda
     scoped_plans_qs = get_scoped_queryset(VisitPlan.objects.all(), request.user, 'visitplan', 'view').filter(
         date=selected_date
     ).select_related('assignee', 'created_by', 'approved_by').prefetch_related(
         'planned_items__contact', 'planned_items__template', 'planned_items__visit',
-        'planned_items__contact__area', 'planned_items__contact__brick', 'visits'
+        'planned_items__visit__approved_by', 'planned_items__visit__template',
+        'planned_items__visit__contact_address', 'planned_items__visit__contact_address__area',
+        'planned_items__visit__contact_address__brick',
+        'planned_items__contact__area', 'planned_items__contact__brick',
+        'planned_items__contact__addresses__area', 'planned_items__contact__addresses__brick',
     )
     if selected_rep:
         scoped_plans_qs = scoped_plans_qs.filter(assignee=selected_rep)
 
-    plan_groups = []
-    planned_visit_ids = set()
+    today_plan_groups = []
+    today_unplanned_cards = []
+    actual_visit_cards = []
+    seen_visit_ids = set()
     covered_item_ids = set()
-    agenda_visits = []
+    planned_count = 0
+    unplanned_count = 0
 
     for pl in scoped_plans_qs:
-        pl_items = list(pl.planned_items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        pl_items = sorted(pl.planned_items.all(), key=lambda x: (x.order, x.id))
         can_approve_pl = bool(
             user_can_manage and
             pl.assignee_id != request.user.id and
             can_user_access_object(request.user, pl, 'approve')
         )
-        group_visits = []
+        unfinished_group_visits = []
         for itm in pl_items:
             covered_item_ids.add(itm.id)
             v = itm.visit
             if v and v.status != 'cancelled' and (v.approval_status == 'approved' or v.is_planned or (user_can_manage and v.approval_status == 'pending')):
-                if v.id in planned_visit_ids:
+                if v.id in seen_visit_ids:
                     continue
-                planned_visit_ids.add(v.id)
-                can_approve = bool(
-                    user_can_manage and
-                    v.owner_id != request.user.id and
-                    can_user_access_object(request.user, v, 'approve')
-                )
-                can_start, _ = can_start_visit(v, request.user)
-                start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-                v_data = {
-                    'type': 'planned',
-                    'source_item': itm,
-                    'visit': v,
-                    'contact': itm.contact,
-                    'template': itm.template or v.template,
-                    'order': itm.order,
-                    'status': v.status,
-                    'status_display': v.status_display_ar,
-                    'status_badge_class': v.status_badge_class,
-                    'approval_status': v.approval_status,
-                    'approval_display': v.approval_display_ar,
-                    'approval_badge_class': v.approval_badge_class,
-                    'is_executed': (v.status == 'finished'),
-                    'can_approve': can_approve,
-                    'can_start': can_start,
-                    'start_questions': start_questions,
-                    'effective_allowed_distance': v.effective_allowed_distance,
-                    'detail_url': reverse('visit_detail', args=[v.pk]),
-                    'action_url': reverse('visit_detail', args=[v.pk]),
-                    'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-                }
-                group_visits.append(v_data)
-                agenda_visits.append(v_data)
+                seen_visit_ids.add(v.id)
+                v_data = _build_visit_card(v, 'planned', source_item=itm, order_num=itm.order, plan_label=pl.plan_id)
+                planned_count += 1
+                if v_data['is_finished']:
+                    actual_visit_cards.append(v_data)
+                else:
+                    unfinished_group_visits.append(v_data)
             elif not v:
+                is_finished = _is_agenda_entry_finished(visit_obj=None, source_item=itm)
                 v_data = {
                     'type': 'planned',
                     'source_item': itm,
@@ -4603,13 +4722,15 @@ def agenda_view(request):
                     'contact': itm.contact,
                     'template': itm.template,
                     'order': itm.order,
-                    'status': 'planned',
-                    'status_display': 'مخططة (بانتظار التنفيذ)',
-                    'status_badge_class': 'bg-slate-100 text-slate-700 border-slate-200',
+                    'plan_label': pl.plan_id,
+                    'status': 'finished' if is_finished else 'planned',
+                    'status_display': 'منتهية' if is_finished else 'مخططة (بانتظار التنفيذ)',
+                    'status_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200' if is_finished else 'bg-slate-100 text-slate-700 border-slate-200',
                     'approval_status': pl.approval_status,
                     'approval_display': pl.get_approval_status_display() if hasattr(pl, 'get_approval_status_display') else pl.approval_status,
                     'approval_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200' if pl.approval_status == 'approved' else 'bg-amber-50 text-amber-700 border-amber-200',
-                    'is_executed': itm.is_executed,
+                    'is_executed': is_finished,
+                    'is_finished': is_finished,
                     'can_approve': False,
                     'can_start': False,
                     'start_questions': [],
@@ -4618,66 +4739,55 @@ def agenda_view(request):
                     'action_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
                     'action_label': 'بدء الزيارة',
                 }
-                group_visits.append(v_data)
-                agenda_visits.append(v_data)
+                planned_count += 1
+                if is_finished:
+                    actual_visit_cards.append(v_data)
+                else:
+                    unfinished_group_visits.append(v_data)
 
-        plan_groups.append({
-            'plan': pl,
-            'plan_id': pl.plan_id,
-            'comment': pl.comment,
-            'approval_status': pl.approval_status,
-            'assignee': pl.assignee,
-            'can_approve': can_approve_pl,
-            'visits': group_visits,
-            'items_count': len(group_visits),
-        })
+        if unfinished_group_visits:
+            today_plan_groups.append({
+                'plan': pl,
+                'plan_id': pl.plan_id,
+                'comment': pl.comment,
+                'approval_status': pl.approval_status,
+                'assignee': pl.assignee,
+                'can_approve': can_approve_pl,
+                'visits': unfinished_group_visits,
+                'items_count': len(unfinished_group_visits),
+            })
 
-    # Legacy unlinked PlannedVisitDay items
-    legacy_plan_days = PlannedVisitDay.objects.filter(assignee=selected_rep, date=selected_date)
-    unlinked_visits = []
+    # Legacy unlinked PlannedVisitDay items (selected_rep is already scope-authorized; per-visit scope enforced)
+    legacy_plan_days = PlannedVisitDay.objects.filter(
+        assignee=selected_rep, date=selected_date
+    ).prefetch_related(
+        'items__contact', 'items__contact__area', 'items__contact__brick',
+        'items__contact__addresses__area', 'items__contact__addresses__brick',
+        'items__template', 'items__visit', 'items__visit__approved_by', 'items__visit__template',
+        'items__visit__contact_address', 'items__visit__contact_address__area', 'items__visit__contact_address__brick',
+    )
+    unfinished_unlinked_visits = []
     for pvd in legacy_plan_days:
-        raw_items = list(pvd.items.select_related('contact', 'template', 'visit', 'visit__approved_by').order_by('order', 'id'))
+        raw_items = sorted(pvd.items.all(), key=lambda x: (x.order, x.id))
         for itm in raw_items:
             if itm.id in covered_item_ids:
                 continue
             covered_item_ids.add(itm.id)
             v = itm.visit
             if v and v.status != 'cancelled' and (v.approval_status == 'approved' or v.is_planned):
-                if v.id in planned_visit_ids:
+                if v.id in seen_visit_ids:
                     continue
-                planned_visit_ids.add(v.id)
-                can_approve = bool(
-                    user_can_manage and
-                    v.owner_id != request.user.id and
-                    can_user_access_object(request.user, v, 'approve')
-                )
-                can_start, _ = can_start_visit(v, request.user)
-                start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-                v_data = {
-                    'type': 'planned',
-                    'source_item': itm,
-                    'visit': v,
-                    'contact': itm.contact,
-                    'template': itm.template or v.template,
-                    'order': itm.order,
-                    'status': v.status,
-                    'status_display': v.status_display_ar,
-                    'status_badge_class': v.status_badge_class,
-                    'approval_status': v.approval_status,
-                    'approval_display': v.approval_display_ar,
-                    'approval_badge_class': v.approval_badge_class,
-                    'is_executed': (v.status == 'finished'),
-                    'can_approve': can_approve,
-                    'can_start': can_start,
-                    'start_questions': start_questions,
-                    'effective_allowed_distance': v.effective_allowed_distance,
-                    'detail_url': reverse('visit_detail', args=[v.pk]),
-                    'action_url': reverse('visit_detail', args=[v.pk]),
-                    'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-                }
-                unlinked_visits.append(v_data)
-                agenda_visits.append(v_data)
+                if not can_user_access_object(request.user, v, 'view'):
+                    continue
+                seen_visit_ids.add(v.id)
+                v_data = _build_visit_card(v, 'planned', source_item=itm, order_num=itm.order, plan_label='خطة عامة')
+                planned_count += 1
+                if v_data['is_finished']:
+                    actual_visit_cards.append(v_data)
+                else:
+                    unfinished_unlinked_visits.append(v_data)
             elif not v:
+                is_finished = _is_agenda_entry_finished(visit_obj=None, source_item=itm)
                 v_data = {
                     'type': 'planned',
                     'source_item': itm,
@@ -4685,13 +4795,15 @@ def agenda_view(request):
                     'contact': itm.contact,
                     'template': itm.template,
                     'order': itm.order,
-                    'status': 'planned',
-                    'status_display': 'مخططة (بانتظار التنفيذ)',
-                    'status_badge_class': 'bg-slate-100 text-slate-700 border-slate-200',
+                    'plan_label': 'خطة عامة',
+                    'status': 'finished' if is_finished else 'planned',
+                    'status_display': 'منتهية' if is_finished else 'مخططة (بانتظار التنفيذ)',
+                    'status_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200' if is_finished else 'bg-slate-100 text-slate-700 border-slate-200',
                     'approval_status': 'approved',
                     'approval_display': 'معتمدة',
                     'approval_badge_class': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                    'is_executed': itm.is_executed,
+                    'is_executed': is_finished,
+                    'is_finished': is_finished,
                     'can_approve': False,
                     'can_start': False,
                     'start_questions': [],
@@ -4700,19 +4812,22 @@ def agenda_view(request):
                     'action_url': reverse('visit_create') + f'?contact_id={itm.contact_id}&planned_item_id={itm.id}',
                     'action_label': 'بدء الزيارة',
                 }
-                unlinked_visits.append(v_data)
-                agenda_visits.append(v_data)
+                planned_count += 1
+                if is_finished:
+                    actual_visit_cards.append(v_data)
+                else:
+                    unfinished_unlinked_visits.append(v_data)
 
-    if unlinked_visits:
-        plan_groups.append({
+    if unfinished_unlinked_visits:
+        today_plan_groups.append({
             'plan': None,
             'plan_id': 'خطة عامة',
             'comment': '',
             'approval_status': 'approved',
             'assignee': selected_rep,
             'can_approve': False,
-            'visits': unlinked_visits,
-            'items_count': len(unlinked_visits),
+            'visits': unfinished_unlinked_visits,
+            'items_count': len(unfinished_unlinked_visits),
         })
 
     # Standalone planned visits (is_planned=True) not already linked to a plan item
@@ -4726,56 +4841,39 @@ def agenda_view(request):
         ).exclude(
             status='cancelled'
         ).exclude(
-            id__in=planned_visit_ids
-        ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num'),
+            id__in=seen_visit_ids
+        ).select_related(
+            'contact', 'contact__area', 'contact__brick',
+            'contact_address', 'contact_address__area', 'contact_address__brick',
+            'template', 'owner', 'approved_by',
+        ).prefetch_related(
+            'contact__addresses__area', 'contact__addresses__brick',
+        ).order_by('serial_num'),
         request.user,
         'visit',
     )
-    standalone_planned_cards = []
+    unfinished_standalone_planned = []
     for v in standalone_planned_qs:
-        planned_visit_ids.add(v.id)
-        can_approve = bool(
-            user_can_manage and
-            v.owner_id != request.user.id and
-            can_user_access_object(request.user, v, 'approve')
-        )
-        can_start, _ = can_start_visit(v, request.user)
-        start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-        sp_data = {
-            'type': 'planned',
-            'source_item': None,
-            'visit': v,
-            'contact': v.contact,
-            'template': v.template,
-            'order': None,
-            'status': v.status,
-            'status_display': v.status_display_ar,
-            'status_badge_class': v.status_badge_class,
-            'approval_status': v.approval_status,
-            'approval_display': v.approval_display_ar,
-            'approval_badge_class': v.approval_badge_class,
-            'is_executed': (v.status == 'finished'),
-            'can_approve': can_approve,
-            'can_start': can_start,
-            'start_questions': start_questions,
-            'effective_allowed_distance': v.effective_allowed_distance,
-            'detail_url': reverse('visit_detail', args=[v.pk]),
-            'action_url': reverse('visit_detail', args=[v.pk]),
-            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-        }
-        standalone_planned_cards.append(sp_data)
-        agenda_visits.append(sp_data)
+        if v.id in seen_visit_ids:
+            continue
+        seen_visit_ids.add(v.id)
+        sp_data = _build_visit_card(v, 'planned', source_item=None, order_num=None, plan_label='زيارات مخططة')
+        planned_count += 1
+        if sp_data['is_finished']:
+            actual_visit_cards.append(sp_data)
+        else:
+            unfinished_standalone_planned.append(sp_data)
 
-    if standalone_planned_cards:
-        plan_groups.append({
+    if unfinished_standalone_planned:
+        today_plan_groups.append({
             'plan': None,
             'plan_id': 'زيارات مخططة',
             'comment': '',
             'approval_status': 'approved',
             'assignee': selected_rep,
             'can_approve': False,
-            'visits': standalone_planned_cards,
-            'items_count': len(standalone_planned_cards),
+            'visits': unfinished_standalone_planned,
+            'items_count': len(unfinished_standalone_planned),
         })
 
     # Query explicitly unplanned visits (is_planned=False) not already shown
@@ -4788,50 +4886,41 @@ def agenda_view(request):
         ).exclude(
             status='cancelled'
         ).exclude(
-            id__in=planned_visit_ids
-        ).select_related('contact', 'template', 'owner', 'approved_by').order_by('serial_num'),
+            id__in=seen_visit_ids
+        ).select_related(
+            'contact', 'contact__area', 'contact__brick',
+            'contact_address', 'contact_address__area', 'contact_address__brick',
+            'template', 'owner', 'approved_by',
+        ).prefetch_related(
+            'contact__addresses__area', 'contact__addresses__brick',
+        ).order_by('serial_num'),
         request.user,
         'visit',
     )
 
-    unplanned_visit_cards = []
     for v in unplanned_visits_qs:
-        can_approve = bool(
-            user_can_manage and
-            v.owner_id != request.user.id and
-            can_user_access_object(request.user, v, 'approve')
-        )
-        can_start, _ = can_start_visit(v, request.user)
-        start_questions = list(v.template.get_active_questions().filter(stage='start_only')) if v.template else []
-        u_data = {
-            'type': 'unplanned',
-            'source_item': None,
-            'visit': v,
-            'contact': v.contact,
-            'template': v.template,
-            'order': None,
-            'status': v.status,
-            'status_display': v.status_display_ar,
-            'status_badge_class': v.status_badge_class,
-            'approval_status': v.approval_status,
-            'approval_display': v.approval_display_ar,
-            'approval_badge_class': v.approval_badge_class,
-            'is_executed': (v.status == 'finished'),
-            'can_approve': can_approve,
-            'can_start': can_start,
-            'start_questions': start_questions,
-            'effective_allowed_distance': v.effective_allowed_distance,
-            'detail_url': reverse('visit_detail', args=[v.pk]),
-            'action_url': reverse('visit_detail', args=[v.pk]),
-            'action_label': 'متابعة الزيارة' if v.status == 'started' else ('بدء الزيارة' if v.status == 'planned' and v.approval_status == 'approved' else 'معاينة التفاصيل'),
-        }
-        unplanned_visit_cards.append(u_data)
+        if v.id in seen_visit_ids:
+            continue
+        seen_visit_ids.add(v.id)
+        u_data = _build_visit_card(v, 'unplanned', source_item=None, order_num=None, plan_label='')
+        unplanned_count += 1
+        if u_data['is_finished']:
+            actual_visit_cards.append(u_data)
+        else:
+            today_unplanned_cards.append(u_data)
 
-    planned_visit_cards = list(agenda_visits)
-    planned_visits_count = len(planned_visit_cards)
-    unplanned_visits_count = len(unplanned_visit_cards)
-    total_visits_count = planned_visits_count + unplanned_visits_count
-    agenda_visits = planned_visit_cards + unplanned_visit_cards
+    today_visit_cards = [
+        card
+        for grp in today_plan_groups
+        for card in grp['visits']
+    ] + list(today_unplanned_cards)
+
+    today_visits_count = len(today_visit_cards)
+    actual_visits_count = len(actual_visit_cards)
+    total_visits_count = today_visits_count + actual_visits_count
+    planned_visit_cards = [c for c in (today_visit_cards + actual_visit_cards) if c['type'] == 'planned']
+    unplanned_visit_cards = [c for c in (today_visit_cards + actual_visit_cards) if c['type'] == 'unplanned']
+    agenda_visits = today_visit_cards + actual_visit_cards
 
     # Todos
     todos = AgendaTodo.objects.filter(user=selected_rep, date=selected_date).order_by('is_completed', '-created_at')
@@ -4850,20 +4939,28 @@ def agenda_view(request):
         'today_date': today.strftime('%Y-%m-%d'),
         'is_today': selected_date == today,
         'weekday_ar': weekday_ar,
-        'plan_groups': plan_groups,
+        # Two mutually exclusive Agenda sections (Req B)
+        'today_plan_groups': today_plan_groups,
+        'today_unplanned_cards': today_unplanned_cards,
+        'today_visit_cards': today_visit_cards,
+        'today_visits_count': today_visits_count,
+        'actual_visit_cards': actual_visit_cards,
+        'actual_visits_count': actual_visits_count,
+        # Preserved compatibility keys
+        'plan_groups': today_plan_groups,
         'planned_visit_cards': planned_visit_cards,
         'unplanned_visit_cards': unplanned_visit_cards,
         'agenda_visits': agenda_visits,
-        'planned_visits_count': planned_visits_count,
-        'unplanned_visits_count': unplanned_visits_count,
+        'planned_visits_count': planned_count,
+        'unplanned_visits_count': unplanned_count,
         'total_visits_count': total_visits_count,
         'visits_count': total_visits_count,
         'todos': todos,
         'todos_count': todos.count(),
         'current_tab': current_tab,
         'can_bypass_start_gps': can_bypass_start_gps,
-        'can_request_gps_exception': can_request_gps_exception,
         'verify_visits_enabled': loc_settings.verify_visits,
+        'agenda_visit_addresses_json': json.dumps(agenda_visit_addresses),
     }
     return render(request, 'activities/agenda.html', context)
 

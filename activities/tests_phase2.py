@@ -469,7 +469,8 @@ class Phase2ComprehensiveVerificationTests(TestCase):
     # REQ J: Visit Deletion Rules
     # =========================================================================
     def test_req_j_finished_visits_cannot_be_deleted_and_unended_unlinks_plan(self):
-        """Finished visits cannot be deleted; unended visit deletion removes associated PlannedVisitItem records."""
+        """Authorized users can delete visits at any lifecycle stage, cleaning up PlannedVisitItem and logging snapshot."""
+        from accounts.models import SecurityAuditLog
         today = timezone.now().date()
         pday = PlannedVisitDay.objects.create(assignee=self.rep_cairo, date=today, created_by=self.rep_cairo)
         visit_unended = Visit.objects.create(
@@ -485,15 +486,17 @@ class Phase2ComprehensiveVerificationTests(TestCase):
         self.assertFalse(Visit.objects.filter(pk=visit_unended.pk).exists())
         self.assertFalse(PlannedVisitItem.objects.filter(pk=pitem.pk).exists())
 
-        # Finished visit -> delete is strictly rejected
+        # Finished visit -> authorized delete also succeeds at any stage and preserves SecurityAuditLog snapshot
         visit_finished = Visit.objects.create(
             contact=self.contact_cairo, template=self.template, owner=self.rep_cairo,
             created_by=self.rep_cairo, date=today, status='finished', ended_at=timezone.now(),
             approval_status='approved'
         )
-        res_fin_del = self.client.post(reverse('visit_delete', args=[visit_finished.pk]))
+        fin_pk = visit_finished.pk
+        res_fin_del = self.client.post(reverse('visit_delete', args=[fin_pk]))
         self.assertEqual(res_fin_del.status_code, 302)
-        self.assertTrue(Visit.objects.filter(pk=visit_finished.pk).exists())
+        self.assertFalse(Visit.objects.filter(pk=fin_pk).exists())
+        self.assertTrue(SecurityAuditLog.objects.filter(action_type='VISIT_DELETED', record_id=str(fin_pk)).exists())
 
     # =========================================================================
     # REQ K: Visits List Table UI
@@ -1074,83 +1077,91 @@ class Phase3VisitsAgreementsAndNavTests(TestCase):
 
     def test_agreements_more_vert_status_scope_and_attachment_cleanup(self):
         """Agreements enforce view/edit/delete permissions, status rules ('new'/'disapproved'), IDOR, attachments, and audits."""
+        import shutil
+        import tempfile
         from django.contrib.contenttypes.models import ContentType
         from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
         from master_data.models import ERPAttachment
 
-        today = timezone.localdate()
-        agr_new = self.Agreement.objects.create(
-            title='اتفاقية جديدة', type=self.agr_type, customer=self.contact_nasr,
-            amount=Decimal('500.00'), date=today, status='new', created_by=self.rep_cairo
-        )
-        agr_done = self.Agreement.objects.create(
-            title='اتفاقية منجزة', type=self.agr_type, customer=self.contact_nasr,
-            amount=Decimal('750.00'), date=today, status='done', created_by=self.rep_cairo, approved_by=self.mgr_cairo
-        )
-        ct_agr = ContentType.objects.get_for_model(self.Agreement)
-        att = ERPAttachment.objects.create(
-            content_type=ct_agr,
-            object_id=agr_new.id,
-            file=SimpleUploadedFile('agr_doc.pdf', b'%PDF-1.4 test', content_type='application/pdf'),
-            original_filename='agr_doc.pdf',
-            mime_type='application/pdf',
-            file_size_bytes=13,
-            uploaded_by=self.rep_cairo,
-        )
+        temp_media = tempfile.mkdtemp()
+        try:
+            with override_settings(MEDIA_ROOT=temp_media):
+                today = timezone.localdate()
+                agr_new = self.Agreement.objects.create(
+                    title='اتفاقية جديدة', type=self.agr_type, customer=self.contact_nasr,
+                    amount=Decimal('500.00'), date=today, status='new', created_by=self.rep_cairo
+                )
+                agr_done = self.Agreement.objects.create(
+                    title='اتفاقية منجزة', type=self.agr_type, customer=self.contact_nasr,
+                    amount=Decimal('750.00'), date=today, status='done', created_by=self.rep_cairo, approved_by=self.mgr_cairo
+                )
+                ct_agr = ContentType.objects.get_for_model(self.Agreement)
+                att = ERPAttachment.objects.create(
+                    content_type=ct_agr,
+                    object_id=agr_new.id,
+                    file=SimpleUploadedFile('agr_doc.pdf', b'%PDF-1.4 test', content_type='application/pdf'),
+                    original_filename='agr_doc.pdf',
+                    mime_type='application/pdf',
+                    file_size_bytes=13,
+                    uploaded_by=self.rep_cairo,
+                )
 
-        # Rep views list: Edit/Delete shown for 'new', hidden for 'done'; DOM balanced with row-menu-trigger
-        self.client.force_login(self.rep_cairo)
-        res_list = self.client.get(reverse('agreements_list'))
-        self.assertEqual(res_list.status_code, 200)
-        self.assertContains(res_list, 'row-menu-trigger')
-        self.assertContains(res_list, 'showConfirmDeleteModal')
-        self.assertContains(res_list, 'global-confirm-delete-modal')
-        self.assertContains(res_list, reverse('agreement_edit', args=[agr_new.id]))
-        self.assertContains(res_list, reverse('agreement_delete', args=[agr_new.id]))
-        self.assertNotContains(res_list, reverse('agreement_edit', args=[agr_done.id]))
-        self.assertNotContains(res_list, reverse('agreement_delete', args=[agr_done.id]))
+                # Rep views list: Edit/Delete shown for 'new', hidden for 'done'; DOM balanced with row-menu-trigger
+                self.client.force_login(self.rep_cairo)
+                res_list = self.client.get(reverse('agreements_list'))
+                self.assertEqual(res_list.status_code, 200)
+                self.assertContains(res_list, 'row-menu-trigger')
+                self.assertContains(res_list, 'showConfirmDeleteModal')
+                self.assertContains(res_list, 'global-confirm-delete-modal')
+                self.assertContains(res_list, reverse('agreement_edit', args=[agr_new.id]))
+                self.assertContains(res_list, reverse('agreement_delete', args=[agr_new.id]))
+                self.assertNotContains(res_list, reverse('agreement_edit', args=[agr_done.id]))
+                self.assertNotContains(res_list, reverse('agreement_delete', args=[agr_done.id]))
 
-        # Giza manager cannot access or mutate Cairo agreement (IDOR -> 403)
-        self.client.force_login(self.mgr_giza)
-        self.assertEqual(self.client.get(reverse('agreement_detail', args=[agr_new.id])).status_code, 403)
-        self.assertEqual(self.client.post(reverse('agreement_edit', args=[agr_new.id]), {'title': 'Hack'}).status_code, 403)
-        self.assertEqual(self.client.post(reverse('agreement_delete', args=[agr_new.id])).status_code, 403)
+                # Giza manager cannot access or mutate Cairo agreement (IDOR -> 403)
+                self.client.force_login(self.mgr_giza)
+                self.assertEqual(self.client.get(reverse('agreement_detail', args=[agr_new.id])).status_code, 403)
+                self.assertEqual(self.client.post(reverse('agreement_edit', args=[agr_new.id]), {'title': 'Hack'}).status_code, 403)
+                self.assertEqual(self.client.post(reverse('agreement_delete', args=[agr_new.id])).status_code, 403)
 
-        # Creator edits 'new' agreement successfully -> writes AGREEMENT_UPDATED audit log
-        self.client.force_login(self.rep_cairo)
-        res_edit = self.client.post(reverse('agreement_edit', args=[agr_new.id]), {
-            'customer': self.contact_nasr.id,
-            'type': self.agr_type.id,
-            'title': 'اتفاقية محدثة',
-            'amount': '600.00',
-            'date': today.strftime('%Y-%m-%d'),
-            'description': 'تم التحديث',
-        })
-        self.assertEqual(res_edit.status_code, 302)
-        agr_new.refresh_from_db()
-        self.assertEqual(agr_new.title, 'اتفاقية محدثة')
-        self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_UPDATED', record_id=str(agr_new.id)).exists())
+                # Creator edits 'new' agreement successfully -> writes AGREEMENT_UPDATED audit log
+                self.client.force_login(self.rep_cairo)
+                res_edit = self.client.post(reverse('agreement_edit', args=[agr_new.id]), {
+                    'customer': self.contact_nasr.id,
+                    'type': self.agr_type.id,
+                    'title': 'اتفاقية محدثة',
+                    'amount': '600.00',
+                    'date': today.strftime('%Y-%m-%d'),
+                    'description': 'تم التحديث',
+                })
+                self.assertEqual(res_edit.status_code, 302)
+                agr_new.refresh_from_db()
+                self.assertEqual(agr_new.title, 'اتفاقية محدثة')
+                self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_UPDATED', record_id=str(agr_new.id)).exists())
 
-        # Cannot edit or delete 'done' agreement
-        res_done_edit = self.client.get(reverse('agreement_edit', args=[agr_done.id]))
-        self.assertEqual(res_done_edit.status_code, 302)
-        res_done_del_ajax = self.client.post(
-            reverse('agreement_delete', args=[agr_done.id]),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
-        )
-        self.assertEqual(res_done_del_ajax.status_code, 400)
-        self.assertTrue(self.Agreement.objects.filter(pk=agr_done.id).exists())
+                # Cannot edit or delete 'done' agreement
+                res_done_edit = self.client.get(reverse('agreement_edit', args=[agr_done.id]))
+                self.assertEqual(res_done_edit.status_code, 302)
+                res_done_del_ajax = self.client.post(
+                    reverse('agreement_delete', args=[agr_done.id]),
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+                )
+                self.assertEqual(res_done_del_ajax.status_code, 400)
+                self.assertTrue(self.Agreement.objects.filter(pk=agr_done.id).exists())
 
-        # Delete 'new' agreement cleans up attachment and writes AGREEMENT_DELETED audit log
-        res_del = self.client.post(
-            reverse('agreement_delete', args=[agr_new.id]),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
-        )
-        self.assertEqual(res_del.status_code, 200)
-        self.assertTrue(res_del.json()['success'])
-        self.assertFalse(self.Agreement.objects.filter(pk=agr_new.id).exists())
-        self.assertFalse(ERPAttachment.objects.filter(pk=att.pk).exists())
-        self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_DELETED', record_id=str(agr_new.id)).exists())
+                # Delete 'new' agreement cleans up attachment and writes AGREEMENT_DELETED audit log
+                res_del = self.client.post(
+                    reverse('agreement_delete', args=[agr_new.id]),
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+                )
+                self.assertEqual(res_del.status_code, 200)
+                self.assertTrue(res_del.json()['success'])
+                self.assertFalse(self.Agreement.objects.filter(pk=agr_new.id).exists())
+                self.assertFalse(ERPAttachment.objects.filter(pk=att.pk).exists())
+                self.assertTrue(SecurityAuditLog.objects.filter(action_type='AGREEMENT_DELETED', record_id=str(agr_new.id)).exists())
+        finally:
+            shutil.rmtree(temp_media, ignore_errors=True)
 
     def test_cleanup_command_dry_run_reports_related_counts_and_audit_note(self):
         """Dry-run mode prints Samples/Expenses/CoachingEvaluations/VisitPlans/SecurityAuditLog note and deletes nothing."""

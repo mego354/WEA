@@ -30,7 +30,12 @@
                     {{ item.contact.name }}
                 </h3>
                 <div class="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
-                    {% if item.contact.area %}
+                    {% if item.visit and item.visit.resolved_address_title %}
+                    <span class="flex items-center gap-0.5 text-teal-700 font-medium">
+                        <span class="material-symbols-outlined text-[13px] text-[#27bebe]">location_on</span>
+                        <span>{{ item.visit.resolved_address_title }}</span>
+                    </span>
+                    {% elif item.contact.area %}
                     <span class="flex items-center gap-0.5">
                         <span class="material-symbols-outlined text-[13px] text-slate-400">pin_drop</span>
                         <span>{{ item.contact.area.name }}</span>

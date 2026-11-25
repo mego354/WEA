@@ -124,20 +124,16 @@
 
     <!-- TAB 1: VISITS (الزيارات) -->
     {% if current_tab != 'todos' %}
-    <div class="space-y-4">
+    <div class="space-y-6">
 
-        <!-- Action Row: Title & Separated Counters -->
+        <!-- Summary Counters Bar (Mutually Exclusive: زيارات اليوم + الزيارات الفعلية = الإجمالي) -->
         <div class="flex items-center justify-between gap-3 flex-wrap">
-            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
-                <span>زيارات مخططة</span>
-                <span class="text-xs font-mono font-normal text-slate-500">({{ planned_visits_count }} زيارة)</span>
-            </h2>
-            <div class="flex items-center gap-2 text-xs">
+            <div class="flex items-center gap-2 text-xs flex-wrap">
                 <span class="px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200 font-bold font-mono">
-                    مخططة: {{ planned_visits_count }}
+                    زيارات اليوم: {{ today_visits_count }}
                 </span>
-                <span class="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-bold font-mono">
-                    مباشرة: {{ unplanned_visits_count }}
+                <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold font-mono">
+                    الزيارات الفعلية: {{ actual_visits_count }}
                 </span>
                 <span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold font-mono">
                     الإجمالي: {{ total_visits_count }}
@@ -145,11 +141,20 @@
             </div>
         </div>
 
-        <!-- VISITS LIST / CARDS -->
-        {% if plan_groups or unplanned_visit_cards %}
-        <div class="space-y-6">
-            {% if plan_groups %}
-                {% for pl_group in plan_groups %}
+        {% if total_visits_count > 0 %}
+        <!-- SECTION 1 (TOP): زيارات اليوم (ALL UNFINISHED VISITS) -->
+        <section id="agenda-today-visits-section" class="space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-base font-black text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[#27bebe] text-xl">schedule</span>
+                    <span>زيارات اليوم</span>
+                    <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">{{ today_visits_count }}</span>
+                </h2>
+            </div>
+
+            {% if today_plan_groups or today_unplanned_cards %}
+            <div class="space-y-4">
+                {% for pl_group in today_plan_groups %}
                 <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-2xs">
                     <!-- Plan Header: ID, Assignee, Status, and Actions -->
                     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -192,7 +197,6 @@
                         {% endif %}
                     </div>
 
-                    <!-- Plan Comment (Requirement 4.C: Displayed directly above each plan and below day name) -->
                     {% if pl_group.comment %}
                     <div class="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
                         <span class="material-symbols-outlined text-sm text-[#27bebe] mt-0.5 shrink-0">notes</span>
@@ -203,7 +207,6 @@
                     </div>
                     {% endif %}
 
-                    <!-- Visits in this Plan -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {% for item in pl_group.visits %}
                         {% include 'activities/_agenda_visit_card.html' with item=item %}
@@ -211,24 +214,55 @@
                     </div>
                 </div>
                 {% endfor %}
-            {% endif %}
 
-            {% if unplanned_visit_cards %}
-            <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-2xs">
-                <div class="border-b border-slate-100 pb-2.5">
-                    <h3 class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-sm text-purple-600">bolt</span>
-                        <span>زيارات خارج الخطة ({{ unplanned_visits_count }})</span>
-                    </h3>
+                {% if today_unplanned_cards %}
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-2xs">
+                    <div class="border-b border-slate-100 pb-2.5">
+                        <h3 class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm text-purple-600">bolt</span>
+                            <span>زيارات مباشرة جارية ({{ today_unplanned_cards|length }})</span>
+                        </h3>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for item in today_unplanned_cards %}
+                        {% include 'activities/_agenda_visit_card.html' with item=item %}
+                        {% endfor %}
+                    </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {% for item in unplanned_visit_cards %}
-                    {% include 'activities/_agenda_visit_card.html' with item=item %}
-                    {% endfor %}
-                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="bg-white rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-emerald-500 text-lg">task_alt</span>
+                <span class="font-bold text-slate-600">لا توجد زيارات متبقية أو جارية لهذا اليوم</span>
             </div>
             {% endif %}
-        </div>
+        </section>
+
+        <!-- SECTION 2 (BOTTOM): الزيارات الفعلية (ALL FINISHED VISITS) -->
+        <section id="agenda-actual-visits-section" class="space-y-4 pt-2 border-t border-slate-200/80">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-base font-black text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600 text-xl">verified</span>
+                    <span>الزيارات الفعلية</span>
+                    <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{{ actual_visits_count }}</span>
+                </h2>
+            </div>
+
+            {% if actual_visit_cards %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for item in actual_visit_cards %}
+                {% include 'activities/_agenda_visit_card.html' with item=item %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-white rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-slate-400 text-lg">pending_actions</span>
+                <span class="font-bold text-slate-600">لا توجد زيارات منتهية مسجلة لهذا اليوم بعد</span>
+            </div>
+            {% endif %}
+        </section>
+
         {% else %}
         <!-- EMPTY STATE - Exactly matching reference application -->
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-12 text-center flex flex-col items-center justify-center space-y-4">
@@ -400,7 +434,11 @@ function closeAgendaRejectModal() {
 
 let currentAgendaContactLat = null;
 let currentAgendaContactLng = null;
+let currentAgendaDeviceLat = null;
+let currentAgendaDeviceLng = null;
 let currentAgendaTolerance = 300;
+let currentAgendaAddresses = [];
+const agendaVisitAddressesMap = {{ agenda_visit_addresses_json|default:"{}"|safe }};
 const verifyVisitsEnabled = {{ verify_visits_enabled|yesno:"true,false" }};
 const canBypassStartGps = {{ can_bypass_start_gps|yesno:"true,false" }};
 
@@ -435,6 +473,82 @@ function resetAgendaStartBypassState() {
     }
 }
 
+function applyAgendaSelectedAddress(addr) {
+    const gpsDisplay = document.getElementById('agenda-start-client-gps');
+    const hiddenIdInp = document.getElementById('agenda-start-contact-address-id');
+    if (hiddenIdInp) hiddenIdInp.value = addr && addr.id ? String(addr.id) : '';
+    if (addr && addr.has_location && addr.latitude !== null && addr.longitude !== null) {
+        currentAgendaContactLat = Number(addr.latitude);
+        currentAgendaContactLng = Number(addr.longitude);
+        if (gpsDisplay) gpsDisplay.textContent = `${currentAgendaContactLat.toFixed(5)}, ${currentAgendaContactLng.toFixed(5)}`;
+    } else {
+        currentAgendaContactLat = null;
+        currentAgendaContactLng = null;
+        if (gpsDisplay) gpsDisplay.textContent = 'لا يوجد موقع GPS مسجل لهذا العنوان';
+    }
+    resetAgendaStartBypassState();
+    if (currentAgendaDeviceLat !== null && currentAgendaDeviceLng !== null) {
+        updateAgendaDistanceDisplay(currentAgendaDeviceLat, currentAgendaDeviceLng);
+    } else if (currentAgendaContactLat === null || currentAgendaContactLng === null) {
+        updateAgendaDistanceDisplay(null, null);
+    }
+}
+
+function renderAgendaAddressSelector(visitId, fallbackLat, fallbackLng) {
+    const wrap = document.getElementById('agenda-start-address-wrapper');
+    const slot = document.getElementById('agenda-start-address-slot');
+    const hiddenIdInp = document.getElementById('agenda-start-contact-address-id');
+    currentAgendaAddresses = agendaVisitAddressesMap[String(visitId)] || [];
+    if (!wrap || !slot) return;
+
+    if (currentAgendaAddresses.length === 0) {
+        if (hiddenIdInp) hiddenIdInp.value = '';
+        wrap.classList.remove('hidden');
+        slot.innerHTML = `<div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-sm">location_off</span>
+            <span>لا توجد عناوين مسجلة لهذا العميل.</span>
+        </div>`;
+        const pLat = fallbackLat && fallbackLat !== 'None' ? parseFloat(String(fallbackLat).replace(',', '.')) : NaN;
+        const pLng = fallbackLng && fallbackLng !== 'None' ? parseFloat(String(fallbackLng).replace(',', '.')) : NaN;
+        applyAgendaSelectedAddress(Number.isFinite(pLat) && Number.isFinite(pLng) ? { id: '', has_location: true, latitude: pLat, longitude: pLng } : null);
+        return;
+    }
+
+    if (currentAgendaAddresses.length === 1) {
+        const a = currentAgendaAddresses[0];
+        wrap.classList.remove('hidden');
+        const gpsBadge = a.has_location
+            ? `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">GPS مسجل</span>`
+            : `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">بدون GPS</span>`;
+        slot.innerHTML = `<div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 text-xs">
+            <div class="min-w-0">
+                <div class="font-bold text-slate-800 truncate">${a.title}</div>
+                ${a.full_text ? `<div class="text-[11px] text-slate-500 truncate">${a.full_text}</div>` : ''}
+            </div>
+            ${gpsBadge}
+        </div>`;
+        applyAgendaSelectedAddress(a);
+        return;
+    }
+
+    // 2+ addresses: compact mobile-friendly selector defaulting to main address (index 0)
+    wrap.classList.remove('hidden');
+    let html = `<select id="agenda-start-address-select" onchange="onAgendaAddressChange(this.value)" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:outline-none">`;
+    currentAgendaAddresses.forEach((a, idx) => {
+        const gpsTag = a.has_location ? '✓ GPS' : '⚠ بدون GPS';
+        const sub = a.full_text ? ` — ${a.full_text}` : '';
+        html += `<option value="${a.id}" ${idx === 0 ? 'selected' : ''}>${a.title}${sub} (${gpsTag})</option>`;
+    });
+    html += `</select>`;
+    slot.innerHTML = html;
+    applyAgendaSelectedAddress(currentAgendaAddresses[0]);
+}
+
+function onAgendaAddressChange(addrId) {
+    const found = currentAgendaAddresses.find(a => String(a.id) === String(addrId));
+    applyAgendaSelectedAddress(found || null);
+}
+
 function updateAgendaDistanceDisplay(lat, lng) {
     const actualEl = document.getElementById('agenda-start-distance-display');
     const pillEl = document.getElementById('agenda-start-distance-pill');
@@ -444,10 +558,31 @@ function updateAgendaDistanceDisplay(lat, lng) {
     if (!actualEl || !pillEl) return;
 
     if (currentAgendaContactLat === null || currentAgendaContactLng === null) {
-        actualEl.textContent = "0 متر (تثبيت أول مرة)";
-        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
-        pillEl.textContent = "سيتم تثبيت موقع العميل تلقائياً ✓";
-        resetAgendaStartBypassState();
+        actualEl.textContent = "غير متوفر";
+        if (!verifyVisitsEnabled) {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-200";
+            pillEl.textContent = "لا يوجد GPS للعنوان (التحقق معطل)";
+            resetAgendaStartBypassState();
+        } else {
+            pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-800 border border-amber-200";
+            pillEl.textContent = "العنوان بدون موقع GPS مسجل ⚠️";
+            if (bypassBox) bypassBox.classList.remove('hidden');
+            if (errorBanner) errorBanner.classList.remove('hidden');
+            const bypassChk = document.getElementById('agenda-start-force-bypass-chk');
+            if (!canBypassStartGps) {
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            } else {
+                const isChecked = bypassChk && bypassChk.checked;
+                if (submitBtn) {
+                    submitBtn.disabled = !isChecked;
+                    if (isChecked) submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    else submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }
+        }
         return;
     }
 
@@ -503,7 +638,8 @@ function toggleAgendaBypassReason() {
             reasonBox.classList.add('hidden');
             const actualEl = document.getElementById('agenda-start-distance-display');
             const distNum = parseInt(actualEl?.textContent || '0');
-            if (distNum > currentAgendaTolerance && verifyVisitsEnabled) {
+            const missingGps = (currentAgendaContactLat === null || currentAgendaContactLng === null || currentAgendaDeviceLat === null || currentAgendaDeviceLng === null);
+            if (verifyVisitsEnabled && (missingGps || distNum > currentAgendaTolerance)) {
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -553,6 +689,8 @@ function acquireAgendaStartCoordinates() {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
             const acc = Math.round(pos.coords.accuracy || 0);
+            currentAgendaDeviceLat = lat;
+            currentAgendaDeviceLng = lng;
             if (latInp) latInp.value = lat;
             if (lngInp) lngInp.value = lng;
             if (accInp) accInp.value = acc;
@@ -570,6 +708,8 @@ function acquireAgendaStartCoordinates() {
 }
 
 function openAgendaStartModal(visitId, serialNum, contactName, contactLat, contactLng, allowedDistance) {
+    currentAgendaDeviceLat = null;
+    currentAgendaDeviceLng = null;
     resetAgendaStartBypassState();
     const actualEl = document.getElementById('agenda-start-distance-display');
     const pillEl = document.getElementById('agenda-start-distance-pill');
@@ -589,24 +729,7 @@ function openAgendaStartModal(visitId, serialNum, contactName, contactLat, conta
     const tolLabel = document.getElementById('agenda-start-tolerance-label');
     if (tolLabel) tolLabel.textContent = `المسافة الفعلية / المسموح بها (${currentAgendaTolerance}م):`;
 
-    const gpsDisplay = document.getElementById('agenda-start-client-gps');
-    if (contactLat && contactLng && contactLat !== 'None' && contactLng !== 'None' && contactLat.trim() !== '') {
-        const parsedLat = parseFloat(String(contactLat).replace(',', '.'));
-        const parsedLng = parseFloat(String(contactLng).replace(',', '.'));
-        if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng)) {
-            currentAgendaContactLat = parsedLat;
-            currentAgendaContactLng = parsedLng;
-            if (gpsDisplay) gpsDisplay.textContent = `${currentAgendaContactLat.toFixed(5)}, ${currentAgendaContactLng.toFixed(5)}`;
-        } else {
-            currentAgendaContactLat = null;
-            currentAgendaContactLng = null;
-            if (gpsDisplay) gpsDisplay.textContent = 'غير مسجل (سيتم تثبيت الموقع الحالي)';
-        }
-    } else {
-        currentAgendaContactLat = null;
-        currentAgendaContactLng = null;
-        if (gpsDisplay) gpsDisplay.textContent = 'غير مسجل (سيتم تثبيت الموقع الحالي)';
-    }
+    renderAgendaAddressSelector(visitId, contactLat, contactLng);
 
     // Questions slot
     const questionsSrc = document.getElementById(`agenda-questions-${visitId}`);
@@ -665,7 +788,14 @@ function handleAgendaStartSubmit(e) {
             <input type="hidden" name="latitude" id="agenda-start-latitude" value="">
             <input type="hidden" name="longitude" id="agenda-start-longitude" value="">
             <input type="hidden" name="device_accuracy" id="agenda-start-accuracy" value="">
+            <input type="hidden" name="contact_address_id" id="agenda-start-contact-address-id" value="">
             <input type="hidden" name="next" id="agenda-start-next" value="">
+
+            <!-- Address Selector (when contact has addresses) -->
+            <div id="agenda-start-address-wrapper" class="hidden space-y-1.5">
+                <label class="block text-[11px] font-bold text-slate-600">عنوان الزيارة</label>
+                <div id="agenda-start-address-slot"></div>
+            </div>
 
             <!-- Client & Geofence Overview -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">

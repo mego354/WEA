@@ -98,10 +98,10 @@ def evaluate_visit_gps_integrity(visit, user, contact, stage='start', client_tel
                 clone_qs = clone_qs.exclude(pk=visit.pk)
             cloned_visit = clone_qs.order_by('-created_at').first()
             if cloned_visit:
-                c_lat = getattr(contact, 'latitude', None)
-                c_lng = getattr(contact, 'longitude', None)
-                oc_lat = getattr(cloned_visit.contact, 'latitude', None)
-                oc_lng = getattr(cloned_visit.contact, 'longitude', None)
+                c_lat = visit.customer_latitude_snapshot if visit.customer_latitude_snapshot is not None else getattr(contact, 'latitude', None)
+                c_lng = visit.customer_longitude_snapshot if visit.customer_longitude_snapshot is not None else getattr(contact, 'longitude', None)
+                oc_lat = cloned_visit.customer_latitude_snapshot if cloned_visit.customer_latitude_snapshot is not None else getattr(cloned_visit.contact, 'latitude', None)
+                oc_lng = cloned_visit.customer_longitude_snapshot if cloned_visit.customer_longitude_snapshot is not None else getattr(cloned_visit.contact, 'longitude', None)
                 dist_between_contacts = None
                 if c_lat is not None and c_lng is not None and oc_lat is not None and oc_lng is not None:
                     dist_between_contacts = calculate_haversine_distance(c_lat, c_lng, oc_lat, oc_lng)

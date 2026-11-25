@@ -2012,6 +2012,7 @@ def customers_search_api(request):
 
     qs = qs.order_by('name')
     total_count = qs.count()
+    from activities.services import serialize_contact_addresses
     results = []
     for c in qs[:limit]:
         main_addr = c.main_address
@@ -2019,6 +2020,7 @@ def customers_search_api(request):
         lng = c.longitude
         area_part = c.brick.name if c.brick else (c.area.name if c.area else '')
         sub_items = [f"#{c.serial_num}", area_part, c.account_type or c.customer_category or 'عميل']
+        addresses_list = serialize_contact_addresses(c)
         results.append({
             'id': c.id,
             'text': f"{c.name}{f' • {c.code}' if c.code else ''}",
@@ -2041,6 +2043,8 @@ def customers_search_api(request):
             'has_saved_location': c.has_saved_location,
             'latitude': float(lat) if lat is not None else None,
             'longitude': float(lng) if lng is not None else None,
+            'addresses': addresses_list,
+            'default_address_id': addresses_list[0]['id'] if addresses_list else None,
         })
 
     return JsonResponse({

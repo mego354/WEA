@@ -514,6 +514,26 @@ class Visit(models.Model):
 
     serial_num = models.IntegerField(unique=True, db_index=True, verbose_name="رقم الزيارة")
     contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='visits', verbose_name="جهة الاتصال")
+    contact_address = models.ForeignKey(
+        'contacts.ContactAddress',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visits',
+        verbose_name="عنوان الزيارة",
+    )
+    contact_address_title = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name="اسم العنوان (لقطة)",
+    )
+    contact_address_text = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name="تفاصيل العنوان (لقطة)",
+    )
     template = models.ForeignKey(VisitTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits', verbose_name="قالب الزيارة")
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='visits_conducted', verbose_name="المسؤول")
     plan = models.ForeignKey(VisitPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='visits', verbose_name="خطة الزيارات")
@@ -614,6 +634,11 @@ class Visit(models.Model):
 
     def clean(self):
         super().clean()
+        if self.contact_address_id and self.contact_id:
+            if self.contact_address.contact_id != self.contact_id:
+                raise ValidationError({
+                    'contact_address': "العنوان المحدد لا ينتمي لجهة الاتصال المختارة."
+                })
         if self.status == 'started' and self.ended_at is None and self.owner_id:
             qs = Visit.objects.filter(owner_id=self.owner_id, status='started', ended_at__isnull=True)
             if self.pk:
@@ -623,6 +648,31 @@ class Visit(models.Model):
                 raise ValidationError({
                     'status': f"لا يمكن فتح أكثر من زيارة نشطة للمسؤول في نفس الوقت (الزيارة المفتوحة حالياً #{conflict.serial_num})."
                 })
+
+    @property
+    def resolved_address_title(self):
+        if self.contact_address_title:
+            return self.contact_address_title
+        if self.contact_address_id and self.contact_address:
+            return self.contact_address.title or ('العنوان الرئيسي' if self.contact_address.is_main else f'عنوان #{self.contact_address_id}')
+        return ''
+
+    @property
+    def resolved_address_text(self):
+        if self.contact_address_text:
+            return self.contact_address_text
+        if self.contact_address_id and self.contact_address:
+            parts = []
+            if self.contact_address.area:
+                parts.append(self.contact_address.area.name)
+            if self.contact_address.brick:
+                parts.append(self.contact_address.brick.name)
+            if self.contact_address.sub_area:
+                parts.append(self.contact_address.sub_area)
+            if self.contact_address.street_address:
+                parts.append(self.contact_address.street_address)
+            return ' - '.join(parts)
+        return ''
 
     def __str__(self):
         return f"Visit #{self.serial_num} - {self.contact.name}"

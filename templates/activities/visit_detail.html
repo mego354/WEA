@@ -532,14 +532,17 @@
                             <!-- 2. Client Registered Location -->
                             <div class="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
                                 <div class="flex items-center justify-between text-[11px] text-slate-500">
-                                    <span>موقع العميل المسجل:</span>
+                                    <span>{% if visit.resolved_address_title %}عنوان الزيارة: {{ visit.resolved_address_title }}{% else %}موقع العميل المسجل:{% endif %}</span>
                                     <span class="material-symbols-outlined text-xs text-slate-400">pin_drop</span>
                                 </div>
+                                {% if visit.resolved_address_text %}
+                                <div class="text-[11px] text-slate-500 truncate">{{ visit.resolved_address_text }}</div>
+                                {% endif %}
                                 <div id="end-client-gps-display" class="text-xs font-bold font-mono text-slate-800 dir-ltr text-right">
-                                    {% if visit.contact.has_saved_location %}
-                                    {{ visit.contact.latitude|floatformat:5 }}, {{ visit.contact.longitude|floatformat:5 }}
+                                    {% if visit_target_lat is not None and visit_target_lng is not None %}
+                                    {{ visit_target_lat|floatformat:5 }}, {{ visit_target_lng|floatformat:5 }}
                                     {% else %}
-                                    غير مسجل مسبقاً (سيتم تثبيت الموقع الحالي)
+                                    لا يوجد موقع GPS مسجل للعنوان المحدد
                                     {% endif %}
                                 </div>
                             </div>
@@ -1119,8 +1122,13 @@
 </div>
 
 <script>
-const clientRegisteredLat = {% if visit.contact.latitude %}Number("{{ visit.contact.latitude|stringformat:'s' }}"){% else %}null{% endif %};
-const clientRegisteredLng = {% if visit.contact.longitude %}Number("{{ visit.contact.longitude|stringformat:'s' }}"){% else %}null{% endif %};
+const clientRegisteredLat = {% if visit_target_lat is not None %}Number("{{ visit_target_lat|stringformat:'s' }}"){% else %}null{% endif %};
+const clientRegisteredLng = {% if visit_target_lng is not None %}Number("{{ visit_target_lng|stringformat:'s' }}"){% else %}null{% endif %};
+const visitContactAddresses = {{ contact_addresses_json|default:"[]"|safe }};
+let startSelectedLat = clientRegisteredLat;
+let startSelectedLng = clientRegisteredLng;
+let startLastDeviceLat = null;
+let startLastDeviceLng = null;
 const visitAllowedDistance = Number("{{ allowed_distance|default:300|stringformat:'s' }}") || 300;
 const verifyVisitsEnabled = {{ verify_visits_enabled|yesno:"true,false" }};
 const verifyEndVisitDistance = {{ verify_end_visit_distance|yesno:"true,false" }};
@@ -1163,10 +1171,15 @@ function updateEndVisitDistanceDisplay(lat, lng) {
     if (!actualEl || !pillEl) return;
 
     if (clientRegisteredLat === null || clientRegisteredLng === null) {
-        actualEl.textContent = "0 متر (تثبيت أول مرة)";
-        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
-        pillEl.textContent = "سيتم تثبيت موقع العميل تلقائياً ✓";
-        resetEndBypassState();
+        actualEl.textContent = "غير متاح";
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200";
+        pillEl.textContent = "لا يوجد GPS مسجل للعنوان ⚠️";
+        if (verifyVisitsEnabled && verifyEndVisitDistance) {
+            if (bypassBox) bypassBox.classList.remove('hidden');
+            if (errorBanner) errorBanner.classList.remove('hidden');
+        } else {
+            resetEndBypassState();
+        }
         return;
     }
 
@@ -1408,6 +1421,27 @@ function closeStartVisitModal() {
     }
 }
 
+function onStartModalAddressChange(selectEl) {
+    const addrId = selectEl ? selectEl.value : '';
+    const found = visitContactAddresses.find(a => String(a.id) === String(addrId));
+    const gpsDisp = document.getElementById('start-client-gps-display');
+    if (found && found.latitude !== null && found.longitude !== null) {
+        startSelectedLat = Number(found.latitude);
+        startSelectedLng = Number(found.longitude);
+        if (gpsDisp) gpsDisp.textContent = `${startSelectedLat.toFixed(5)}, ${startSelectedLng.toFixed(5)}`;
+    } else {
+        startSelectedLat = null;
+        startSelectedLng = null;
+        if (gpsDisp) gpsDisp.textContent = 'لا يوجد موقع GPS مسجل للعنوان المحدد';
+    }
+    resetStartModalBypassState();
+    if (startLastDeviceLat !== null && startLastDeviceLng !== null) {
+        updateStartVisitDistanceDisplay(startLastDeviceLat, startLastDeviceLng);
+    } else if (startSelectedLat === null || startSelectedLng === null) {
+        updateStartVisitDistanceDisplay(null, null);
+    }
+}
+
 function updateStartVisitDistanceDisplay(lat, lng) {
     const actualEl = document.getElementById('start-actual-distance-display');
     const pillEl = document.getElementById('start-distance-status-pill');
@@ -1416,15 +1450,40 @@ function updateStartVisitDistanceDisplay(lat, lng) {
     const submitBtn = document.getElementById('start-modal-submit-btn');
     if (!actualEl || !pillEl) return;
 
-    if (clientRegisteredLat === null || clientRegisteredLng === null) {
-        actualEl.textContent = "0 متر (تثبيت أول مرة)";
-        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200";
-        pillEl.textContent = "سيتم تثبيت موقع العميل تلقائياً ✓";
-        resetStartModalBypassState();
+    if (lat !== null && lng !== null) {
+        startLastDeviceLat = lat;
+        startLastDeviceLng = lng;
+    }
+
+    if (startSelectedLat === null || startSelectedLng === null) {
+        actualEl.textContent = "غير متاح";
+        pillEl.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200";
+        pillEl.textContent = "لا يوجد GPS مسجل للعنوان ⚠️";
+        if (!verifyVisitsEnabled) {
+            resetStartModalBypassState();
+        } else {
+            if (bypassBox) bypassBox.classList.remove('hidden');
+            if (errorBanner) errorBanner.classList.remove('hidden');
+            const bypassChk = document.getElementById('start-force-bypass-chk');
+            if (!canBypassStartGps) {
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            } else {
+                const isChecked = bypassChk && bypassChk.checked;
+                if (submitBtn) {
+                    submitBtn.disabled = !isChecked;
+                    if (isChecked) submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    else submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }
+        }
         return;
     }
 
-    const dist = computeHaversineDistance(lat, lng, clientRegisteredLat, clientRegisteredLng);
+    if (lat === null || lng === null) return;
+    const dist = computeHaversineDistance(lat, lng, startSelectedLat, startSelectedLng);
     if (dist === null) return;
     actualEl.textContent = `${Math.round(dist)} متر`;
 
@@ -1476,7 +1535,8 @@ function toggleStartBypassReason() {
             reasonBox.classList.add('hidden');
             const actualEl = document.getElementById('start-actual-distance-display');
             const distNum = parseInt(actualEl?.textContent || '0');
-            if (distNum > visitAllowedDistance && verifyVisitsEnabled) {
+            const missingGps = (startSelectedLat === null || startSelectedLng === null || startLastDeviceLat === null || startLastDeviceLng === null);
+            if (verifyVisitsEnabled && (missingGps || distNum > visitAllowedDistance)) {
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -1709,6 +1769,38 @@ document.addEventListener('DOMContentLoaded', function() {
             <input type="hidden" name="longitude" id="start-modal-longitude" value="">
             <input type="hidden" name="device_accuracy" id="start-modal-accuracy" value="">
 
+            <!-- Contact Address Selection (Requirement A) -->
+            {% if contact_addresses|length > 1 %}
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
+                <label for="start-modal-address-select" class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-[#27bebe]">location_on</span>
+                    <span>اختر عنوان الزيارة:</span>
+                </label>
+                <select name="contact_address_id" id="start-modal-address-select" onchange="onStartModalAddressChange(this)" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-bold text-slate-800 focus:border-[#27bebe] focus:outline-none">
+                    {% for addr in contact_addresses %}
+                    <option value="{{ addr.id }}" {% if visit.contact_address_id == addr.id or not visit.contact_address_id and forloop.first %}selected{% endif %}>
+                        {{ addr.title }}{% if addr.full_text %} — {{ addr.full_text }}{% endif %} {% if addr.has_location %}(GPS ✓){% else %}(بدون GPS){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% elif contact_addresses|length == 1 %}
+            <input type="hidden" name="contact_address_id" value="{{ contact_addresses.0.id }}">
+            <div class="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2 text-[11px]">
+                <span class="font-bold text-slate-700 truncate">{{ contact_addresses.0.title }}{% if contact_addresses.0.full_text %} — {{ contact_addresses.0.full_text }}{% endif %}</span>
+                {% if contact_addresses.0.has_location %}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">GPS ✓</span>
+                {% else %}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">بدون GPS</span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="px-3 py-2 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm">location_off</span>
+                <span>لا يوجد عنوان مسجل لهذا العميل.</span>
+            </div>
+            {% endif %}
+
             <!-- Client & Geofence Quick Overview -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
@@ -1718,10 +1810,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <strong class="text-slate-800 text-xs block truncate">{{ visit.contact.name }}</strong>
                     <div id="start-client-gps-display" class="text-[11px] font-mono text-slate-600 dir-ltr text-right">
-                        {% if visit.contact.has_saved_location %}
-                        {{ visit.contact.latitude|floatformat:5 }}, {{ visit.contact.longitude|floatformat:5 }}
+                        {% if visit_target_lat is not None and visit_target_lng is not None %}
+                        {{ visit_target_lat|floatformat:5 }}, {{ visit_target_lng|floatformat:5 }}
                         {% else %}
-                        غير مسجل (سيتم تثبيت الموقع الحالي)
+                        لا يوجد موقع GPS مسجل للعنوان المحدد
                         {% endif %}
                     </div>
                 </div>

@@ -17,7 +17,8 @@ ERP/
 ├── purchases/              # Purchase orders, stock receiving, supplier invoice settlement, return orders
 ├── sales/                  # Sales orders, collections, customer ledgers, payment terms, returns
 ├── treasury/               # Cash vaults, deposits, withdrawals, internal transfers, vendor payments
-├── notifications/          # Centralized Capacitor-ready notifications (60 events, RoleNotificationRule, /api/v1/notifications/, device registry)
+├── notifications/          # Centralized Capacitor-ready notifications (61 events, RoleNotificationRule, /api/v1/notifications/, device registry)
+├── reports/                # Performance dashboards and 8 standalone Excel/print reports
 ├── config/                 # Django settings, root URL routing, WSGI/ASGI handlers
 ├── templates/              # Server-rendered HTML templates (Tailwind RTL, components, layouts)
 ├── static/                 # Static assets (JS table column manager, styles)
@@ -108,7 +109,7 @@ erDiagram
 
 3. **Contact (`contacts.Contact`)**:
    - Real database ForeignKeys to both `area` (governorate) and `brick` (subarea).
-   - Strictly standardized status choices (`customer`, `lead`, `inactive`) with English display labels (`Customer`, `Lead`, `Inactive`).
+   - Strictly standardized status choices (`customer`, `lead`, `inactive`) with English display labels (`Customer`, `Lead`, `Inactive`), synchronized from workbook sources via `python manage.py sync_contact_statuses [--add-missing]`.
    - Support for dynamic User-Defined Fields (UDF), customer todos, and interaction timeline.
 
 4. **Visit Plan (`activities.VisitPlan`)**:
@@ -126,6 +127,7 @@ erDiagram
    - Date validation: Visits can only be started when `visit.date == timezone.localdate()`. Time fields and time setting have been completely removed.
    - Outcome and comments: `visit_outcome` and `feedback` removed from direct model fields; outcome is collected via Question #1 (`نتيجة الزيارة`) in every `VisitTemplate` and accessed via `visit.outcome_display`.
    - GPS verification & forced bypass: Enforces `activities:visits/bypass_gps` for starting and ending visits outside tolerance (shown only when out of range or GPS unavailable); records separate forced GPS tracking (`gps_forced_start`, `gps_forced_end`) with audit logs.
+   - Any-stage deletion: Authorized users holding `activities:visits/delete` within DataScope can delete visits at any lifecycle stage (`planned`, `started`, `finished`, `cancelled`), decoupled from `LocationSettings`, cleaning up linked `PlannedVisitItem`s, empty `VisitPlan`s, and unshared attachments while preserving snapshot + `ApprovalAuditLog` history in `SecurityAuditLog`.
    - Evidence photo capture completely removed: `location_photo`, `photo_captured_at`, and `activities:visits/evidence` removed across the application.
 
 6. **Agreement (`activities.Agreement`)**:

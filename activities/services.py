@@ -36,19 +36,112 @@ def calculate_haversine_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 
+def format_contact_address_text(addr):
+    """Build a concise display line for a ContactAddress (area - brick - sub_area - street)."""
+    if not addr:
+        return ''
+    parts = []
+    if getattr(addr, 'area_id', None) and getattr(addr, 'area', None):
+        parts.append(addr.area.name)
+    if getattr(addr, 'brick_id', None) and getattr(addr, 'brick', None):
+        parts.append(addr.brick.name)
+    if getattr(addr, 'sub_area', None):
+        parts.append(addr.sub_area.strip())
+    if getattr(addr, 'street_address', None):
+        parts.append(addr.street_address.strip())
+    return ' - '.join(p for p in parts if p)
+
+
+def serialize_contact_addresses(contact):
+    """
+    Serialize all ContactAddress rows for a contact in a single pass using
+    prefetch cache when available (no N+1 queries). Main address comes first.
+    """
+    if not contact:
+        return []
+    addrs = list(contact.addresses.all())
+    addrs.sort(key=lambda a: (0 if a.is_main else 1, a.id or 0))
+    serialized = []
+    for addr in addrs:
+        title = (addr.title or '').strip() or ('العنوان الرئيسي' if addr.is_main else f'عنوان #{addr.id}')
+        area_name = addr.area.name if addr.area_id and addr.area else ''
+        brick_name = addr.brick.name if addr.brick_id and addr.brick else ''
+        street = (addr.street_address or '').strip()
+        full_text = format_contact_address_text(addr)
+        serialized.append({
+            'id': addr.id,
+            'title': title,
+            'is_main': bool(addr.is_main),
+            'area_name': area_name,
+            'brick_name': brick_name,
+            'sub_area': (addr.sub_area or '').strip(),
+            'street_address': street,
+            'full_text': full_text,
+            'latitude': float(addr.latitude) if addr.latitude is not None else None,
+            'longitude': float(addr.longitude) if addr.longitude is not None else None,
+            'has_location': bool(addr.latitude is not None and addr.longitude is not None),
+        })
+    return serialized
+
+
+def resolve_visit_contact_address(contact, contact_address_id=None, existing_address=None):
+    """
+    Validate and resolve the ContactAddress for a visit.
+    - If contact_address_id is provided, strictly require it to be a valid ID belonging to `contact`.
+    - Otherwise, use `existing_address` if it belongs to `contact`.
+    - Otherwise, fall back to `contact.main_address` (or None if contact has 0 addresses).
+    """
+    from contacts.models import ContactAddress
+
+    if not contact:
+        return None
+
+    raw_id = str(contact_address_id).strip() if contact_address_id is not None else ''
+    if raw_id:
+        if not raw_id.isdigit():
+            raise ValidationError("العنوان المحدد غير صالح.")
+        addr = ContactAddress.objects.select_related('area', 'brick').filter(
+            pk=int(raw_id),
+            contact_id=contact.pk,
+        ).first()
+        if not addr:
+            raise ValidationError("العنوان المحدد غير صالح أو لا ينتمي لجهة الاتصال المختارة.")
+        return addr
+
+    if existing_address is not None and getattr(existing_address, 'contact_id', None) == contact.pk:
+        return existing_address
+
+    return contact.main_address
+
+
+def snapshot_visit_contact_address(visit, addr):
+    """Bind the selected ContactAddress and freeze its immutable text snapshot on Visit."""
+    visit.contact_address = addr
+    if addr is not None:
+        visit.contact_address_title = (addr.title or '').strip() or (
+            'العنوان الرئيسي' if addr.is_main else f'عنوان #{addr.id}'
+        )
+        visit.contact_address_text = format_contact_address_text(addr)[:500]
+    else:
+        visit.contact_address_title = ''
+        visit.contact_address_text = ''
+
+
 def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, device_accuracy=None,
                           photo_file=None, force_bypass=False, bypass_reason='',
-                          stage='start', strict_distance=False, **kwargs):
+                          stage='start', strict_distance=False, contact_address=None, **kwargs):
     """
     Applies the ERP location and distance verification policy across visit execution (start & end):
     1. Dynamically determines allowed distance threshold:
        - Uses template's special_tolerance if allow_template_distance_override is enabled and configured on template.
        - Otherwise uses default LocationSettings.tolerance.
-    2. Compares user's current GPS coordinates against client's registered coordinates.
+    2. Compares user's current GPS coordinates against the visit's selected ContactAddress coordinates
+       (or immutable snapshot / legacy main_address fallback when no explicit address is attached).
     3. Records actual distance, allowed threshold, and distance discrepancy on the visit.
-    4. Handles authorized bypass (users with activities:visits/bypass_gps / Superadmin):
+    4. NEVER auto-saves device GPS coordinates onto any ContactAddress or Contact during visit verification.
+    5. Handles authorized bypass (users with activities:visits/bypass_gps / Superadmin):
        - Bypassing distance will NOT make the visit need an approval (approval_status is untouched).
-    5. Unauthorized users outside distance threshold cannot start or end the visit.
+    6. Unauthorized users outside distance threshold (or visiting an address with no GPS) cannot start/end when strict.
     """
     settings = LocationSettings.get_settings()
     template = getattr(visit, 'template', None)
@@ -88,11 +181,27 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         except Exception:
             pass
 
-    customer_lat = getattr(contact, 'latitude', None)
-    customer_lng = getattr(contact, 'longitude', None)
-
-    visit.customer_latitude_snapshot = customer_lat
-    visit.customer_longitude_snapshot = customer_lng
+    # Resolve target coordinates from the selected ContactAddress (no silent fallback to main_address
+    # when a specific address was chosen without coordinates).
+    target_addr = contact_address if contact_address is not None else getattr(visit, 'contact_address', None)
+    if target_addr is not None:
+        if getattr(target_addr, 'contact_id', None) != getattr(contact, 'pk', None):
+            raise ValidationError("العنوان المحدد غير صالح أو لا ينتمي لجهة الاتصال المختارة.")
+        customer_lat = target_addr.latitude
+        customer_lng = target_addr.longitude
+        visit.customer_latitude_snapshot = customer_lat
+        visit.customer_longitude_snapshot = customer_lng
+    elif stage == 'end' and visit.customer_latitude_snapshot is not None and visit.customer_longitude_snapshot is not None:
+        # Selected address may have been deleted after check-in; preserve immutable start snapshot
+        customer_lat = visit.customer_latitude_snapshot
+        customer_lng = visit.customer_longitude_snapshot
+    else:
+        # Legacy visits or contacts with 0 addresses
+        fallback_addr = contact.main_address if contact else None
+        customer_lat = fallback_addr.latitude if fallback_addr else None
+        customer_lng = fallback_addr.longitude if fallback_addr else None
+        visit.customer_latitude_snapshot = customer_lat
+        visit.customer_longitude_snapshot = customer_lng
 
     # Always compute actual distance and discrepancy whenever both sets of coordinates exist
     dist = None
@@ -101,6 +210,9 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         if dist is not None:
             visit.distance = Decimal(str(round(dist, 2)))
             visit.distance_discrepancy = max(Decimal('0.00'), visit.distance - visit.allowed_distance)
+    else:
+        visit.distance = None
+        visit.distance_discrepancy = None
 
     # Non-blocking server-side GPS integrity evaluation (never alters distance rules or blocks workflow)
     from activities.gps_integrity import evaluate_visit_gps_integrity
@@ -121,7 +233,7 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         return visit
 
     # Handle explicit bypass:
-    # All users who have activities:visits/bypass_gps (or superadmin) can ignore distance.
+    # All users who have activities:visits/bypass_gps (or superadmin) can ignore distance / missing GPS.
     # Bypassing distance will NOT make the visit need an approval.
     if force_bypass:
         if not can_bypass_directly:
@@ -132,6 +244,8 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
         visit.verification_status = 'force_bypassed'
         if dist is not None and dist > tolerance:
             visit.location_status = 'بعيد جدا عن الموقع المحدد (تم التجاوز بصلاحية إدارية)'
+        elif customer_lat is None or customer_lng is None:
+            visit.location_status = 'لا يوجد موقع جغرافي مسجل للعنوان المحدد (تم التجاوز بصلاحية إدارية)'
         else:
             visit.location_status = 'تم تجاهل التحقق بالقوة بواسطة المشرف'
         visit.bypassed_by = user
@@ -198,7 +312,7 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
                 raise ValidationError("تحديد الموقع الجغرافي (GPS) إلزامي للتحقق من المسافة.")
             return visit
 
-    # Case 2: Customer has saved GPS coordinates
+    # Case 2: Selected address has saved GPS coordinates
     if customer_lat is not None and customer_lng is not None:
         if dist is not None:
             if dist <= tolerance:
@@ -216,23 +330,16 @@ def verify_visit_location(visit, user, contact, visit_lat=None, visit_lng=None, 
                     )
         return visit
 
-    # Case 3: Customer has NO saved GPS coordinates
-    if settings.auto_set_customer_location_in_visit and visit.latitude is not None and visit.longitude is not None:
-        # Auto-set customer's location from this first visit
-        contact.set_location(visit.latitude, visit.longitude)
-        visit.customer_latitude_snapshot = visit.latitude
-        visit.customer_longitude_snapshot = visit.longitude
-        visit.distance = Decimal('0.00')
-        visit.distance_discrepancy = Decimal('0.00')
-        visit.location_verified = True
-        visit.verification_status = 'verified'
-        visit.location_status = 'تم حفظ موقع العميل بشكل تلقائي مع أول زيارة'
-        return visit
-    else:
-        visit.location_verified = False
-        visit.verification_status = 'unverified'
-        visit.location_status = 'لا يوجد موقع مسجل للعميل'
-        return visit
+    # Case 3: Selected address / contact has NO saved GPS coordinates.
+    # NEVER auto-save device coordinates to the selected ContactAddress or Contact.main_address.
+    visit.location_verified = False
+    visit.verification_status = 'unverified'
+    visit.location_status = 'لا يوجد موقع جغرافي مسجل للعنوان المحدد'
+    if strict_distance:
+        raise ValidationError(
+            "العنوان المحدد لا يحتوي على إحداثيات GPS مسجلة. يرجى تحديث موقع العنوان أولاً أو استخدام صلاحية تجاوز GPS إن كانت متاحة."
+        )
+    return visit
 
 
 def get_question_product_choices(template, visit=None, question=None):
@@ -529,12 +636,12 @@ def can_start_visit(visit, user):
 
 
 def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, photo_file=None,
-                force_bypass=False, bypass_reason='', checkin_answers=None, **kwargs):
+                force_bypass=False, bypass_reason='', checkin_answers=None, contact_address_id=None, **kwargs):
     """
     Executes explicit Start Visit / Check-in transition:
     planned (approved) -> started
-    Captures server-side started_at timestamp, applies GPS check-in verification,
-    validates and saves check-in questionnaire answers (stage='start_only'),
+    Captures server-side started_at timestamp, validates & snapshots selected ContactAddress,
+    applies GPS check-in verification, validates and saves check-in questionnaire answers (stage='start_only'),
     enforces one open visit per owner (via owner lock + DB constraint),
     and records an audit log entry.
     """
@@ -546,10 +653,18 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
     with transaction.atomic():
         if visit.owner_id:
             UserModel.objects.select_for_update().get(pk=visit.owner_id)
-        visit = Visit.objects.select_for_update().get(pk=visit.pk)
+        visit = Visit.objects.select_for_update().select_related('contact', 'contact_address').get(pk=visit.pk)
         can_start, err = can_start_visit(visit, user)
         if not can_start:
             raise ValidationError(err)
+
+        # Resolve, validate, and snapshot the selected ContactAddress for this visit
+        selected_addr = resolve_visit_contact_address(
+            visit.contact,
+            contact_address_id=contact_address_id,
+            existing_address=visit.contact_address,
+        )
+        snapshot_visit_contact_address(visit, selected_addr)
 
         # Validate check-in questions (stage == 'start_only')
         saved_answers = dict(visit.questionnaire_answers or {})
@@ -599,8 +714,12 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
                 device_accuracy=accuracy if accuracy is not None else visit.device_accuracy,
                 force_bypass=force_bypass, bypass_reason=bypass_reason,
                 stage='start',
-                strict_distance=bool(loc_settings.verify_visits)
+                strict_distance=bool(loc_settings.verify_visits),
+                contact_address=selected_addr,
             )
+        elif selected_addr is not None:
+            visit.customer_latitude_snapshot = selected_addr.latitude
+            visit.customer_longitude_snapshot = selected_addr.longitude
 
         status_before = visit.status
         visit.status = 'started'
@@ -646,7 +765,11 @@ def start_visit(visit, user, request=None, lat=None, lng=None, accuracy=None, ph
             record_name=str(visit.serial_num),
             description=f"بدء الزيارة رقم {visit.serial_num}",
             previous_values={'status': status_before},
-            new_values={'status': 'started'},
+            new_values={
+                'status': 'started',
+                'contact_address_id': visit.contact_address_id,
+                'contact_address_title': visit.contact_address_title,
+            },
             status='SUCCESS',
         )
         return visit
@@ -669,6 +792,7 @@ def create_and_start_unplanned_visit(
     bypass_reason='',
     checkin_answers=None,
     detailed_product_ids=None,
+    contact_address_id=None,
     request=None,
 ):
     """
@@ -716,6 +840,8 @@ def create_and_start_unplanned_visit(
                 f"(#{open_conflict.serial_num} - {open_conflict.contact.name}). يرجى إنهاء الزيارة المفتوحة أولاً."
             )
 
+        selected_addr = resolve_visit_contact_address(contact, contact_address_id=contact_address_id)
+
         visit_date = timezone.localdate()
         now_ts = timezone.now()
 
@@ -740,6 +866,7 @@ def create_and_start_unplanned_visit(
             location_status='بانتظار بدء الزيارة والتحقق من الموقع الجغرافي',
             requires_approval_due_to_distance=False,
         )
+        snapshot_visit_contact_address(visit, selected_addr)
         visit.save()
 
         # Persist optional suggested_products / product detailing submitted at creation
@@ -800,6 +927,8 @@ def create_and_start_unplanned_visit(
                 'serial_num': visit.serial_num,
                 'contact_id': contact.id,
                 'contact_name': contact.name,
+                'contact_address_id': visit.contact_address_id,
+                'contact_address_title': visit.contact_address_title,
                 'is_planned': False,
                 'date': str(visit.date),
                 'owner_id': target_owner.id,
@@ -827,6 +956,7 @@ def create_and_start_unplanned_visit(
                 force_bypass=force_bypass,
                 bypass_reason=bypass_reason,
                 checkin_answers=resolved_checkin,
+                contact_address_id=selected_addr.pk if selected_addr else None,
             )
         except IntegrityError:
             raise ValidationError(
@@ -990,14 +1120,16 @@ def end_visit(visit, user, request=None, answers=None, detailed_product_ids=None
             visit.detailed_products.clear()
 
         approval_before = visit.approval_status
-        # Location verification for completion stage
+        # Location verification for completion stage (uses the same selected ContactAddress / snapshot)
         verify_visit_location(
             visit, user, visit.contact,
             visit_lat=lat if lat is not None else visit.latitude,
             visit_lng=lng if lng is not None else visit.longitude,
             device_accuracy=accuracy if accuracy is not None else visit.device_accuracy,
             force_bypass=force_bypass, bypass_reason=bypass_reason,
-            stage='end', strict_distance=bool(LocationSettings.get_settings().verify_visits and LocationSettings.get_settings().verify_end_visit_distance)
+            stage='end',
+            strict_distance=bool(LocationSettings.get_settings().verify_visits and LocationSettings.get_settings().verify_end_visit_distance),
+            contact_address=visit.contact_address,
         )
 
         status_before = visit.status
@@ -1375,12 +1507,12 @@ def build_visit_timeline(visit):
 
 def can_delete_unended_visit(visit, user):
     """
-    Validates whether a user is authorized to delete a visit:
+    Validates whether a user is authorized to delete a visit at any lifecycle stage:
     1. User must be authenticated and hold `activities:visits/delete` (or SuperAdmin).
     2. User must pass object-level DataScope (`can_user_access_object(user, visit, 'delete')`)
-       BEFORE inspecting or exposing visit lifecycle status.
-    3. Visit must NOT be ended (`visit.status != 'finished'` and `visit.ended_at is None`).
-    Note: Decoupled from LocationSettings.allow_visit_deletion_before_end.
+       BEFORE inspecting or exposing visit existence or status.
+    3. Allowed across all visit lifecycle stages (planned, started, finished, cancelled)
+       and completely decoupled from LocationSettings.allow_visit_deletion_before_end.
     """
     if not user or not getattr(user, 'is_authenticated', False):
         return False, "يجب تسجيل الدخول لحذف الزيارة."
@@ -1395,12 +1527,16 @@ def can_delete_unended_visit(visit, user):
     return True, ""
 
 
-def delete_unended_visit(visit, user, request=None):
+can_delete_visit = can_delete_unended_visit
+
+
+def _delete_visit_and_related_records(visit, user, request=None):
     """
-    Deletes an unended visit after verifying permissions and data scope.
-    - Deletes associated PlannedVisitItem records (and empty parent VisitPlan if orphaned).
-    - Cleans up linked ERPAttachment records and Visit.photo safely post-commit.
-    - Preserves full audit snapshot (including ApprovalAuditLog history) in SecurityAuditLog.
+    Atomically deletes `visit`, removes all associated `PlannedVisitItem` records
+    (and any orphaned empty `VisitPlan`), cleans up unshared `ERPAttachment` and
+    `Visit.photo` files post-commit, and preserves a complete snapshot (including
+    `ApprovalAuditLog` history) inside `SecurityAuditLog(action_type='VISIT_DELETED')`.
+    Caller is responsible for authorization checks before invoking this helper.
     """
     from django.contrib.contenttypes.models import ContentType
     from django.db import transaction
@@ -1411,10 +1547,6 @@ def delete_unended_visit(visit, user, request=None):
 
     with transaction.atomic():
         visit = Visit.objects.select_for_update().select_related('contact', 'owner', 'template', 'plan').get(pk=visit.pk)
-        allowed, reason = can_delete_unended_visit(visit, user)
-        if not allowed:
-            raise ValidationError(reason)
-
         visit_pk = visit.pk
         serial_num = visit.serial_num
         linked_items = list(PlannedVisitItem.objects.filter(visit=visit).select_related('plan'))
@@ -1453,10 +1585,14 @@ def delete_unended_visit(visit, user, request=None):
             'approval_status': visit.approval_status,
             'is_planned': visit.is_planned,
             'started_at': visit.started_at.isoformat() if visit.started_at else None,
+            'ended_at': visit.ended_at.isoformat() if visit.ended_at else None,
+            'duration': visit.duration,
             'latitude': str(visit.latitude) if visit.latitude is not None else None,
             'longitude': str(visit.longitude) if visit.longitude is not None else None,
             'distance': str(visit.distance) if visit.distance is not None else None,
             'verification_status': visit.verification_status,
+            'gps_forced_start': bool(visit.gps_forced_start),
+            'gps_forced_end': bool(visit.gps_forced_end),
             'questionnaire_answers': visit.questionnaire_answers or {},
             'approval_history': approval_logs,
         }
@@ -1497,6 +1633,25 @@ def delete_unended_visit(visit, user, request=None):
             status='SUCCESS',
         )
         return snapshot
+
+
+def delete_unended_visit(visit, user, request=None):
+    """
+    Deletes a visit at any lifecycle stage after verifying `activities:visits/delete`
+    and object-level DataScope.
+    """
+    from django.db import transaction
+    from activities.models import Visit
+
+    with transaction.atomic():
+        locked_visit = Visit.objects.select_for_update().select_related('contact', 'owner', 'template', 'plan').get(pk=visit.pk)
+        allowed, reason = can_delete_unended_visit(locked_visit, user)
+        if not allowed:
+            raise ValidationError(reason)
+        return _delete_visit_and_related_records(locked_visit, user, request=request)
+
+
+delete_visit = delete_unended_visit
 
 
 def can_edit_visit_answers(visit, user):

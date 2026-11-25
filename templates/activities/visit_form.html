@@ -211,12 +211,12 @@
                                     {% if selected_contact and selected_contact.has_saved_location %}
                                     <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                                         <span class="material-symbols-outlined text-xs">pin_drop</span>
-                                        <span class="dir-ltr">موقع العميل المسجل: {{ selected_contact.latitude|floatformat:5 }}, {{ selected_contact.longitude|floatformat:5 }}</span>
+                                        <span class="dir-ltr">موقع العنوان: {{ selected_contact.latitude|floatformat:5 }}, {{ selected_contact.longitude|floatformat:5 }}</span>
                                     </span>
                                     {% else %}
                                     <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                        <span class="material-symbols-outlined text-xs">info</span>
-                                        <span>لا يوجد موقع مسجل للعميل (سيتم حفظ أول موقع تلقائياً عند التسجيل)</span>
+                                        <span class="material-symbols-outlined text-xs">location_off</span>
+                                        <span>لا يوجد موقع GPS مسجل للعنوان المحدد</span>
                                     </span>
                                     {% endif %}
                                 </div>
@@ -233,6 +233,19 @@
                                 <span class="material-symbols-outlined text-lg">open_in_new</span>
                             </a>
                         </div>
+                    </div>
+
+                    <!-- Visit Target Address Selector (Requirement A) -->
+                    <input type="hidden" name="contact_address_id" id="id_contact_address_id" value="{{ selected_contact_address_id|default:'' }}">
+                    <div id="visit-address-section" class="mt-3 pt-3 border-t border-teal-200/70 hidden">
+                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                            <span class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm text-[#27bebe]">location_on</span>
+                                <span>عنوان الزيارة</span>
+                            </span>
+                            <span id="visit-address-count-badge" class="text-[10px] font-bold text-slate-500"></span>
+                        </div>
+                        <div id="visit-address-options" class="space-y-1.5"></div>
                     </div>
                 </div>
             </div>
@@ -372,11 +385,11 @@
                         <input type="checkbox" name="force_bypass_location" id="unplanned-force-bypass-chk" value="1"
                                onchange="toggleUnplannedBypassReason()"
                                class="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500">
-                        <span class="text-xs font-bold text-amber-900">تجاوز التحقق من الموقع الجغرافي (يتطلب سبباً لا يقل عن 10 أحرف)</span>
+                        <span class="text-xs font-bold text-amber-900">تجاوز التحقق من الموقع الجغرافي (صلاحية تجاوز GPS)</span>
                     </label>
                     <div id="unplanned-bypass-reason-box" class="hidden">
                         <textarea name="bypass_reason" id="unplanned-bypass-reason-input" rows="2"
-                                  placeholder="اذكر سبب التجاوز (10 أحرف على الأقل)..."
+                                  placeholder="سبب التجاوز (اختياري / إلزامي حسب إعدادات النظام)..."
                                   class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs focus:border-amber-500 focus:outline-none"></textarea>
                     </div>
                 </div>
@@ -417,6 +430,8 @@
 <script>
     const isEditMode = {{ visit|yesno:"true,false" }};
     const isSuperuserBypass = {{ can_bypass_gps|yesno:"true,false" }};
+    const bypassReasonMandatory = {{ bypass_reason_mandatory|yesno:"true,false" }};
+    const isSuperAdminUser = {% if request.user.is_superuser or request.user.is_super_admin %}true{% else %}false{% endif %};
     const verifyVisitsEnabled = {{ verify_visits_enabled|yesno:"true,false" }};
     const verifyUnplannedDistance = {{ verify_unplanned_visit_distance|default:True|yesno:"true,false" }};
     const allowTemplateDistanceOverride = {{ allow_template_distance_override|default:True|yesno:"true,false" }};
@@ -438,6 +453,14 @@
     let allTemplates = [];
     let currentTemplate = null;
 
+    let preselectedContactAddresses = [];
+    try {
+        preselectedContactAddresses = JSON.parse('{{ selected_contact_addresses_json|default:"[]"|escapejs }}');
+    } catch (_) {
+        preselectedContactAddresses = [];
+    }
+    const preselectedContactAddressId = "{{ selected_contact_address_id|default:''|escapejs }}";
+
     {% if selected_contact %}
     currentCustomer = {
         id: "{{ selected_contact.id }}",
@@ -448,11 +471,17 @@
         specialty: "{{ selected_contact.specialty|default:'عام'|escapejs }}",
         area: "{{ selected_contact.area.name|default:'غير محددة'|escapejs }}",
         lat: {% if selected_contact.latitude %}Number("{{ selected_contact.latitude|stringformat:'s' }}"){% else %}null{% endif %},
-        lng: {% if selected_contact.longitude %}Number("{{ selected_contact.longitude|stringformat:'s' }}"){% else %}null{% endif %}
+        lng: {% if selected_contact.longitude %}Number("{{ selected_contact.longitude|stringformat:'s' }}"){% else %}null{% endif %},
+        addresses: preselectedContactAddresses,
+        selectedAddressId: preselectedContactAddressId || null,
+        selectedAddressTitle: ''
     };
     {% endif %}
 
     document.addEventListener('DOMContentLoaded', function() {
+        if (currentCustomer && Array.isArray(currentCustomer.addresses)) {
+            renderVisitAddressSelector(currentCustomer.addresses, preselectedContactAddressId);
+        }
         if (!isEditMode) {
             acquireDeviceLocation();
         }
@@ -781,15 +810,15 @@
             return;
         }
 
-        if (!currentCustomer.lat || !currentCustomer.lng) {
-            if (clientGpsEl) clientGpsEl.textContent = "غير مسجل مسبقاً";
-            if (clientSubEl) clientSubEl.textContent = "سيتم اعتماد موقعك الحالي كموقع للعميل";
-            if (actualDistEl) actualDistEl.textContent = "0 متر (تثبيت أول مرة)";
+        if (currentCustomer.lat === null || currentCustomer.lat === undefined || currentCustomer.lng === null || currentCustomer.lng === undefined) {
+            if (clientGpsEl) clientGpsEl.textContent = "غير مسجل";
+            if (clientSubEl) clientSubEl.textContent = "العنوان المحدد بدون إحداثيات GPS";
+            if (actualDistEl) actualDistEl.textContent = "غير متاح";
             if (feedbackBadge) {
                 feedbackBadge.className = "px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200";
-                feedbackBadge.textContent = "سيتم حفظ الموقع تلقائياً";
+                feedbackBadge.textContent = "لا يوجد GPS مسجل للعنوان ⚠️";
             }
-            if (requireGps && gpsAcquireFailed) {
+            if (requireGps) {
                 showUnplannedOutOfRangeState();
             } else {
                 resetUnplannedBypassState();
@@ -798,7 +827,7 @@
         }
 
         if (clientGpsEl) clientGpsEl.textContent = `${Number(currentCustomer.lat).toFixed(5)}, ${Number(currentCustomer.lng).toFixed(5)}`;
-        if (clientSubEl) clientSubEl.textContent = "إحداثيات العميل المسجلة";
+        if (clientSubEl) clientSubEl.textContent = currentCustomer.selectedAddressTitle ? `العنوان: ${currentCustomer.selectedAddressTitle}` : "إحداثيات العنوان المسجلة";
 
         if (!currentDeviceCoords) {
             if (actualDistEl) actualDistEl.textContent = gpsAcquireFailed ? "غير متاح" : "جاري الحساب...";
@@ -885,7 +914,140 @@
     }
     window.onCustomerSelected = onCustomerSelected;
 
+    function escapeHtmlText(str) {
+        return String(str || '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+    }
+
+    function applySelectedAddress(addr) {
+        const hiddenInput = document.getElementById('id_contact_address_id');
+        const gpsEl = document.getElementById('customer-gps-status');
+        if (!currentCustomer) return;
+
+        if (addr) {
+            currentCustomer.selectedAddressId = addr.id;
+            currentCustomer.selectedAddressTitle = addr.title || '';
+            currentCustomer.lat = addr.latitude !== null && addr.latitude !== undefined ? Number(addr.latitude) : null;
+            currentCustomer.lng = addr.longitude !== null && addr.longitude !== undefined ? Number(addr.longitude) : null;
+            if (hiddenInput) hiddenInput.value = String(addr.id);
+        } else {
+            currentCustomer.selectedAddressId = null;
+            currentCustomer.selectedAddressTitle = '';
+            currentCustomer.lat = null;
+            currentCustomer.lng = null;
+            if (hiddenInput) hiddenInput.value = '';
+        }
+
+        if (gpsEl) {
+            if (currentCustomer.lat !== null && currentCustomer.lng !== null) {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <span class="material-symbols-outlined text-xs">pin_drop</span>
+                        <span class="dir-ltr">${Number(currentCustomer.lat).toFixed(5)}, ${Number(currentCustomer.lng).toFixed(5)}</span>
+                    </span>
+                `;
+            } else {
+                gpsEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        <span class="material-symbols-outlined text-xs">location_off</span>
+                        <span>لا يوجد موقع GPS مسجل للعنوان المحدد</span>
+                    </span>
+                `;
+            }
+        }
+        resetUnplannedBypassState();
+        updateGeofenceCheck();
+    }
+
+    function renderVisitAddressSelector(addresses, preselectedId) {
+        const section = document.getElementById('visit-address-section');
+        const optionsEl = document.getElementById('visit-address-options');
+        const countBadge = document.getElementById('visit-address-count-badge');
+        if (!section || !optionsEl) return;
+
+        const list = Array.isArray(addresses) ? addresses : [];
+        section.classList.remove('hidden');
+
+        if (list.length === 0) {
+            if (countBadge) countBadge.textContent = 'لا توجد عناوين';
+            optionsEl.innerHTML = `
+                <div class="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    <span class="material-symbols-outlined text-sm">info</span>
+                    <span>لا يوجد عنوان مسجل لهذا العميل.</span>
+                </div>
+            `;
+            applySelectedAddress(null);
+            return;
+        }
+
+        let selected = list.find(a => String(a.id) === String(preselectedId)) || list.find(a => a.is_main) || list[0];
+
+        if (list.length === 1) {
+            if (countBadge) countBadge.textContent = 'عنوان واحد';
+            const a = list[0];
+            const gpsPill = a.has_location
+                ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">GPS ✓</span>`
+                : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">بدون GPS</span>`;
+            optionsEl.innerHTML = `
+                <div class="flex items-center justify-between gap-2 bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
+                    <div class="min-w-0">
+                        <div class="font-bold text-slate-800 truncate">${escapeHtmlText(a.title)}</div>
+                        ${a.full_text ? `<div class="text-[11px] text-slate-500 truncate">${escapeHtmlText(a.full_text)}</div>` : ''}
+                    </div>
+                    ${gpsPill}
+                </div>
+            `;
+            applySelectedAddress(a);
+            return;
+        }
+
+        if (countBadge) countBadge.textContent = `${list.length} عناوين — اختر عنوان الزيارة`;
+        optionsEl.innerHTML = list.map(a => {
+            const isSel = String(a.id) === String(selected.id);
+            const gpsPill = a.has_location
+                ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">GPS ✓</span>`
+                : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">بدون GPS</span>`;
+            const mainPill = a.is_main
+                ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">رئيسي</span>`
+                : '';
+            return `
+                <label class="flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${isSel ? 'border-[#27bebe] bg-teal-50/50' : 'border-slate-200 bg-white hover:bg-slate-50'}">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <input type="radio" name="visit_address_radio" value="${a.id}" ${isSel ? 'checked' : ''}
+                               onchange="onVisitAddressChanged(${a.id})"
+                               class="text-[#27bebe] focus:ring-[#27bebe] shrink-0">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-bold text-slate-800 truncate">${escapeHtmlText(a.title)}</span>
+                                ${mainPill}
+                            </div>
+                            ${a.full_text ? `<div class="text-[11px] text-slate-500 truncate">${escapeHtmlText(a.full_text)}</div>` : ''}
+                        </div>
+                    </div>
+                    ${gpsPill}
+                </label>
+            `;
+        }).join('');
+        applySelectedAddress(selected);
+    }
+
+    function onVisitAddressChanged(addrId) {
+        if (!currentCustomer || !Array.isArray(currentCustomer.addresses)) return;
+        const found = currentCustomer.addresses.find(a => String(a.id) === String(addrId));
+        if (!found) return;
+        document.querySelectorAll('#visit-address-options label').forEach(lbl => {
+            const inp = lbl.querySelector('input[type="radio"]');
+            if (inp && String(inp.value) === String(addrId)) {
+                lbl.className = 'flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all border-[#27bebe] bg-teal-50/50';
+            } else {
+                lbl.className = 'flex items-center justify-between gap-2 p-2.5 rounded-xl border cursor-pointer transition-all border-slate-200 bg-white hover:bg-slate-50';
+            }
+        });
+        applySelectedAddress(found);
+    }
+    window.onVisitAddressChanged = onVisitAddressChanged;
+
     function selectCustomer(c) {
+        const addressesList = Array.isArray(c.addresses) ? c.addresses : [];
         currentCustomer = {
             id: c.id,
             name: c.name,
@@ -894,8 +1056,11 @@
             account_type: c.account_type || '',
             specialty: c.specialty || 'عام',
             area: c.area_name || c.area || 'غير محددة',
-            lat: c.latitude || null,
-            lng: c.longitude || null
+            lat: c.latitude !== null && c.latitude !== undefined ? Number(c.latitude) : null,
+            lng: c.longitude !== null && c.longitude !== undefined ? Number(c.longitude) : null,
+            addresses: addressesList,
+            selectedAddressId: null,
+            selectedAddressTitle: '',
         };
 
         const djangoSelect = document.getElementById('visit-contact-select') || document.getElementById('id_contact') || document.querySelector('select[name="contact"]');
@@ -921,7 +1086,6 @@
         const catEl = document.getElementById('customer-category-badge');
         const specEl = document.getElementById('customer-specialty-text');
         const areaEl = document.getElementById('customer-area-text');
-        const gpsEl = document.getElementById('customer-gps-status');
         const linkEl = document.getElementById('customer-profile-link');
 
         if (nameEl) nameEl.textContent = currentCustomer.name;
@@ -931,29 +1095,14 @@
         if (areaEl) areaEl.textContent = `المنطقة: ${currentCustomer.area}`;
         if (linkEl) linkEl.href = `/contacts/${c.id}/`;
 
-        if (gpsEl) {
-            if (currentCustomer.lat && currentCustomer.lng) {
-                gpsEl.innerHTML = `
-                    <span class="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        <span class="material-symbols-outlined text-xs">pin_drop</span>
-                        <span class="dir-ltr">موقع العميل المسجل: ${Number(currentCustomer.lat).toFixed(5)}, ${Number(currentCustomer.lng).toFixed(5)}</span>
-                    </span>
-                `;
-            } else {
-                gpsEl.innerHTML = `
-                    <span class="inline-flex items-center gap-1 text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        <span class="material-symbols-outlined text-xs">info</span>
-                        <span>لا يوجد موقع مسجل للعميل (سيتم حفظ أول موقع تلقائياً عند التسجيل)</span>
-                    </span>
-                `;
-            }
-        }
-
         if (selectWrapper) selectWrapper.classList.add('hidden');
         if (card) card.classList.remove('hidden');
 
+        const hiddenInput = document.getElementById('id_contact_address_id');
+        const preselectedAddrId = hiddenInput ? hiddenInput.value : (c.default_address_id || '');
+        renderVisitAddressSelector(addressesList, preselectedAddrId);
+
         filterTemplatesByCustomer(currentCustomer);
-        updateGeofenceCheck();
         checkDuplicateVisitOnDate();
     }
 
@@ -968,9 +1117,13 @@
         const card = document.getElementById('selected-customer-card');
         const selectWrapper = document.getElementById('customer-select-wrapper');
         const warningBox = document.getElementById('duplicate-visit-warning-box');
+        const addrSection = document.getElementById('visit-address-section');
+        const hiddenAddr = document.getElementById('id_contact_address_id');
 
         if (card) card.classList.add('hidden');
         if (warningBox) warningBox.classList.add('hidden');
+        if (addrSection) addrSection.classList.add('hidden');
+        if (hiddenAddr) hiddenAddr.value = '';
         if (selectWrapper) selectWrapper.classList.remove('hidden');
 
         filterTemplatesByCustomer(null);
@@ -1031,8 +1184,8 @@
         const bypassReason = document.getElementById('unplanned-bypass-reason-input');
         if (!isEditMode && currentVisitType === 'unplanned' && bypassChk && bypassChk.checked) {
             const reasonVal = (bypassReason ? bypassReason.value : '').trim();
-            if (reasonVal.length < 10) {
-                window.ERPToast.warning('يرجى كتابة سبب تجاوز الموقع (10 أحرف على الأقل).');
+            if (bypassReasonMandatory && !isSuperAdminUser && !reasonVal) {
+                window.ERPToast.warning('يرجى كتابة سبب تجاوز الموقع الجغرافي للمتابعة.');
                 if (bypassReason) bypassReason.focus();
                 if (e) e.preventDefault();
                 return false;

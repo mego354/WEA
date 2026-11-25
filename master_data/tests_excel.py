@@ -168,3 +168,35 @@ class GlobalExcelImportExportTests(TestCase):
             self.assertIn('spreadsheetml', resp['Content-Type'])
             wb = openpyxl.load_workbook(io.BytesIO(resp.content))
             self.assertGreaterEqual(len(wb.sheetnames), 1)
+
+    def test_contacts_importer_validates_canonical_status_and_planned_visits_prepares_context(self):
+        """ContactsExcelImporter validates Customer/Lead/Inactive strictly and PlannedVisitsExcelImporter excludes inactive."""
+        c_active = Contact.objects.create(
+            name='صيدلية نشطة إكسل', area=self.cairo, brick=self.nasr, is_customer=True, status='customer', created_by=self.rep
+        )
+        c_inactive = Contact.objects.create(
+            name='صيدلية موقوفة إكسل', area=self.cairo, brick=self.nasr, is_customer=True, status='inactive', created_by=self.rep
+        )
+
+        # Contacts importer accepts canonical statuses and rejects legacy status values
+        c_importer = get_importer_class('contacts')(self.superadmin)
+        upload_c = _build_xlsx_upload(
+            ['الاسم', 'النوع', 'الحالة', 'المنطقة الرئيسية', 'المنطقة الفرعية (البريك)'],
+            [
+                ['عيادة ليد مستوردة', 'عميل', 'Lead', 'القاهرة_إكسل', 'مدينة نصر_إكسل'],
+                ['عيادة بحالة قديمة', 'عميل', 'active', 'القاهرة_إكسل', 'مدينة نصر_إكسل'],
+            ],
+        )
+        parsed_c, err_c = c_importer.parse_and_validate_upload(upload_c)
+        self.assertIsNone(err_c)
+        self.assertEqual(parsed_c['valid_count'], 1)
+        self.assertEqual(parsed_c['invalid_count'], 1)
+        c_importer.commit_rows([r for r in parsed_c['rows'] if r['is_valid']])
+        created_lead = Contact.objects.get(name='عيادة ليد مستوردة')
+        self.assertEqual(created_lead.status, 'lead')
+
+        # PlannedVisitsExcelImporter.prepare_context works and excludes inactive contacts
+        p_importer = get_importer_class('planned_visits')(self.rep)
+        p_importer.prepare_context()
+        self.assertIn('صيدلية نشطة إكسل', p_importer._eligible_contacts)
+        self.assertNotIn('صيدلية موقوفة إكسل', p_importer._eligible_contacts)

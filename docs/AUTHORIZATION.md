@@ -93,7 +93,7 @@ Governorate / Main Area (Area.parent IS NULL)
 2. **Fail Closed**:
    - If a manager or target user has no assigned areas, `is_manager_eligible_for_user` evaluates to `False`.
 
-### Representative Brick Scoping (`get_visit_eligible_contacts_queryset`)
+### Representative Brick Scoping (`get_visit_eligible_contacts_queryset(qs, user)`)
 
 - In visit creation (`/visits/create/`), bulk planning (`/planned-visits/`), and client search API (`customers_search_api`):
   - **SuperAdmin**: Can select active clients across the entire country.
@@ -147,7 +147,7 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Visit Creation (Unplanned) | Yes | Yes (Auto-approved, Atomic start) | If granted (Auto-approved, Atomic start) | Own (Assigned Brick, Auto-approved, Atomic start) |
 | Visit Planning & Bulk Plans | Yes | Subordinates (Auto-approved) | If granted | Own (Assigned Brick, Pending manager approval) |
 | Visit & Plan Approval | Yes | Subordinates in Main Area (Not Self) | No | No |
-| Visit Deletion (Unended Only) | Yes | If granted (`activities:visits/delete`) | If granted (`activities:visits/delete`) | Own Unended (If granted `activities:visits/delete`) |
+| Visit Deletion (Any Stage) | Yes | If granted (`activities:visits/delete`) | If granted (`activities:visits/delete`) | Own Scoped (If granted `activities:visits/delete`) |
 | Visit Questionnaire Answers Edit | Yes | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) | Own Created Only (`activities:visits/edit_answers`) |
 | GPS Distance Bypass | Yes | If granted (`activities:visits/bypass_gps`) | No | If granted (`activities:visits/bypass_gps`) |
 | GPS Suspicious / Fake Location Visibility & Filter | Yes (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | If granted (`activities:visits/view_gps_suspicion`) | No (never exposed to rep without permission) |

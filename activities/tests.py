@@ -484,24 +484,36 @@ class VisitAndLocationParityTestCase(TestCase):
         self.assertEqual(visit.approval_status, 'approved')
 
     def test_auto_set_customer_location_on_first_visit(self):
-        """First visit check-in automatically saves GPS to customer dossier."""
+        """Missing GPS on selected address must NOT auto-save device coords; requires authorized bypass."""
         today = timezone.now().date()
         self.assertFalse(self.new_customer.has_saved_location)
         visit = Visit.objects.create(
             contact=self.new_customer, template=self.template, owner=self.superuser,
             created_by=self.superuser, date=today, status='planned', approval_status='approved'
         )
-        res = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
+        # Without force_bypass, starting visit for an address with no GPS is blocked and does NOT save coords
+        res_blocked = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
             'latitude': '31.2200000',
             'longitude': '29.9300000',
             'device_accuracy': '10.0',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(res.status_code, 200)
-
+        self.assertEqual(res_blocked.status_code, 400)
         self.new_customer.refresh_from_db()
-        self.assertTrue(self.new_customer.has_saved_location)
-        self.assertAlmostEqual(float(self.new_customer.latitude), 31.2200, places=3)
-        self.assertAlmostEqual(float(self.new_customer.longitude), 29.9300, places=3)
+        self.assertFalse(self.new_customer.has_saved_location)
+
+        # With authorized bypass, visit starts without auto-saving coordinates to contact/address
+        res_bypass = self.client.post(reverse('visit_action', args=[visit.pk, 'start']), {
+            'latitude': '31.2200000',
+            'longitude': '29.9300000',
+            'device_accuracy': '10.0',
+            'force_bypass_location': '1',
+            'bypass_reason': 'العنوان بدون إحداثيات مسجلة',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_bypass.status_code, 200)
+        self.new_customer.refresh_from_db()
+        self.assertFalse(self.new_customer.has_saved_location)
+        self.assertIsNone(self.new_customer.latitude)
+        self.assertIsNone(self.new_customer.longitude)
 
     def test_location_settings_superuser_only_enforcement(self):
         """Settings page /settings/location/ is strictly restricted to superusers."""
@@ -6190,18 +6202,23 @@ class ComprehensiveRequirementsAtoJTests(TestCase):
             SecurityAuditLog.objects.filter(action_type='VISIT_DELETED', actor=self.rep_nasr).exists()
         )
 
-        # 3. Ended visit CANNOT be deleted even with permission or by manager
+        # 3. Ended (finished) visit CAN ALSO be deleted at any stage by authorized user within DataScope
         ended_visit = Visit.objects.create(
             contact=self.nasr_contacts[1], template=self.template, owner=self.rep_nasr,
             created_by=self.rep_nasr, date=today, status='finished',
             ended_at=timezone.now(), approval_status='approved'
         )
+        ended_pk = ended_visit.pk
         res_ended = self.client.post(
-            reverse('visit_delete', args=[ended_visit.pk]),
+            reverse('visit_delete', args=[ended_pk]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        self.assertEqual(res_ended.status_code, 400)
-        self.assertTrue(Visit.objects.filter(pk=ended_visit.pk).exists())
+        self.assertEqual(res_ended.status_code, 200)
+        self.assertTrue(res_ended.json()['success'])
+        self.assertFalse(Visit.objects.filter(pk=ended_pk).exists())
+        self.assertTrue(
+            SecurityAuditLog.objects.filter(action_type='VISIT_DELETED', record_id=str(ended_pk)).exists()
+        )
 
         # 4. Cross-area manager cannot delete Cairo visit (IDOR protection)
         other_unended = Visit.objects.create(
@@ -6799,39 +6816,60 @@ class PlannedVisitDeletionAndApprovalStateTests(TestCase):
             plan=plan, plan_day=pday, order=1, contact=self.contact, template=self.template, visit=visit
         )
 
-        # 1. While pending approval, delete button is hidden in /planned-visits/ and POST delete is blocked (400)
+        # 1. While pending approval and unstarted, delete button IS shown in /planned-visits/ and POST delete succeeds
         self.client.force_login(self.mgr)
         list_res = self.client.get(reverse('planned_visits_list'))
         self.assertEqual(list_res.status_code, 200)
-        self.assertNotContains(list_res, reverse('planned_visit_item_delete', args=[item.pk]))
+        self.assertContains(list_res, reverse('planned_visit_item_delete', args=[item.pk]))
 
         del_pending = self.client.post(
             reverse('planned_visit_item_delete', args=[item.pk]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
-        self.assertEqual(del_pending.status_code, 400)
-        self.assertTrue(PlannedVisitItem.objects.filter(pk=item.pk).exists())
-        self.assertTrue(Visit.objects.filter(pk=visit.pk).exists())
+        self.assertEqual(del_pending.status_code, 200)
+        self.assertTrue(del_pending.json()['success'])
+        self.assertFalse(PlannedVisitItem.objects.filter(pk=item.pk).exists())
+        self.assertFalse(Visit.objects.filter(pk=visit.pk).exists())
+        self.assertFalse(VisitPlan.objects.filter(pk=plan.pk).exists())
 
-        # 2. Once approved (or disapproved) and still unstarted, delete button appears and removes item, visit, and empty plan
-        plan.approval_status = 'approved'
-        plan.save(update_fields=['approval_status'])
-        visit.approval_status = 'approved'
-        visit.save(update_fields=['approval_status'])
+        # 2. When linked visit is finished, deletion requires `activities:visits/delete` and removes item, visit, and empty plan
+        from accounts.models import Permission as ErpPermission
+        del_visit_perm = ErpPermission.objects.get(codename='activities:visits/delete')
+        plan2 = VisitPlan.objects.create(
+            date=today, assignee=self.rep, created_by=self.rep, approval_status='approved'
+        )
+        visit2 = Visit.objects.create(
+            contact=self.contact, template=self.template, owner=self.rep, created_by=self.rep,
+            date=today, status='finished', ended_at=timezone.now(), is_planned=True, plan=plan2, approval_status='approved'
+        )
+        item2 = PlannedVisitItem.objects.create(
+            plan=plan2, plan_day=pday, order=2, contact=self.contact, template=self.template, visit=visit2
+        )
 
+        self.mgr_role.permissions.remove(del_visit_perm)
+        self.mgr.clear_perm_cache()
+        res_fin_denied = self.client.post(
+            reverse('planned_visit_item_delete', args=[item2.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(res_fin_denied.status_code, 403)
+        self.assertTrue(PlannedVisitItem.objects.filter(pk=item2.pk).exists())
+
+        self.mgr_role.permissions.add(del_visit_perm)
+        self.mgr.clear_perm_cache()
         list_res_ok = self.client.get(reverse('planned_visits_list'))
         self.assertEqual(list_res_ok.status_code, 200)
-        self.assertContains(list_res_ok, reverse('planned_visit_item_delete', args=[item.pk]))
+        self.assertContains(list_res_ok, reverse('planned_visit_item_delete', args=[item2.pk]))
 
         del_ok = self.client.post(
-            reverse('planned_visit_item_delete', args=[item.pk]),
+            reverse('planned_visit_item_delete', args=[item2.pk]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(del_ok.status_code, 200)
         self.assertTrue(del_ok.json()['success'])
-        self.assertFalse(PlannedVisitItem.objects.filter(pk=item.pk).exists())
-        self.assertFalse(Visit.objects.filter(pk=visit.pk).exists())
-        self.assertFalse(VisitPlan.objects.filter(pk=plan.pk).exists())
+        self.assertFalse(PlannedVisitItem.objects.filter(pk=item2.pk).exists())
+        self.assertFalse(Visit.objects.filter(pk=visit2.pk).exists())
+        self.assertFalse(VisitPlan.objects.filter(pk=plan2.pk).exists())
 
     def test_declined_plan_hides_buttons_and_blocks_redecision(self):
         from activities.models import VisitPlan

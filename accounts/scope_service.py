@@ -1037,7 +1037,7 @@ class ScopeResolutionService:
 
         elif target_choice_type == 'customers':
             return cls.get_scoped_queryset(
-                Contact.objects.filter(is_customer=True).exclude(status='inactive').select_related('area', 'brick'),
+                Contact.objects.filter(is_customer=True, status='customer').select_related('area', 'brick'),
                 user,
                 'contact',
                 'view'

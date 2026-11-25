@@ -26,7 +26,7 @@ Domain Mutation (Sales / Purchases / Treasury / Inventory / Activities / Contact
 
 | Layer | Current Status | Where It Lives |
 |---|---|---|
-| Arabic message formatting (60 events) & `route_key` routing | **Implemented & Tested** | `notifications/formatters.py`, `hooks.py`, `signals.py` |
+| Arabic message formatting (61 events) & `route_key` routing | **Implemented & Tested** | `notifications/formatters.py`, `hooks.py`, `signals.py` |
 | Persistent inbox, 4-layer DataScope/RBAC, `/api/v1/notifications/*` | **Implemented & Tested** | `notifications/models.py`, `services.py`, `views.py` |
 | Device registration, `device_uid` token rotation & logout unregister | **Implemented & Tested** | `notifications/views.py`, `accounts/views.py`, `static/js/notifications_client.js` |
 | FCM HTTP v1 backend sender & delivery diagnostics | **Implemented & Tested** (requires live Firebase credentials in server env) | `notifications/fcm_provider.py`, `notifications/channels.py` |
@@ -224,7 +224,7 @@ All keys inside `message.data` are strictly strings (FCM HTTP v1 requirement):
 
 ## 6. How Django Generates Notifications
 
-1. **Event Registry (`notifications/registry.py`):** Catalogs all 60 events across 10 modules (`sales`, `purchases`, `treasury`, `inventory`, `activities`, `contacts`, `catalog`, `accounts`, `master_data`, `reports`) with `required_permission`, optional `approval_permission`, `default_severity`, and `default_delivery_mode`.
+1. **Event Registry (`notifications/registry.py`):** Catalogs all 61 events across 11 modules (`sales`, `purchases`, `treasury`, `inventory`, `activities`, `contacts`, `catalog`, `accounts`, `master_data`, `reports`, `notifications`) with `required_permission`, optional `approval_permission`, `default_severity`, and `default_delivery_mode`.
 2. **Arabic Formatter (`notifications/formatters.py`):** `build_arabic_notification()` formats clear, contextual Arabic `title` + `body` (currency `ج.م`, localized statuses, actor name, document number, next action) and assigns a canonical `route_key`.
 3. **Emission Entry Points:**
    - `notifications/hooks.py` (`post_save` on `SecurityAuditLog`) for audited business actions.

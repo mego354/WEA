@@ -1231,43 +1231,51 @@ class R2StorageAndAttachmentsTests(TestCase):
         self.assertEqual(cfg.price_per_gb_month_usd, Decimal('0.0200'))
 
     def test_attachment_validation_dedup_refcount_and_idor(self):
+        import shutil
+        import tempfile
         from django.core.files.uploadedfile import SimpleUploadedFile
         from django.core.exceptions import ValidationError
+        from django.test import override_settings
         from master_data.media_service import store_attachment, delete_attachment
         from master_data.models import ERPAttachment
         from django.core.files.storage import default_storage
 
-        # Invalid extension rejected
-        bad_file = SimpleUploadedFile('malware.exe', b'MZ\x90\x00', content_type='application/octet-stream')
-        with self.assertRaises(ValidationError):
-            store_attachment(self.customer_cai, bad_file, user=self.rep_cai)
+        temp_media = tempfile.mkdtemp()
+        try:
+            with override_settings(MEDIA_ROOT=temp_media):
+                # Invalid extension rejected
+                bad_file = SimpleUploadedFile('malware.exe', b'MZ\x90\x00', content_type='application/octet-stream')
+                with self.assertRaises(ValidationError):
+                    store_attachment(self.customer_cai, bad_file, user=self.rep_cai)
 
-        # Valid PDF uploaded twice on two records -> deduplicates same storage path
-        pdf_bytes = b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n'
-        f1 = SimpleUploadedFile('invoice1.pdf', pdf_bytes, content_type='application/pdf')
-        f2 = SimpleUploadedFile('invoice2.pdf', pdf_bytes, content_type='application/pdf')
-        att1, _ = store_attachment(self.customer_cai, f1, user=self.rep_cai)
-        att2, dedup2 = store_attachment(self.customer_cai2, f2, user=self.rep_cai)
-        self.assertTrue(dedup2)
-        self.assertEqual(att1.file_hash, att2.file_hash)
-        self.assertEqual(att1.file.name, att2.file.name)
-        shared_name = att1.file.name
+                # Valid PDF uploaded twice on two records -> deduplicates same storage path
+                pdf_bytes = b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n'
+                f1 = SimpleUploadedFile('invoice1.pdf', pdf_bytes, content_type='application/pdf')
+                f2 = SimpleUploadedFile('invoice2.pdf', pdf_bytes, content_type='application/pdf')
+                att1, _ = store_attachment(self.customer_cai, f1, user=self.rep_cai)
+                att2, dedup2 = store_attachment(self.customer_cai2, f2, user=self.rep_cai)
+                self.assertTrue(dedup2)
+                self.assertEqual(att1.file_hash, att2.file_hash)
+                self.assertEqual(att1.file.name, att2.file.name)
+                shared_name = att1.file.name
 
-        # Giza rep cannot view/download/delete Cairo attachment (IDOR protection)
-        self.client.force_login(self.rep_giz)
-        self.assertIn(self.client.get(reverse('erp_attachment_view', args=[att1.pk])).status_code, (302, 403))
-        self.assertIn(self.client.get(reverse('erp_attachment_download', args=[att1.pk])).status_code, (302, 403))
+                # Giza rep cannot view/download/delete Cairo attachment (IDOR protection)
+                self.client.force_login(self.rep_giz)
+                self.assertIn(self.client.get(reverse('erp_attachment_view', args=[att1.pk])).status_code, (302, 403))
+                self.assertIn(self.client.get(reverse('erp_attachment_download', args=[att1.pk])).status_code, (302, 403))
 
-        # Deleting first ref preserves shared blob
-        with self.captureOnCommitCallbacks(execute=True):
-            delete_attachment(att1, user=self.rep_cai)
-        self.assertTrue(ERPAttachment.objects.filter(pk=att2.pk).exists())
-        self.assertTrue(default_storage.exists(shared_name))
+                # Deleting first ref preserves shared blob
+                with self.captureOnCommitCallbacks(execute=True):
+                    delete_attachment(att1, user=self.rep_cai)
+                self.assertTrue(ERPAttachment.objects.filter(pk=att2.pk).exists())
+                self.assertTrue(default_storage.exists(shared_name))
 
-        # Deleting last ref deletes blob
-        with self.captureOnCommitCallbacks(execute=True):
-            delete_attachment(att2, user=self.rep_cai)
-        self.assertFalse(default_storage.exists(shared_name))
+                # Deleting last ref deletes blob
+                with self.captureOnCommitCallbacks(execute=True):
+                    delete_attachment(att2, user=self.rep_cai)
+                self.assertFalse(default_storage.exists(shared_name))
+        finally:
+            shutil.rmtree(temp_media, ignore_errors=True)
 
 
 class PDFInvoicesAndStatementsTests(TestCase):

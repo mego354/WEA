@@ -100,7 +100,7 @@ This document outlines the user interface specifications, front-end architecture
   - Replaces all inconsistent native browser `confirm(...)` dialogs across the application.
   - Displays red warning icon, item identifier, irreversible action warning, optional related-records alert, and double-submit protection.
   - Supports non-destructive reversals (e.g. treasury reversals, purchase cancellations) with customizable button colors and icons via `showConfirmDeleteModal({ ... })`.
-- **Context-Preserving Modals**: Quick actions (e.g. Set Visit Time, Distance Exception Reason, Void Order) open compact centered modals without navigating away from the list or detail view.
+- **Context-Preserving Modals**: Quick actions (e.g. Start Visit GPS Check-In Modal, Distance Exception Reason, Void Order) open compact centered modals without navigating away from the list or detail view.
 - **Client-First Template Cascading**: In visit forms, selecting the client automatically queries eligible templates via AJAX, preventing selection of incompatible templates.
 - **Territorial Cascading Dropdowns**: Selecting a Governorate dynamically updates the Brick/Subarea selector with child areas.
 - **Submit Button State Management**: Form submit buttons automatically disable and display a loading spinner upon submission to prevent accidental duplicate requests.

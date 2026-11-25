@@ -68,6 +68,7 @@ class ContactsExcelImporter(BaseExcelImporter):
     columns = [
         ColumnSpec('name', 'الاسم', required=True, aliases=['اسم العميل', 'اسم المورد', 'contact_name'], sample='صيدلية الشفاء', rules_ar='الاسم الكامل للعميل أو المورد (إلزامي).', width=28),
         ColumnSpec('contact_type', 'النوع', required=False, aliases=['نوع الجهة', 'type'], sample='عميل', rules_ar='عميل / مورد / كلاهما / أخرى (الافتراضي: عميل).', width=16),
+        ColumnSpec('status', 'الحالة', required=False, aliases=['حالة العميل', 'contact_status'], sample='Customer', rules_ar='Customer / Lead / Inactive (الافتراضي: Customer).', width=16),
         ColumnSpec('code', 'الكود', required=False, aliases=['كود العميل', 'كود المورد'], sample='C-1001', rules_ar='اختياري؛ يُستخدم لمطابقة وتحديث السجلات القائمة.', width=16),
         ColumnSpec('area', 'المنطقة الرئيسية', required=False, aliases=['المحافظة', 'governorate', 'main_area'], sample='القاهرة', rules_ar='يجب أن تكون منطقة موجودة ومصرح بها ضمن نطاقك.', width=20),
         ColumnSpec('brick', 'المنطقة الفرعية (البريك)', required=False, aliases=['البريك', 'subarea'], sample='مدينة نصر', rules_ar='يجب أن يكون بريك موجود ضمن نطاقك.', width=22),
@@ -165,6 +166,15 @@ class ContactsExcelImporter(BaseExcelImporter):
         if err:
             errors.append(err)
 
+        raw_status = _clean_str(raw.get('status'))
+        status_val = ''
+        if raw_status:
+            status_norm = raw_status.lower()
+            if status_norm in ('customer', 'lead', 'inactive'):
+                status_val = status_norm
+            else:
+                errors.append("الحالة يجب أن تكون واحدة من: Customer, Lead, Inactive.")
+
         existing_id = None
         if code and code.lower() in self._existing_by_code:
             existing_id = self._existing_by_code[code.lower()]
@@ -178,6 +188,7 @@ class ContactsExcelImporter(BaseExcelImporter):
             'existing_id': existing_id,
             'name': name,
             'code': code,
+            'status': status_val,
             'is_customer': is_customer,
             'is_supplier': is_supplier,
             'is_other': is_other,
@@ -191,6 +202,9 @@ class ContactsExcelImporter(BaseExcelImporter):
         return cleaned, ('update' if existing_id else 'create'), []
 
     def commit_rows(self, valid_rows):
+        from sales.models import CustomerAccount
+        from treasury.models import VendorAccount
+
         created, updated = 0, 0
         for item in valid_rows:
             d = item['cleaned']
@@ -199,6 +213,8 @@ class ContactsExcelImporter(BaseExcelImporter):
                 c.name = d['name']
                 if d['code']:
                     c.code = d['code']
+                if d['status']:
+                    c.status = d['status']
                 c.is_customer = d['is_customer']
                 c.is_supplier = d['is_supplier']
                 c.is_other = d['is_other']
@@ -215,9 +231,10 @@ class ContactsExcelImporter(BaseExcelImporter):
                 c.save()
                 updated += 1
             else:
-                Contact.objects.create(
+                new_c = Contact.objects.create(
                     name=d['name'],
                     code=d['code'] or '',
+                    status=d['status'] or 'customer',
                     is_customer=d['is_customer'],
                     is_supplier=d['is_supplier'],
                     is_other=d['is_other'],
@@ -229,6 +246,10 @@ class ContactsExcelImporter(BaseExcelImporter):
                     notes=d['notes'],
                     created_by=self.user,
                 )
+                if new_c.is_customer:
+                    CustomerAccount.objects.get_or_create(customer=new_c)
+                if new_c.is_supplier:
+                    VendorAccount.get_or_create_for_supplier(new_c)
                 created += 1
         return created, updated
 
@@ -623,7 +644,7 @@ class PlannedVisitsExcelImporter(BaseExcelImporter):
 
     def prepare_context(self) -> None:
         self._eligible_contacts = {}
-        for c in get_visit_eligible_contacts_queryset(self.user):
+        for c in get_visit_eligible_contacts_queryset(Contact.objects.exclude(status='inactive'), self.user):
             self._eligible_contacts[c.name.strip().lower()] = c.id
             if c.code:
                 self._eligible_contacts[c.code.strip().lower()] = c.id
@@ -859,10 +880,21 @@ class CollectionsExcelImporter(BaseExcelImporter):
 
     def prepare_context(self) -> None:
         self._customers = {}
+        self._lead_customers = {}
+        self._inactive_customers = {}
         for c in get_scoped_queryset(Contact.objects.filter(is_customer=True), self.user, 'contact'):
-            self._customers[c.name.strip().lower()] = c
+            keys = [c.name.strip().lower()]
             if c.code:
-                self._customers[c.code.strip().lower()] = c
+                keys.append(c.code.strip().lower())
+            if c.status == 'customer':
+                for k in keys:
+                    self._customers[k] = c
+            elif c.status == 'lead':
+                for k in keys:
+                    self._lead_customers[k] = c
+            else:
+                for k in keys:
+                    self._inactive_customers[k] = c
         self._vaults = {}
         for v in get_scoped_queryset(Vault.objects.filter(is_active=True), self.user, 'vault'):
             self._vaults[v.name.strip().lower()] = v
@@ -871,11 +903,31 @@ class CollectionsExcelImporter(BaseExcelImporter):
     def validate_row(self, row_num, raw, seen):
         errors = []
         cust_ref = _clean_str(raw.get('customer'))
-        cust = self._customers.get(cust_ref.lower()) if cust_ref else None
+        cust_key = cust_ref.lower() if cust_ref else ''
+        cust = self._customers.get(cust_key) if cust_key else None
+        lead_cust = self._lead_customers.get(cust_key) if (cust_key and not cust) else None
+        inactive_cust = self._inactive_customers.get(cust_key) if (cust_key and not cust and not lead_cust) else None
+
+        so_obj = None
+        so_id = None
+        so_ref = _clean_str(raw.get('sales_order'))
+        if so_ref:
+            so_obj = self._orders.get(so_ref.lower())
+
         if not cust_ref:
             errors.append("العميل مطلوب.")
+        elif inactive_cust:
+            errors.append(f"جهة الاتصال '{cust_ref}' غير نشطة (Inactive) ولا يمكن تسجيل تحصيل لها.")
+        elif lead_cust:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            from sales.services import validate_sales_customer_eligibility
+            try:
+                validate_sales_customer_eligibility(lead_cust, allow_historical_lead=True, sales_order=so_obj)
+                cust = lead_cust
+            except DjangoValidationError as ve:
+                errors.append(str(ve.message if hasattr(ve, 'message') else ve))
         elif not cust:
-            errors.append(f"العميل '{cust_ref}' غير موجود أو خارج نطاقك.")
+            errors.append(f"العميل '{cust_ref}' غير موجود أو غير مصنف كعميل فعلي أو خارج نطاقك.")
 
         vault_ref = _clean_str(raw.get('vault'))
         vault = self._vaults.get(vault_ref.lower()) if vault_ref else None
@@ -894,16 +946,13 @@ class CollectionsExcelImporter(BaseExcelImporter):
         if err:
             errors.append(err)
 
-        so_id = None
-        so_ref = _clean_str(raw.get('sales_order'))
         if so_ref:
-            so = self._orders.get(so_ref.lower())
-            if not so:
+            if not so_obj:
                 errors.append(f"أمر البيع '{so_ref}' غير موجود أو خارج نطاقك.")
-            elif cust and so.customer_id != cust.id:
+            elif cust and so_obj.customer_id != cust.id:
                 errors.append(f"أمر البيع '{so_ref}' لا يتبع العميل '{cust.name}'.")
             else:
-                so_id = so.id
+                so_id = so_obj.id
 
         pm = _clean_str(raw.get('payment_method')).lower() or 'cash'
         if pm in ('نقدي', 'كاش'):

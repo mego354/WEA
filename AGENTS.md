@@ -30,7 +30,7 @@ Django project package: `config`. Custom user: `accounts.User`. UI language: Ara
 |---|---|
 | `accounts` | Users, canonical roles, permission registry, RBAC/ABAC helpers, security audit log, login |
 | `master_data` | Areas (governorate → subarea), company profile, location/sales/purchase settings, dashboard/home, geocoding |
-| `contacts` | Customers/vendors, UDF, todos, timeline, Excel import/export, customer search APIs |
+| `contacts` | Customers/vendors, canonical English statuses (`customer`, `lead`, `inactive`), `sync_contact_statuses`, UDF, todos, timeline, Excel import/export, search APIs |
 | `catalog` | Products, categories, volume discounts, Excel import/export |
 | `inventory` | Warehouses, stock, lots, memos, inter-warehouse transfer requests |
 | `purchases` | Purchase orders/returns, stock receive, vendor invoice settlement |
@@ -38,7 +38,7 @@ Django project package: `config`. Custom user: `accounts.User`. UI language: Ara
 | `sales` | Sales orders, sales returns, collections, customer accounts/transactions |
 | `activities` | Visits, planned visits, visit plans, agreements, visit templates, agenda, approval hub, GPS integrity |
 | `reports` | Performance analytics dashboards and 8 standalone financial/operational Excel & print reports |
-| `notifications` | Centralized Capacitor-ready notification system (60 events across all 10 apps, Role Settings rules, 4-layer DataScope, `/api/v1/notifications/` & device registration) |
+| `notifications` | Centralized Capacitor-ready notification system (61 events across 11 apps, Role Settings rules, 4-layer DataScope, `/api/v1/notifications/` & device registration) |
 
 Business mutations for sales, purchases, treasury, and stock transfers belong in `*/services.py` with `@transaction.atomic`. HTTP views authenticate, authorize, validate input, call services, and render templates. Shared UI: `templates/layouts/base.html` (Tailwind CDN, Cairo, Material Symbols, Leaflet). Full map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -62,8 +62,14 @@ Enforced in `accounts.scope_service.ScopeResolutionService`, `accounts.permissio
 10. **No unauthorized bypasses**: SuperAdmin exceptions must stay explicit. Settings flags such as `allow_all_users_to_create_visits` grant **create/list permission**, not cross-area data.
 11. **Anti-self-approval**: a user cannot approve/reject their own visit, order, or transfer.
 12. **Post-approval editing**: when a Representative edits an already-approved visit, approval is automatically invalidated (`approval_status='pending'`, `waiting_for_reapproval=True`) while preserving prior `ApprovalAuditLog` history.
+13. **Visit & Planned-Item Deletion (Any Stage)**: authorized users holding `activities:visits/delete` (`حذف الزيارات`) within object-level DataScope may delete visits at any lifecycle stage (`planned`, `started`, `finished`, `cancelled`), decoupled from `LocationSettings`. Deletion removes linked `PlannedVisitItem`s and empty parent `VisitPlan`s, cleans up unshared attachments/`Visit.photo`, and preserves the snapshot + `ApprovalAuditLog` history in `SecurityAuditLog`. Deleting items in `/planned-visits/` is allowed regardless of `pending` approval, and deleting an item whose linked visit has started or finished additionally requires `activities:visits/delete`.
+14. **Atomic Unplanned Visits & Single Open Visit per Owner**: unplanned `POST /visits/create/` locks `date=timezone.localdate()` and atomically creates + starts (`create_and_start_unplanned_visit`), rolling back completely on any failure. Partial DB `UniqueConstraint` (`unique_open_visit_per_owner`) + service locks enforce at most one open visit (`status='started'`, `ended_at IS NULL`) per `visit.owner` across all roles (zero bypass).
+15. **GPS Bypass & Visit/Plan Notifications**: GPS bypass is gated exclusively on `activities:visits/bypass_gps` (`gps_request_exception` is unwired). Standalone visit creation emits 1 visit notification (`activities.visit_created` or `activities.visit_pending_approval`); bulk planning suppresses per-visit notifications and emits 1 `activities.plan_submitted` notification.
+16. **Visit Address Selection & No Auto-Saved GPS**: Visits bind to a specific `contacts.ContactAddress` (`Visit.contact_address`, validated server-side to belong to `visit.contact`) with immutable snapshots (`contact_address_title`, `contact_address_text`, `customer_latitude_snapshot`, `customer_longitude_snapshot`) used consistently for both Start and End GPS verification. When the selected address has no GPS coordinates, the system **never** auto-saves device coordinates onto any `ContactAddress` or `Contact` (authorized `activities:visits/bypass_gps` is required when verification is enabled).
+17. **Mutually Exclusive Agenda Sections**: `/agenda/` organizes visits into two non-overlapping sections: `زيارات اليوم` (top — all unfinished planned/started/unplanned visits) and `الزيارات الفعلية` (bottom — all finished visits). Every visit appears in at most one section (`today_visits_count + actual_visits_count == total_visits_count`); cancelled visits are excluded from both.
+18. **Customer-Only Sales Selectors & Preserved Historical Leads**: `ScopeResolutionService.get_scoped_choices(user, 'customers', ...)` and `sales_customers_search_api` return ONLY `is_customer=True, status='customer'` (excluding `lead` and `inactive`), while Visits (`get_visit_eligible_contacts_queryset`) continue allowing `lead`. New Sales Orders strictly require `status='customer'`; editing an existing historical `lead` Sales Order allows keeping its current `lead` customer (rejecting switches to other `lead`/`inactive` contacts); Sales Returns and Collections against legitimate historical `lead` orders/balances remain permitted while rejecting `inactive` or history-less `lead` contacts.
 
-**Visit customer picker scoping:** `customers_search_api` scopes active customers via `get_visit_eligible_contacts_queryset(request.user)` (all areas for SuperAdmin, Main Area + child bricks for Manager, assigned Bricks for Representative). Contact **list/detail** uses `get_scoped_queryset`.
+**Visit customer picker scoping:** `customers_search_api` excludes `status='inactive'`, returns ordered `addresses[]` per contact, and scopes contacts via `get_visit_eligible_contacts_queryset(qs, request.user)` (all areas for SuperAdmin, Main Area + child bricks for Manager, assigned Bricks for Representative). Text search matches `name`, `code`, `mobile`, `specialty`, and numeric `serial_num` (`area__name` and `brick__name` are excluded). Contact **list/detail** uses `get_scoped_queryset`.
 
 ## D. Code quality principles
 
@@ -104,4 +110,5 @@ Before reporting done, verify:
 | Style, ORM, security coding | [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) |
 | Test layout and commands | [`docs/TESTING.md`](docs/TESTING.md) |
 | JSON/AJAX endpoints | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) |
+| Notifications & Capacitor deep linking | [`docs/notifications-deep-linking.md`](docs/notifications-deep-linking.md) |
 | Local/prod operations | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |

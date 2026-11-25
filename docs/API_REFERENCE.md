@@ -15,27 +15,50 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 
 ### 2.1 Customer Search (`customers_search_api`)
 - **URLs**:
-  - `/api/customers/search/`
+  - `/contacts/api/search/`
+  - `/api/customers/search/` (Global Parity Alias)
   - `/api/v1/visits/contacts/list` (Reference ERP Alias)
-- **Method**: `GET`
-- **Scoping**: Strictly scoped via `get_visit_eligible_contacts_queryset(request.user)`.
+- **Method**: `GET` or `POST`
+- **Scoping**: Excludes `status='inactive'` and strictly scopes via `get_visit_eligible_contacts_queryset(qs, request.user)`.
 - **Query Parameters**:
   - `q` (string, optional): Arabic-normalized text search across `name`, `code`, `mobile`, `specialty`, and numeric `serial_num` (`area__name` and `brick__name` are excluded; no area/brick query parameters are accepted).
-  - `type` (string, optional): Filter by account type (`pharmacy`, `clinic`, `hospital`, etc.).
+  - `id` (integer, optional): Fetch exact contact record by ID within DataScope.
+  - `limit` (integer, optional, default `100`): Maximum returned rows.
 - **Response Format**:
   ```json
-  [
-    {
-      "id": 104,
-      "name": "صيدلية النور",
-      "code": "CUST-00104",
-      "account_type": "pharmacy",
-      "governorate": "القاهرة",
-      "brick": "مدينة نصر",
-      "latitude": 30.0543,
-      "longitude": 31.3412
-    }
-  ]
+  {
+    "results": [
+      {
+        "id": 104,
+        "text": "صيدلية النور • CUST-00104",
+        "name": "صيدلية النور",
+        "code": "CUST-00104",
+        "account_type": "pharmacy",
+        "area_name": "القاهرة",
+        "brick_name": "مدينة نصر",
+        "latitude": 30.0543,
+        "longitude": 31.3412,
+        "default_address_id": 210,
+        "addresses": [
+          {
+            "id": 210,
+            "title": "الفرع الرئيسي",
+            "is_main": true,
+            "area_name": "القاهرة",
+            "brick_name": "مدينة نصر",
+            "street_address": "شارع عباس العقاد",
+            "full_text": "القاهرة - مدينة نصر - شارع عباس العقاد",
+            "latitude": 30.0543,
+            "longitude": 31.3412,
+            "has_location": true
+          }
+        ]
+      }
+    ],
+    "count": 1,
+    "total": 1,
+    "total_count": 1
+  }
   ```
 
 ### 2.2 Subareas / Bricks API (`get_subareas`)
@@ -111,7 +134,7 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 ## 3. Activities & Visits Endpoints
 
 ### 3.1 Visit Duplicate Check (`visit_check_duplicate_api`)
-- **URL**: `/activities/visits/check-duplicate/`
+- **URLs**: `/visits/api/check-duplicate/` and `/activities/visits/api/check-duplicate/`
 - **Method**: `GET`
 - **Permission**: `@require_permission('activities:visits/create')`
 - **Query Parameters**:
@@ -147,10 +170,11 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - `GET /planned-visits/?action=load_contacts&show_all=1`: returns all matching scoped contacts in one batch for "عرض جميع العملاء المؤهلين".
 - `POST /planned-visits/bulk-add/`: atomically creates a `VisitPlan` entity (with unique `plan_id` and plan-level comment), `PlannedVisitDay`, `PlannedVisitItem`, and linked `Visit(status='planned', is_planned=True)` records. Individual visit-creation notifications are suppressed; only a single plan-level notification (`activities.plan_submitted`) is emitted per submission. Visits are created as `pending` approval if the creator lacks `activities:visits/approve`. Returns `plan_id`, `created_count`, and `created_visit_ids`.
 
-### 3.4 Unended Visit Deletion (`visit_delete`)
-- **URL**: `POST /visits/<pk>/delete/`
-- **Permission**: Controlled strictly by `activities:visits/delete` (`can_delete_unended_visit`) plus object-level scope (`can_user_access_object(request.user, visit, 'delete')`), decoupled from `LocationSettings`. DataScope/permission checks run before exposing visit existence or finished status.
-- **Behavior**: Deletes only visits that have not ended (`status != 'finished'` and `ended_at is None`), deletes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), cleans up linked `ERPAttachment` and unshared `Visit.photo` files, preserves a full snapshot + `ApprovalAuditLog` history inside `SecurityAuditLog(action_type='VISIT_DELETED')`, and returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests. Finished visits return HTTP 400.
+### 3.4 Visit & Planned-Visit Item Deletion (`visit_delete`, `planned_visit_item_delete`)
+- **Visit Delete URL**: `POST /visits/<pk>/delete/` (and `/activities/visits/<pk>/delete/`)
+- **Permission**: Controlled strictly by `activities:visits/delete` (`can_delete_unended_visit`) plus object-level scope (`can_user_access_object(request.user, visit, 'delete')`), decoupled from `LocationSettings`. RBAC and DataScope checks run before exposing visit existence.
+- **Behavior**: Deletes visits at any lifecycle stage (`planned`, `started`, `finished`, `cancelled`), removes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), cleans up linked `ERPAttachment` and unshared `Visit.photo` files, preserves a full snapshot + `ApprovalAuditLog` history inside `SecurityAuditLog(action_type='VISIT_DELETED')`, and returns `{ "success": true, "message": "...", "redirect_url": "/visits/" }` for AJAX requests.
+- **Planned-Visit Item Delete URL**: `POST /planned-visits/item/<pk>/delete/` (`activities:planned/manage` + item manage scope; if linked visit is started/finished, additionally requires `activities:visits/delete` + visit delete scope and executes the same atomic visit/attachment/audit cleanup regardless of `pending` approval status).
 
 ### 3.5 Visit Questionnaire Answers Update (`visit_update_answers`)
 - **URLs**:
@@ -183,7 +207,7 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
     - Validates end GPS coordinates and completion questionnaire answers.
     - Transitions `status='finished'`, sets `ended_at=now()`.
     - Evaluates approval: if unplanned, or distance exception requested, or questionnaire answered, flags for approval (`pending`); if planned without exceptions, auto-approves (`approved`).
-  - `cancel`: Legacy cancellation action (retained for backward compatibility; unended visits are deleted via `/visits/<pk>/delete/` per Requirement J).
+  - `cancel`: Legacy cancellation action (retained for backward compatibility; UI uses `/visits/<pk>/delete/` for visit removal).
 
 ### 3.7 Agreements CRUD & Lifecycle Endpoints
 - **List & Filters**: `GET /activities/agreements/`

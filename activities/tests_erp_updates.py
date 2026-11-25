@@ -267,15 +267,76 @@ class ApprovedErpUpdatesTests(TestCase):
                 self.assertIn('approval_history', audit.previous_values)
                 self.assertEqual(len(audit.previous_values['approval_history']), 1)
 
-                # 4. Authorized deletion on finished visit -> 400
+                # 4. Authorized deletion on finished visit ALSO succeeds (any lifecycle stage) and logs snapshot
+                v_fin_pk = v_finished.pk
                 res_fin = self.client.post(
-                    reverse('visit_delete', args=[v_finished.pk]),
+                    reverse('visit_delete', args=[v_fin_pk]),
                     HTTP_X_REQUESTED_WITH='XMLHttpRequest',
                 )
-                self.assertEqual(res_fin.status_code, 400)
-                self.assertTrue(Visit.objects.filter(pk=v_finished.pk).exists())
+                self.assertEqual(res_fin.status_code, 200)
+                self.assertTrue(res_fin.json()['success'])
+                self.assertFalse(Visit.objects.filter(pk=v_fin_pk).exists())
+                fin_audit = SecurityAuditLog.objects.filter(action_type='VISIT_DELETED', record_id=str(v_fin_pk)).first()
+                self.assertIsNotNone(fin_audit)
+                self.assertEqual(fin_audit.previous_values.get('status'), 'finished')
+                self.assertIsNotNone(fin_audit.previous_values.get('ended_at'))
+
+                # 4b. PlannedVisitItem deletion allowed while pending approval, and finished item requires visits/delete
+                plan_p = VisitPlan.objects.create(date=today, assignee=self.rep_nasr, created_by=self.rep_nasr, approval_status='pending')
+                v_pending = Visit.objects.create(
+                    contact=self.c_nasr, template=self.template, owner=self.rep_nasr, created_by=self.rep_nasr,
+                    date=today, status='planned', is_planned=True, plan=plan_p, approval_status='pending',
+                )
+                item_pending = PlannedVisitItem.objects.create(
+                    plan=plan_p, plan_day=pday, order=2, contact=self.c_nasr, template=self.template, visit=v_pending
+                )
+                self.client.force_login(self.mgr_cairo)
+                res_item_pend = self.client.post(
+                    reverse('planned_visit_item_delete', args=[item_pending.pk]),
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+                )
+                self.assertEqual(res_item_pend.status_code, 200)
+                self.assertFalse(PlannedVisitItem.objects.filter(pk=item_pending.pk).exists())
+                self.assertFalse(Visit.objects.filter(pk=v_pending.pk).exists())
+                self.assertFalse(VisitPlan.objects.filter(pk=plan_p.pk).exists())
+
+                # Finished planned item deletion requires activities:visits/delete
+                plan_f = VisitPlan.objects.create(date=today, assignee=self.rep_nasr, created_by=self.rep_nasr, approval_status='approved')
+                v_pfin = Visit.objects.create(
+                    contact=self.c_nasr_lead, template=self.template, owner=self.rep_nasr, created_by=self.rep_nasr,
+                    date=today, status='finished', ended_at=timezone.now(), is_planned=True, plan=plan_f, approval_status='approved',
+                )
+                item_pfin = PlannedVisitItem.objects.create(
+                    plan=plan_f, plan_day=pday, order=3, contact=self.c_nasr_lead, template=self.template, visit=v_pfin
+                )
+                self.manager_role.permissions.remove(del_perm)
+                self.mgr_cairo.clear_perm_cache()
+                res_item_fin_denied = self.client.post(
+                    reverse('planned_visit_item_delete', args=[item_pfin.pk]),
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+                )
+                self.assertEqual(res_item_fin_denied.status_code, 403)
+                self.assertTrue(PlannedVisitItem.objects.filter(pk=item_pfin.pk).exists())
+
+                self.manager_role.permissions.add(del_perm)
+                self.mgr_cairo.clear_perm_cache()
+                res_item_fin_ok = self.client.post(
+                    reverse('planned_visit_item_delete', args=[item_pfin.pk]),
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+                )
+                self.assertEqual(res_item_fin_ok.status_code, 200)
+                self.assertFalse(PlannedVisitItem.objects.filter(pk=item_pfin.pk).exists())
+                self.assertFalse(Visit.objects.filter(pk=v_pfin.pk).exists())
+                self.assertFalse(VisitPlan.objects.filter(pk=plan_f.pk).exists())
+
+                self.client.force_login(self.rep_nasr)
 
                 # 5. Unified visits_list UI ignores view=cards and keeps Delete inside more_vert
+                Visit.objects.create(
+                    contact=self.c_nasr, template=self.template, owner=self.rep_nasr, created_by=self.rep_nasr,
+                    date=today, status='finished', ended_at=timezone.now(), approval_status='approved',
+                )
+                self.client.force_login(self.rep_nasr)
                 res_plain = self.client.get(reverse('visits_list'))
                 self.assertEqual(res_plain.status_code, 200)
                 self.assertNotIn('view=cards', res_plain.content.decode('utf-8'))
@@ -286,6 +347,7 @@ class ApprovedErpUpdatesTests(TestCase):
                 html = res_list.content.decode('utf-8')
                 self.assertIn('<table', html)
                 self.assertIn('more_vert', html)
+                self.assertIn('visit_delete', html) if False else self.assertIn('حذف الزيارة', html)
         finally:
             shutil.rmtree(temp_media, ignore_errors=True)
 
@@ -449,7 +511,28 @@ class ApprovedErpUpdatesTests(TestCase):
         self.rep_role.permissions.add(bypass_perm)
         self.rep_nasr.clear_perm_cache()
         res_form_bp = self.client.get(reverse('visit_create'))
-        self.assertIn('id="distance-bypass-container" class="hidden', res_form_bp.content.decode('utf-8'))
+        form_bp_html = res_form_bp.content.decode('utf-8')
+        self.assertIn('id="distance-bypass-container" class="hidden', form_bp_html)
+        self.assertNotIn('10 أحرف', form_bp_html)
+
+        # When bypass_reason_mandatory=False, authorized user can start unplanned visit out-of-range with empty reason
+        self.loc.bypass_reason_mandatory = False
+        self.loc.save()
+        res_bypass_no_reason = self.client.post(reverse('visit_create'), {
+            'contact': self.c_nasr_lead.id,
+            'template': self.template.id,
+            'date': today.strftime('%Y-%m-%d'),
+            'latitude': '30.200000',
+            'longitude': '31.500000',
+            'force_bypass_location': '1',
+            'bypass_reason': '',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_bypass_no_reason.status_code, 200)
+        created_bp = Visit.objects.get(pk=res_bypass_no_reason.json()['visit_id'])
+        self.assertTrue(created_bp.gps_forced_start)
+        created_bp.status = 'finished'
+        created_bp.ended_at = timezone.now()
+        created_bp.save(update_fields=['status', 'ended_at'])
 
         # Missing mandatory bypass reason rejected when out of range
         self.loc.bypass_reason_mandatory = True
@@ -636,6 +719,14 @@ class ApprovedErpUpdatesTests(TestCase):
         res_ssr = self.client.get(reverse('planned_visits_list'), {'contact_status': 'lead'})
         self.assertContains(res_ssr, 'name="contact_status"')
         self.assertContains(res_ssr, '<option value="lead" selected>')
+
+        # Direct POST bulk_add for an inactive contact is rejected (400)
+        res_ina_post = self.client.post(reverse('planned_visits_bulk_add'), {
+            'date': (timezone.localdate() + datetime.timedelta(days=3)).strftime('%Y-%m-%d'),
+            'template_id': self.template.id,
+            'contact_ids': [self.c_inactive.id],
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_ina_post.status_code, 400)
 
     # ------------------------------------------------------------------
     # Req I: Visit vs Planned-Visit Notifications

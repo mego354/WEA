@@ -9,18 +9,16 @@ This document describes the business rules, transaction invariants, lifecycle st
 ```mermaid
 stateDiagram-v2
     [*] --> Planned : Bulk Planning (/planned-visits/)
-    [*] --> Unplanned : Direct Creation (/visits/create/)
-    
-    Planned --> PendingApproval : Created (Requires Manager Approval)
-    Unplanned --> PendingApproval : Created (Within Tolerance OR Exception Requested)
-    
-    PendingApproval --> Approved : Manager Approves (visit_action)
+    [*] --> InProgress : Direct Unplanned Visit (/visits/create/ Atomic Start)
+
+    Planned --> PendingApproval : Rep Submits Plan (Requires Manager Approval)
+    Planned --> Approved : Manager Submits Plan (Auto-Approved)
+    PendingApproval --> Approved : Manager Approves (plan_action / visit_action)
     PendingApproval --> Disapproved : Manager Rejects
-    
+
     Approved --> InProgress : Start Visit (start_visit)
-    Approved --> PendingApproval : Rep Edits (waiting_for_reapproval=True)
-    
     InProgress --> Completed : Checkout / End Visit (end_visit)
+    Completed --> PendingApproval : Creator Edits Answers (waiting_for_reapproval=True)
     Completed --> [*]
 ```
 
@@ -78,11 +76,12 @@ stateDiagram-v2
   - Updating questionnaire answers triggers re-approval (`approval_status='pending'`, `waiting_for_reapproval=True`), records before/after answer diffs (with readable product names) in `ApprovalAuditLog` and `SecurityAuditLog`, updates `edited_by_creator` / `last_edited_by` / `last_edited_at`, and appears in the Complete Visit Timeline.
 - **Agenda Start-Visit Execution**:
   - Clicking «بدء الزيارة» from `agenda/` executes the exact same start workflow as the visit details page (capturing GPS, verifying geofence, displaying authorized bypass options when out of range, and answering check-in questions), rather than merely redirecting.
-- **Removal of Cancellation Actions & Strict Deletion Rules**:
+- **Removal of Cancellation Actions & Any-Stage Visit Deletion Rules**:
   - Visit cancellation buttons and actions have been completely removed from the UI.
-  - Finished visits cannot be deleted under any circumstances (`status == 'finished'` or `ended_at is not None`).
-  - Unended visits can be deleted by authorized users holding `activities:visits/delete` (`حذف الزيارات`) within DataScope, decoupled from `LocationSettings`. Deletion removes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), safely cleans up `ERPAttachment` / `Visit.photo` files, and preserves a complete snapshot + `ApprovalAuditLog` history in `SecurityAuditLog`.
-  - Permission and DataScope are checked before revealing visit existence or finished status.
+  - Authorized users holding `activities:visits/delete` (`حذف الزيارات`) within object-level DataScope can delete visits at **any lifecycle stage** (`planned`, `started`, `finished`, `cancelled`), completely decoupled from `LocationSettings`.
+  - Deleting a visit removes associated `PlannedVisitItem` records (and empty parent `VisitPlan` rows), safely cleans up unshared `ERPAttachment` / `Visit.photo` files, and preserves a complete snapshot + `ApprovalAuditLog` history in `SecurityAuditLog(action_type='VISIT_DELETED')`.
+  - Deleting items in `/planned-visits/` (`planned_visit_item_delete`) is allowed regardless of `pending` approval status; when the linked visit has already started or finished, it additionally enforces `activities:visits/delete` + visit-level DataScope and delegates to the same atomic visit-deletion cleanup.
+  - RBAC and DataScope are checked before revealing visit existence.
 - **Visit Detail Actions**:
   - Direct manual status overrides (`change_status` / `manage_status`) are prohibited; visits progress exclusively through `approve`, `disapprove` (only while `approval_status != 'approved'`), `start`, and `complete`.
 
@@ -96,12 +95,16 @@ stateDiagram-v2
 - **Elimination of Duplicate Start**:
   - Once started, the active visit dossier immediately renders the completion form and the "End Visit" (`complete`) action.
   - The "Start Visit" button is hidden once active, and duplicate start POST requests redirect safely without state degradation.
+- **Visit ContactAddress Binding & No Auto-Saved GPS**:
+  - Starting a planned visit (`start_visit`) or creating+starting an unplanned visit (`create_and_start_unplanned_visit`) accepts `contact_address_id` (validated server-side to belong to `visit.contact`, defaulting to `contact.main_address`).
+  - Both live FK (`Visit.contact_address`, `SET_NULL`) and immutable historical snapshots (`contact_address_title`, `contact_address_text`, `customer_latitude_snapshot`, `customer_longitude_snapshot`) are stored and used consistently for Start and End GPS verification (`verify_visit_location`) and GPS integrity checks.
+  - When the selected address has no registered GPS coordinates, `verify_visit_location` **never** auto-saves device coordinates onto any `ContactAddress` or `Contact`; when verification is active, authorized `activities:visits/bypass_gps` is required.
+- **Mutually Exclusive Agenda Sections (`/agenda/`)**:
+  - **Top (`زيارات اليوم`)**: all unfinished visits (`planned`, `started`, unfinished unplanned visits, uncreated `PlannedVisitItem`s), preserving `VisitPlan` grouping, comments, and plan-level approval actions.
+  - **Bottom (`الزيارات الفعلية`)**: all finished visits (`status='finished'` or `ended_at IS NOT NULL`), preserving quick approve/reject actions for pending finished visits.
+  - Strictly mutually exclusive (zero duplicates, `today_visits_count + actual_visits_count == total_visits_count`), with `cancelled` visits excluded from both sections.
 
-### 1.5 Scheduled Time & Quick Actions
-- Visits maintain a dedicated `time` (`TimeField`) and localized Arabic 12-hour property `formatted_time`.
-- An inline AJAX modal endpoint (`POST /activities/visits/<pk>/set-time/`) allows adjusting scheduled visit times without a page refresh, audited via `SecurityAuditLog`.
-
-### 1.6 Visit Templates & Mandatory Questions
+### 1.5 Visit Templates & Mandatory Questions
 - **Role Restrictions**: Templates can be restricted to specific roles (`restricted_roles`). Unrestricted templates are available to all authorized roles.
 - **Client-First Filtering**: Available templates dynamically filter based on the selected contact's account type (`is_contact_eligible(contact)`).
 - **Mandatory Completion Validation**: When ending a visit (`can_end_visit`), every required question in the template (including active conditional questions) must have non-empty answers.
@@ -140,6 +143,9 @@ stateDiagram-v2
   - **Collection Block**: Deletion is strictly blocked if any payment collections are linked to the order (`order.collections.exists()`).
   - Restores deducted stock to the warehouse, reverts customer account balance, deletes related `CustomerTransaction` and `InventoryMemo`, and logs `SALES_ORDER_DELETED` in `SecurityAuditLog`.
 - **Backward Compatibility**: Downstream service methods (`prepare_order`, `deliver_order`, `invoice_order`) remain idempotent and safe if called by legacy scripts.
+- **Customer-Only Selectors & Preserved Historical Leads**:
+  - All general Sales/Returns/Collections/Accounting customer dropdowns, filter drawers, and `sales_customers_search_api` use `ScopeResolutionService.get_scoped_choices(user, 'customers', 'sales')` filtered strictly to `is_customer=True, status='customer'`.
+  - `validate_sales_customer_eligibility()` in `sales/services.py` strictly enforces `status='customer'` on new `SalesOrder` creation, allows editing an existing historical `lead` `SalesOrder` while keeping its current customer (rejecting switches to other `lead`/`inactive` contacts), and permits Sales Returns and Collections (including `CollectionsExcelImporter`) against legitimate historical `lead` orders/balances while rejecting `inactive` or history-less `lead` contacts. Historical `lead` records remain intact in lists, statements, ledgers, reports, and exports.
 
 ### 2.2 Operational Payment Status (`payment_status`)
 - Independent from order fulfillment, `SalesOrder` maintains an operational `payment_status` tracking settlement progress:
@@ -251,7 +257,7 @@ stateDiagram-v2
 ## 7. Agreements Lifecycle (`activities.Agreement`)
 
 - **2-Status Lifecycle**: `new` (جديدة) and `done` (منجزة).
-- **Client Scoping**: Agreement client dropdown is dynamically scoped using `get_visit_eligible_contacts_queryset(request.user)` (SuperAdmin = all, Manager = Main Area + child bricks, Rep = assigned Bricks).
+- **Client Scoping**: Agreement client dropdown is dynamically scoped using `get_visit_eligible_contacts_queryset(qs, request.user)` (SuperAdmin = all, Manager = Main Area + child bricks, Rep = assigned Bricks).
 - **Status Transitions & Anti-Self-Approval**:
   - Marking an agreement as completed (`done`) or reopening it (`new`) requires `activities:agreements/approve` and manage scope.
   - Anti-self-approval rule strictly prohibits creators from changing the status of their own agreements (`can_user_access_object(user, agreement, 'approve')` / `can_user_access_object(user, agreement, 'done')`).
@@ -373,7 +379,7 @@ Historical and operational ERP records from the Bricks-Rep WEA exports (`wea dat
   - Supports 2-sheet `.xlsx` templates (`البيانات` + `التعليمات`), pre-commit validation (types, duplicates, FKs, `ScopeResolutionService`), paginated filterable preview, downloadable `.xlsx` error reports with formula-injection protection, explicit confirmation (never silently skips invalid rows), atomic commit, `SecurityAuditLog`, and `catalog.excel_import_completed` notification.
   - Covers 10 approved first-wave entities (`contacts`, `products`, `categories`, `areas`, `warehouses`, `planned_visits`, `stock_adjustments`, `collections`, `vendor_payments`, `inventory_stock`); `users` is strictly excluded.
 - **Centralized Notifications System (`notifications` App — Capacitor-Ready)**:
-  - 60 registered business events across all 10 ERP apps (`notifications/registry.py`), configurable per-role via the 3-tab Role Settings UI (`البيانات والنطاقات` | `الصلاحيات` | `قواعد الإشعارات`).
+  - 61 registered business events across all 11 ERP apps (`notifications/registry.py`), configurable per-role via the 3-tab Role Settings UI (`البيانات والنطاقات` | `الصلاحيات` | `قواعد الإشعارات`).
   - Delivered via `transaction.on_commit()` with strict 4-layer `ScopeResolutionService` + RBAC filtering, actor exclusion, anti-self-approval, deduplication, 45s visibility-aware polling, 90-day retention (`prune_old_notifications`), and extensible push channel stub + device registration (`NotificationDevice`).
 - **4-Category Django Admin Deletion Policy (`master_data/admin_mixins.py`)**:
   - All registered ERP models preserve database `PROTECT` constraints and explicitly inherit one of: Category 1 (`SafeCascadeAdminMixin`), Category 2 (`ProtectedMasterAdminMixin`), Category 3 (`ControlledServiceDeleteAdminMixin`), or Category 4 (`ImmutableAdminMixin` / `SingletonSettingsAdminMixin`).

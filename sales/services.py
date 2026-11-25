@@ -153,6 +153,46 @@ class CustomerAccountService:
         return tx, previous_balance
 
 
+def has_historical_sales_activity(customer) -> bool:
+    """Returns True if `customer` has any non-cancelled SalesOrder, non-zero CustomerAccount balance, or CustomerTransaction."""
+    if not customer or not getattr(customer, 'pk', None):
+        return False
+    return (
+        SalesOrder.objects.filter(customer_id=customer.pk).exclude(status='cancelled').exists()
+        or CustomerAccount.objects.filter(customer_id=customer.pk).exclude(current_balance=Decimal('0.00')).exists()
+        or CustomerTransaction.objects.filter(account__customer_id=customer.pk).exists()
+    )
+
+
+def validate_sales_customer_eligibility(customer, *, allow_existing_customer_id=None, allow_historical_lead=False, sales_order=None):
+    """
+    Enforces Customer-only eligibility across Sales workflows while preserving
+    legitimate historical Lead workflows:
+    - Always requires `customer` with `is_customer=True` and `status != 'inactive'`.
+    - New Sales Orders strictly require `status == 'customer'`.
+    - Editing an existing Sales Order allows keeping its current `lead` customer
+      (`customer.pk == allow_existing_customer_id`), while rejecting switching to
+      any other `lead` or `inactive` contact.
+    - Collections (`allow_historical_lead=True`) allow `status == 'customer'`,
+      and allow `status == 'lead'` when settling a linked `sales_order` or an
+      existing historical order/account balance/ledger.
+    """
+    if not customer or not getattr(customer, 'is_customer', False):
+        raise ValidationError("جهة الاتصال المحددة غير مصنفة كعميل.")
+    if customer.status == 'inactive':
+        raise ValidationError("لا يمكن إجراء عمليات بيع أو تحصيل لعميل غير نشط.")
+    if customer.status == 'customer':
+        return
+    if allow_existing_customer_id is not None and customer.pk == allow_existing_customer_id:
+        return
+    if allow_historical_lead and customer.status == 'lead':
+        if sales_order is not None and sales_order.customer_id == customer.pk:
+            return
+        if has_historical_sales_activity(customer):
+            return
+    raise ValidationError("يمكن اختيار العملاء المعتمدين فقط (حالة: عميل). لا يمكن اختيار عميل محتمل (Lead) لهذه العملية.")
+
+
 class SalesOrderService:
 
     @classmethod
@@ -161,6 +201,7 @@ class SalesOrderService:
         """
         Creates a new SalesOrder with line items, stock validation, and discount/grand_total computation.
         """
+        validate_sales_customer_eligibility(customer)
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر البيع.")
 
@@ -309,6 +350,8 @@ class SalesOrderService:
         """
         if order.status in ['preparing', 'delivered', 'invoiced', 'cancelled']:
             raise ValidationError(f"لا يمكن تعديل أمر البيع في حالته الحالية: {order.get_status_display()}.")
+
+        validate_sales_customer_eligibility(customer, allow_existing_customer_id=order.customer_id)
 
         if not items_data:
             raise ValidationError("يجب إضافة صنف واحد على الأقل في أمر البيع.")
@@ -974,9 +1017,16 @@ class CollectionService:
         6. Lowers Customer debt balance.
         7. Records audit log.
         """
+        validate_sales_customer_eligibility(
+            customer,
+            allow_historical_lead=True,
+            sales_order=sales_order,
+        )
         amount = Decimal(str(amount))
         if amount <= 0:
             raise ValidationError("قيمة التحصيل يجب أن تكون أكبر من الصفر.")
+
+        validate_sales_customer_eligibility(customer, allow_historical_lead=True, sales_order=sales_order)
 
         if sales_order:
             if sales_order.customer_id != customer.id:

@@ -1016,5 +1016,115 @@ class SupplierActivationServiceTests(TestCase):
         self.assertEqual(contact.status, 'customer')
 
 
+class ContactStatusSyncCommandTests(TestCase):
+    """Tests for `python manage.py sync_contact_statuses`."""
+
+    def test_sync_contact_statuses_updates_status_and_optionally_adds_missing(self):
+        import os
+        import tempfile
+        from io import StringIO
+        from django.core.management import call_command
+        from sales.models import CustomerAccount
+
+        gov = Area.objects.create(code='15', name='محافظة الفيوم', area_type='governorate')
+
+        c_uuid_to_lead = Contact.objects.create(
+            serial_num=90001, name='صيدلية الاختبار 1', code='T-01', mobile='01000000001',
+            is_customer=True, is_supplier=False, status='customer',
+            custom_values={'source_uuid': 'uuid-001'},
+        )
+        c_uuid_to_inactive = Contact.objects.create(
+            serial_num=90002, name='عيادة الاختبار 2', code='T-02', mobile='01000000002',
+            is_customer=True, is_supplier=False, status='customer',
+            custom_values={'source_uuid': 'uuid-002'},
+        )
+        c_fallback = Contact.objects.create(
+            serial_num=90003, name='صيدلية أحمد', code='T-03', mobile='01000000003',
+            is_customer=True, is_supplier=False, status='customer',
+            custom_values={},
+        )
+        c_collision = Contact.objects.create(
+            serial_num=90004, name='عميل محلي مختلف', code='T-04', mobile='01000000004',
+            is_customer=True, is_supplier=False, status='customer',
+            custom_values={},
+        )
+        c_supplier_blank = Contact.objects.create(
+            serial_num=90005, name='مورد غير نشط', code='', mobile='01000000005',
+            is_customer=False, is_supplier=True, status='customer',
+            custom_values={'source_uuid': 'uuid-005'},
+        )
+
+        orig_updated_at = c_uuid_to_lead.updated_at
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([
+            'المعرف', 'الاسم', 'مسلسل', 'الكود', 'حالة العميل - الكود', 'حالة العميل - الاسم',
+            'المنطقة - الكود', 'المنطقة - الاسم', 'المنطقة - المنطقة الرئيسية - الكود', 'المنطقة - المنطقة الرئيسية - الاسم',
+            'المنطقة - المجموعة', 'العنوان الرئيسي - الاسم', 'العنوان الرئيسي - العنوان',
+            'العنوان الرئيسي - الموقع - الإحداثيات', 'الموبايل', 'تصنيف العميل', 'التخصص', 'نوع الاكونت',
+        ])
+        ws.append(['uuid-001', 'اسم مختلف تماما', 90001, 'T-01', 'Customers:status:lead', 'Lead', '', '', '', '', '', '', '', '', '', '', '', 'Pharmacy'])
+        ws.append(['uuid-002', 'عيادة الاختبار 2', 90002, 'T-02', 'Customers:status:inactive', 'Inactive', '', '', '', '', '', '', '', '', '', '', '', 'Clinic'])
+        ws.append(['uuid-003', 'صيدليه احمد', 90003, 'T-03', 'Customers:status:lead', 'Lead', '', '', '', '', '', '', '', '', '', '', '', 'Pharmacy'])
+        ws.append(['uuid-004', 'اسم إكسل متصادم', 90004, 'X-99', 'Customers:status:lead', 'Lead', '', '', '', '', '', '', '', '', '', '', '', 'Clinic'])
+        ws.append(['uuid-005', 'مورد غير نشط', 90005, '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
+        ws.append(['uuid-new-999', 'عميل جديد مضاف', 99999, 'N-999', 'Customers:status:lead', 'Lead', 'Senro', 'سنرو', '15', 'محافظة الفيوم', 'Fayoum', 'سنرو', 'بجوار الوحدة', '29.360775,30.752617', '201012345678', 'B', 'Clinic', 'Clinic'])
+        ws.append(['uuid-new-blank', 'عميل جديد بدون حالة', 99998, '', '', '', '', '', '15', 'محافظة الفيوم', '', '', '', '', '', '', '', 'Pharmacy'])
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix='.xlsx')
+        os.close(tmp_fd)
+        try:
+            wb.save(tmp_path)
+            wb.close()
+
+            # 1. Dry run leaves DB unchanged
+            out_dry = StringIO()
+            call_command('sync_contact_statuses', file=tmp_path, add_missing=True, dry_run=True, stdout=out_dry)
+            c_uuid_to_lead.refresh_from_db()
+            self.assertEqual(c_uuid_to_lead.status, 'customer')
+            self.assertEqual(Contact.objects.count(), 5)
+            self.assertIn('[DRY-RUN]', out_dry.getvalue())
+
+            # 2. Live run without --add-missing updates status only (including blank -> inactive), creates 0 rows
+            call_command('sync_contact_statuses', file=tmp_path, stdout=StringIO())
+            for obj in (c_uuid_to_lead, c_uuid_to_inactive, c_fallback, c_collision, c_supplier_blank):
+                obj.refresh_from_db()
+
+            self.assertEqual(c_uuid_to_lead.status, 'lead')
+            self.assertEqual(c_uuid_to_inactive.status, 'inactive')
+            self.assertEqual(c_fallback.status, 'lead')
+            self.assertEqual(c_collision.status, 'customer')
+            self.assertEqual(c_supplier_blank.status, 'inactive')
+            self.assertEqual(Contact.objects.count(), 5)
+            self.assertEqual(c_uuid_to_lead.updated_at, orig_updated_at)
+
+            # 3. Live run with --add-missing adds the 2 non-colliding new rows (skips serial 90004 collision)
+            call_command('sync_contact_statuses', file=tmp_path, add_missing=True, stdout=StringIO())
+            self.assertEqual(Contact.objects.count(), 7)
+            added_lead = Contact.objects.get(serial_num=99999)
+            added_blank = Contact.objects.get(serial_num=99998)
+            self.assertEqual(added_lead.status, 'lead')
+            self.assertEqual(added_blank.status, 'inactive')
+            self.assertEqual(added_lead.mobile, '01012345678')
+            self.assertEqual(added_lead.brick.name, 'سنرو')
+            self.assertEqual(added_lead.brick.parent, gov)
+            self.assertTrue(added_lead.addresses.filter(is_main=True, street_address='بجوار الوحدة').exists())
+            self.assertTrue(added_lead.communication_methods.filter(method_type='mobile', value='01012345678').exists())
+            self.assertTrue(CustomerAccount.objects.filter(customer=added_lead).exists())
+            self.assertTrue(CustomerAccount.objects.filter(customer=added_blank).exists())
+
+            # 4. Second run with --add-missing is completely idempotent
+            out_idem = StringIO()
+            call_command('sync_contact_statuses', file=tmp_path, add_missing=True, stdout=out_idem)
+            self.assertIn('created: 0', out_idem.getvalue())
+            self.assertIn('updated: 0', out_idem.getvalue())
+            self.assertEqual(Contact.objects.count(), 7)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
+
 
 

@@ -185,7 +185,8 @@ class VisitAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
     readonly_fields = (
         'created_at', 'updated_at', 'started_at', 'ended_at',
         'edited_by_creator', 'last_edited_by', 'last_edited_at',
-        'duration', 'customer_latitude_snapshot', 'customer_longitude_snapshot',
+        'duration', 'contact_address_title', 'contact_address_text',
+        'customer_latitude_snapshot', 'customer_longitude_snapshot',
         'gps_integrity_status', 'gps_integrity_checked_at',
         'gps_suspicion_signals', 'gps_suspicion_reason',
         'gps_integrity_context', 'gps_detector_version',
@@ -212,6 +213,8 @@ class VisitAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
         }),
         ('التحقق والموقع الجغرافي', {
             'fields': (
+                ('contact_address',),
+                ('contact_address_title', 'contact_address_text'),
                 ('latitude', 'longitude'),
                 ('device_accuracy', 'distance', 'allowed_distance', 'distance_discrepancy'),
                 ('location_verified', 'location_status', 'verification_status'),

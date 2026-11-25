@@ -311,8 +311,8 @@ def sales_order_create(request):
         customer = get_object_or_404(Contact, id=customer_id)
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
-        if not customer.is_customer or customer.status == 'inactive':
-            return render_form_error("جهة الاتصال المحددة غير مصنفة كعميل نشط.")
+        if not customer.is_customer or customer.status != 'customer':
+            return render_form_error("يمكن إنشاء أمر بيع للعملاء المعتمدين فقط (حالة: عميل).")
 
         try:
             order = SalesOrderService.create_order(
@@ -441,6 +441,8 @@ def sales_order_edit(request, pk):
                 selected_id=customer_id,
                 limit=100,
             )
+            if order.customer and order.customer.status != 'inactive' and not any(c.id == order.customer_id for c in customers):
+                customers = [order.customer] + list(customers)
             warehouses = get_bounded_select_options(
                 ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales'),
                 selected_id=warehouse_id,
@@ -477,8 +479,8 @@ def sales_order_edit(request, pk):
         customer = get_object_or_404(Contact, id=customer_id)
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "غير مصرح لك بإنشاء أمر بيع لعميل خارج نطاق منطقتك الجغرافية.")
-        if not customer.is_customer or (customer.pk != order.customer_id and customer.status == 'inactive'):
-            return render_form_error("جهة الاتصال المحددة غير مصنفة كعميل نشط.")
+        if not customer.is_customer or customer.status == 'inactive' or (customer.pk != order.customer_id and customer.status != 'customer'):
+            return render_form_error("لا يمكن ربط أمر البيع إلا بعميل فعلي (Customer) نشط.")
 
         try:
             order = SalesOrderService.update_order(
@@ -511,6 +513,8 @@ def sales_order_edit(request, pk):
         selected_id=order.customer_id,
         limit=100,
     )
+    if order.customer and order.customer.status != 'inactive' and not any(c.id == order.customer_id for c in customers):
+        customers = [order.customer] + list(customers)
     warehouses = get_bounded_select_options(
         ScopeResolutionService.get_scoped_choices(request.user, 'warehouses', 'sales'),
         selected_id=order.source_warehouse_id,
@@ -852,9 +856,6 @@ def collection_create(request):
 
         if not can_user_access_object(request.user, customer, 'view'):
             return render_forbidden_response(request, "لا يمكنك تسجيل تحصيل لعميل خارج نطاقك الجغرافي أو صلاحياتك.")
-        if not customer.is_customer or customer.status == 'inactive':
-            messages.error(request, "جهة الاتصال المحددة غير مصنفة كعميل نشط.")
-            return redirect('collection_create')
         if not can_user_access_object(request.user, vault, 'deposit'):
             return render_forbidden_response(request, "لا يمكنك الإيداع في خزنة غير مخصصة لك.")
 
@@ -863,6 +864,13 @@ def collection_create(request):
             sales_order = get_object_or_404(SalesOrder, id=sales_order_id)
             if not can_user_access_object(request.user, sales_order, 'view'):
                 return render_forbidden_response(request, "لا يمكنك تسجيل تحصيل لأمر بيع خارج نطاق صلاحياتك.")
+
+        from .services import validate_sales_customer_eligibility
+        try:
+            validate_sales_customer_eligibility(customer, allow_historical_lead=True, sales_order=sales_order)
+        except ValidationError as e:
+            messages.error(request, str(e.message if hasattr(e, 'message') else e))
+            return redirect('collection_create')
 
         try:
             col = CollectionService.record_collection(
@@ -910,6 +918,14 @@ def collection_create(request):
     selected_customer_account = None
     if selected_customer_id:
         cust_obj = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales').filter(id=selected_customer_id).first()
+        if not cust_obj:
+            # Preserve historical Lead settlement when navigating from an existing order or balance
+            from .services import has_historical_sales_activity
+            cand_cust = Contact.objects.filter(id=selected_customer_id, is_customer=True, status='lead').first()
+            if cand_cust and can_user_access_object(request.user, cand_cust, 'view') and has_historical_sales_activity(cand_cust):
+                cust_obj = cand_cust
+                if not any(c.id == cand_cust.id for c in customers):
+                    customers = [cand_cust] + list(customers)
         if cust_obj:
             selected_customer_account = CustomerAccount.get_or_create_for_customer(cust_obj)
             orders_qs = SalesOrder.with_payment_totals(
@@ -2013,9 +2029,18 @@ def sales_order_return_details_api(request, order_id):
 def sales_customers_search_api(request):
     """Scoped Arabic-normalized smart-search API for Sales customer selectors."""
     q = (request.GET.get('q') or request.GET.get('search') or '').strip()
+    scope_model = (request.GET.get('scope_model') or '').strip().lower()
     limit = parse_search_limit(request)
 
-    qs = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
+    if scope_model == 'customeraccount':
+        scoped_acc_customer_ids = get_scoped_queryset(
+            CustomerAccount.objects.all(), request.user, 'customeraccount'
+        ).values_list('customer_id', flat=True)
+        qs = Contact.objects.filter(
+            id__in=scoped_acc_customer_ids, is_customer=True, status='customer'
+        ).select_related('area', 'brick').order_by('name')
+    else:
+        qs = ScopeResolutionService.get_scoped_choices(request.user, 'customers', 'sales')
     if q:
         qs = filter_by_arabic_search(
             qs,

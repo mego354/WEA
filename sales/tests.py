@@ -1521,3 +1521,285 @@ class Phase2SalesListAndIntegerQtyTests(TestCase):
         self.assertEqual(print_resp.status_code, 200)
         self.assertContains(print_resp, self.prod.sku_code)
 
+
+class CustomerOnlySelectorsAndHistoricalLeadTests(TestCase):
+    """Comprehensive tests for Requirement C:
+    - Customer-only selectors & APIs across Sales / Returns / Collections / Accounting
+    - Visits picker still allows Lead contacts
+    - Strict rejection of Lead/Inactive on new Sales Orders
+    - Preserved historical Lead workflows (order edit without changing customer, returns, collections, lists, Excel import)
+    """
+
+    def setUp(self):
+        self.superadmin_role = Role.objects.get(name='superadmin')
+        self.superadmin = User.objects.create_user(
+            username='cust_only_sa@wea.com', email='cust_only_sa@wea.com',
+            password='Password123!', is_superuser=True, is_staff=True, role=self.superadmin_role,
+        )
+        self.cairo = Area.objects.create(name='القاهرة_C', code='CAI_C')
+        self.nasr = Area.objects.create(name='نصر_C', code='NSR_C', parent=self.cairo)
+        self.wh = Warehouse.objects.create(name='مخزن C', code='WH-C', area=self.cairo, is_main=True)
+        self.vault = Vault.objects.create(serial_num=9901, name='خزنة C', area=self.cairo)
+        self.cat = ProductCategory.objects.create(name='فئة C')
+        self.prod = Product.objects.create(
+            name='دواء اختبار C', sku_code='PRD-C-01', category=self.cat,
+            retail_price=Decimal('100.00'), default_purchase_cost=Decimal('50.00'),
+            is_active=True, sellable=True,
+        )
+        InventoryStock.objects.create(
+            warehouse=self.wh, product=self.prod,
+            qty_on_hand=Decimal('100.00'), qty_reserved=Decimal('0.00'),
+            product_cost=Decimal('50.00'),
+        )
+
+        self.active_customer = Contact.objects.create(
+            name='صيدلية عميل فعلي', code='CUST-ACTIVE', is_customer=True, status='customer',
+            area=self.cairo, brick=self.nasr, created_by=self.superadmin,
+        )
+        self.lead_with_history = Contact.objects.create(
+            name='صيدلية محتمل تاريخي', code='LEAD-HIST', is_customer=True, status='lead',
+            area=self.cairo, brick=self.nasr, created_by=self.superadmin,
+        )
+        self.lead_fresh = Contact.objects.create(
+            name='صيدلية محتمل جديد', code='LEAD-NEW', is_customer=True, status='lead',
+            area=self.cairo, brick=self.nasr, created_by=self.superadmin,
+        )
+        self.inactive_contact = Contact.objects.create(
+            name='صيدلية غير نشطة', code='CUST-INACT', is_customer=True, status='inactive',
+            area=self.cairo, brick=self.nasr, created_by=self.superadmin,
+        )
+
+        # Historical invoiced SalesOrder belonging to `lead_with_history`
+        self.hist_invoiced_order = SalesOrder.objects.create(
+            order_number='SO-HIST-LEAD-01',
+            customer=self.lead_with_history,
+            source_warehouse=self.wh,
+            status='invoiced',
+            order_date='2026-11-01',
+            grand_total=Decimal('500.00'),
+            created_by=self.superadmin,
+        )
+        self.hist_invoiced_item = SalesOrderItem.objects.create(
+            order=self.hist_invoiced_order, product=self.prod,
+            quantity=Decimal('5.00'), unit_price=Decimal('100.00'),
+        )
+        acc = CustomerAccount.get_or_create_for_customer(self.lead_with_history)
+        acc.current_balance = Decimal('500.00')
+        acc.save(update_fields=['current_balance'])
+
+        # Historical editable pending SalesOrder belonging to `lead_with_history`
+        self.hist_pending_order = SalesOrder.objects.create(
+            order_number='SO-HIST-LEAD-PEND',
+            customer=self.lead_with_history,
+            source_warehouse=self.wh,
+            status='pending',
+            order_date='2026-11-10',
+            grand_total=Decimal('200.00'),
+            created_by=self.superadmin,
+        )
+        SalesOrderItem.objects.create(
+            order=self.hist_pending_order, product=self.prod,
+            quantity=Decimal('2.00'), unit_price=Decimal('100.00'),
+        )
+
+        self.client.force_login(self.superadmin)
+
+    def test_sales_selectors_return_only_customers_while_visits_allows_leads(self):
+        from accounts.scope_service import ScopeResolutionService
+
+        choices = list(ScopeResolutionService.get_scoped_choices(self.superadmin, 'customers', 'sales'))
+        choice_ids = [c.id for c in choices]
+        self.assertIn(self.active_customer.id, choice_ids)
+        self.assertNotIn(self.lead_with_history.id, choice_ids)
+        self.assertNotIn(self.lead_fresh.id, choice_ids)
+        self.assertNotIn(self.inactive_contact.id, choice_ids)
+
+        # sales_customers_search_api excludes lead & inactive
+        for code in ('LEAD-HIST', 'LEAD-NEW', 'CUST-INACT'):
+            resp = self.client.get(reverse('sales_customers_search_api') + f'?q={code}')
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json()['results'], [])
+
+        resp_cust = self.client.get(reverse('sales_customers_search_api') + '?q=CUST-ACTIVE')
+        self.assertEqual(len(resp_cust.json()['results']), 1)
+
+        # scope_model=customeraccount also enforces status='customer' (excludes lead & inactive)
+        CustomerAccount.get_or_create_for_customer(self.active_customer)
+        resp_acc_cust = self.client.get(reverse('sales_customers_search_api') + '?scope_model=customeraccount&q=CUST-ACTIVE')
+        self.assertEqual(len(resp_acc_cust.json()['results']), 1)
+        resp_acc_lead = self.client.get(reverse('sales_customers_search_api') + '?scope_model=customeraccount&q=LEAD-HIST')
+        self.assertEqual(resp_acc_lead.json()['results'], [])
+
+        # Visits search API (`customers_search_api`) MUST still return lead contacts
+        resp_visit_lead = self.client.get(reverse('customers_search_api') + '?q=LEAD-NEW')
+        self.assertEqual(resp_visit_lead.status_code, 200)
+        self.assertEqual(len(resp_visit_lead.json()['results']), 1)
+
+    def test_new_sales_order_rejects_lead_and_inactive_and_accepts_customer(self):
+        # Service layer rejects lead & inactive
+        for bad_contact in (self.lead_fresh, self.lead_with_history, self.inactive_contact):
+            with self.assertRaises(ValidationError):
+                SalesOrderService.create_order(
+                    customer=bad_contact, source_warehouse=self.wh,
+                    order_date='2026-11-20',
+                    items_data=[{'product': self.prod, 'quantity': Decimal('1'), 'unit_price': Decimal('100')}],
+                    user=self.superadmin,
+                )
+
+        # View POST rejects lead even via manipulated POST
+        before_cnt = SalesOrder.objects.count()
+        res_bad = self.client.post(reverse('sales_order_create'), {
+            'customer': self.lead_fresh.id,
+            'warehouse': self.wh.id,
+            'order_date': '2026-11-20',
+            'product_id[]': [str(self.prod.id)],
+            'quantity[]': ['1'],
+            'unit_price[]': ['100'],
+            'discount_percentage[]': ['0'],
+        })
+        self.assertEqual(res_bad.status_code, 200)
+        self.assertEqual(SalesOrder.objects.count(), before_cnt)
+
+        # View POST accepts active customer
+        res_ok = self.client.post(reverse('sales_order_create'), {
+            'customer': self.active_customer.id,
+            'warehouse': self.wh.id,
+            'order_date': '2026-11-20',
+            'product_id[]': [str(self.prod.id)],
+            'quantity[]': ['1'],
+            'unit_price[]': ['100'],
+            'discount_percentage[]': ['0'],
+        })
+        self.assertEqual(res_ok.status_code, 302)
+        self.assertEqual(SalesOrder.objects.count(), before_cnt + 1)
+
+    def test_edit_historical_lead_sales_order_rules(self):
+        # 1. GET edit page includes existing historical lead as selectable option
+        res_get = self.client.get(reverse('sales_order_edit', args=[self.hist_pending_order.pk]))
+        self.assertEqual(res_get.status_code, 200)
+        self.assertContains(res_get, self.lead_with_history.name)
+
+        # 2. POST keeping the same historical lead succeeds
+        res_same = self.client.post(reverse('sales_order_edit', args=[self.hist_pending_order.pk]), {
+            'customer': self.lead_with_history.id,
+            'warehouse': self.wh.id,
+            'order_date': '2026-11-10',
+            'notes': 'تعديل ملاحظة فقط',
+            'product_id[]': [str(self.prod.id)],
+            'quantity[]': ['3'],
+            'unit_price[]': ['100'],
+            'discount_percentage[]': ['0'],
+        })
+        self.assertEqual(res_same.status_code, 302)
+        self.hist_pending_order.refresh_from_db()
+        self.assertEqual(self.hist_pending_order.customer_id, self.lead_with_history.id)
+        self.assertEqual(self.hist_pending_order.grand_total, Decimal('300.00'))
+
+        # 3. POST changing to a DIFFERENT lead or inactive is strictly rejected
+        for other_bad in (self.lead_fresh, self.inactive_contact):
+            res_reject = self.client.post(reverse('sales_order_edit', args=[self.hist_pending_order.pk]), {
+                'customer': other_bad.id,
+                'warehouse': self.wh.id,
+                'order_date': '2026-11-10',
+                'product_id[]': [str(self.prod.id)],
+                'quantity[]': ['2'],
+                'unit_price[]': ['100'],
+                'discount_percentage[]': ['0'],
+            })
+            self.assertEqual(res_reject.status_code, 200)
+            self.hist_pending_order.refresh_from_db()
+            self.assertEqual(self.hist_pending_order.customer_id, self.lead_with_history.id)
+
+        # 4. POST changing to a valid status='customer' succeeds
+        res_upgrade = self.client.post(reverse('sales_order_edit', args=[self.hist_pending_order.pk]), {
+            'customer': self.active_customer.id,
+            'warehouse': self.wh.id,
+            'order_date': '2026-11-10',
+            'product_id[]': [str(self.prod.id)],
+            'quantity[]': ['2'],
+            'unit_price[]': ['100'],
+            'discount_percentage[]': ['0'],
+        })
+        self.assertEqual(res_upgrade.status_code, 302)
+        self.hist_pending_order.refresh_from_db()
+        self.assertEqual(self.hist_pending_order.customer_id, self.active_customer.id)
+
+    def test_historical_lead_sales_return_and_collection_preserved(self):
+        # 1. Sales return against historical lead order succeeds
+        ret = SalesReturnOrderService.create_return_order(
+            sales_order=self.hist_invoiced_order,
+            target_warehouse=self.wh,
+            order_date='2026-11-20',
+            items_data=[{
+                'original_item': self.hist_invoiced_item,
+                'product': self.prod,
+                'quantity': Decimal('1'),
+                'unit_price': Decimal('100.00'),
+                'condition': 'resalable',
+            }],
+            user=self.superadmin,
+            notes='مرتجع على فاتورة تاريخية',
+        )
+        self.assertEqual(ret.customer_id, self.lead_with_history.id)
+
+        # 2. Collection against historical lead order succeeds (view GET + POST)
+        res_get = self.client.get(reverse('collection_create') + f'?order_id={self.hist_invoiced_order.id}')
+        self.assertEqual(res_get.status_code, 200)
+        self.assertContains(res_get, self.lead_with_history.name)
+
+        col = CollectionService.record_collection(
+            customer=self.lead_with_history,
+            vault=self.vault,
+            amount=Decimal('150.00'),
+            user=self.superadmin,
+            sales_order=self.hist_invoiced_order,
+        )
+        self.assertEqual(col.customer_id, self.lead_with_history.id)
+
+        # 3. Collection for fresh lead with NO history or inactive contact is rejected
+        for bad_c in (self.lead_fresh, self.inactive_contact):
+            with self.assertRaises(ValidationError):
+                CollectionService.record_collection(
+                    customer=bad_c,
+                    vault=self.vault,
+                    amount=Decimal('50.00'),
+                    user=self.superadmin,
+                )
+
+        # 4. Historical lead records remain visible in list views
+        self.assertContains(self.client.get(reverse('sales_orders_list')), self.lead_with_history.name)
+        self.assertContains(self.client.get(reverse('collections_list')), self.lead_with_history.name)
+        self.assertContains(self.client.get(reverse('accounting_customers_list')), self.lead_with_history.name)
+
+    def test_collections_excel_importer_customer_and_historical_lead_rules(self):
+        from master_data.excel_importers import CollectionsExcelImporter
+
+        imp = CollectionsExcelImporter(self.superadmin)
+        imp.prepare_context()
+
+        # Active customer -> valid
+        _, status_ok, errs_ok = imp.validate_row(2, {
+            'customer': 'CUST-ACTIVE', 'vault': self.vault.name, 'amount': '100',
+        }, {})
+        self.assertEqual(status_ok, 'create', errs_ok)
+
+        # Historical lead with existing order -> valid
+        _, status_lead_ok, errs_lead_ok = imp.validate_row(3, {
+            'customer': 'LEAD-HIST', 'vault': self.vault.name, 'amount': '50',
+            'sales_order': self.hist_invoiced_order.order_number,
+        }, {})
+        self.assertEqual(status_lead_ok, 'create', errs_lead_ok)
+
+        # Fresh lead without history -> error
+        _, status_lead_bad, _ = imp.validate_row(4, {
+            'customer': 'LEAD-NEW', 'vault': self.vault.name, 'amount': '50',
+        }, {})
+        self.assertEqual(status_lead_bad, 'error')
+
+        # Inactive contact -> error
+        _, status_inact, _ = imp.validate_row(5, {
+            'customer': 'CUST-INACT', 'vault': self.vault.name, 'amount': '50',
+        }, {})
+        self.assertEqual(status_inact, 'error')
+
+
