@@ -75,16 +75,13 @@
                         class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
                     <option value="">-- تحصيل حر / بدون ربط بأمر محدد --</option>
                     {% for o in orders %}
-                    {% with bal=o.outstanding_balance %}
                     <option value="{{ o.id }}"
                             data-customer="{{ o.customer_id }}"
-                            data-outstanding="{{ bal|stringformat:'.2f' }}"
                             data-due="{{ o.due_date|date:'Y-m-d'|default:'' }}"
                             data-payment-status="{{ o.payment_status }}"
                             {% if selected_order_id == o.id %}selected{% endif %}>
-                        أمر بيع {{ o.order_number }} - الإجمالي: {{ o.grand_total|floatformat:2 }} ج.م - المتبقي: {{ bal|floatformat:2 }} ج.م{% if o.due_date %} (استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
+                        أمر بيع {{ o.order_number }} - الإجمالي: {{ o.grand_total|floatformat:2 }} ج.م{% if o.due_date %} (استحقاق: {{ o.due_date|date:'Y-m-d' }}){% endif %}
                     </option>
-                    {% endwith %}
                     {% endfor %}
                 </select>
 

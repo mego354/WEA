@@ -174,7 +174,7 @@
                             <div>{{ tx.description }}</div>
                             {% if tx.is_reversed %}
                             <span class="inline-block mt-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                تم عكسها بواسطة {{ tx.reversed_by.get_full_name|default:tx.reversed_by.username }}
+                                تم عكسها بواسطة {% if tx.reversed_by %}{{ tx.reversed_by.get_full_name|default:tx.reversed_by.username }}{% else %}النظام{% endif %}
                             </span>
                             {% elif tx.reference_type == 'reversal' %}
                             <span class="inline-block mt-1 text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
@@ -182,7 +182,7 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td data-col="created_by" class="py-3.5 px-4 text-slate-600">{{ tx.created_by.get_full_name|default:tx.created_by.username }}</td>
+                        <td data-col="created_by" class="py-3.5 px-4 text-slate-600">{% if tx.created_by %}{{ tx.created_by.get_full_name|default:tx.created_by.username }}{% else %}النظام{% endif %}</td>
                         <td data-col="created_at" class="py-3.5 px-4 font-mono text-slate-500">{{ tx.created_at|date:"Y-m-d H:i" }}</td>
                         <td data-col="status" class="py-3.5 px-4 text-center">
                             {% if tx.is_reversed %}

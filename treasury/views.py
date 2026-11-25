@@ -362,6 +362,91 @@ def accounting_vendor_zero_balance(request, pk):
     return redirect('accounting_vendors_list')
 
 
+@require_permission('treasury:vendors/zero_balance')
+def accounting_vendor_settle(request, pk):
+    """Non-cash vendor account settlement / adjustment — zero vault impact, preserves order payment_status."""
+    if request.method != 'POST':
+        return redirect('accounting_vendors_list')
+
+    account = get_object_or_404(VendorAccount.objects.select_related('supplier'), pk=pk)
+    if not (can_user_access_object(request.user, account, 'manage') or ScopeResolutionService.can_user_access_supplier(request.user, account.supplier)):
+        return render_forbidden_response(request, "غير مصرح لك بتسوية حساب مورد خارج نطاق اختصاصك.")
+
+    amount_raw = (request.POST.get('amount') or '').strip()
+    direction = (request.POST.get('direction') or 'debit').strip()
+    reason_note = (request.POST.get('reason') or '').strip()
+    reference = (request.POST.get('reference') or '').strip()
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    try:
+        amount = Decimal(amount_raw)
+    except Exception:
+        err_msg = "يرجى إدخال مبلغ تسوية صحيح."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+        return redirect('accounting_vendors_list')
+
+    try:
+        tx, prev_bal = TreasuryService.record_vendor_settlement(
+            supplier=account.supplier,
+            amount=amount,
+            direction=direction,
+            user=request.user,
+            reason_note=reason_note,
+            reference=reference,
+            request=request,
+        )
+        msg = (
+            f"تم تسجيل تسوية غير نقدية للمورد {account.supplier.name} بمبلغ {amount:,.2f} ج.م "
+            f"(الرصيد: {prev_bal:,.2f} ← {tx.running_balance:,.2f} ج.م، بدون تأثير على الخزن)."
+        )
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'new_balance': str(tx.running_balance),
+                'transaction_serial': tx.serial,
+            })
+        messages.success(request, msg)
+    except ValidationError as e:
+        err_msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+
+    return redirect('accounting_vendors_list')
+
+
+@require_permission('treasury:vendors/zero_balance')
+def vendor_settlement_reverse(request, pk):
+    """Reverses a non-cash vendor settlement/adjustment transaction (zero vault impact)."""
+    if request.method != 'POST':
+        return redirect('vendor_transactions_list')
+
+    tx = get_object_or_404(VendorTransaction.objects.select_related('account', 'account__supplier'), pk=pk)
+    if not (can_user_access_object(request.user, tx.account, 'manage') or ScopeResolutionService.can_user_access_supplier(request.user, tx.account.supplier)):
+        return render_forbidden_response(request, "غير مصرح لك بعكس تسوية لمورد خارج نطاق اختصاصك.")
+
+    reason_note = (request.POST.get('reason') or '').strip()
+    try:
+        rev_tx = TreasuryService.reverse_vendor_settlement(
+            tx_id=tx.pk,
+            user=request.user,
+            reason_note=reason_note,
+            request=request,
+        )
+        messages.success(request, f"تم عكس قيد التسوية #{tx.serial} بنجاح (قيد العكس #{rev_tx.serial}).")
+    except ValidationError as e:
+        err_msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+        messages.error(request, err_msg)
+
+    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER')
+    if next_url and next_url.startswith('/'):
+        return redirect(next_url)
+    return redirect('vendor_transactions_list')
+
+
 @require_permission('treasury:vendors/transactions')
 def vendor_transactions_list(request):
     """

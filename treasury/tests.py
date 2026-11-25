@@ -586,16 +586,25 @@ class VendorPaymentRequestWorkflowTests(TestCase):
         self.assertEqual(req.status, 'pending')
         self.assertEqual(req.amount, Decimal('400.00'))
 
-        # 2. Request for 700 LE exceeds 600 LE outstanding balance
-        with self.assertRaises(ValidationError) as ctx:
+        # 2. Account-level Single Source of Truth: request above single PO total is allowed,
+        # while non-positive amounts remain rejected.
+        req2 = VendorPaymentRequestService.create_request(
+            supplier=self.supplier,
+            amount=Decimal('700.00'),
+            preferred_vault=self.vault,
+            purchase_order=self.po,
+            user=self.accountant
+        )
+        self.assertEqual(req2.amount, Decimal('700.00'))
+
+        with self.assertRaises(ValidationError):
             VendorPaymentRequestService.create_request(
                 supplier=self.supplier,
-                amount=Decimal('700.00'),
+                amount=Decimal('0.00'),
                 preferred_vault=self.vault,
                 purchase_order=self.po,
                 user=self.accountant
             )
-        self.assertIn('يتجاوز الرصيد المستحق', str(ctx.exception))
 
     def test_vendor_payment_request_anti_self_approval(self):
         """User who created payment request cannot approve or reject it."""

@@ -384,6 +384,23 @@ Historical and operational ERP records from the Bricks-Rep WEA exports (`wea dat
 - **4-Category Django Admin Deletion Policy (`master_data/admin_mixins.py`)**:
   - All registered ERP models preserve database `PROTECT` constraints and explicitly inherit one of: Category 1 (`SafeCascadeAdminMixin`), Category 2 (`ProtectedMasterAdminMixin`), Category 3 (`ControlledServiceDeleteAdminMixin`), or Category 4 (`ImmutableAdminMixin` / `SingletonSettingsAdminMixin`).
 
+---
+
+## 15. Account-Level Financial Single Source of Truth, Non-Cash Settlements & Safe Reconstruction
+
+- **Single Source of Truth**:
+  - `CustomerAccount` (`current_balance`, `overdue_balance`, `due_this_month_balance`) + `CustomerTransaction` is the sole authoritative source for customer receivables (`Contact.total_outstanding_balance` delegates directly to `CustomerAccount.current_balance`).
+  - `VendorAccount` + `VendorTransaction` is the sole authoritative source for vendor payables.
+  - Independent per-order debt displays, filters (`remaining_min`/`remaining_max`), PDF order balance-due rows, and per-order collection/payment/payment-request caps have been removed.
+- **100% Manual `payment_status`**:
+  - `SalesOrder.payment_status` and `PurchaseOrder.payment_status` are strictly manual administrative tags and are never auto-updated by collections, vendor payments, or settlements.
+- **Non-Cash Account Settlements & Reversals**:
+  - Customer settlements (`CustomerAccountService.record_settlement` / `reverse_settlement`, URLs `accounting_customer_settle` & `customer_settlement_reverse`) and Vendor settlements (`TreasuryService.record_vendor_settlement` / `reverse_vendor_settlement`, URLs `accounting_vendor_settle` & `vendor_settlement_reverse`) post `reason='settlement'` ledger entries with **strictly zero vault, cash, or inventory impact**, full `SecurityAuditLog` entries, and double-reversal protection (`is_reversed`, `reversal_transaction`).
+- **Any-Vault Collections**:
+  - `CollectionService.record_collection` accepts `cash`, `cheque`, or `bank_transfer` into any active authorized `Vault` chosen by the user.
+- **Safe Financial Reconstruction (`reconstruct_wea_financials`)**:
+  - `python manage.py reconstruct_wea_financials` defaults to `--dry-run` (zero DB mutations), supports `--backup-only` (creates an integrity-verified SQLite online backup + `SalesReturnOrderItem` JSON snapshot in `backups/`), and requires `--apply --confirm-reset` before resetting transactional financial/inventory tables and reconstructing from verified `wea data/*.xlsx` files.
+
 
 
 

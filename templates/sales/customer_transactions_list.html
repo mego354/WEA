@@ -193,7 +193,22 @@
                             {{ tx.transaction_date|date:"Y-m-d" }}
                         </td>
                         <td data-col="description" class="py-3.5 px-4 text-xs font-medium text-slate-700">
-                            {{ tx.description }}
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span>{{ tx.description }}</span>
+                                {% if tx.reason == 'settlement' or tx.reason == 'adjustment' %}
+                                <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">تسوية</span>
+                                {% endif %}
+                                {% if tx.is_reversed %}
+                                <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">معكوسة</span>
+                                {% elif tx.reason == 'settlement' or tx.reason == 'adjustment' %}
+                                {% if request.user|has_permission:'sales:customers/zero_balance' %}
+                                <form method="POST" action="{% url 'customer_settlement_reverse' tx.pk %}" class="inline" onsubmit="return confirm('تأكيد عكس قيد التسوية #{{ tx.serial }}؟');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold">عكس</button>
+                                </form>
+                                {% endif %}
+                                {% endif %}
+                            </div>
                         </td>
                         <td data-col="debit" class="py-3.5 px-4 text-left font-mono font-bold text-xs {% if tx.debit > 0 %}text-rose-600{% else %}text-slate-300{% endif %}">
                             {% if tx.debit > 0 %}{{ tx.debit|floatformat:2 }} ج.م{% else %}—{% endif %}

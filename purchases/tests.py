@@ -534,7 +534,8 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
         self.assertTrue(po.is_paid)
 
     def test_vendor_payment_overpayment_rejected(self):
-        """Attempting to pay more than the purchase order's outstanding balance must raise ValidationError."""
+        """Account-level Single Source of Truth: vendor payments are NOT capped by per-order debt,
+        but still reject non-positive amounts and cancelled purchase orders."""
         po = PurchaseOrderService.create_order(
             supplier=self.supplier,
             target_warehouse=self.warehouse,
@@ -542,18 +543,29 @@ class PurchaseOrderLifecycleAndSettlementTests(TestCase):
             items_data=[{'product': self.product, 'quantity': 10, 'unit_price': Decimal('40.00')}],
             user=self.accountant
         )
-        self.assertEqual(po.outstanding_balance, Decimal('400.00'))
+        self.assertEqual(po.grand_total, Decimal('400.00'))
 
-        with self.assertRaises(ValidationError) as ctx:
+        # Paying 500 EGP (e.g., covering opening balance + PO) succeeds without per-order cap
+        vp = TreasuryService.record_vendor_payment(
+            supplier=self.supplier,
+            vault=self.vault,
+            amount=Decimal('500.00'),
+            payment_method='cash',
+            user=self.accountant,
+            purchase_order=po
+        )
+        self.assertEqual(vp.amount, Decimal('500.00'))
+
+        # Zero / negative amount is still rejected
+        with self.assertRaises(ValidationError):
             TreasuryService.record_vendor_payment(
                 supplier=self.supplier,
                 vault=self.vault,
-                amount=Decimal('500.00'),
+                amount=Decimal('0.00'),
                 payment_method='cash',
                 user=self.accountant,
                 purchase_order=po
             )
-        self.assertIn('يتجاوز الرصيد المستحق', str(ctx.exception))
 
     def test_purchase_list_stats_respect_active_filters(self):
         PurchaseOrderService.create_order(

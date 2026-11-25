@@ -15,6 +15,7 @@ class CustomerAccount(models.Model):
     current_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الرصيد المدين المستحق (ج.م)")
     last_transaction_date = models.DateField(null=True, blank=True, verbose_name="تاريخ آخر معاملة")
     overdue_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="المديونية المتأخرة (ج.م)")
+    due_this_month_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="واجب السداد الشهر الحالي (ج.م)")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -40,10 +41,19 @@ class CustomerTransaction(models.Model):
         ('credit', 'دائن / Credit (تحصيل نقدية أو مردودات)'),
     ]
 
+    REASONS = [
+        ('sales', 'فاتورة بيع'),
+        ('collection', 'تحصيل نقدية'),
+        ('sales_return', 'مرتجع مبيعات'),
+        ('settlement', 'تسوية حساب'),
+        ('adjustment', 'تسوية / تصفير رصيد'),
+        ('opening', 'رصيد افتتاحي'),
+    ]
+
     serial = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم الحركة")
     account = models.ForeignKey(CustomerAccount, on_delete=models.CASCADE, related_name="transactions", verbose_name="حساب العميل")
     transaction_type = models.CharField(max_length=10, choices=TX_TYPES, verbose_name="نوع القيد")
-    reason = models.CharField(max_length=30, choices=[('sales', 'فاتورة بيع'), ('collection', 'تحصيل نقدية'), ('sales_return', 'مرتجع')], default='sales')
+    reason = models.CharField(max_length=30, choices=REASONS, default='sales')
     transaction_date = models.DateField(default=timezone.now, db_index=True, verbose_name="تاريخ القيد")
     due_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستحقاق")
     
@@ -52,6 +62,8 @@ class CustomerTransaction(models.Model):
     running_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0.00, verbose_name="الرصيد بعد الحركة (ج.م)")
     
     description = models.CharField(max_length=255, verbose_name="التوصيف")
+    is_reversed = models.BooleanField(default=False, verbose_name="حركة معكوسة")
+    reversal_transaction = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, blank=True, related_name="original_transaction", verbose_name="حركة العكس المرتبطة")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -72,6 +84,7 @@ class CustomerTransaction(models.Model):
             'sales': 'فاتورة بيع',
             'collection': 'تحصيل نقدية',
             'sales_return': 'مرتجع مبيعات',
+            'settlement': 'تسوية حساب',
             'adjustment': 'تسوية / تصفير رصيد',
             'opening': 'رصيد افتتاحي',
         }
@@ -322,7 +335,7 @@ class Collection(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="المبلغ المحصل (ج.م)")
     collection_date = models.DateField(default=timezone.now, verbose_name="تاريخ التحصيل")
     due_date = models.DateField(null=True, blank=True, verbose_name="تاريخ الاستحقاق")
-    payment_method = models.CharField(max_length=20, default='cash', choices=[('cash', 'نقدي'), ('cheque', 'شيك')])
+    payment_method = models.CharField(max_length=20, default='cash', choices=[('cash', 'نقدي'), ('cheque', 'شيك'), ('bank_transfer', 'تحويل بنكي')])
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المحصل")
     created_at = models.DateTimeField(auto_now_add=True)

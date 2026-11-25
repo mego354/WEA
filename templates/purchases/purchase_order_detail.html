@@ -308,16 +308,6 @@
                         <span class="text-slate-400 block mb-0.5">القيمة الكلية</span>
                         <strong class="font-mono text-slate-900 font-bold">{{ order.grand_total|intcomma }} ج.م</strong>
                     </div>
-                    <div>
-                        <span class="text-slate-400 block mb-0.5">القيمة المسددة</span>
-                        <strong class="font-mono text-emerald-700 font-bold">{{ order.total_paid|intcomma }} ج.م</strong>
-                    </div>
-                    <div>
-                        <span class="text-slate-400 block mb-0.5">المتبقي المطلوب</span>
-                        <strong class="font-mono {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %} font-bold">
-                            {{ order.outstanding_balance|intcomma }} ج.م
-                        </strong>
-                    </div>
                 </div>
 
                 <!-- Real Settlements Table (التسوية وسندات الصرف) -->

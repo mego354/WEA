@@ -230,14 +230,6 @@
                 <span class="text-slate-900 font-black">الإجمالي النهائي:</span>
                 <span class="font-black font-mono text-brand-700 text-sm">{{ order.grand_total|floatformat:2 }} ج.م</span>
             </div>
-            <div class="flex justify-between items-center text-xs">
-                <span class="text-slate-500">المحصل:</span>
-                <span class="font-bold font-mono text-emerald-600">{{ order.total_paid|floatformat:2 }} ج.م</span>
-            </div>
-            <div class="flex justify-between items-center text-xs pt-1 border-t border-slate-100">
-                <span class="text-slate-700 font-bold">المتبقي:</span>
-                <span class="font-bold font-mono {% if order.outstanding_balance > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">{{ order.outstanding_balance|floatformat:2 }} ج.م</span>
-            </div>
             <div class="flex justify-between items-center text-xs pt-1 border-t border-slate-100">
                 <span class="text-slate-500 font-bold">حالة السداد:</span>
                 <span class="px-2 py-0.5 rounded-full text-[11px] font-bold {{ order.payment_status_badge_class }}">{{ order.payment_status_display_ar }}</span>

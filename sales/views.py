@@ -1170,6 +1170,93 @@ def accounting_customer_zero_balance(request, pk):
     return redirect('accounting_customers_list')
 
 
+@require_permission('sales:customers/zero_balance')
+def accounting_customer_settle(request, pk):
+    """Non-cash customer account settlement / adjustment — zero vault impact, preserves order payment_status."""
+    if request.method != 'POST':
+        return redirect('accounting_customers_list')
+
+    account = get_object_or_404(CustomerAccount.objects.select_related('customer'), pk=pk)
+    if not can_user_access_object(request.user, account, 'manage'):
+        return render_forbidden_response(request, "غير مصرح لك بتسوية حساب عميل خارج نطاق اختصاصك.")
+
+    amount_raw = (request.POST.get('amount') or '').strip()
+    direction = (request.POST.get('direction') or 'credit').strip()
+    reason_note = (request.POST.get('reason') or '').strip()
+    reference = (request.POST.get('reference') or '').strip()
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
+    from .services import CustomerAccountService
+    try:
+        amount = Decimal(amount_raw)
+    except Exception:
+        err_msg = "يرجى إدخال مبلغ تسوية صحيح."
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+        return redirect('accounting_customers_list')
+
+    try:
+        tx, prev_bal = CustomerAccountService.record_settlement(
+            customer=account.customer,
+            amount=amount,
+            direction=direction,
+            user=request.user,
+            reason_note=reason_note,
+            reference=reference,
+            request=request,
+        )
+        msg = (
+            f"تم تسجيل تسوية غير نقدية للعميل {account.customer.name} بمبلغ {amount:,.2f} ج.م "
+            f"(الرصيد: {prev_bal:,.2f} ← {tx.running_balance:,.2f} ج.م، بدون تأثير على الخزن)."
+        )
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'new_balance': str(tx.running_balance),
+                'transaction_serial': tx.serial,
+            })
+        messages.success(request, msg)
+    except ValidationError as e:
+        err_msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': err_msg}, status=400)
+        messages.error(request, err_msg)
+
+    return redirect('accounting_customers_list')
+
+
+@require_permission('sales:customers/zero_balance')
+def customer_settlement_reverse(request, pk):
+    """Reverses a non-cash customer settlement/adjustment transaction (zero vault impact)."""
+    if request.method != 'POST':
+        return redirect('customer_transactions_list')
+
+    tx = get_object_or_404(CustomerTransaction.objects.select_related('account', 'account__customer'), pk=pk)
+    if not can_user_access_object(request.user, tx.account, 'manage'):
+        return render_forbidden_response(request, "غير مصرح لك بعكس تسوية لعميل خارج نطاق اختصاصك.")
+
+    reason_note = (request.POST.get('reason') or '').strip()
+    from .services import CustomerAccountService
+    try:
+        rev_tx = CustomerAccountService.reverse_settlement(
+            tx_id=tx.pk,
+            user=request.user,
+            reason_note=reason_note,
+            request=request,
+        )
+        messages.success(request, f"تم عكس قيد التسوية #{tx.serial} بنجاح (قيد العكس #{rev_tx.serial}).")
+    except ValidationError as e:
+        err_msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+        messages.error(request, err_msg)
+
+    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER')
+    if next_url and next_url.startswith('/'):
+        return redirect(next_url)
+    return redirect('customer_transactions_list')
+
+
 @require_permission('sales:customers/transactions')
 def customer_transactions_list(request):
     """

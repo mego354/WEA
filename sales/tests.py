@@ -439,15 +439,18 @@ class SalesCollectionAndTerritoryScopingTests(TestCase):
         self.assertEqual(so.outstanding_balance, Decimal('600.00'))
         self.assertFalse(so.is_paid)
 
-        # Overpayment rejected
-        with self.assertRaises(ValidationError):
-            CollectionService.record_collection(
-                customer=self.customer,
-                vault=self.main_vault,
-                amount=Decimal('700.00'),
-                user=self.rep_cairo,
-                sales_order=so
-            )
+        # Account-level Single Source of Truth: collections are NOT capped by independent per-order debt
+        # and never auto-modify manual SalesOrder.payment_status.
+        col2 = CollectionService.record_collection(
+            customer=self.customer,
+            vault=self.main_vault,
+            amount=Decimal('700.00'),
+            user=self.rep_cairo,
+            sales_order=so
+        )
+        self.assertEqual(col2.amount, Decimal('700.00'))
+        so.refresh_from_db()
+        self.assertEqual(so.payment_status, 'credit')
 
     def test_representative_cannot_access_other_representative_order(self):
         cairo_order = SalesOrderService.create_order(

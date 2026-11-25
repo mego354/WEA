@@ -114,8 +114,9 @@ class CustomerAccountService:
 
         account.current_balance = Decimal('0.00')
         account.overdue_balance = Decimal('0.00')
+        account.due_this_month_balance = Decimal('0.00')
         account.last_transaction_date = tx_date
-        account.save(update_fields=['current_balance', 'overdue_balance', 'last_transaction_date', 'updated_at'])
+        account.save(update_fields=['current_balance', 'overdue_balance', 'due_this_month_balance', 'last_transaction_date', 'updated_at'])
 
         from accounts.services import AuditLogService
         AuditLogService.log(
@@ -151,6 +152,178 @@ class CustomerAccountService:
             pass
 
         return tx, previous_balance
+
+    @classmethod
+    @transaction.atomic
+    def record_settlement(
+        cls,
+        customer: Contact,
+        amount: Decimal,
+        direction: str,
+        user,
+        reason_note: str,
+        settlement_date=None,
+        reference: str = '',
+        request=None,
+    ):
+        """
+        Records a non-cash customer account settlement / adjustment.
+        STRICT INVARIANTS:
+        - Affects CustomerAccount.current_balance ONLY via CustomerTransaction(reason='settlement').
+        - direction='credit' reduces customer debt (current_balance -= amount).
+        - direction='debit' increases customer debt (current_balance += amount).
+        - Strictly ZERO Vault / VaultTransaction / Collection / Inventory impact.
+        - Never modifies SalesOrder.payment_status or original orders/collections.
+        - Writes SecurityAuditLog.
+        """
+        amount = Decimal(str(amount or '0.00')).quantize(Decimal('0.01'))
+        if amount <= Decimal('0.00'):
+            raise ValidationError("مبلغ التسوية يجب أن يكون أكبر من الصفر.")
+
+        if direction not in ('credit', 'debit'):
+            raise ValidationError("نوع التسوية يجب أن يكون دائن (تخفيض رصيد) أو مدين (زيادة رصيد).")
+
+        clean_reason = (reason_note or '').strip()
+        if not clean_reason:
+            raise ValidationError("يرجى إدخال سبب التسوية للتوثيق المحاسبي.")
+
+        clean_ref = (reference or '').strip()
+        account = CustomerAccount.get_or_create_for_customer(customer)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
+        previous_balance = account.current_balance or Decimal('0.00')
+
+        if direction == 'credit':
+            debit_amt = Decimal('0.00')
+            credit_amt = amount
+            new_balance = previous_balance - amount
+        else:
+            debit_amt = amount
+            credit_amt = Decimal('0.00')
+            new_balance = previous_balance + amount
+
+        tx_date = settlement_date or timezone.now().date()
+        ref_part = f" [مرجع: {clean_ref}]" if clean_ref else ""
+        desc = f"تسوية حساب عميل (غير نقدية){ref_part} - {clean_reason}"[:255]
+
+        tx = CustomerTransaction.objects.create(
+            account=account,
+            transaction_type=direction,
+            reason='settlement',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=new_balance,
+            description=desc,
+            created_by=user,
+        )
+
+        account.current_balance = new_balance
+        if new_balance <= Decimal('0.00'):
+            account.overdue_balance = Decimal('0.00')
+            account.due_this_month_balance = Decimal('0.00')
+        else:
+            if (account.overdue_balance or Decimal('0.00')) > new_balance:
+                account.overdue_balance = new_balance
+            if (account.due_this_month_balance or Decimal('0.00')) > new_balance:
+                account.due_this_month_balance = new_balance
+        account.last_transaction_date = tx_date
+        account.save(update_fields=[
+            'current_balance', 'overdue_balance', 'due_this_month_balance',
+            'last_transaction_date', 'updated_at',
+        ])
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action='create',
+            action_type='CUSTOMER_SETTLEMENT_CREATED',
+            module='sales',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"تسوية حساب عميل #{tx.serial} ({customer.name})",
+            description=(
+                f"تسجيل تسوية حساب غير نقدية للعميل {customer.name} ({'دائن / تخفيض' if direction == 'credit' else 'مدين / زيادة'}) "
+                f"بمبلغ {amount:,.2f} ج.م — الرصيد من {previous_balance:,.2f} إلى {new_balance:,.2f} ج.م (بدون تأثير على الخزن) - {clean_reason}"
+            ),
+            previous_values={'current_balance': str(previous_balance)},
+            new_values={
+                'current_balance': str(new_balance),
+                'transaction_serial': tx.serial,
+                'direction': direction,
+                'amount': str(amount),
+                'reference': clean_ref,
+                'reason': clean_reason,
+            },
+            reason=clean_reason,
+            request=request,
+        )
+
+        return tx, previous_balance
+
+    @classmethod
+    @transaction.atomic
+    def reverse_settlement(cls, tx_id, user, reason_note: str = '', request=None):
+        """
+        Reverses a non-cash customer settlement/adjustment transaction by posting an exact opposing entry.
+        ZERO vault impact. Prevents double reversal.
+        """
+        tx = CustomerTransaction.objects.select_for_update().select_related('account__customer').get(pk=tx_id)
+        if tx.reason not in ('settlement', 'adjustment'):
+            raise ValidationError("يمكن عكس قيود التسويات والتعديلات الحسابية فقط.")
+        if tx.is_reversed:
+            raise ValidationError(f"قيد التسوية #{tx.serial} معكوس بالفعل.")
+
+        account = CustomerAccount.objects.select_for_update().get(pk=tx.account_id)
+        previous_balance = account.current_balance or Decimal('0.00')
+        amount = tx.credit if tx.transaction_type == 'credit' else tx.debit
+        opp_type = 'debit' if tx.transaction_type == 'credit' else 'credit'
+        if opp_type == 'debit':
+            debit_amt, credit_amt = amount, Decimal('0.00')
+            new_balance = previous_balance + amount
+        else:
+            debit_amt, credit_amt = Decimal('0.00'), amount
+            new_balance = previous_balance - amount
+
+        clean_reason = (reason_note or '').strip() or 'عكس قيد تسوية'
+        tx_date = timezone.now().date()
+        rev_tx = CustomerTransaction.objects.create(
+            account=account,
+            transaction_type=opp_type,
+            reason='settlement',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=new_balance,
+            description=f"عكس تسوية #{tx.serial} - {clean_reason}"[:255],
+            created_by=user,
+        )
+
+        tx.is_reversed = True
+        tx.reversal_transaction = rev_tx
+        tx.save(update_fields=['is_reversed', 'reversal_transaction'])
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        from accounts.services import AuditLogService
+        AuditLogService.log(
+            action='update',
+            action_type='CUSTOMER_SETTLEMENT_REVERSED',
+            module='sales',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"عكس تسوية عميل #{tx.serial}",
+            description=(
+                f"عكس تسوية حساب العميل {account.customer.name} #{tx.serial} بمبلغ {amount:,.2f} ج.م "
+                f"(قيد العكس #{rev_tx.serial} — بدون تأثير على الخزن)"
+            ),
+            previous_values={'current_balance': str(previous_balance), 'is_reversed': False},
+            new_values={'current_balance': str(new_balance), 'is_reversed': True, 'reversal_serial': rev_tx.serial},
+            reason=clean_reason,
+            request=request,
+        )
+
+        return rev_tx
 
 
 def has_historical_sales_activity(customer) -> bool:
@@ -1008,14 +1181,13 @@ class CollectionService:
     @transaction.atomic
     def record_collection(cls, customer, vault, amount, user, payment_method='cash', notes='', sales_order=None, collection_date=None, due_date=None):
         """
-        Records customer cash/cheque collection:
-        1. Links to specific SalesOrder if provided.
-        2. Prevents overpayment beyond order outstanding balance.
-        3. Concurrency locks Vault.
-        4. Deposits cash into Vault.
-        5. Posts Credit transaction in Customer Ledger.
-        6. Lowers Customer debt balance.
-        7. Records audit log.
+        Records customer cash/cheque/bank collection:
+        1. Validates customer eligibility and optional SalesOrder ownership.
+        2. Concurrency locks Vault and CustomerAccount.
+        3. Deposits cash into ANY authorized active Vault chosen by the user.
+        4. Posts Credit transaction in Customer Ledger and lowers CustomerAccount.current_balance.
+        5. Never auto-modifies SalesOrder.payment_status and never caps by independent order debt.
+        6. Records audit log.
         """
         validate_sales_customer_eligibility(
             customer,
@@ -1026,22 +1198,19 @@ class CollectionService:
         if amount <= 0:
             raise ValidationError("قيمة التحصيل يجب أن تكون أكبر من الصفر.")
 
-        validate_sales_customer_eligibility(customer, allow_historical_lead=True, sales_order=sales_order)
-
         if sales_order:
             if sales_order.customer_id != customer.id:
                 raise ValidationError("أمر البيع المحدد لا ينتمي لهذا العميل.")
             if sales_order.status == 'cancelled':
                 raise ValidationError("لا يمكن تحصيل مبالغ لأمر بيع ملغى.")
-            # Check overpayment
-            order_outstanding = sales_order.outstanding_balance
-            if amount > order_outstanding:
-                raise ValidationError(f"قيمة التحصيل ({amount}) تتجاوز المبلغ المتبقي على أمر البيع #{sales_order.order_number} وهو ({order_outstanding}).")
 
-        # Concurrency lock on Vault
+        # Concurrency lock on Vault and CustomerAccount
         vault = Vault.objects.select_for_update().get(id=vault.id)
+        if not vault.is_active:
+            raise ValidationError(f"الخزنة ({vault.name}) معطلة حالياً ولا يمكن الإيداع بها.")
 
         account = CustomerAccount.get_or_create_for_customer(customer)
+        account = CustomerAccount.objects.select_for_update().get(pk=account.pk)
         new_balance = account.current_balance - amount
 
         actual_date = collection_date or timezone.now().date()

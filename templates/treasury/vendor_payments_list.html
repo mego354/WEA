@@ -173,7 +173,7 @@
                         </td>
                         <td data-col="vault" class="py-3.5 px-4 text-xs font-medium text-slate-700">{{ p.vault.name }}</td>
                         <td data-col="reference_number" class="py-3.5 px-4 text-xs font-mono text-slate-500">{{ p.reference_number|default:"—" }}</td>
-                        <td data-col="created_by" class="py-3.5 px-4 text-xs text-slate-600">{{ p.created_by.get_full_name|default:p.created_by.username }}</td>
+                        <td data-col="created_by" class="py-3.5 px-4 text-xs text-slate-600">{% if p.created_by %}{{ p.created_by.get_full_name|default:p.created_by.username }}{% else %}—{% endif %}</td>
                         <td data-col="notes" class="py-3.5 px-4 text-xs text-slate-500 max-w-xs truncate">{{ p.notes|default:"—" }}</td>
                         <td data-col="actions" class="py-3.5 px-4 text-center">
                             <div data-row-menu-host class="inline-flex items-center justify-center">

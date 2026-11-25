@@ -355,24 +355,37 @@ def home_view(request):
         po_qs = po_qs.filter(build_contact_brick_q(brick_ids, prefix='supplier'))
         vendor_payments_qs = vendor_payments_qs.filter(build_contact_brick_q(brick_ids, prefix='supplier'))
 
+    so_base_qs = so_qs
+    ro_base_qs = ro_qs
+
     if start_date and end_date:
         so_qs = so_qs.filter(order_date__range=(start_date, end_date))
+        so_deliv_qs = so_base_qs.filter(status__in=['delivered', 'invoiced']).filter(
+            Q(delivery_date__range=(start_date, end_date))
+            | Q(delivery_date__isnull=True, order_date__range=(start_date, end_date))
+        )
         ro_qs = ro_qs.filter(order_date__range=(start_date, end_date))
+        ro_acc_qs = ro_base_qs.filter(status__in=['settled', 'delivered', 'approved']).filter(
+            Q(settled_at__date__range=(start_date, end_date))
+            | Q(settled_at__isnull=True, order_date__range=(start_date, end_date))
+        )
         col_qs = col_qs.filter(collection_date__range=(start_date, end_date))
         vis_qs = vis_qs.filter(date__range=(start_date, end_date))
         cont_qs = cont_qs.filter(created_at__date__range=(start_date, end_date))
         po_period_qs = po_qs.filter(order_date__range=(start_date, end_date))
         vendor_payments_qs = vendor_payments_qs.filter(payment_date__range=(start_date, end_date))
     else:
+        so_deliv_qs = so_base_qs.filter(status__in=['delivered', 'invoiced'])
+        ro_acc_qs = ro_base_qs.filter(status__in=['settled', 'delivered', 'approved'])
         po_period_qs = po_qs
 
     # Unified Permission-Driven KPI Cards
     kpi_cards = []
 
     if can_view_sales:
-        so_created = so_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
-        so_deliv = so_qs.filter(status='delivered').aggregate(total=Sum('grand_total'), count=Count('id'))
-        so_proc = so_qs.filter(status__in=['pending', 'preparing', 'manager_approval', 'invoiced']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_created = so_qs.exclude(status__in=['cancelled', 'rejected']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_deliv = so_deliv_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_proc = so_base_qs.filter(status__in=['pending', 'manager_approval', 'preparing']).aggregate(total=Sum('grand_total'), count=Count('id'))
         kpi_cards.extend([
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
@@ -382,13 +395,12 @@ def home_view(request):
         so_deliv = {'total': Decimal('0.00'), 'count': 0}
 
     if can_view_sales_returns:
-        ro_created = ro_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
-        ro_acc = ro_qs.filter(status__in=['settled', 'accepted']).aggregate(total=Sum('grand_total'), count=Count('id'))
-        if is_rep:
-            kpi_cards.extend([
-                {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
-                {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
-            ])
+        ro_created = ro_qs.exclude(status__in=['cancelled', 'rejected']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        ro_acc = ro_acc_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
+        kpi_cards.extend([
+            {'id': 'ros_created_stats', 'title': 'المرتجعات المنشأة', 'amount': _format_metric_amount(ro_created['total']), 'subtitle': f"{ro_created['count']} مرتجع"},
+            {'id': 'ros_picked_stats', 'title': 'المرتجعات المقبولة', 'amount': _format_metric_amount(ro_acc['total']), 'subtitle': f"{ro_acc['count']} مرتجع"},
+        ])
     else:
         ro_acc = {'total': Decimal('0.00'), 'count': 0}
 
@@ -399,27 +411,20 @@ def home_view(request):
     if can_view_collections:
         colls = col_qs.aggregate(total=Sum('amount'), count=Count('id'))
         kpi_cards.append({'id': 'collections_collected_stats', 'title': 'التحصيلات', 'amount': _format_metric_amount(colls['total']), 'subtitle': f"{colls['count']} تحصيل"})
-        if is_rep:
-            cheques = col_qs.filter(payment_method='cheque').aggregate(total=Sum('amount'), count=Count('id'))
-            kpi_cards.append({'id': 'collections_waiting_collection_stats', 'title': 'شيكات تحت التحصيل', 'amount': '', 'subtitle': f"{cheques['count']} تحصيل"})
 
     if can_view_purchases:
-        po_active = PurchaseOrder.with_payment_totals(po_period_qs.exclude(status='cancelled'))
+        po_active = po_period_qs.exclude(status__in=['cancelled', 'rejected'])
         po_created = po_active.aggregate(total=Sum('grand_total'), count=Count('id'))
-        po_active_list = list(po_active)
-        po_outstanding = sum((p.outstanding_balance for p in po_active_list), Decimal('0.00'))
-        po_overdue_count = sum(1 for p in po_active_list if p.is_overdue)
         kpi_cards.append({'id': 'po_total_stats', 'title': 'إجمالي المشتريات', 'amount': _format_metric_amount(po_created['total']), 'subtitle': f"{po_created['count']} أمر شراء"})
         if can_view_treasury_payments:
             vendor_paid_agg = vendor_payments_qs.aggregate(total=Sum('amount'), count=Count('id'))
             total_vendor_paid = vendor_paid_agg['total'] or Decimal('0.00')
             kpi_cards.append({'id': 'po_paid_stats', 'title': 'المدفوع للموردين', 'amount': _format_metric_amount(total_vendor_paid), 'subtitle': f"{vendor_paid_agg['count']} دفعة"})
-        kpi_cards.append({'id': 'po_outstanding_stats', 'title': 'مستحقات أوامر الشراء', 'amount': _format_metric_amount(po_outstanding), 'subtitle': f"{po_overdue_count} متأخر" if po_overdue_count else 'رصيد مطلوب'})
 
     if can_view_contacts:
         new_customers_count = cont_qs.count()
-        customers_count = all_contacts_scoped.filter(is_customer=True).count()
-        leads_count = all_contacts_scoped.filter(status='lead').count() or customers_count
+        customers_count = all_contacts_scoped.filter(is_customer=True, status='customer').count()
+        leads_count = all_contacts_scoped.filter(status='lead').count()
         kpi_cards.extend([
             {'id': 'customers_count_stats', 'title': 'العملاء المعتمدين', 'amount': f"{customers_count}", 'subtitle': 'حساب نشط'},
             {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد بالفترة', 'amount': f"{new_customers_count}", 'subtitle': ''},
@@ -430,12 +435,14 @@ def home_view(request):
     if can_view_customer_acc:
         cust_acc = cust_acc_qs.aggregate(
             total_balance=Sum('current_balance'),
-            accounts_count=Count('id', filter=Q(current_balance__gt=0)),
+            accounts_count=Count('id', filter=~Q(current_balance=Decimal('0.00'))),
             total_overdue=Sum('overdue_balance'),
+            total_due_this_month=Sum('due_this_month_balance'),
         )
         kpi_cards.extend([
             {'id': 'acc_stats_balance', 'title': 'إجمالي رصيد العملاء', 'amount': _format_metric_amount(cust_acc['total_balance']), 'subtitle': f"{cust_acc['accounts_count']} حساب"},
-            {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'واجب السداد'},
+            {'id': 'acc_stats_overdue', 'title': 'المديونية المتأخرة للعملاء', 'amount': _format_metric_amount(cust_acc['total_overdue']), 'subtitle': 'متأخر السداد'},
+            {'id': 'acc_stats_due_this_month', 'title': 'واجب السداد الشهر الحالي', 'amount': _format_metric_amount(cust_acc['total_due_this_month']), 'subtitle': 'مستحق هذا الشهر'},
         ])
 
     if can_view_treasury_vaults:
@@ -498,7 +505,7 @@ def home_view(request):
     if can_view_sales:
         charts_dict['orders_created_by_area'] = _build_area_sunburst(so_qs, amount_field='grand_total')
         available_chart_keys.append('orders_created_by_area')
-        charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_qs.filter(status='delivered'), amount_field='grand_total')
+        charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_deliv_qs, amount_field='grand_total')
         available_chart_keys.append('orders_delivered_by_area')
 
     if can_view_customer_acc and not is_rep:

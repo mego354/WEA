@@ -73,7 +73,9 @@ class VendorTransaction(models.Model):
         ('purchase', 'فاتورة مشتريات'),
         ('purchase_payments', 'سداد نقدي للمورد'),
         ('purchase_returns', 'مردودات مشتريات'),
+        ('settlement', 'تسوية حساب'),
         ('adjustment', 'تسوية رصيد'),
+        ('opening', 'رصيد افتتاحي'),
     ]
 
     serial = models.PositiveIntegerField(unique=True, db_index=True, verbose_name="رقم الحركة")
@@ -91,6 +93,8 @@ class VendorTransaction(models.Model):
     
     description = models.CharField(max_length=255, verbose_name="التوصيف")
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    is_reversed = models.BooleanField(default=False, verbose_name="حركة معكوسة")
+    reversal_transaction = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, blank=True, related_name="original_transaction", verbose_name="حركة العكس المرتبطة")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="المسئول")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
 

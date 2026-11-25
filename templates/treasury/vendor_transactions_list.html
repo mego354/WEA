@@ -142,10 +142,25 @@
                         <td data-col="supplier" class="py-3 px-4 font-bold text-slate-900">{{ tx.account.supplier.name }}</td>
                         <td data-col="transaction_date" class="py-3 px-4 font-mono text-slate-500">{{ tx.transaction_date|date:"Y-m-d" }}</td>
                         <td data-col="description" class="py-3 px-4 font-medium text-slate-800">
-                            {{ tx.description }}
-                            {% if tx.purchase_order %}
-                            <a href="{% url 'purchase_order_detail' tx.purchase_order.pk %}" class="text-brand-600 hover:underline mr-1 font-bold">({{ tx.purchase_order.order_number }})</a>
-                            {% endif %}
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span>{{ tx.description }}</span>
+                                {% if tx.purchase_order %}
+                                <a href="{% url 'purchase_order_detail' tx.purchase_order.pk %}" class="text-brand-600 hover:underline mr-1 font-bold">({{ tx.purchase_order.order_number }})</a>
+                                {% endif %}
+                                {% if tx.reason == 'settlement' or tx.reason == 'adjustment' %}
+                                <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">تسوية</span>
+                                {% endif %}
+                                {% if tx.is_reversed %}
+                                <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">معكوسة</span>
+                                {% elif tx.reason == 'settlement' or tx.reason == 'adjustment' %}
+                                {% if request.user|has_permission:'treasury:vendors/zero_balance' %}
+                                <form method="POST" action="{% url 'vendor_settlement_reverse' tx.pk %}" class="inline" onsubmit="return confirm('تأكيد عكس قيد التسوية #{{ tx.serial }}؟');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold">عكس</button>
+                                </form>
+                                {% endif %}
+                                {% endif %}
+                            </div>
                         </td>
                         <td data-col="due_date" class="py-3 px-4 font-mono text-slate-500">{{ tx.due_date|date:"Y-m-d"|default:"-" }}</td>
                         <td data-col="credit" class="py-3 px-4 font-mono font-bold text-emerald-700">
@@ -157,7 +172,7 @@
                         <td data-col="running_balance" class="py-3 px-4 font-mono font-black text-slate-900">
                             {{ tx.running_balance|intcomma }} ج.م
                         </td>
-                        <td data-col="responsible" class="py-3 px-4 text-slate-500">{{ tx.created_by.name|default:tx.created_by.username }}</td>
+                        <td data-col="responsible" class="py-3 px-4 text-slate-500">{% if tx.created_by %}{{ tx.created_by.get_full_name|default:tx.created_by.username }}{% else %}النظام{% endif %}</td>
                     </tr>
                     {% empty %}
                     <tr>

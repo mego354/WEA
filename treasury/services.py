@@ -99,6 +99,172 @@ class TreasuryService:
 
     @staticmethod
     @transaction.atomic
+    def record_vendor_settlement(
+        supplier: Contact,
+        amount: Decimal,
+        direction: str,
+        user,
+        reason_note: str,
+        settlement_date=None,
+        reference: str = '',
+        request=None,
+    ):
+        """
+        Records a non-cash vendor account settlement / adjustment.
+        STRICT INVARIANTS:
+        - Affects VendorAccount.current_balance ONLY via VendorTransaction(reason='settlement').
+        - direction='debit' reduces vendor payable (current_balance -= amount).
+        - direction='credit' increases vendor payable (current_balance += amount).
+        - Strictly ZERO Vault / VaultTransaction / VendorPayment / Inventory impact.
+        - Never modifies PurchaseOrder.payment_status.
+        - Writes SecurityAuditLog.
+        """
+        amount = Decimal(str(amount or '0.00')).quantize(Decimal('0.01'))
+        if amount <= Decimal('0.00'):
+            raise ValidationError("مبلغ التسوية يجب أن يكون أكبر من الصفر.")
+
+        if direction not in ('debit', 'credit'):
+            raise ValidationError("نوع التسوية يجب أن يكون مدين (تخفيض مستحق المورد) أو دائن (زيادة مستحق المورد).")
+
+        clean_reason = (reason_note or '').strip()
+        if not clean_reason:
+            raise ValidationError("يرجى إدخال سبب التسوية للتوثيق المحاسبي.")
+
+        clean_ref = (reference or '').strip()
+        account = VendorAccount.get_or_create_for_supplier(supplier)
+        account = VendorAccount.objects.select_for_update().get(pk=account.pk)
+        previous_balance = account.current_balance or Decimal('0.00')
+
+        if direction == 'debit':
+            debit_amt = amount
+            credit_amt = Decimal('0.00')
+            new_balance = previous_balance - amount
+        else:
+            debit_amt = Decimal('0.00')
+            credit_amt = amount
+            new_balance = previous_balance + amount
+
+        tx_date = settlement_date or timezone.now().date()
+        ref_part = f" [مرجع: {clean_ref}]" if clean_ref else ""
+        desc = f"تسوية حساب مورد (غير نقدية){ref_part} - {clean_reason}"[:255]
+
+        tx = VendorTransaction.objects.create(
+            account=account,
+            purchase_order=None,
+            transaction_type=direction,
+            reason='settlement',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=new_balance,
+            description=desc,
+            notes=clean_reason,
+            created_by=user,
+        )
+
+        account.current_balance = new_balance
+        if new_balance <= Decimal('0.00'):
+            account.overdue_balance = Decimal('0.00')
+        elif (account.overdue_balance or Decimal('0.00')) > new_balance:
+            account.overdue_balance = new_balance
+        account.last_transaction_date = tx_date
+        account.save(update_fields=['current_balance', 'overdue_balance', 'last_transaction_date', 'updated_at'])
+
+        AuditLogService.log(
+            action='create',
+            action_type='VENDOR_SETTLEMENT_CREATED',
+            module='treasury',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"تسوية حساب مورد #{tx.serial} ({supplier.name})",
+            description=(
+                f"تسجيل تسوية حساب غير نقدية للمورد {supplier.name} ({'مدين / تخفيض' if direction == 'debit' else 'دائن / زيادة'}) "
+                f"بمبلغ {amount:,.2f} ج.م — الرصيد من {previous_balance:,.2f} إلى {new_balance:,.2f} ج.م (بدون تأثير على الخزن) - {clean_reason}"
+            ),
+            previous_values={'current_balance': str(previous_balance)},
+            new_values={
+                'current_balance': str(new_balance),
+                'transaction_serial': tx.serial,
+                'direction': direction,
+                'amount': str(amount),
+                'reference': clean_ref,
+                'reason': clean_reason,
+            },
+            reason=clean_reason,
+            request=request,
+        )
+
+        return tx, previous_balance
+
+    @staticmethod
+    @transaction.atomic
+    def reverse_vendor_settlement(tx_id, user, reason_note: str = '', request=None):
+        """
+        Reverses a non-cash vendor settlement/adjustment transaction by posting an opposing entry.
+        ZERO vault impact. Prevents double reversal.
+        """
+        tx = VendorTransaction.objects.select_for_update().select_related('account__supplier').get(pk=tx_id)
+        if tx.reason not in ('settlement', 'adjustment'):
+            raise ValidationError("يمكن عكس قيود التسويات والتعديلات الحسابية فقط.")
+        if tx.is_reversed:
+            raise ValidationError(f"قيد التسوية #{tx.serial} معكوس بالفعل.")
+
+        account = VendorAccount.objects.select_for_update().get(pk=tx.account_id)
+        previous_balance = account.current_balance or Decimal('0.00')
+        amount = tx.debit if tx.transaction_type == 'debit' else tx.credit
+        opp_type = 'credit' if tx.transaction_type == 'debit' else 'debit'
+        if opp_type == 'credit':
+            debit_amt, credit_amt = Decimal('0.00'), amount
+            new_balance = previous_balance + amount
+        else:
+            debit_amt, credit_amt = amount, Decimal('0.00')
+            new_balance = previous_balance - amount
+
+        clean_reason = (reason_note or '').strip() or 'عكس قيد تسوية'
+        tx_date = timezone.now().date()
+        rev_tx = VendorTransaction.objects.create(
+            account=account,
+            purchase_order=None,
+            transaction_type=opp_type,
+            reason='settlement',
+            transaction_date=tx_date,
+            debit=debit_amt,
+            credit=credit_amt,
+            running_balance=new_balance,
+            description=f"عكس تسوية #{tx.serial} - {clean_reason}"[:255],
+            notes=clean_reason,
+            created_by=user,
+        )
+
+        tx.is_reversed = True
+        tx.reversal_transaction = rev_tx
+        tx.save(update_fields=['is_reversed', 'reversal_transaction'])
+
+        account.current_balance = new_balance
+        account.last_transaction_date = tx_date
+        account.save(update_fields=['current_balance', 'last_transaction_date', 'updated_at'])
+
+        AuditLogService.log(
+            action='update',
+            action_type='VENDOR_SETTLEMENT_REVERSED',
+            module='treasury',
+            actor=user,
+            record_id=tx.id,
+            record_name=f"عكس تسوية مورد #{tx.serial}",
+            description=(
+                f"عكس تسوية حساب المورد {account.supplier.name} #{tx.serial} بمبلغ {amount:,.2f} ج.م "
+                f"(قيد العكس #{rev_tx.serial} — بدون تأثير على الخزن)"
+            ),
+            previous_values={'current_balance': str(previous_balance), 'is_reversed': False},
+            new_values={'current_balance': str(new_balance), 'is_reversed': True, 'reversal_serial': rev_tx.serial},
+            reason=clean_reason,
+            request=request,
+        )
+
+        return rev_tx
+
+    @staticmethod
+    @transaction.atomic
     def record_vendor_payment(supplier: Contact, vault: Vault, amount: Decimal, user,
                               purchase_order: PurchaseOrder = None, payment_date=None,
                               payment_method='cash', reference_number='', notes=''):
@@ -122,7 +288,7 @@ class TreasuryService:
         if vault_locked.current_balance < amount:
             raise ValidationError(f"رصيد الخزنة ({vault_locked.name}: {vault_locked.current_balance:,.2f} ج.م) غير كافٍ لسداد {amount:,.2f} ج.م.")
 
-        # If linked to a purchase order, lock and validate
+        # If linked to a purchase order, lock and validate ownership/status (no per-order debt cap)
         if purchase_order:
             from purchases.models import PurchaseOrder
             purchase_order = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
@@ -130,10 +296,6 @@ class TreasuryService:
                 raise ValidationError("لا يمكن تسجيل سداد لأمر شراء ملغى.")
             if purchase_order.supplier_id != supplier.id:
                 raise ValidationError("أمر الشراء المحدد لا ينتمي إلى هذا المورد.")
-            if amount > purchase_order.outstanding_balance:
-                raise ValidationError(
-                    f"مبلغ السداد ({amount:,.2f} ج.م) يتجاوز الرصيد المستحق على أمر الشراء ({purchase_order.outstanding_balance:,.2f} ج.م)."
-                )
 
         account = VendorAccount.get_or_create_for_supplier(supplier)
         account = VendorAccount.objects.select_for_update().get(pk=account.pk)
@@ -638,10 +800,8 @@ class VendorPaymentRequestService:
         if purchase_order:
             if purchase_order.supplier_id != supplier.id:
                 raise ValidationError("أمر الشراء المحدد لا ينتمي إلى هذا المورد.")
-            if amount > purchase_order.outstanding_balance:
-                raise ValidationError(
-                    f"مبلغ طلب السداد ({amount:,.2f} ج.م) يتجاوز الرصيد المستحق على أمر الشراء ({purchase_order.outstanding_balance:,.2f} ج.م)."
-                )
+            if purchase_order.status == 'cancelled':
+                raise ValidationError("لا يمكن إنشاء طلب سداد لأمر شراء ملغى.")
 
         req = VendorPaymentRequest.objects.create(
             supplier=supplier,

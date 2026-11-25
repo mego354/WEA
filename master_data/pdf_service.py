@@ -296,8 +296,8 @@ def generate_order_pdf(doc_type, order, options=None, user=None):
         items = list(order.items.select_related("product").all())
         payments = list(order.collections.select_related("vault").all()) if opts["include_payments"] else []
         returns = list(order.return_orders.all()) if opts["include_returns"] else []
-        paid_total = order.total_paid
-        balance_due = order.outstanding_balance
+        paid_total = None
+        balance_due = None
         items_disc = getattr(order, "items_discount_total", Decimal("0.00"))
         custom_disc = getattr(order, "custom_discount_amount", Decimal("0.00"))
         shipping = getattr(order, "shipping_fees", Decimal("0.00"))
@@ -312,8 +312,8 @@ def generate_order_pdf(doc_type, order, options=None, user=None):
         items = list(order.items.select_related("product").all())
         payments = list(order.vendor_payments.select_related("vault").all()) if opts["include_payments"] else []
         returns = list(order.return_orders.all()) if opts["include_returns"] else []
-        paid_total = order.total_paid
-        balance_due = order.outstanding_balance
+        paid_total = None
+        balance_due = None
         items_disc = getattr(order, "items_discount_total", Decimal("0.00"))
         custom_disc = getattr(order, "custom_discount_amount", Decimal("0.00"))
         shipping = getattr(order, "shipping_fees", Decimal("0.00"))

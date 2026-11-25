@@ -179,6 +179,14 @@
                                         <span>سداد</span>
                                     </a>
                                     {% endif %}
+                                    {% if request.user|has_permission:'treasury:vendors/zero_balance' %}
+                                    <button type="button"
+                                            onclick="openVendorSettleModal('{% url 'accounting_vendor_settle' acc.id %}', '{{ acc.supplier.name|escapejs }}', '{{ acc.current_balance|stringformat:'.2f' }}')"
+                                            class="w-full text-right px-3.5 py-2 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-indigo-600">tune</span>
+                                        <span>تسوية رصيد</span>
+                                    </button>
+                                    {% endif %}
                                     {% if request.user|has_permission:'treasury:vendors/zero_balance' and acc.current_balance != 0 %}
                                     <button type="button"
                                             onclick="openZeroVendorBalanceModal('{% url 'accounting_vendor_zero_balance' acc.id %}', '{{ acc.supplier.name|escapejs }}', '{{ acc.current_balance|stringformat:'.2f' }}')"
@@ -249,6 +257,65 @@
         </div>
     </div>
 </div>
+<!-- Vendor Settlement Modal (Non-Cash Adjustment) -->
+<div id="vendorSettleModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs" onclick="closeVendorSettleModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4 relative z-10">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center material-symbols-outlined">tune</span>
+                    <h3 class="text-sm font-black text-slate-900">تسوية حساب مورد (غير نقدية)</h3>
+                </div>
+                <button type="button" onclick="closeVendorSettleModal()" class="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 text-xs text-indigo-900 space-y-1">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">المورد:</span>
+                    <strong id="vsTargetName" class="text-slate-900"></strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">الرصيد الحالي:</span>
+                    <strong id="vsCurrentBalance" class="font-mono text-rose-700"></strong>
+                </div>
+                <p class="pt-1 text-[11px] font-bold text-indigo-800">تسوية حسابية فقط: لا تؤثر على أي خزنة ولا تعدل حالة سداد أوامر الشراء.</p>
+            </div>
+            <form id="vendorSettleForm" method="POST" action="" class="space-y-3">
+                {% csrf_token %}
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">نوع التسوية</label>
+                        <select name="direction" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs">
+                            <option value="debit">مدين (تخفيض المستحق)</option>
+                            <option value="credit">دائن (زيادة المستحق)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">المبلغ (ج.م) <span class="text-rose-500">*</span></label>
+                        <input type="number" step="0.01" min="0.01" name="amount" id="vsAmountInput" required
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">مرجع (اختياري)</label>
+                    <input type="text" name="reference" id="vsRefInput" placeholder="رقم إشعار أو مرجع..."
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">السبب <span class="text-rose-500">*</span></label>
+                    <textarea name="reason" id="vsReasonInput" rows="2" required placeholder="مثال: تسوية حساب مورد أو خصم مكتسب..."
+                              class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeVendorSettleModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl min-h-[40px]">إلغاء</button>
+                    <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs min-h-[40px]">حفظ التسوية</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <script>
 function openZeroVendorBalanceModal(actionUrl, name, balance) {
     document.getElementById('zeroVendorBalanceForm').action = actionUrl;
@@ -259,6 +326,18 @@ function openZeroVendorBalanceModal(actionUrl, name, balance) {
 }
 function closeZeroVendorBalanceModal() {
     document.getElementById('zeroVendorBalanceModal').classList.add('hidden');
+}
+function openVendorSettleModal(actionUrl, name, balance) {
+    document.getElementById('vendorSettleForm').action = actionUrl;
+    document.getElementById('vsTargetName').textContent = name;
+    document.getElementById('vsCurrentBalance').textContent = window.erpFormatMoney(balance, '0.00') + ' ج.م';
+    document.getElementById('vsAmountInput').value = '';
+    document.getElementById('vsRefInput').value = '';
+    document.getElementById('vsReasonInput').value = '';
+    document.getElementById('vendorSettleModal').classList.remove('hidden');
+}
+function closeVendorSettleModal() {
+    document.getElementById('vendorSettleModal').classList.add('hidden');
 }
 </script>
 {% endblock %}
