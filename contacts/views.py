@@ -1989,8 +1989,19 @@ def customers_search_api(request):
         limit = int(request.GET.get('limit', 100))
 
     # Base queryset: active contacts matching contacts list scope
-    qs = Contact.objects.exclude(status='inactive')\
-        .select_related('area', 'brick', 'area__parent', 'created_by')\
+    customers_only_raw = (
+        request.GET.get('customers_only')
+        or request.POST.get('customers_only')
+        or ''
+    ).strip().lower()
+    status_param = (request.GET.get('status') or request.POST.get('status') or '').strip().lower()
+    customers_only = customers_only_raw in ('1', 'true', 'yes', 'on') or status_param == 'customer'
+
+    if customers_only:
+        qs = Contact.objects.filter(status='customer')
+    else:
+        qs = Contact.objects.exclude(status='inactive')
+    qs = qs.select_related('area', 'brick', 'area__parent', 'created_by')\
         .prefetch_related('addresses__area', 'addresses__brick')
 
     # Authorization Scoping (Superadmin: all, Manager: Main Area, Representative: Brick)

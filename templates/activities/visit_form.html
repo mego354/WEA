@@ -902,7 +902,8 @@
             return;
         }
         try {
-            const res = await fetch(`/contacts/api/search/?id=${encodeURIComponent(contactId)}`);
+            const custOnlyParam = (!isEditMode && !plannedItemId) ? '&customers_only=1' : '';
+            const res = await fetch(`/contacts/api/search/?id=${encodeURIComponent(contactId)}${custOnlyParam}`);
             if (res.ok) {
                 const data = await res.json();
                 const list = data.results || data || [];
@@ -1132,7 +1133,8 @@
 
     async function fetchCustomerDetails(id) {
         try {
-            const res = await fetch(`/contacts/api/search/?id=${id}`);
+            const custOnlyParam = (!isEditMode && !plannedItemId) ? '&customers_only=1' : '';
+            const res = await fetch(`/contacts/api/search/?id=${id}${custOnlyParam}`);
             if (res.ok) {
                 const data = await res.json();
                 const list = data.results || data || [];

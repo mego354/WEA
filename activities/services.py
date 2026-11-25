@@ -821,6 +821,8 @@ def create_and_start_unplanned_visit(
 
         if not contact:
             raise ValidationError("يرجى اختيار جهة الاتصال (العميل).")
+        if contact.status != 'customer':
+            raise ValidationError("يمكن إنشاء زيارة مباشرة (خارج الخطة) للعملاء الفعليين فقط (حالة: عميل).")
         if not can_user_access_contact_for_visit(user, contact):
             raise ValidationError("غير مصرح لك بإنشاء زيارة لهذا العميل خارج نطاق منطقتك الجغرافية.")
         if not template:

@@ -519,13 +519,14 @@ class ApprovedErpUpdatesTests(TestCase):
         self.loc.bypass_reason_mandatory = False
         self.loc.save()
         res_bypass_no_reason = self.client.post(reverse('visit_create'), {
-            'contact': self.c_nasr_lead.id,
+            'contact': self.c_nasr.id,
             'template': self.template.id,
             'date': today.strftime('%Y-%m-%d'),
             'latitude': '30.200000',
             'longitude': '31.500000',
             'force_bypass_location': '1',
             'bypass_reason': '',
+            'confirm_duplicate': '1',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(res_bypass_no_reason.status_code, 200)
         created_bp = Visit.objects.get(pk=res_bypass_no_reason.json()['visit_id'])

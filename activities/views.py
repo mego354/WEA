@@ -3305,7 +3305,7 @@ def visit_create(request):
             cand = Contact.objects.filter(pk=int(contact_id)).select_related(
                 'area', 'area__parent', 'brick'
             ).prefetch_related('addresses__area', 'addresses__brick').first()
-            if cand and can_user_access_contact_for_visit(request.user, cand):
+            if cand and cand.status == 'customer' and can_user_access_contact_for_visit(request.user, cand):
                 selected_contact = cand
 
     from activities.services import serialize_contact_addresses

@@ -139,7 +139,16 @@ class VisitForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
-        base_qs = Contact.objects.exclude(status='inactive')
+        is_editing = bool(self.instance and self.instance.pk)
+        planned_item_id = (self.data.get('planned_item_id') if self.data else None) or self.initial.get('planned_item_id')
+        is_unplanned_create = (not is_editing and not planned_item_id)
+
+        if is_unplanned_create:
+            base_qs = Contact.objects.filter(status='customer')
+            self.fields['contact'].widget.attrs['data-search-url'] = '/contacts/api/search/?customers_only=1'
+        else:
+            base_qs = Contact.objects.exclude(status='inactive')
+            self.fields['contact'].widget.attrs['data-search-url'] = '/contacts/api/search/'
 
         from django.contrib.auth import get_user_model
         UserModel = get_user_model()
@@ -210,9 +219,7 @@ class VisitForm(forms.ModelForm):
         self.fields['template'].required = True
         self.fields['template'].empty_label = "-- اختر قالب الزيارة (إلزامي) --"
 
-        is_editing = bool(self.instance and self.instance.pk)
-        planned_item_id = (self.data.get('planned_item_id') if self.data else None) or self.initial.get('planned_item_id')
-        if not is_editing and not planned_item_id:
+        if is_unplanned_create:
             self.fields['date'].required = False
 
     def clean(self):

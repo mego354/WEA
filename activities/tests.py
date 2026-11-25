@@ -1973,7 +1973,7 @@ class VisitWorkflowsAndPermissionsComprehensiveTestCase(TestCase):
         self.assertLessEqual(form.fields['contact'].queryset.count(), 100)
         html = str(form['contact'])
         self.assertIn('data-smart-select="true"', html)
-        self.assertIn('data-search-url="/contacts/api/search/"', html)
+        self.assertIn('data-search-url="/contacts/api/search/?customers_only=1"', html)
         self.assertIn('data-subtext=', html)
 
         # 2. Last bulk contact beyond the first 100 is dynamically loaded when targeted

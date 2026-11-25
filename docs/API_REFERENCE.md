@@ -23,6 +23,7 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 - **Query Parameters**:
   - `q` (string, optional): Arabic-normalized text search across `name`, `code`, `mobile`, `specialty`, and numeric `serial_num` (`area__name` and `brick__name` are excluded; no area/brick query parameters are accepted).
   - `id` (integer, optional): Fetch exact contact record by ID within DataScope.
+  - `customers_only` (`1` / `true`, optional) or `status=customer`: Restricts results strictly to canonical `status='customer'` contacts (excludes `lead` and `inactive`; used by unplanned visit creation).
   - `limit` (integer, optional, default `100`): Maximum returned rows.
 - **Response Format**:
   ```json

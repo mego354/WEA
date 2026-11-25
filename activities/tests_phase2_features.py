@@ -466,3 +466,75 @@ class VisitAddressSelectionAndAgendaTests(TestCase):
         self.assertEqual(r2.context['actual_visits_count'], 4)
         delta = len(ctx_large) - len(ctx_small)
         self.assertLessEqual(delta, 10, f"Agenda query delta too high ({len(ctx_small)} -> {len(ctx_large)}, delta={delta})")
+
+    def test_unplanned_visit_create_restricts_contacts_to_customers_only(self):
+        """Unplanned visit creation (form, API customers_only=1, view, service) allows status='customer' only,
+        while planned visits & default customers_search_api still allow status='lead'.
+        """
+        from activities.forms import VisitForm
+        from activities.services import create_and_start_unplanned_visit
+        from django.core.exceptions import ValidationError
+
+        lead_contact = Contact.objects.create(
+            name='عميل محتمل زيارة مباشرة', code='LEAD-UNPL', account_type='Pharmacy',
+            area=self.cairo, brick=self.nasr, is_customer=True, status='lead',
+            created_by=self.rep,
+        )
+        ContactAddress.objects.create(
+            contact=lead_contact, title='العنوان الرئيسي', is_main=True,
+            area=self.cairo, brick=self.nasr,
+            latitude=Decimal('30.0561000'), longitude=Decimal('31.3301000'),
+        )
+        inactive_contact = Contact.objects.create(
+            name='عميل غير نشط زيارة مباشرة', code='INACT-UNPL', account_type='Pharmacy',
+            area=self.cairo, brick=self.nasr, is_customer=True, status='inactive',
+            created_by=self.rep,
+        )
+
+        self.client.force_login(self.rep)
+
+        # 1. customers_search_api?customers_only=1 excludes lead & inactive, returns customer
+        res_cust_only_lead = self.client.get(reverse('customers_search_api') + '?customers_only=1&q=LEAD-UNPL')
+        self.assertEqual(res_cust_only_lead.status_code, 200)
+        self.assertEqual(res_cust_only_lead.json()['results'], [])
+
+        res_cust_only_ok = self.client.get(reverse('customers_search_api') + '?customers_only=1&q=MULTI01')
+        self.assertEqual(len(res_cust_only_ok.json()['results']), 1)
+
+        # 2. Default customers_search_api (used by planned visits) still returns lead
+        res_default_lead = self.client.get(reverse('customers_search_api') + '?q=LEAD-UNPL')
+        self.assertEqual(len(res_default_lead.json()['results']), 1)
+
+        # 3. Unplanned VisitForm queryset excludes lead & inactive and uses ?customers_only=1
+        form_unplanned = VisitForm(user=self.rep)
+        qs_ids = set(form_unplanned.fields['contact'].queryset.values_list('id', flat=True))
+        self.assertIn(self.multi_contact.id, qs_ids)
+        self.assertNotIn(lead_contact.id, qs_ids)
+        self.assertNotIn(inactive_contact.id, qs_ids)
+        self.assertEqual(
+            form_unplanned.fields['contact'].widget.attrs.get('data-search-url'),
+            '/contacts/api/search/?customers_only=1',
+        )
+
+        # 4. GET /visits/create/?contact_id=<lead> does not preselect lead
+        res_get = self.client.get(reverse('visit_create') + f'?contact_id={lead_contact.id}')
+        self.assertEqual(res_get.status_code, 200)
+        self.assertIsNone(res_get.context['selected_contact'])
+
+        # 5. Manipulated POST /visits/create/ and direct service call reject lead & inactive
+        today_str = timezone.localdate().strftime('%Y-%m-%d')
+        for bad_c in (lead_contact, inactive_contact):
+            res_post = self.client.post(reverse('visit_create'), {
+                'contact': bad_c.id,
+                'template': self.template.id,
+                'date': today_str,
+                'latitude': '30.0561000',
+                'longitude': '31.3301000',
+            })
+            self.assertEqual(res_post.status_code, 200)
+            self.assertFalse(Visit.objects.filter(contact=bad_c).exists())
+            with self.assertRaises(ValidationError):
+                create_and_start_unplanned_visit(
+                    self.rep, bad_c, self.template,
+                    lat='30.0561000', lng='31.3301000',
+                )
