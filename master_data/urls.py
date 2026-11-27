@@ -70,6 +70,14 @@ urlpatterns = [
     path('settings/purchase/', views.purchase_settings_view, name='purchase_settings'),
     path('settings/inventory/', views.inventory_settings_view, name='inventory_settings'),
 
+    # Configurable Account-Type Report Groups
+    path('settings/report-groups/', views.report_groups_settings_view, name='report_groups_settings'),
+    path('settings/report-groups/add/', views.report_group_create, name='report_group_create'),
+    path('settings/report-groups/<int:pk>/edit/', views.report_group_edit, name='report_group_edit'),
+    path('settings/report-groups/<int:pk>/toggle/', views.report_group_toggle, name='report_group_toggle'),
+    path('settings/report-groups/<int:pk>/reorder/', views.report_group_reorder, name='report_group_reorder'),
+    path('settings/report-groups/<int:pk>/delete/', views.report_group_delete, name='report_group_delete'),
+
     # Geocoding & Map Proxy APIs
     path('api/geocoding/search/', views.geocoding_search_api, name='geocoding_search_api'),
     path('api/geocoding/reverse/', views.geocoding_reverse_api, name='geocoding_reverse_api'),

@@ -1,0 +1,297 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}مجموعات أنواع الحسابات بالتقارير{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="text-slate-500">الإعدادات</span>
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+<span class="font-bold text-brand-600">مجموعات تقارير الحسابات</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-4">
+
+    <!-- Compact Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-xl">workspaces</span>
+            </div>
+            <div>
+                <h1 class="text-lg sm:text-xl font-black text-slate-900">مجموعات تقارير الحسابات</h1>
+                <p class="text-[11px] text-slate-500">تجميع أنواع الحسابات لتقارير الزيارات والأداء بدون تكرار</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'performance_overview' %}"
+               class="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 min-h-[40px] transition-colors">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">speed</span>
+                <span>تقارير الأداء</span>
+            </a>
+            <button type="button" onclick="openNewGroupModal()"
+                    class="px-4 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs inline-flex items-center gap-1.5 min-h-[40px] transition-colors">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>مجموعة جديدة</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Groups List -->
+    <div class="grid grid-cols-1 gap-3">
+        {% for g in groups_payload %}
+        <div class="bg-white rounded-2xl border {% if g.is_active %}border-slate-200/90{% else %}border-slate-200/60 opacity-70 bg-slate-50/70{% endif %} p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition-all">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <!-- Right Info -->
+                <div class="flex items-start gap-3 min-w-0 flex-1">
+                    <div class="w-10 h-10 rounded-xl {% if g.is_active %}bg-teal-50 text-[#27bebe]{% else %}bg-slate-100 text-slate-400{% endif %} flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-xl">{{ g.icon }}</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-black font-mono">{{ g.display_order }}</span>
+                            <h2 class="text-sm font-black text-slate-900 truncate">{{ g.name }}</h2>
+                            {% if g.is_active %}
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مفعلة</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">معطلة</span>
+                            {% endif %}
+                            <span class="text-[11px] text-slate-500 font-medium">{{ g.contacts_count }} حساب نشط</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            {% for at in g.account_types %}
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-teal-50/80 text-teal-800 border border-teal-200/70">{{ at }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Left Controls -->
+                <div class="flex items-center justify-end gap-1 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <!-- Reorder Up -->
+                    <form method="POST" action="{% url 'report_group_reorder' g.id %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="direction" value="up">
+                        <button type="submit" {% if forloop.first %}disabled{% endif %}
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] inline-flex items-center justify-center" title="تحريك لأعلى">
+                            <span class="material-symbols-outlined text-lg">arrow_upward</span>
+                        </button>
+                    </form>
+                    <!-- Reorder Down -->
+                    <form method="POST" action="{% url 'report_group_reorder' g.id %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="direction" value="down">
+                        <button type="submit" {% if forloop.last %}disabled{% endif %}
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-[#27bebe] hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] inline-flex items-center justify-center" title="تحريك لأسفل">
+                            <span class="material-symbols-outlined text-lg">arrow_downward</span>
+                        </button>
+                    </form>
+                    <!-- Toggle Active -->
+                    <form method="POST" action="{% url 'report_group_toggle' g.id %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="p-1.5 rounded-lg {% if g.is_active %}text-emerald-600 hover:bg-emerald-50{% else %}text-slate-400 hover:bg-slate-100{% endif %} min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+                                title="{% if g.is_active %}تعطيل{% else %}تفعيل{% endif %}">
+                            <span class="material-symbols-outlined text-xl">{% if g.is_active %}toggle_on{% else %}toggle_off{% endif %}</span>
+                        </button>
+                    </form>
+                    <!-- Edit -->
+                    <button type="button" onclick="openEditGroupModal({{ g.id }})"
+                            class="p-1.5 rounded-lg text-slate-600 hover:text-[#27bebe] hover:bg-teal-50 min-w-[36px] min-h-[36px] inline-flex items-center justify-center" title="تعديل">
+                        <span class="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    <!-- Delete -->
+                    <form method="POST" action="{% url 'report_group_delete' g.id %}" class="inline"
+                          onsubmit="return confirm('هل أنت متأكد من حذف المجموعة {{ g.name|escapejs }}؟')">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 min-w-[36px] min-h-[36px] inline-flex items-center justify-center" title="حذف">
+                            <span class="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
+            <span class="material-symbols-outlined text-4xl text-slate-300 block mb-2">workspaces</span>
+            <p class="text-xs font-bold text-slate-600">لا توجد مجموعات تقارير مكونة حالياً</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Unassigned Active Account Types Bar -->
+    {% if unassigned_types %}
+    <div class="bg-amber-50/70 rounded-2xl border border-amber-200/80 p-3.5 sm:p-4">
+        <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-amber-600 text-lg">info</span>
+            <h3 class="text-xs font-black text-amber-900">أنواع حسابات نشطة غير مصنفة (تظهر تلقائياً تحت "أنواع أخرى غير مصنفة")</h3>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+            {% for u in unassigned_types %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white text-amber-800 border border-amber-200">
+                <span>{{ u.name }}</span>
+                <span class="text-[10px] text-amber-600 font-mono">({{ u.count }})</span>
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- MODAL: ADD / EDIT GROUP -->
+<div id="groupModal" onclick="if (event.target === this) closeGroupModal()" class="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-[60] hidden flex items-end sm:items-center justify-center sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-xl w-full p-5 sm:p-6 border border-slate-100 max-h-[90dvh] flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+            <h2 id="groupModalTitle" class="text-base font-black text-slate-900">إضافة مجموعة تقارير جديدة</h2>
+            <button type="button" onclick="closeGroupModal()" class="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="إغلاق">
+                <span class="material-symbols-outlined text-xl">close</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{% url 'report_group_create' %}" id="groupForm" class="flex-1 overflow-y-auto space-y-4 pt-4">
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                    <label for="groupNameInput" class="block text-xs font-bold text-slate-700 mb-1">اسم المجموعة <span class="text-rose-500">*</span></label>
+                    <input type="text" name="name" id="groupNameInput" required placeholder="مثال: الصيدليات، المنشآت الطبية"
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white">
+                </div>
+                <div>
+                    <label for="groupOrderInput" class="block text-xs font-bold text-slate-700 mb-1">ترتيب العرض</label>
+                    <input type="number" name="display_order" id="groupOrderInput" min="1" value="{{ next_order }}"
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                    <label for="groupIconSelect" class="block text-xs font-bold text-slate-700 mb-1">الأيقونة</label>
+                    <select name="icon" id="groupIconSelect"
+                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white">
+                        {% for ic_val, ic_lbl in icon_choices %}
+                        <option value="{{ ic_val }}">{{ ic_lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <label class="inline-flex items-center gap-2.5 pt-4 cursor-pointer select-none">
+                    <input type="checkbox" name="is_active" id="groupActiveInput" checked
+                           class="w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]">
+                    <span class="text-xs font-bold text-slate-700">تفعيل المجموعة بالتقارير</span>
+                </label>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="text-xs font-bold text-slate-700">أنواع الحسابات المشمولة <span class="text-rose-500">*</span></label>
+                    <input type="text" id="typeSearchInput" placeholder="بحث عن نوع..." oninput="filterAccountTypeCheckboxes(this.value)"
+                           class="px-2.5 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#27bebe] w-36">
+                </div>
+                <div id="accountTypesGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-56 overflow-y-auto p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
+                    {% for item in available_type_items %}
+                    <label class="group-type-option flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-white border border-slate-200/80 hover:border-[#27bebe] cursor-pointer text-xs transition-colors"
+                           data-type-name="{{ item.name|lower }}"
+                           data-assigned-group-id="{{ item.assigned_group_id|default:'' }}">
+                        <span class="flex items-center gap-2 min-w-0">
+                            <input type="checkbox" name="account_types" value="{{ item.name }}"
+                                   class="group-type-cb w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe] shrink-0">
+                            <span class="font-bold text-slate-800 truncate">{{ item.name }}</span>
+                        </span>
+                        <span class="flex items-center gap-1 shrink-0">
+                            {% if item.count %}
+                            <span class="text-[10px] font-mono text-slate-400">{{ item.count }}</span>
+                            {% endif %}
+                            {% if item.assigned_group_name %}
+                            <span class="assigned-badge text-[9px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 truncate max-w-[90px]" title="مستخدمة في: {{ item.assigned_group_name }}">{{ item.assigned_group_name }}</span>
+                            {% endif %}
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div>
+                <label for="customTypesInput" class="block text-xs font-bold text-slate-700 mb-1">إضافة نوع مخصص غير مدرج (اختياري، مفصول بفاصلة)</label>
+                <input type="text" name="custom_account_types" id="customTypesInput" placeholder="مثال: Lab, Medical Complex"
+                       class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white">
+            </div>
+
+            <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 sticky bottom-0 bg-white">
+                <button type="button" onclick="closeGroupModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 text-xs font-bold rounded-xl min-h-[40px]">إلغاء</button>
+                <button type="submit" class="px-6 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs min-h-[40px]">حفظ المجموعة</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const REPORT_GROUPS_DATA = {{ groups_json|safe }};
+    const CREATE_GROUP_URL = "{% url 'report_group_create' %}";
+    const EDIT_GROUP_URL_TPL = "{% url 'report_group_edit' 999999 %}";
+    const DEFAULT_NEXT_ORDER = {{ next_order }};
+
+    function _resetCheckboxes(selectedTypes, editingGroupId) {
+        const selectedSet = new Set((selectedTypes || []).map(t => String(t).trim().toLowerCase()));
+        document.querySelectorAll('#accountTypesGrid .group-type-option').forEach(opt => {
+            const cb = opt.querySelector('.group-type-cb');
+            const badge = opt.querySelector('.assigned-badge');
+            const assignedId = opt.getAttribute('data-assigned-group-id');
+            const tLow = opt.getAttribute('data-type-name');
+            const isSelected = selectedSet.has(tLow);
+            cb.checked = isSelected;
+            const conflictWithOther = assignedId && String(assignedId) !== String(editingGroupId || '');
+            if (badge) {
+                badge.classList.toggle('hidden', !conflictWithOther);
+            }
+            opt.classList.toggle('opacity-60', Boolean(conflictWithOther && !isSelected));
+        });
+        document.getElementById('typeSearchInput').value = '';
+        filterAccountTypeCheckboxes('');
+    }
+
+    function openNewGroupModal() {
+        document.getElementById('groupModalTitle').textContent = "إضافة مجموعة تقارير جديدة";
+        document.getElementById('groupForm').action = CREATE_GROUP_URL;
+        document.getElementById('groupNameInput').value = "";
+        document.getElementById('groupOrderInput').value = DEFAULT_NEXT_ORDER;
+        document.getElementById('groupIconSelect').value = "category";
+        document.getElementById('groupActiveInput').checked = true;
+        document.getElementById('customTypesInput').value = "";
+        _resetCheckboxes([], null);
+        document.getElementById('groupModal').classList.remove('hidden');
+    }
+
+    function openEditGroupModal(groupId) {
+        const grp = REPORT_GROUPS_DATA.find(g => g.id === groupId);
+        if (!grp) return;
+        document.getElementById('groupModalTitle').textContent = "تعديل المجموعة: " + grp.name;
+        document.getElementById('groupForm').action = EDIT_GROUP_URL_TPL.replace('999999', String(groupId));
+        document.getElementById('groupNameInput').value = grp.name;
+        document.getElementById('groupOrderInput').value = grp.display_order;
+        document.getElementById('groupIconSelect').value = grp.icon || "category";
+        document.getElementById('groupActiveInput').checked = Boolean(grp.is_active);
+        document.getElementById('customTypesInput').value = "";
+        _resetCheckboxes(grp.account_types, groupId);
+        document.getElementById('groupModal').classList.remove('hidden');
+    }
+
+    function closeGroupModal() {
+        document.getElementById('groupModal').classList.add('hidden');
+    }
+
+    function filterAccountTypeCheckboxes(q) {
+        const norm = (q || '').trim().toLowerCase();
+        document.querySelectorAll('#accountTypesGrid .group-type-option').forEach(opt => {
+            const t = opt.getAttribute('data-type-name') || '';
+            opt.classList.toggle('hidden', Boolean(norm && !t.includes(norm)));
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeGroupModal();
+    });
+</script>
+{% endblock %}

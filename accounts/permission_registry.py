@@ -447,6 +447,12 @@ ERP_PERMISSIONS_CATALOG = {
                 'actions': [
                     ('settings:storage/manage', 'عرض وتعديل إعدادات وحاسبة تكلفة التخزين السحابي (R2)', 'admin'),
                 ]
+            },
+            'report_groups': {
+                'name_ar': 'مجموعات أنواع الحسابات بالتقارير',
+                'actions': [
+                    ('settings:reportGroups/manage', 'إدارة وتكوين مجموعات أنواع الحسابات في تقارير الأداء والزيارات', 'admin'),
+                ]
             }
         }
     },
@@ -461,6 +467,7 @@ ERP_PERMISSIONS_CATALOG = {
                 'name_ar': 'النظرة العامة والمؤشرات القيادية',
                 'actions': [
                     ('performance:overview/view', 'عرض لوحة النظرة العامة ومؤشرات الأداء', 'read'),
+                    ('performance:overview/export', 'تصدير نظرة عامة على الأداء وتقارير الزيارات إلى Excel', 'export'),
                 ]
             },
             'analysis': {

@@ -135,10 +135,11 @@ def report_ar_aging_print(request):
 @login_required
 @require_permission('reports:financial/view')
 def report_trial_balance(request):
+    from master_data.filter_utils import parse_single_int
     period = request.GET.get('period', 'this_month')
     start_str = request.GET.get('start_date')
     end_str = request.GET.get('end_date')
-    area_id = request.GET.get('area')
+    area_id = parse_single_int(request.GET, 'area', 'area_id')
 
     start_date, end_date, _, _, period_label = parse_date_range(period, start_str, end_str)
     data = get_trial_balance_report_data(request.user, start_date, end_date, {'area_id': area_id})
@@ -154,7 +155,7 @@ def report_trial_balance(request):
         'start_date': start_date.isoformat(),
         'end_date': end_date.isoformat(),
         'areas': areas,
-        'selected_area': int(area_id) if area_id and area_id.isdigit() else '',
+        'selected_area': area_id or '',
     }
     return render(request, 'reports/report_trial_balance.html', context)
 
@@ -162,9 +163,10 @@ def report_trial_balance(request):
 @login_required
 @require_permission('reports:financial/export')
 def report_trial_balance_export(request):
+    from master_data.filter_utils import parse_single_int
     start_date, end_date, _, _, _ = parse_date_range(request.GET.get('period'), request.GET.get('start_date'), request.GET.get('end_date'))
     tb_filters = {
-        'area_id': request.GET.get('area') or request.GET.get('area_id'),
+        'area_id': parse_single_int(request.GET, 'area', 'area_id'),
         'search': request.GET.get('search', ''),
     }
     data = get_trial_balance_report_data(request.user, start_date, end_date, tb_filters)
@@ -184,9 +186,10 @@ def report_trial_balance_export(request):
 @login_required
 @require_permission('reports:financial/view')
 def report_trial_balance_print(request):
+    from master_data.filter_utils import parse_single_int
     start_date, end_date, _, _, _ = parse_date_range(request.GET.get('period'), request.GET.get('start_date'), request.GET.get('end_date'))
     tb_filters = {
-        'area_id': request.GET.get('area') or request.GET.get('area_id'),
+        'area_id': parse_single_int(request.GET, 'area', 'area_id'),
         'search': request.GET.get('search', ''),
     }
     data = get_trial_balance_report_data(request.user, start_date, end_date, tb_filters)
@@ -240,9 +243,10 @@ def report_agreements_roi_export(request):
 @login_required
 @require_permission('reports:sales/view')
 def report_customer_360(request):
+    from master_data.filter_utils import parse_single_int
     period = request.GET.get('period', 'this_month')
     start_date, end_date, _, _, period_label = parse_date_range(period, request.GET.get('start_date'), request.GET.get('end_date'))
-    area_id = request.GET.get('area')
+    area_id = parse_single_int(request.GET, 'area', 'area_id')
 
     data = get_customer_360_report_data(request.user, start_date, end_date, {'area_id': area_id})
     from accounts.scope_service import ScopeResolutionService
@@ -256,7 +260,7 @@ def report_customer_360(request):
         'start_date': start_date.isoformat(),
         'end_date': end_date.isoformat(),
         'areas': areas,
-        'selected_area': int(area_id) if area_id and area_id.isdigit() else '',
+        'selected_area': area_id or '',
     }
     return render(request, 'reports/report_customer_360.html', context)
 

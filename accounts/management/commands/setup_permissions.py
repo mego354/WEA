@@ -170,7 +170,8 @@ class Command(BaseCommand):
             'purchases:orders/export',
             'purchases:returns/list', 'purchases:returns/view', 'purchases:returns/create', 'purchases:returns/approve', 'purchases:returns/manage', 'purchases:returns/export',
             'module:treasury', 'treasury:payments/requests', 'treasury:payment_requests/approve', 'treasury:payment_requests/export',
-            'module:performance', 'performance:overview/view', 'performance:analysis/view', 'performance:daily/view', 'performance:detailed/view',
+            'module:performance', 'performance:overview/view', 'performance:overview/export',
+            'performance:analysis/view', 'performance:daily/view', 'performance:detailed/view',
             'performance:analysis/export', 'performance:daily/export', 'performance:detailed/export',
             'module:reports', 'reports:hub/view', 'reports:financial/view', 'reports:financial/export', 'reports:sales/view', 'reports:sales/export', 'reports:inventory/view', 'reports:inventory/export', 'reports:activities/view', 'reports:activities/export',
         ]

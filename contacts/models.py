@@ -75,6 +75,9 @@ class Contact(models.Model):
         verbose_name = "جهة اتصال"
         verbose_name_plural = "جهات الاتصال"
         ordering = ['-serial_num']
+        indexes = [
+            models.Index(fields=['is_customer', 'status', 'account_type'], name='contact_cust_stat_atype_idx'),
+        ]
 
     def __str__(self):
         return self.name

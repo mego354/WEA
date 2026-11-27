@@ -16,7 +16,13 @@ from django.core.signals import request_started, request_finished
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from master_data.models import CompanyProfile, LocationSettings, SalesSettings, PurchaseSettings
+from master_data.models import (
+    CompanyProfile,
+    LocationSettings,
+    SalesSettings,
+    PurchaseSettings,
+    AccountTypeReportGroup,
+)
 from accounts.models import UserSettings, Role
 from accounts.services import AuditLogService
 
@@ -453,11 +459,39 @@ class SettingsService:
         return u_settings
 
 
+    @classmethod
+    def get_account_type_report_groups(
+        cls,
+        active_only: bool = True,
+        force_refresh: bool = False,
+        request=None,
+    ):
+        """Return ordered list of configurable AccountTypeReportGroup objects (request-cached)."""
+        cache_key = 'account_type_report_groups_active' if active_only else 'account_type_report_groups_all'
+        cache = cls._get_cache(request=request)
+        if cache is not None and not force_refresh and cache_key in cache:
+            return cache[cache_key]
+        qs = AccountTypeReportGroup.objects.all().order_by('display_order', 'id')
+        if active_only:
+            qs = qs.filter(is_active=True)
+        groups = list(qs)
+        if cache is not None:
+            cache[cache_key] = groups
+        return groups
+
+
 def _on_settings_model_changed(sender, **kwargs):
     SettingsService.clear_cache()
 
 
-for _model_cls in (CompanyProfile, LocationSettings, SalesSettings, PurchaseSettings, UserSettings):
+for _model_cls in (
+    CompanyProfile,
+    LocationSettings,
+    SalesSettings,
+    PurchaseSettings,
+    UserSettings,
+    AccountTypeReportGroup,
+):
     post_save.connect(_on_settings_model_changed, sender=_model_cls)
     post_delete.connect(_on_settings_model_changed, sender=_model_cls)
 

@@ -668,3 +668,150 @@ class PendingStorageDeletion(models.Model):
         return f"{self.storage_key} ({self.attempts} attempts)"
 
 
+class AccountTypeReportGroup(models.Model):
+    """
+    Configurable reporting groups organizing Contact.account_type values for
+    Performance Analytics and Visit Reports.
+    Enforces strict exclusivity: each account type may belong to at most one active group.
+    """
+    ICON_CHOICES = [
+        ('local_pharmacy', 'صيدلية (local_pharmacy)'),
+        ('stethoscope', 'منشآت طبية (stethoscope)'),
+        ('local_hospital', 'مستشفى / مركز (local_hospital)'),
+        ('medical_services', 'خدمات طبية (medical_services)'),
+        ('storefront', 'متجر / مخزن أدوية (storefront)'),
+        ('business', 'شركة / مؤسسة (business)'),
+        ('category', 'تصنيف عام (category)'),
+        ('groups', 'مجموعة (groups)'),
+    ]
+
+    name = models.CharField(max_length=100, unique=True, verbose_name="اسم المجموعة")
+    code = models.SlugField(max_length=60, unique=True, blank=True, verbose_name="الكود")
+    account_types = models.JSONField(
+        default=list,
+        verbose_name="أنواع الحسابات المشمولة",
+        help_text="قائمة بأنواع الحسابات (Contact.account_type) التابعة لهذه المجموعة",
+    )
+    display_order = models.PositiveIntegerField(default=10, db_index=True, verbose_name="ترتيب العرض")
+    icon = models.CharField(max_length=50, default='category', blank=True, verbose_name="الأيقونة")
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name="مفعلة")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاريخ التحديث")
+
+    class Meta:
+        verbose_name = "مجموعة أنواع حسابات للتقارير"
+        verbose_name_plural = "مجموعات أنواع الحسابات للتقارير"
+        ordering = ['display_order', 'id']
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def normalize_account_types(raw_types):
+        """Return deduplicated, stripped list of valid non-empty account type strings."""
+        if not raw_types:
+            return []
+        if isinstance(raw_types, str):
+            raw_types = [p.strip() for p in raw_types.split(',')]
+        cleaned = []
+        seen_lower = set()
+        for item in raw_types:
+            if not isinstance(item, str):
+                item = str(item)
+            val = item.strip()
+            if not val or val.lower() in ('nan', 'none', 'null'):
+                continue
+            low = val.lower()
+            if low not in seen_lower:
+                seen_lower.add(low)
+                cleaned.append(val)
+        return cleaned
+
+    @classmethod
+    def get_available_account_types(cls):
+        """
+        Return ordered union of canonical contacts.constants.ACCOUNT_TYPES plus any
+        clean distinct account_type values currently present in Contact records.
+        """
+        from contacts.constants import ACCOUNT_TYPES
+        from contacts.models import Contact
+
+        result = []
+        seen = set()
+        for at in ACCOUNT_TYPES:
+            val = (at or '').strip()
+            if val and val.lower() not in seen:
+                seen.add(val.lower())
+                result.append(val)
+
+        db_types = (
+            Contact.objects.exclude(account_type__isnull=True)
+            .exclude(account_type='')
+            .values_list('account_type', flat=True)
+            .distinct()
+        )
+        for at in sorted(db_types):
+            val = (at or '').strip()
+            if val and val.lower() not in ('nan', 'none', 'null') and val.lower() not in seen:
+                seen.add(val.lower())
+                result.append(val)
+        return result
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+        self.name = (self.name or '').strip()
+        if not self.name:
+            raise ValidationError({'name': "اسم المجموعة حقل إلزامي."})
+
+        if not isinstance(self.account_types, list):
+            self.account_types = self.normalize_account_types(self.account_types)
+        else:
+            self.account_types = self.normalize_account_types(self.account_types)
+
+        if not self.account_types:
+            raise ValidationError({'account_types': "يجب اختيار نوع حساب واحد على الأقل للمجموعة."})
+
+        if not self.icon:
+            self.icon = 'category'
+
+        # Enforce exclusivity across active groups so no account type is double-counted
+        if self.is_active:
+            my_lower = {t.lower(): t for t in self.account_types}
+            other_active = AccountTypeReportGroup.objects.filter(is_active=True)
+            if self.pk:
+                other_active = other_active.exclude(pk=self.pk)
+            conflicts = []
+            for grp in other_active:
+                for t in (grp.account_types or []):
+                    t_low = str(t).strip().lower()
+                    if t_low in my_lower:
+                        conflicts.append(f"'{my_lower[t_low]}' (مستخدمة بالفعل في مجموعة: {grp.name})")
+            if conflicts:
+                raise ValidationError({
+                    'account_types': "لا يمكن تعيين نوع حساب واحد لأكثر من مجموعة مفعلة: " + "، ".join(conflicts)
+                })
+
+    def save(self, *args, **kwargs):
+        from django.utils.text import slugify
+
+        self.name = (self.name or '').strip()
+        self.account_types = self.normalize_account_types(self.account_types)
+        if not self.icon:
+            self.icon = 'category'
+        if not self.code:
+            base_slug = slugify(self.name, allow_unicode=False) or 'report-group'
+            candidate = base_slug[:50]
+            counter = 1
+            qs = AccountTypeReportGroup.objects.all()
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            while qs.filter(code=candidate).exists():
+                counter += 1
+                candidate = f"{base_slug[:45]}-{counter}"
+            self.code = candidate
+        super().save(*args, **kwargs)
+
+
+

@@ -38,9 +38,10 @@ Parameters:
                 <span data-drf-summary class="block text-xs font-bold text-slate-800 truncate">
                     {% if resolved_preset == 'today' %}اليوم
                     {% elif resolved_preset == 'yesterday' %}أمس
+                    {% elif resolved_preset == 'this_week' or resolved_preset == 'week' %}هذا الأسبوع
                     {% elif resolved_preset == 'last_7_days' %}آخر 7 أيام
                     {% elif resolved_preset == 'last_30_days' %}آخر 30 يوم
-                    {% elif resolved_preset == 'this_month' %}هذا الشهر
+                    {% elif resolved_preset == 'this_month' %}الشهر الحالي
                     {% elif resolved_preset == 'last_month' %}الشهر الماضي
                     {% elif resolved_preset == 'quarter' %}هذا الربع
                     {% elif resolved_preset == 'this_year' or resolved_preset == 'year' %}هذه السنة
@@ -71,9 +72,10 @@ Parameters:
             {% endif %}
             <option value="today" {% if resolved_preset == 'today' %}selected{% endif %}>اليوم</option>
             <option value="yesterday" {% if resolved_preset == 'yesterday' %}selected{% endif %}>أمس</option>
+            <option value="this_week" {% if resolved_preset == 'this_week' or resolved_preset == 'week' %}selected{% endif %}>هذا الأسبوع</option>
             <option value="last_7_days" {% if resolved_preset == 'last_7_days' %}selected{% endif %}>آخر 7 أيام</option>
             <option value="last_30_days" {% if resolved_preset == 'last_30_days' %}selected{% endif %}>آخر 30 يوم</option>
-            <option value="this_month" {% if resolved_preset == 'this_month' or not allow_all_time|default:True and not resolved_preset and not date_from and not date_to %}selected{% endif %}>هذا الشهر</option>
+            <option value="this_month" {% if resolved_preset == 'this_month' or not allow_all_time|default:True and not resolved_preset and not date_from and not date_to %}selected{% endif %}>الشهر الحالي</option>
             <option value="last_month" {% if resolved_preset == 'last_month' %}selected{% endif %}>الشهر الماضي</option>
             {% if include_quarter %}
             <option value="quarter" {% if resolved_preset == 'quarter' %}selected{% endif %}>هذا الربع</option>
@@ -89,9 +91,10 @@ Parameters:
             {% endif %}
             <button type="button" data-drf-pill="today" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">اليوم</button>
             <button type="button" data-drf-pill="yesterday" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">أمس</button>
+            <button type="button" data-drf-pill="this_week" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذا الأسبوع</button>
             <button type="button" data-drf-pill="last_7_days" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">آخر 7 أيام</button>
             <button type="button" data-drf-pill="last_30_days" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">آخر 30 يوم</button>
-            <button type="button" data-drf-pill="this_month" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذا الشهر</button>
+            <button type="button" data-drf-pill="this_month" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">الشهر الحالي</button>
             <button type="button" data-drf-pill="last_month" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">الشهر الماضي</button>
             {% if include_quarter %}
             <button type="button" data-drf-pill="quarter" class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors text-center bg-white text-slate-700 border-slate-200 hover:border-brand-400">هذا الربع</button>

@@ -126,7 +126,7 @@ class ReportsPermissionsAndDataScopeTests(TestCase):
         cls.acc_cairo.save()
 
         cls.visit_cairo = Visit.objects.create(
-            owner=cls.rep_cairo, contact=cls.cust_cairo, date=cls.today, status='ended',
+            owner=cls.rep_cairo, contact=cls.cust_cairo, date=cls.today, status='finished',
             location_verified=True, created_by=cls.rep_cairo
         )
         cls.order_cairo = SalesOrder.objects.create(
@@ -154,7 +154,7 @@ class ReportsPermissionsAndDataScopeTests(TestCase):
         cls.acc_giza.save()
 
         cls.visit_giza = Visit.objects.create(
-            owner=cls.rep_giza, contact=cls.cust_giza, date=cls.today, status='ended',
+            owner=cls.rep_giza, contact=cls.cust_giza, date=cls.today, status='finished',
             location_verified=True, created_by=cls.rep_giza
         )
         cls.order_giza = SalesOrder.objects.create(

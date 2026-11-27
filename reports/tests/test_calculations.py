@@ -51,13 +51,26 @@ class MathAndCalculationsUnitTests(SimpleTestCase):
         self.assertEqual(work_days, 4)
 
     def test_parse_date_range_standard_periods(self):
-        today = timezone.now().date()
+        import calendar
+        today = timezone.localdate()
+        last_day_num = calendar.monthrange(today.year, today.month)[1]
 
-        # this_month
+        # this_month: confirmed full current month (1st -> last day of month)
         s_date, e_date, p_s, p_e, label = parse_date_range('this_month')
         self.assertEqual(s_date, today.replace(day=1))
-        self.assertEqual(e_date, today)
+        self.assertEqual(e_date, today.replace(day=last_day_num))
         self.assertEqual(label, 'الشهر الحالي')
+
+        # this_week: confirmed Saturday -> Friday
+        s_date, e_date, _, _, _ = parse_date_range('this_week')
+        self.assertEqual(s_date.weekday(), 5)  # Saturday
+        self.assertEqual(e_date.weekday(), 4)  # Friday
+        self.assertEqual((e_date - s_date).days, 6)
+
+        # today
+        s_date, e_date, _, _, _ = parse_date_range('today')
+        self.assertEqual(s_date, today)
+        self.assertEqual(e_date, today)
 
         # last_month
         s_date, e_date, p_s, p_e, label = parse_date_range('last_month')
@@ -68,11 +81,13 @@ class MathAndCalculationsUnitTests(SimpleTestCase):
         self.assertEqual(e_date, expected_end)
         self.assertEqual(label, 'الشهر الماضي')
 
-        # quarter (last 90 days)
+        # quarter (calendar quarter)
         s_date, e_date, p_s, p_e, label = parse_date_range('quarter')
-        self.assertEqual(s_date, today - datetime.timedelta(days=90))
-        self.assertEqual(e_date, today)
-        self.assertEqual(label, 'آخر 90 يوماً')
+        q_start_month = ((today.month - 1) // 3) * 3 + 1
+        q_end_month = q_start_month + 2
+        q_end_day = calendar.monthrange(today.year, q_end_month)[1]
+        self.assertEqual(s_date, today.replace(month=q_start_month, day=1))
+        self.assertEqual(e_date, today.replace(month=q_end_month, day=q_end_day))
 
         # custom range
         s_date, e_date, p_s, p_e, label = parse_date_range('custom', '2026-01-01', '2026-01-31')

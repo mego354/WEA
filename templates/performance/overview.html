@@ -1,247 +1,925 @@
 {% extends 'layouts/base.html' %}
-{% load erp_tags %}
+{% load static erp_tags %}
 
-{% block title %}الأداء الميداني — نظرة عامة{% endblock %}
+{% block title %}الأداء الميداني — تقارير الزيارات والنظرة العامة{% endblock %}
 
 {% block breadcrumb %}
 <a href="{% url 'home' %}" class="hover:text-brand-600 transition-colors">الرئيسية</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="text-slate-500">الأداء الميداني</span>
+<a href="{% url 'performance_overview' %}" class="hover:text-brand-600 transition-colors">الأداء الميداني</a>
 <span class="material-symbols-outlined text-xs">chevron_left</span>
-<span class="font-bold text-brand-600">نظرة عامة</span>
+<span class="font-bold text-brand-600">تقارير الزيارات والأداء</span>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <!-- Top Header & Sub-navigation -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+<div class="space-y-4 max-w-full">
+
+    <!-- Compact Top Header & Actions -->
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-teal-50 text-[#27bebe] flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-2xl">speed</span>
             </div>
-            <div>
-                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">لوحة الأداء الميداني</h1>
-                <p class="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-                    مؤشرات الأداء الرئيسية والإنتاجية والمبيعات مقارنة بذات الفترة من الشهر السابق.
-                </p>
-            </div>
-        </div>
-
-        <!-- Section Tabs Switcher & Export -->
-        <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {% url 'performance_overview_export' as perf_overview_export_url %}
-            {% include 'components/excel_toolbar_actions.html' with export_url=perf_overview_export_url export_perm='performance:overview/export' %}
-            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
-                <a href="{% url 'performance_overview' %}" class="px-3.5 py-2 rounded-lg bg-white text-brand-700 shadow-xs flex items-center gap-1.5 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-base">dashboard</span>
-                    <span>نظرة عامة</span>
-                </a>
-                <a href="{% url 'performance_analysis' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-base">insights</span>
-                    <span>تحليلي</span>
-                </a>
-                <a href="{% url 'performance_daily' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-base">today</span>
-                    <span>يومي</span>
-                </a>
-                <a href="{% url 'performance_detailed' %}" class="px-3.5 py-2 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-base">grid_on</span>
-                    <span>مفصل</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Filters Bar -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
-            <div>
-                {% include 'components/date_range_filter.html' with preset_name='period' from_name='start_date' to_name='end_date' active_preset=period|default:'this_month' date_from=start_date date_to=end_date allow_all_time=False include_quarter=True year_value='year' %}
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">المندوب / المسؤول</label>
-                <select name="rep" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
-                    <option value="">جميع المناديب</option>
-                    {% for r in reps %}
-                    <option value="{{ r.id }}" {% if selected_rep == r.id %}selected{% endif %}>{{ r.name|default:r.username }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">المنطقة الجغرافية</label>
-                <select name="area" class="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-brand-500 min-h-[40px]">
-                    <option value="">كافة المحافظات والمناطق</option>
-                    {% for a in areas %}
-                    <option value="{{ a.id }}" {% if selected_area == a.id %}selected{% endif %}>{{ a.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="lg:pt-5 flex items-center gap-2">
-                <button type="submit" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold transition-colors min-h-[40px]">
-                    <span class="material-symbols-outlined text-base">filter_list</span>
-                    <span>تطبيق الفلاتر</span>
-                </button>
-                <a href="{% url 'performance_overview' %}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold min-h-[40px] inline-flex items-center">مسح</a>
-            </div>
-        </form>
-    </div>
-
-    <!-- KPI Grid -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-        {% for key, kpi in kpis.items %}
-        <div class="erp-stat-card p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-brand-300 transition-colors">
-            <div class="flex items-center justify-between mb-2">
-                <span class="erp-stat-label text-[11px] sm:text-xs font-bold text-slate-500 truncate" title="{{ kpi.label }}">{{ kpi.label }}</span>
-                <span class="w-7 h-7 rounded-lg bg-teal-50 text-brand-600 flex items-center justify-center shrink-0">
-                    <span class="material-symbols-outlined text-base">{{ kpi.icon }}</span>
-                </span>
-            </div>
-
-            <div class="my-1">
-                <div class="erp-stat-value text-lg sm:text-xl font-black text-slate-900 tracking-tight font-mono">
-                    {% if kpi.unit == 'ج.م' %}
-                        {{ kpi.value|floatformat:2 }} <span class="text-xs font-bold text-slate-400 font-sans">ج.م</span>
-                    {% elif kpi.unit == '%' %}
-                        {{ kpi.value }}<span class="text-xs font-bold text-slate-400 font-sans">%</span>
-                    {% elif kpi.unit %}
-                        {{ kpi.value }} <span class="text-xs font-bold text-slate-400 font-sans">{{ kpi.unit }}</span>
-                    {% else %}
-                        {{ kpi.value }}
-                    {% endif %}
+            <div class="min-w-0">
+                <h1 class="text-lg sm:text-xl font-black text-slate-900 truncate">تقارير الزيارات والأداء الميداني</h1>
+                <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                    <span>{{ period_label }}</span>
+                    <span class="text-slate-300">•</span>
+                    <span class="font-mono" dir="ltr">{{ start_date }} → {{ end_date }}</span>
                 </div>
             </div>
+        </div>
 
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] sm:text-xs">
-                <span class="text-slate-400 truncate" title="{{ kpi.detail }}">{{ kpi.detail }}</span>
-                {% if kpi.variance > 0 %}
-                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 shrink-0" title="زيادة عن الفترة السابقة">
-                    <span class="material-symbols-outlined text-xs">trending_up</span>
-                    <span>+{{ kpi.variance }}%</span>
-                </span>
-                {% elif kpi.variance < 0 %}
-                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-bold text-rose-700 bg-rose-50 shrink-0" title="انخفاض عن الفترة السابقة">
-                    <span class="material-symbols-outlined text-xs">trending_down</span>
-                    <span>{{ kpi.variance }}%</span>
-                </span>
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- Sub-nav -->
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
+                <a href="{% url 'performance_overview' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-1.5 rounded-lg bg-white text-[#27bebe] shadow-xs flex items-center gap-1 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-sm">dashboard</span>
+                    <span>نظرة عامة</span>
+                </a>
+                {% if request.user|has_permission:'performance:analysis/view' %}
+                <a href="{% url 'performance_analysis' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-sm">insights</span>
+                    <span>تحليلي</span>
+                </a>
+                {% endif %}
+                {% if request.user|has_permission:'performance:daily/view' %}
+                <a href="{% url 'performance_daily' %}" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-sm">today</span>
+                    <span>يومي</span>
+                </a>
+                {% endif %}
+                {% if request.user|has_permission:'performance:detailed/view' %}
+                <a href="{% url 'performance_detailed' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-sm">grid_on</span>
+                    <span>مفصل</span>
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- Filter Drawer Button -->
+            <button type="button" onclick="openPerfFilterDrawer()"
+                    class="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 min-h-[38px] transition-colors">
+                <span class="material-symbols-outlined text-base text-[#27bebe]">tune</span>
+                <span>تصفية</span>
+                {% if active_filters_count %}
+                <span class="px-1.5 py-0.2 rounded-full bg-[#27bebe] text-white text-[10px] font-black font-mono">{{ active_filters_count }}</span>
+                {% endif %}
+            </button>
+
+            <!-- Report Groups Settings Shortcut -->
+            {% if can_manage_report_groups %}
+            <a href="{% url 'report_groups_settings' %}" title="إدارة مجموعات أنواع الحسابات"
+               class="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-[#27bebe] rounded-xl min-w-[38px] min-h-[38px] inline-flex items-center justify-center transition-colors">
+                <span class="material-symbols-outlined text-lg">workspaces</span>
+            </a>
+            {% endif %}
+
+            <!-- Selective Export Button -->
+            {% if can_export_overview %}
+            <button type="button" onclick="openExportModal()"
+                    class="px-3.5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-bold rounded-xl shadow-xs inline-flex items-center gap-1.5 min-h-[38px] transition-colors">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>تصدير Excel</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Compact Quick Period Switcher + Active Filter Chips -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 no-scrollbar">
+            <a href="?{% url_replace period='today' preset=None start_date=None end_date=None date_from=None date_to=None page=1 %}"
+               class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors {% if period == 'today' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">اليوم</a>
+            <a href="?{% url_replace period='this_week' preset=None start_date=None end_date=None date_from=None date_to=None page=1 %}"
+               class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors {% if period == 'this_week' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">هذا الأسبوع</a>
+            <a href="?{% url_replace period='this_month' preset=None start_date=None end_date=None date_from=None date_to=None page=1 %}"
+               class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors {% if period == 'this_month' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">الشهر الحالي</a>
+            <a href="?{% url_replace period='last_month' preset=None start_date=None end_date=None date_from=None date_to=None page=1 %}"
+               class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors {% if period == 'last_month' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">الشهر الماضي</a>
+            <button type="button" onclick="openPerfFilterDrawer(true)"
+                    class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap inline-flex items-center gap-1 transition-colors {% if period == 'custom' %}bg-[#27bebe] text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                <span class="material-symbols-outlined text-sm">date_range</span>
+                <span>مخصصة</span>
+            </button>
+        </div>
+
+        <!-- Account Status Quick Pills -->
+        <div class="flex items-center gap-1 shrink-0">
+            <a href="?{% url_replace account_status='all' page=1 %}"
+               class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors {% if selected_account_status == 'all' %}bg-slate-800 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">الكل</a>
+            <a href="?{% url_replace account_status='customer' page=1 %}"
+               class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors {% if selected_account_status == 'customer' %}bg-emerald-600 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">عملاء فعليون</a>
+            <a href="?{% url_replace account_status='lead' page=1 %}"
+               class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors {% if selected_account_status == 'lead' %}bg-amber-500 text-white{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">محتملون</a>
+        </div>
+    </div>
+
+    <!-- Active Filter Chips -->
+    {% if active_filters %}
+    <div class="flex flex-wrap items-center gap-1.5">
+        {% for f in active_filters %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200/80 text-[11px] font-bold">
+            <span class="text-teal-600">{{ f.label }}:</span>
+            <span>{{ f.value }}</span>
+            <a href="?{% if f.remove_value %}{% url_remove_param f.param value=f.remove_value page=1 %}{% else %}{% url_remove_param f.param page=1 %}{% endif %}"
+               class="text-teal-500 hover:text-rose-600 leading-none" title="إزالة">×</a>
+        </span>
+        {% endfor %}
+        <a href="{% url 'performance_overview' %}" class="text-[11px] font-bold text-rose-600 hover:underline px-2">مسح الكل</a>
+    </div>
+    {% endif %}
+
+    <!-- ROW 1: CORE VISIT & FIELD KPI STRIP -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
+        <!-- 1. Working Days -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">أيام العمل الفعلية</span>
+                <span class="material-symbols-outlined text-base text-[#27bebe]">work_history</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.working_days }}</div>
+            <div class="text-[10px] text-slate-500 font-semibold mt-1 truncate">من {{ analytics.calendar_days }} يوم تقويمي</div>
+        </div>
+
+        <!-- 2. Total Completed Visits -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">إجمالي المكتملة</span>
+                <span class="material-symbols-outlined text-base text-emerald-600">verified</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.total_completed_visits }}</div>
+            <div class="text-[10px] text-slate-500 font-semibold mt-1 truncate">مخطط {{ analytics.planned_completed }} | غير مخطط {{ analytics.unplanned_completed }}</div>
+        </div>
+
+        <!-- 3. Planned Visits -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">الزيارات المخططة</span>
+                <span class="px-1.5 py-0.5 rounded-md text-[10px] font-black font-mono {% if analytics.plan_completion_pct >= 80 %}bg-emerald-50 text-emerald-700{% elif analytics.plan_completion_pct >= 50 %}bg-amber-50 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">{{ analytics.plan_completion_pct }}%</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.planned_total }}</div>
+            <div class="text-[10px] font-semibold mt-1 flex items-center gap-2 truncate">
+                <span class="text-emerald-700">مكتمل: {{ analytics.planned_completed }}</span>
+                <span class="text-amber-600">غير مكتمل: {{ analytics.planned_incomplete }}</span>
+            </div>
+        </div>
+
+        <!-- 4. Unplanned Visits -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">غير المخططة</span>
+                <span class="material-symbols-outlined text-base text-indigo-600">bolt</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.unplanned_completed }}</div>
+            <div class="text-[10px] text-slate-500 font-semibold mt-1 truncate">
+                {% if analytics.unplanned_in_progress %}
+                <span class="text-amber-600">جارية الآن: {{ analytics.unplanned_in_progress }}</span>
                 {% else %}
-                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-medium text-slate-500 bg-slate-50 shrink-0">
-                    <span>0%</span>
-                </span>
+                <span>{{ analytics.unplanned_share_pct }}% من المكتملة</span>
                 {% endif %}
             </div>
         </div>
-        {% endfor %}
+
+        <!-- 5. Average Visits Per Day -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">متوسط الزيارات / يوم</span>
+                <span class="material-symbols-outlined text-base text-cyan-600">trending_up</span>
+            </div>
+            <div class="flex items-baseline gap-1">
+                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.avg_visits_per_working_day }}</span>
+                <span class="text-[10px] text-slate-400 font-bold">/ يوم عمل</span>
+            </div>
+            <div class="text-[10px] text-slate-500 font-semibold mt-1 truncate">تقويمي: {{ analytics.avg_visits_per_calendar_day }} / يوم</div>
+        </div>
+
+        <!-- 6. Accounts Coverage -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[11px] font-bold text-slate-500 truncate">تغطية الحسابات</span>
+                <span class="px-1.5 py-0.5 rounded-md text-[10px] font-black font-mono {% if analytics.accounts_summary.coverage_pct >= 70 %}bg-emerald-50 text-emerald-700{% elif analytics.accounts_summary.coverage_pct >= 40 %}bg-amber-50 text-amber-700{% else %}bg-rose-50 text-rose-700{% endif %}">{{ analytics.accounts_summary.coverage_pct }}%</span>
+            </div>
+            <div class="flex items-baseline gap-1">
+                <span class="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-tight">{{ analytics.accounts_summary.visited_accounts }}</span>
+                <span class="text-xs text-slate-400 font-mono">/ {{ analytics.accounts_summary.eligible_accounts }}</span>
+            </div>
+            <div class="text-[10px] text-rose-600 font-semibold mt-1 truncate">غير مزارة: {{ analytics.accounts_summary.unvisited_accounts }}</div>
+        </div>
     </div>
 
-    <!-- Secondary Widgets: Top Detailed Products & Plan Progress -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Top Detailed Products -->
-        <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-brand-600 text-lg">medical_services</span>
-                    <span>الأصناف الأكثر شرحاً وترويجاً</span>
-                </h3>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-slate-400 font-medium">أعلى 10 أصناف خلال الفترة</span>
-                    {% include 'components/table_column_picker.html' with table_id='performance_overview_products_table' %}
+    <!-- ROW 2: CONFIGURABLE ACCOUNT-TYPE GROUP CARDS -->
+    {% if analytics.all_group_rows %}
+    <div class="space-y-2">
+        <div class="flex items-center justify-between">
+            <h2 class="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[#27bebe] text-lg">workspaces</span>
+                <span>إحصائيات مجموعات أنواع الحسابات</span>
+            </h2>
+            {% if can_manage_report_groups %}
+            <a href="{% url 'report_groups_settings' %}" class="text-[11px] font-bold text-[#27bebe] hover:underline">تخصيص المجموعات</a>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {% for g in analytics.all_group_rows %}
+            {% with g_param=g.id|default:g.code %}
+            <a href="?{% url_replace group=g_param page=1 %}"
+               class="block bg-white rounded-2xl border {% if selected_group_code == g_param|stringformat:'s' %}border-[#27bebe] ring-2 ring-teal-500/20{% else %}border-slate-200/80 hover:border-[#27bebe]/70{% endif %} p-3.5 shadow-2xs transition-all">
+                <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-8 h-8 rounded-xl {% if g.is_unclassified %}bg-amber-50 text-amber-600{% else %}bg-teal-50 text-[#27bebe]{% endif %} flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-lg">{{ g.icon }}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-xs sm:text-sm font-black text-slate-900 truncate">{{ g.name }}</h3>
+                            <div class="text-[10px] text-slate-400 truncate">
+                                {% if g.account_types %}{{ g.account_types|join:'، ' }}{% else %}غير محدد{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-left shrink-0">
+                        <div class="text-base font-black text-[#27bebe] font-mono leading-none">{{ g.total_completed }}</div>
+                        <div class="text-[9px] font-bold text-slate-400">مكتملة</div>
+                    </div>
                 </div>
+
+                <div class="grid grid-cols-3 gap-2 pt-2.5 text-center">
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black text-emerald-700 font-mono">{{ g.planned_completed }}</div>
+                        <div class="text-[9px] font-bold text-slate-500">مخطط مكتمل</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black text-amber-600 font-mono">{{ g.planned_incomplete }}</div>
+                        <div class="text-[9px] font-bold text-slate-500">مخطط غير مكتمل</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black text-slate-800 font-mono">{{ g.planned_total }}</div>
+                        <div class="text-[9px] font-bold text-slate-500">إجمالي المخطط</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black text-indigo-600 font-mono">{{ g.unplanned_completed }}</div>
+                        <div class="text-[9px] font-bold text-slate-500">غير مخطط</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black text-slate-900 font-mono">{{ g.visited_accounts }} / {{ g.eligible_accounts }}</div>
+                        <div class="text-[9px] font-bold text-slate-500">حساب مزار</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-1.5">
+                        <div class="text-xs font-black {% if g.coverage_pct >= 60 %}text-emerald-700{% else %}text-slate-700{% endif %} font-mono">{{ g.coverage_pct }}%</div>
+                        <div class="text-[9px] font-bold text-slate-500">التغطية</div>
+                    </div>
+                </div>
+            </a>
+            {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ROW 3: DAILY VISIT ACTIVITY CHART (ECharts Bundled) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[#27bebe] text-lg">bar_chart</span>
+                <span>النشاط اليومي للزيارات خلال الفترة</span>
+            </h2>
+            <div class="flex flex-wrap items-center gap-3 text-[11px] font-bold text-slate-600">
+                <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-[#27bebe]"></span>مخططة مكتملة</span>
+                <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-indigo-500"></span>غير مخططة</span>
+                <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-400"></span>مخططة غير مكتملة</span>
+            </div>
+        </div>
+        <div id="dailyVisitsActivityChart" class="w-full h-[270px] sm:h-[310px]"></div>
+    </div>
+
+    <!-- ROW 4: VISITED VS UNVISITED ACCOUNTS DRILL-DOWN (AJAX Paginated) -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div class="p-3.5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <!-- Tabs -->
+            <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold overflow-x-auto max-w-full">
+                <button type="button" data-acc-tab="visited" onclick="switchAccountsTab('visited')"
+                        class="acc-tab-btn px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 {% if initial_tab == 'visited' %}bg-white text-emerald-700 shadow-xs{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+                    <span>الحسابات المزارة</span>
+                    <span class="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-mono text-[11px]">{{ analytics.accounts_summary.visited_accounts }}</span>
+                </button>
+                <button type="button" data-acc-tab="unvisited" onclick="switchAccountsTab('unvisited')"
+                        class="acc-tab-btn px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 {% if initial_tab == 'unvisited' %}bg-white text-rose-700 shadow-xs{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+                    <span>غير المزارة</span>
+                    <span class="px-1.5 py-0.2 rounded-md bg-rose-50 text-rose-700 font-mono text-[11px]">{{ analytics.accounts_summary.unvisited_accounts }}</span>
+                </button>
+                <button type="button" data-acc-tab="all" onclick="switchAccountsTab('all')"
+                        class="acc-tab-btn px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 {% if initial_tab == 'all' %}bg-white text-slate-900 shadow-xs{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+                    <span>الكل المستهدف</span>
+                    <span class="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 font-mono text-[11px]">{{ analytics.accounts_summary.eligible_accounts }}</span>
+                </button>
             </div>
 
-            {% if top_detailed_products %}
-            <div class="overflow-x-auto">
-                <table id="performance_overview_products_table" data-col-table="performance_overview_products_table" class="w-full text-right text-xs">
-                    <thead>
-                        <tr class="text-slate-400 border-b border-slate-100 pb-2">
-                            <th class="py-2 px-3 font-bold" data-col="rank" data-col-label="#" data-required="true">#</th>
-                            <th class="py-2 px-3 font-bold" data-col="name" data-col-label="اسم المنتج" data-required="true">اسم المنتج / الصنف</th>
-                            <th class="py-2 px-3 font-bold" data-col="code" data-col-label="الكود">الكود</th>
-                            <th class="py-2 px-3 font-bold text-center" data-col="count" data-col-label="مرات الشرح">مرات الشرح</th>
-                            <th class="py-2 px-3 font-bold text-left" data-col="share" data-col-label="الحصة">الحصة من الإجمالي</th>
-                        </tr>
-                    </thead>
+            <!-- Search + Sort + Column Picker -->
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative flex-1 sm:flex-initial">
+                    <span class="material-symbols-outlined text-base text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
+                    <input type="text" id="accDrillSearch" placeholder="بحث باسم الحساب أو الكود..."
+                           oninput="debouncedAccountsReload()"
+                           class="w-full sm:w-52 pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#27bebe] focus:bg-white min-h-[36px]">
+                </div>
+                <select id="accDrillSort" onchange="loadAccountsPage(1)"
+                        class="px-2.5 py-1.5 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#27bebe] min-h-[36px]">
+                    <option value="">الترتيب الافتراضي</option>
+                    <option value="-visits">الأكثر زيارة</option>
+                    <option value="-last_visit">الأحدث زيارة</option>
+                    <option value="name">الاسم (أ-ي)</option>
+                    <option value="type">نوع الحساب</option>
+                </select>
+                {% include 'components/table_column_picker.html' with table_id='performance_accounts_table' %}
+            </div>
+        </div>
+
+        <div class="overflow-x-auto relative">
+            <div id="accDrillLoading" class="hidden absolute inset-0 bg-white/75 backdrop-blur-[1px] z-20 flex items-center justify-center">
+                <span class="text-xs font-bold text-[#27bebe]">جاري تحميل الحسابات...</span>
+            </div>
+            <table id="performance_accounts_table" data-col-table="performance_accounts_table" class="w-full text-right text-xs whitespace-nowrap">
+                <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                        <th class="py-2.5 px-3 sticky right-0 bg-slate-50 z-10" data-col="name" data-col-label="اسم الحساب" data-required="true">اسم الحساب</th>
+                        <th class="py-2.5 px-3 text-center" data-col="account_type" data-col-label="نوع الحساب">نوع الحساب</th>
+                        <th class="py-2.5 px-3 text-center" data-col="status" data-col-label="الحالة">الحالة</th>
+                        <th class="py-2.5 px-3" data-col="area" data-col-label="المحافظة">المحافظة</th>
+                        <th class="py-2.5 px-3" data-col="brick" data-col-label="الخط الجغرافي">الخط</th>
+                        <th class="py-2.5 px-3" data-col="rep" data-col-label="المندوب">المندوب</th>
+                        <th class="py-2.5 px-3 text-center" data-col="completed_visits" data-col-label="مكتملة بالفترة">مكتملة بالفترة</th>
+                        <th class="py-2.5 px-3 text-center" data-col="incomplete_planned" data-col-label="مخطط غير مكتمل">مخطط غير مكتمل</th>
+                        <th class="py-2.5 px-3 text-center" data-col="last_visit" data-col-label="آخر زيارة">آخر زيارة</th>
+                    </tr>
+                </thead>
+                <tbody id="accDrillTbody" class="divide-y divide-slate-100">
+                    {% for c in initial_accounts %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td data-col="name" class="py-2.5 px-3 font-bold text-slate-900 sticky right-0 bg-white z-10">
+                            <a href="{{ c.detail_url }}" class="hover:text-[#27bebe] transition-colors">{{ c.name }}</a>
+                            <span class="block text-[10px] text-slate-400 font-mono font-normal">{{ c.code }}</span>
+                        </td>
+                        <td data-col="account_type" class="py-2.5 px-3 text-center">
+                            <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[11px]">{{ c.account_type }}</span>
+                        </td>
+                        <td data-col="status" class="py-2.5 px-3 text-center">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold {% if c.status == 'customer' %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ c.status_ar }}</span>
+                        </td>
+                        <td data-col="area" class="py-2.5 px-3 text-slate-600">{{ c.area_name }}</td>
+                        <td data-col="brick" class="py-2.5 px-3 text-slate-600">{{ c.brick_name }}</td>
+                        <td data-col="rep" class="py-2.5 px-3 text-slate-700 font-medium">{{ c.rep_name }}</td>
+                        <td data-col="completed_visits" class="py-2.5 px-3 text-center font-mono font-black {% if c.completed_visits > 0 %}text-emerald-700{% else %}text-slate-400{% endif %}">{{ c.completed_visits }}</td>
+                        <td data-col="incomplete_planned" class="py-2.5 px-3 text-center font-mono font-bold {% if c.incomplete_planned > 0 %}text-amber-600{% else %}text-slate-400{% endif %}">{{ c.incomplete_planned }}</td>
+                        <td data-col="last_visit" class="py-2.5 px-3 text-center font-mono text-slate-500">{{ c.last_visit_date }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="py-8 text-center text-slate-400 font-semibold">لا توجد حسابات مطابقة في هذا القسم.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- AJAX Pagination Footer -->
+        <div class="px-3.5 py-2.5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 text-xs">
+            <span id="accDrillInfo" class="text-slate-500 font-semibold">صفحة 1 من {{ initial_accounts_pages }} ({{ initial_accounts_total }} حساب)</span>
+            <div class="flex items-center gap-1.5">
+                <button type="button" id="accPrevBtn" onclick="loadAccountsPage(accState.page - 1)" disabled
+                        class="px-3 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:border-[#27bebe] min-h-[32px]">السابق</button>
+                <button type="button" id="accNextBtn" onclick="loadAccountsPage(accState.page + 1)" {% if initial_accounts_pages <= 1 %}disabled{% endif %}
+                        class="px-3 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40 hover:border-[#27bebe] min-h-[32px]">التالي</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 5: COMPACT SECONDARY FIELD & COMMERCIAL STRIP -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5">
+            <h3 class="text-xs font-black text-slate-800 mb-2.5 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[#27bebe] text-base">analytics</span>
+                <span>مؤشرات ميدانية وتجارية إضافية</span>
+            </h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div class="p-2.5 rounded-xl bg-slate-50">
+                    <div class="text-[10px] text-slate-500 font-bold">معدل التكرار</div>
+                    <div class="text-sm font-black text-slate-900 font-mono mt-0.5">{{ analytics.accounts_summary.visit_frequency }}</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-50">
+                    <div class="text-[10px] text-slate-500 font-bold">متوسط المدة</div>
+                    <div class="text-sm font-black text-slate-900 font-mono mt-0.5">{{ analytics.avg_visit_duration_mins }} د</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-50">
+                    <div class="text-[10px] text-slate-500 font-bold">الزيارات المزدوجة</div>
+                    <div class="text-sm font-black text-slate-900 font-mono mt-0.5">{{ analytics.double_visits }}</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-50">
+                    <div class="text-[10px] text-slate-500 font-bold">المصروفات</div>
+                    <div class="text-sm font-black text-slate-900 font-mono mt-0.5">{{ current.expenses_total|floatformat:0 }} ج.م</div>
+                </div>
+                {% if can_view_sales %}
+                <div class="p-2.5 rounded-xl bg-teal-50/60">
+                    <div class="text-[10px] text-teal-700 font-bold">المبيعات ({{ current.sales_count }})</div>
+                    <div class="text-sm font-black text-teal-900 font-mono mt-0.5">{{ current.sales_total|floatformat:0 }} ج.م</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-emerald-50/60">
+                    <div class="text-[10px] text-emerald-700 font-bold">التحصيلات ({{ current.collections_count }})</div>
+                    <div class="text-sm font-black text-emerald-900 font-mono mt-0.5">{{ current.collections_total|floatformat:0 }} ج.م</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Top Detailed Products -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[#27bebe] text-base">medication</span>
+                    <span>الأصناف الأكثر شرحاً (Detailing)</span>
+                </h3>
+                <span class="text-[10px] font-mono text-slate-400">{{ current.detailing_count }} مرة</span>
+            </div>
+            <div class="overflow-x-auto max-h-40 overflow-y-auto">
+                <table class="w-full text-right text-xs">
                     <tbody class="divide-y divide-slate-100">
-                        {% for p in top_detailed_products %}
-                        <tr class="hover:bg-slate-50 transition-colors">
-                            <td data-col="rank" class="py-2.5 px-3 font-bold text-slate-400">{{ forloop.counter }}</td>
-                            <td data-col="name" class="py-2.5 px-3 font-bold text-slate-900">{{ p.name }}</td>
-                            <td data-col="code" class="py-2.5 px-3 text-slate-500 font-mono">{{ p.code|default:'–' }}</td>
-                            <td data-col="count" class="py-2.5 px-3 text-center font-bold text-brand-600">{{ p.count }}</td>
-                            <td data-col="share" class="py-2.5 px-3 text-left">
-                                <div class="flex items-center justify-end gap-2">
-                                    <div class="w-20 bg-slate-100 rounded-full h-2 overflow-hidden">
-                                        <div class="bg-brand-500 h-2 rounded-full" style="width: {{ p.share_pct }}%"></div>
-                                    </div>
-                                    <span class="font-bold text-slate-700 w-10 text-left">{{ p.share_pct }}%</span>
-                                </div>
-                            </td>
+                        {% for prod in top_detailed_products %}
+                        <tr class="hover:bg-slate-50">
+                            <td class="py-1.5 font-bold text-slate-800">{{ prod.name }}</td>
+                            <td class="py-1.5 text-center font-mono font-bold text-[#27bebe]">{{ prod.count }}</td>
+                            <td class="py-1.5 text-left font-mono text-slate-500">{{ prod.share_pct }}%</td>
                         </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="py-6 text-center text-slate-400">لا توجد بيانات شرح أصناف بالفترة.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <div class="py-8 text-center text-slate-400 text-xs">
-                لا توجد بيانات شرح منتجات مسجلة خلال الفترة المحددة.
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Planned vs Unplanned Breakdown -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <div>
-                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
-                    <span class="material-symbols-outlined text-brand-600 text-lg">pie_chart</span>
-                    <span>توزيع الزيارات والخطة الميدانية</span>
-                </h3>
-
-                <div class="space-y-4 pt-2">
-                    <div>
-                        <div class="flex items-center justify-between text-xs font-bold mb-1">
-                            <span class="text-slate-700">زيارات مخططة</span>
-                            <span class="text-blue-600">{{ current.planned_visits }} ({{ current.planned_pct }}%)</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                            <div class="bg-blue-500 h-2.5 rounded-full" style="width: {{ current.planned_pct }}%"></div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="flex items-center justify-between text-xs font-bold mb-1">
-                            <span class="text-slate-700">زيارات خارج الخطة</span>
-                            <span class="text-purple-600">{{ current.unplanned_visits }} ({{ current.unplanned_pct }}%)</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                            <div class="bg-purple-500 h-2.5 rounded-full" style="width: {{ current.unplanned_pct }}%"></div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="flex items-center justify-between text-xs font-bold mb-1">
-                            <span class="text-slate-700">زيارات مزدوجة (إشراف)</span>
-                            <span class="text-emerald-600">{{ current.double_visits }} ({{ current.double_visits_pct }}%)</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                            <div class="bg-emerald-500 h-2.5 rounded-full" style="width: {{ current.double_visits_pct }}%"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-                <div>
-                    <span class="text-xs font-bold text-slate-500 block">إجمالي الزيارات</span>
-                    <span class="text-xl font-black text-slate-900 font-mono">{{ current.total_visits }}</span>
-                </div>
-                <div class="text-left">
-                    <span class="text-xs font-bold text-slate-500 block">نسبة تغطية العملاء</span>
-                    <span class="text-xl font-black text-brand-600 font-mono">{{ current.coverage_pct }}%</span>
-                </div>
-            </div>
         </div>
     </div>
+
 </div>
+
+<!-- FILTER DRAWER (Desktop Side Drawer / Mobile Bottom Sheet) -->
+<div id="perfFilterBackdrop" onclick="closePerfFilterDrawer()" class="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-[60] hidden"></div>
+<aside id="perfFilterDrawer" class="fixed inset-x-0 bottom-0 sm:inset-y-0 sm:left-0 sm:right-auto w-full sm:w-[370px] max-w-full bg-white rounded-t-3xl sm:rounded-none shadow-2xl z-[65] hidden flex flex-col max-h-[90dvh] sm:max-h-full">
+    <div class="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#27bebe] text-xl">tune</span>
+            <h2 class="text-sm font-black text-slate-900">تصفية تقارير الأداء والزيارات</h2>
+        </div>
+        <button type="button" onclick="closePerfFilterDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center">
+            <span class="material-symbols-outlined text-lg">close</span>
+        </button>
+    </div>
+
+    <form method="GET" action="{% url 'performance_overview' %}" id="perfFilterForm" class="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
+        <!-- Date Range -->
+        <div>
+            {% include 'components/date_range_filter.html' with preset_name='period' from_name='start_date' to_name='end_date' active_preset=period|default:'this_month' date_from=start_date date_to=end_date allow_all_time=False include_quarter=True year_value='year' start_open=True %}
+        </div>
+
+        <!-- Representative (Scoped) -->
+        {% if can_select_rep %}
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">المندوب / المستخدم</label>
+            <select name="rep" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="">كافة المناديب ضمن النطاق</option>
+                {% for r in reps %}
+                <option value="{{ r.id }}" {% if selected_rep == r.id %}selected{% endif %}>{{ r.name|default:r.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <!-- Governorate -->
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">المحافظة / المنطقة</label>
+            <select name="area" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="">كافة المحافظات</option>
+                {% for a in areas %}
+                <option value="{{ a.id }}" {% if a.id in selected_area_ids %}selected{% endif %}>{{ a.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Brick -->
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">الخط الجغرافي (Brick)</label>
+            <select name="brick" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="">كافة الخطوط</option>
+                {% for b in bricks %}
+                <option value="{{ b.id }}" {% if b.id in selected_brick_ids %}selected{% endif %}>{{ b.name }}{% if b.parent %} ({{ b.parent.name }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Account-Type Group -->
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">مجموعة أنواع الحسابات</label>
+            <select name="group" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="">كافة المجموعات</option>
+                {% for g in active_groups %}
+                <option value="{{ g.id }}" {% if selected_group_code == g.id|stringformat:'s' %}selected{% endif %}>{{ g.name }}</option>
+                {% endfor %}
+                <option value="unclassified" {% if selected_group_code == 'unclassified' %}selected{% endif %}>أنواع أخرى غير مصنفة</option>
+            </select>
+        </div>
+
+        <!-- Individual Account Type -->
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">نوع الحساب المحدد</label>
+            <select name="account_type" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="">كافة الأنواع</option>
+                {% for at in available_account_types %}
+                <option value="{{ at }}" {% if at in selected_account_types %}selected{% endif %}>{{ at }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Account Status -->
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">حالة الحساب</label>
+            <select name="account_status" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <option value="all" {% if selected_account_status == 'all' %}selected{% endif %}>الكل (عملاء فعليون + محتملون)</option>
+                <option value="customer" {% if selected_account_status == 'customer' %}selected{% endif %}>عميل فعلي فقط (Customer)</option>
+                <option value="lead" {% if selected_account_status == 'lead' %}selected{% endif %}>عميل محتمل فقط (Lead)</option>
+            </select>
+        </div>
+
+        <!-- Specific Account Search Picker -->
+        <div class="relative">
+            <label class="block font-bold text-slate-700 mb-1">حساب محدد</label>
+            <input type="hidden" name="contact_id" id="perfContactIdInput" value="{{ selected_contact.id|default:'' }}">
+            <div class="flex items-center gap-1.5">
+                <input type="text" id="perfContactSearchInput" autocomplete="off"
+                       value="{{ selected_contact.name|default:'' }}"
+                       placeholder="ابحث بالاسم أو الكود..."
+                       oninput="searchPerfContacts(this.value)"
+                       class="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#27bebe] min-h-[40px]">
+                <button type="button" id="perfClearContactBtn" onclick="clearPerfContact()"
+                        class="{% if not selected_contact %}hidden {% endif %}p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 min-w-[36px] min-h-[36px] flex items-center justify-center" title="مسح الحساب">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <div id="perfContactResults" class="hidden absolute inset-x-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto z-30 divide-y divide-slate-100"></div>
+        </div>
+    </form>
+
+    <div class="p-3.5 border-t border-slate-100 bg-slate-50/90 flex items-center gap-2 shrink-0">
+        <button type="submit" form="perfFilterForm" class="flex-1 py-2.5 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-black rounded-xl shadow-xs min-h-[42px]">تطبيق التصفية</button>
+        <a href="{% url 'performance_overview' %}" class="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-bold rounded-xl min-h-[42px] inline-flex items-center">إعادة ضبط</a>
+    </div>
+</aside>
+
+<!-- SELECTIVE EXPORT MODAL / MOBILE BOTTOM SHEET -->
+{% if can_export_overview %}
+<div id="perfExportModal" onclick="if (event.target === this) closeExportModal()" class="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-[65] hidden flex items-end sm:items-center justify-center sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full p-5 border border-slate-100 max-h-[88dvh] flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#27bebe] text-xl">file_download</span>
+                <h2 class="text-sm font-black text-slate-900">تصدير أقسام التقرير (Excel)</h2>
+            </div>
+            <button type="button" onclick="closeExportModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form method="GET" action="{% url 'performance_overview_export' %}" id="perfExportForm" data-no-loader="1" onsubmit="return validateExportForm(event)" class="flex-1 overflow-y-auto pt-3 space-y-3">
+            <!-- Preserve all active filters in export -->
+            <input type="hidden" name="selective" value="1">
+            <input type="hidden" name="period" value="{{ period }}">
+            <input type="hidden" name="start_date" value="{{ start_date }}">
+            <input type="hidden" name="end_date" value="{{ end_date }}">
+            {% if selected_rep %}<input type="hidden" name="rep" value="{{ selected_rep }}">{% endif %}
+            {% for aid in selected_area_ids %}<input type="hidden" name="area" value="{{ aid }}">{% endfor %}
+            {% for bid in selected_brick_ids %}<input type="hidden" name="brick" value="{{ bid }}">{% endfor %}
+            {% if selected_group_code %}<input type="hidden" name="group" value="{{ selected_group_code }}">{% endif %}
+            {% for at in selected_account_types %}<input type="hidden" name="account_type" value="{{ at }}">{% endfor %}
+            <input type="hidden" name="account_status" value="{{ selected_account_status }}">
+            {% if selected_contact %}<input type="hidden" name="contact_id" value="{{ selected_contact.id }}">{% endif %}
+
+            <div class="flex items-center justify-between text-[11px] font-bold">
+                <span class="text-slate-500">اختر أوراق العمل المطلوبة:</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="toggleAllExportSections(true)" class="text-[#27bebe] hover:underline">تحديد الكل</button>
+                    <span class="text-slate-300">|</span>
+                    <button type="button" onclick="toggleAllExportSections(false)" class="text-slate-500 hover:text-rose-600">إلغاء الكل</button>
+                </div>
+            </div>
+
+            <div class="space-y-1.5">
+                {% for sec_key, sec_label in export_section_choices %}
+                <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200/80 hover:border-[#27bebe] bg-slate-50/50 cursor-pointer text-xs font-bold text-slate-800">
+                    <input type="checkbox" name="sections" value="{{ sec_key }}"
+                           {% if sec_key in default_export_sections %}checked{% endif %}
+                           class="export-sec-cb w-4 h-4 rounded border-slate-300 text-[#27bebe] focus:ring-[#27bebe]">
+                    <span>{{ sec_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div id="exportValidationErr" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                يرجى تحديد قسم واحد على الأقل للتصدير.
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeExportModal()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl min-h-[40px]">إلغاء</button>
+                <button type="submit" class="px-5 py-2 bg-[#27bebe] hover:bg-[#1fa8a8] text-white text-xs font-black rounded-xl shadow-xs inline-flex items-center gap-1.5 min-h-[40px]">
+                    <span class="material-symbols-outlined text-base">download</span>
+                    <span>تحميل ملف Excel</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Bundled Apache ECharts (No External CDN Dependency) -->
+<script src="{% static 'libs/echarts.min.js' %}"></script>
+<script>
+    const CHART_PAYLOAD = {{ chart_payload_json|safe }};
+    const ACCOUNTS_API_URL = "{% url 'performance_overview_accounts_api' %}";
+    const CONTACTS_SEARCH_URL = "{% url 'performance_contacts_search_api' %}";
+
+    const accState = {
+        tab: "{{ initial_tab }}",
+        page: 1,
+        numPages: {{ initial_accounts_pages|default:1 }},
+        debounceTimer: null,
+    };
+
+    // 1. ECharts Daily Activity Chart
+    function initDailyActivityChart() {
+        const el = document.getElementById('dailyVisitsActivityChart');
+        if (!el || typeof echarts === 'undefined') return;
+        const series = CHART_PAYLOAD.daily_series || [];
+        if (!series.length) {
+            el.innerHTML = '<div class="h-full flex items-center justify-center text-xs text-slate-400">لا توجد بيانات زيارات لهذه الفترة</div>';
+            return;
+        }
+        const chart = echarts.init(el);
+        const dates = series.map(d => d.label);
+        const fullDates = series.map(d => `${d.weekday_ar} ${d.date}`);
+        const plannedDone = series.map(d => d.planned_completed);
+        const unplannedDone = series.map(d => d.unplanned_completed);
+        const plannedInc = series.map(d => d.planned_incomplete);
+        const avgVal = Number(CHART_PAYLOAD.avg_working_day || 0);
+        const needZoom = series.length > 40;
+
+        chart.setOption({
+            textStyle: { fontFamily: 'Cairo, sans-serif' },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' },
+                formatter: function(params) {
+                    if (!params || !params.length) return '';
+                    const idx = params[0].dataIndex;
+                    const item = series[idx];
+                    let html = `<div style="direction:rtl;text-align:right;font-family:Cairo;font-size:12px;">
+                        <div style="font-weight:800;margin-bottom:4px;color:#0f172a;">${fullDates[idx]}</div>`;
+                    params.forEach(p => {
+                        html += `<div>${p.marker} ${p.seriesName}: <b>${p.value}</b></div>`;
+                    });
+                    html += `<div style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:3px;font-weight:700;">إجمالي المكتملة: ${item.total_completed}</div></div>`;
+                    return html;
+                }
+            },
+            grid: { left: 16, right: 20, top: 20, bottom: needZoom ? 58 : 28, containLabel: true },
+            dataZoom: needZoom ? [
+                { type: 'inside', start: Math.max(0, 100 - Math.round((31 / series.length) * 100)), end: 100 },
+                { type: 'slider', height: 18, bottom: 6 }
+            ] : [],
+            xAxis: {
+                type: 'category',
+                data: dates,
+                axisLabel: { fontSize: 10, color: '#64748b', rotate: series.length > 18 ? 35 : 0 },
+                axisLine: { lineStyle: { color: '#e2e8f0' } }
+            },
+            yAxis: {
+                type: 'value',
+                minInterval: 1,
+                splitLine: { lineStyle: { color: '#f1f5f9' } },
+                axisLabel: { fontSize: 10, color: '#64748b' }
+            },
+            series: [
+                {
+                    name: 'مخططة مكتملة',
+                    type: 'bar',
+                    stack: 'completed',
+                    barMaxWidth: series.length === 1 ? 48 : 22,
+                    itemStyle: { color: '#27bebe', borderRadius: [0, 0, 2, 2] },
+                    data: plannedDone,
+                    markLine: avgVal > 0 && series.length > 1 ? {
+                        silent: true,
+                        symbol: 'none',
+                        lineStyle: { type: 'dashed', color: '#0f766e', width: 1.5 },
+                        label: { formatter: `المتوسط: ${avgVal}`, fontSize: 10, color: '#0f766e', position: 'insideEndTop' },
+                        data: [{ yAxis: avgVal }]
+                    } : undefined
+                },
+                {
+                    name: 'غير مخططة مكتملة',
+                    type: 'bar',
+                    stack: 'completed',
+                    barMaxWidth: series.length === 1 ? 48 : 22,
+                    itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] },
+                    data: unplannedDone
+                },
+                {
+                    name: 'مخططة غير مكتملة',
+                    type: 'bar',
+                    barMaxWidth: series.length === 1 ? 48 : 16,
+                    itemStyle: { color: '#fbbf24', borderRadius: [4, 4, 0, 0] },
+                    data: plannedInc
+                }
+            ]
+        });
+
+        window.addEventListener('resize', () => chart.resize());
+    }
+
+    // 2. AJAX Accounts Drill-Down
+    function switchAccountsTab(tab) {
+        accState.tab = tab;
+        document.querySelectorAll('.acc-tab-btn').forEach(btn => {
+            const active = btn.getAttribute('data-acc-tab') === tab;
+            btn.classList.toggle('bg-white', active);
+            btn.classList.toggle('shadow-xs', active);
+            btn.classList.toggle('text-slate-600', !active);
+            btn.classList.toggle('text-emerald-700', active && tab === 'visited');
+            btn.classList.toggle('text-rose-700', active && tab === 'unvisited');
+            btn.classList.toggle('text-slate-900', active && tab === 'all');
+        });
+        loadAccountsPage(1);
+    }
+
+    function debouncedAccountsReload() {
+        clearTimeout(accState.debounceTimer);
+        accState.debounceTimer = setTimeout(() => loadAccountsPage(1), 280);
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function loadAccountsPage(pageNum) {
+        if (pageNum < 1) return;
+        const loader = document.getElementById('accDrillLoading');
+        const tbody = document.getElementById('accDrillTbody');
+        const info = document.getElementById('accDrillInfo');
+        const prevBtn = document.getElementById('accPrevBtn');
+        const nextBtn = document.getElementById('accNextBtn');
+        const q = (document.getElementById('accDrillSearch')?.value || '').trim();
+        const sort = (document.getElementById('accDrillSort')?.value || '').trim();
+
+        const url = new URL(ACCOUNTS_API_URL, window.location.origin);
+        // Copy all current active page filters
+        const currentParams = new URLSearchParams(window.location.search);
+        currentParams.forEach((v, k) => {
+            if (!['page', 'tab', 'q', 'sort'].includes(k)) url.searchParams.append(k, v);
+        });
+        url.searchParams.set('tab', accState.tab);
+        url.searchParams.set('page', String(pageNum));
+        if (q) url.searchParams.set('q', q);
+        if (sort) url.searchParams.set('sort', sort);
+
+        if (loader) loader.classList.remove('hidden');
+        fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' } })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(res => {
+                accState.page = res.page;
+                accState.numPages = res.num_pages;
+                if (!res.rows || !res.rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400 font-semibold">لا توجد حسابات مطابقة في هذا القسم.</td></tr>';
+                } else {
+                    tbody.innerHTML = res.rows.map(c => {
+                        const stCls = c.status === 'customer' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
+                        const vCls = c.completed_visits > 0 ? 'text-emerald-700' : 'text-slate-400';
+                        const pCls = c.incomplete_planned > 0 ? 'text-amber-600' : 'text-slate-400';
+                        return `<tr class="hover:bg-slate-50 transition-colors">
+                            <td data-col="name" class="py-2.5 px-3 font-bold text-slate-900 sticky right-0 bg-white z-10">
+                                <a href="${_esc(c.detail_url)}" class="hover:text-[#27bebe] transition-colors">${_esc(c.name)}</a>
+                                <span class="block text-[10px] text-slate-400 font-mono font-normal">${_esc(c.code)}</span>
+                            </td>
+                            <td data-col="account_type" class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[11px]">${_esc(c.account_type)}</span></td>
+                            <td data-col="status" class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${stCls}">${_esc(c.status_ar)}</span></td>
+                            <td data-col="area" class="py-2.5 px-3 text-slate-600">${_esc(c.area_name)}</td>
+                            <td data-col="brick" class="py-2.5 px-3 text-slate-600">${_esc(c.brick_name)}</td>
+                            <td data-col="rep" class="py-2.5 px-3 text-slate-700 font-medium">${_esc(c.rep_name)}</td>
+                            <td data-col="completed_visits" class="py-2.5 px-3 text-center font-mono font-black ${vCls}">${c.completed_visits}</td>
+                            <td data-col="incomplete_planned" class="py-2.5 px-3 text-center font-mono font-bold ${pCls}">${c.incomplete_planned}</td>
+                            <td data-col="last_visit" class="py-2.5 px-3 text-center font-mono text-slate-500">${_esc(c.last_visit_date)}</td>
+                        </tr>`;
+                    }).join('');
+                }
+                if (info) info.textContent = `صفحة ${res.page} من ${res.num_pages} (${res.total_count} حساب)`;
+                if (prevBtn) prevBtn.disabled = !res.has_previous;
+                if (nextBtn) nextBtn.disabled = !res.has_next;
+                if (window.TableColumnManager && typeof window.TableColumnManager.reapply === 'function') {
+                    window.TableColumnManager.reapply('performance_accounts_table');
+                }
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-rose-600 font-bold">تعذر تحميل قائمة الحسابات، يرجى إعادة المحاولة.</td></tr>';
+            })
+            .finally(() => {
+                if (loader) loader.classList.add('hidden');
+            });
+    }
+
+    // 3. Filter Drawer & Specific Account Search
+    function openPerfFilterDrawer(focusCustomDate) {
+        document.getElementById('perfFilterBackdrop')?.classList.remove('hidden');
+        document.getElementById('perfFilterDrawer')?.classList.remove('hidden');
+        if (focusCustomDate) {
+            const customPill = document.querySelector('#perfFilterDrawer [data-drf-pill="custom"]');
+            if (customPill) customPill.click();
+        }
+    }
+    function closePerfFilterDrawer() {
+        document.getElementById('perfFilterBackdrop')?.classList.add('hidden');
+        document.getElementById('perfFilterDrawer')?.classList.add('hidden');
+    }
+
+    let _contactSearchTimer = null;
+    function searchPerfContacts(q) {
+        clearTimeout(_contactSearchTimer);
+        const box = document.getElementById('perfContactResults');
+        if (!q || q.trim().length < 1) {
+            if (box) box.classList.add('hidden');
+            return;
+        }
+        _contactSearchTimer = setTimeout(() => {
+            fetch(`${CONTACTS_SEARCH_URL}?q=${encodeURIComponent(q.trim())}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Skip-Global-Loader': '1' }
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const items = data.results || [];
+                    if (!items.length) {
+                        box.innerHTML = '<div class="p-3 text-center text-[11px] text-slate-400">لا توجد نتائج</div>';
+                    } else {
+                        box.innerHTML = items.map(c =>
+                            `<button type="button" onclick="selectPerfContact(${c.id}, '${_esc(c.name).replace(/'/g, "\\'")}')"
+                                     class="w-full text-right px-3 py-2 hover:bg-teal-50 transition-colors block">
+                                <div class="font-bold text-slate-800 text-xs">${_esc(c.name)}</div>
+                                <div class="text-[10px] text-slate-400">${_esc(c.code)} • ${_esc(c.account_type || '—')} • ${_esc(c.location || '—')}</div>
+                            </button>`
+                        ).join('');
+                    }
+                    box.classList.remove('hidden');
+                })
+                .catch(() => {});
+        }, 250);
+    }
+
+    function selectPerfContact(id, name) {
+        document.getElementById('perfContactIdInput').value = String(id);
+        document.getElementById('perfContactSearchInput').value = name;
+        document.getElementById('perfClearContactBtn')?.classList.remove('hidden');
+        document.getElementById('perfContactResults')?.classList.add('hidden');
+    }
+
+    function clearPerfContact() {
+        document.getElementById('perfContactIdInput').value = '';
+        document.getElementById('perfContactSearchInput').value = '';
+        document.getElementById('perfClearContactBtn')?.classList.add('hidden');
+    }
+
+    // 4. Selective Export Modal
+    function openExportModal() {
+        document.getElementById('exportValidationErr')?.classList.add('hidden');
+        document.getElementById('perfExportModal')?.classList.remove('hidden');
+    }
+    function closeExportModal() {
+        document.getElementById('perfExportModal')?.classList.add('hidden');
+    }
+    function toggleAllExportSections(checked) {
+        document.querySelectorAll('#perfExportForm .export-sec-cb').forEach(cb => { cb.checked = checked; });
+        document.getElementById('exportValidationErr')?.classList.add('hidden');
+    }
+    function validateExportForm(e) {
+        const anyChecked = Array.from(document.querySelectorAll('#perfExportForm .export-sec-cb')).some(cb => cb.checked);
+        const err = document.getElementById('exportValidationErr');
+        if (!anyChecked) {
+            e.preventDefault();
+            if (err) err.classList.remove('hidden');
+            return false;
+        }
+        if (err) err.classList.add('hidden');
+        setTimeout(() => closeExportModal(), 300);
+        return true;
+    }
+
+    document.addEventListener('DOMContentLoaded', initDailyActivityChart);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closePerfFilterDrawer();
+            closeExportModal();
+        }
+    });
+</script>
 {% endblock %}

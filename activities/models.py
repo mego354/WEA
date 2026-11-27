@@ -624,6 +624,11 @@ class Visit(models.Model):
         verbose_name = "زيارة"
         verbose_name_plural = "الزيارات"
         ordering = ['-date', '-serial_num']
+        indexes = [
+            models.Index(fields=['date', 'status', 'is_planned'], name='visit_date_stat_plan_idx'),
+            models.Index(fields=['owner', 'date', 'status'], name='visit_owner_date_stat_idx'),
+            models.Index(fields=['contact', 'date', 'status'], name='visit_cont_date_stat_idx'),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['owner'],
@@ -702,21 +707,6 @@ class Visit(models.Model):
         if self.is_planned:
             return "bg-blue-50 text-blue-700 border-blue-200"
         return "bg-purple-50 text-purple-700 border-purple-200"
-
-    @property
-    def duration_formatted(self):
-        if self.started_at and self.ended_at:
-            delta = self.ended_at - self.started_at
-            sec = int(delta.total_seconds())
-            if sec >= 0:
-                min_val = max(1, round(sec / 60))
-                return f"{min_val} دقيقة"
-        if self.duration and self.duration > 0:
-            min_val = max(1, round(self.duration / 60))
-            return f"{min_val} دقيقة"
-        if self.status == 'started':
-            return "قيد التنفيذ"
-        return "–"
 
     @property
     def outcome_display(self):

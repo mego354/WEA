@@ -401,6 +401,55 @@ Historical and operational ERP records from the Bricks-Rep WEA exports (`wea dat
 - **Safe Financial Reconstruction (`reconstruct_wea_financials`)**:
   - `python manage.py reconstruct_wea_financials` defaults to `--dry-run` (zero DB mutations), supports `--backup-only` (creates an integrity-verified SQLite online backup + `SalesReturnOrderItem` JSON snapshot in `backups/`), and requires `--apply --confirm-reset` before resetting transactional financial/inventory tables and reconstructing from verified `wea data/*.xlsx` files.
 
+---
+
+## 16. Field Performance Analytics, Visit Reporting, Account-Type Groups & Dashboard Statistics
+
+All visit execution and account-coverage metrics are calculated centrally by `reports.visit_analytics.VisitAnalyticsService` and reused across `/performance/*`, `/home/`, and `/reports/customer-360/`.
+
+### 16.1 Qualifying Completed Visit Definition
+- **Qualifying Completed Visit (`COMPLETED_VISIT_Q`)**: `status == 'finished'` AND `approval_status != 'disapproved'`.
+  - Includes finished visits awaiting re-approval (`waiting_for_reapproval=True`, `approval_status='pending'`) or distance-exception review.
+  - Excludes `cancelled`, `disapproved`, unstarted `planned`, and still-open `started` visits.
+- **Planned Completed (`PLANNED_COMPLETED_Q`)**: `is_planned=True`, `status='finished'`, `approval_status!='disapproved'`.
+- **Planned Not Completed (`PLANNED_INCOMPLETE_Q`)**: `is_planned=True`, `status in ('planned', 'started')`, `approval_status!='disapproved'`, plus legacy unlinked `PlannedVisitItem` rows (`visit__isnull=True`, excluding cancelled/disapproved plans) without double-counting linked items.
+- **Total Planned & Plan Completion %**:
+  - $\text{Total Planned} = \text{Planned Completed} + \text{Planned Incomplete}$
+  - $\text{Plan Completion \%} = \frac{\text{Planned Completed}}{\text{Total Planned}} \times 100$ (0% when denominator is 0).
+- **Unplanned Visits**:
+  - **Unplanned Completed (`UNPLANNED_COMPLETED_Q`)**: `is_planned=False`, `status='finished'`, `approval_status!='disapproved'`.
+  - **Unplanned In-Progress (`UNPLANNED_IN_PROGRESS_Q`)**: `is_planned=False`, `status='started'`, `approval_status!='disapproved'` (shown separately, never added to completed totals).
+- **Overall Completed Visits**: $\text{Planned Completed} + \text{Unplanned Completed}$.
+
+### 16.2 Working Days & Average Visits Per Day
+- **Working Days**: Count of distinct `Visit.date` values within the reporting period that have at least one qualifying completed visit. Multiple visits on the same calendar date count as 1 working day; days containing only planned, started, cancelled, or disapproved visits do not count.
+- **Average Visits Per Working Day (Primary)**: $\frac{\text{Completed Visits}}{\text{Working Days}}$ (0.0 when Working Days = 0).
+- **Average Visits Per Calendar Day (Secondary)**: $\frac{\text{Completed Visits}}{\text{Calendar Days in Selected Period}}$ (inclusive date count; 0.0 when empty).
+
+### 16.3 Unified Reporting Date Ranges (`master_data/date_filter_utils.py`)
+- Timezone: `Africa/Cairo` using `timezone.localdate()`; all boundaries are **inclusive**.
+- **This Week (`this_week` / `week`)**: **Saturday → Friday** (`get_week_bounds_sat_to_fri`).
+- **This Month (`this_month` / `month`, default)**: **1st day of current month → last day of current month** (`get_month_bounds`), intentionally including the rest of the current month so upcoming scheduled visits appear accurately in Planned Not Completed and Total Planned.
+- Supports `today`, `yesterday`, `this_week`, `last_7_days`, `last_30_days`, `this_month`, `last_month`, `quarter`, `year`/`this_year`, `all`, and `custom` (`start_date`..`end_date`). Explicit non-custom presets take precedence over auto-filled client date fields.
+
+### 16.4 Eligible, Visited & Unvisited Accounts
+- **Eligible Accounts**: Scoped active customer contacts (`is_customer=True`, `status != 'inactive'`).
+  - Default `account_status='all'` includes both `customer` and `lead` accounts; users can narrow in 1 click to `customer` only or `lead` only.
+  - Filtered consistently by selected Governorate (`area`), Brick (`brick`), Account Type (`account_type`), and Representative (`rep`, matching contacts in the rep's brick/territory or visited by the rep).
+- **Visited Accounts**: Eligible accounts with ≥1 qualifying completed visit in the selected period.
+- **Unvisited Accounts**: Eligible accounts with 0 qualifying completed visits in the selected period.
+- **Invariant**: $\text{Visited} + \text{Unvisited} = \text{Eligible}$, and $0\% \le \text{Coverage \%} \le 100\%$.
+
+### 16.5 Configurable Account-Type Report Groups (`master_data.AccountTypeReportGroup`)
+- Managed via `/settings/report-groups/` (`settings:reportGroups/manage`) with full `AuditLogService` logging (`REPORT_GROUP_CREATED`, `_UPDATED`, `_TOGGLED`, `_REORDERED`, `_DELETED`).
+- Default seeded groups: `الصيدليات` (`['Pharmacy']`) and `المنشآت الطبية` (`['Clinic', 'Polyclinic']`).
+- **Strict Exclusivity**: Each active `account_type` may belong to at most one active group (validated in `AccountTypeReportGroup.clean()` and settings views).
+- **Automatic Reconciliation Bucket**: Any active account types (or blank `account_type`) not assigned to an active group automatically appear in a trailing `أنواع أخرى غير مصنفة` group whenever unassigned accounts or visits exist, guaranteeing 100% reconciliation with overall totals and zero double-counting.
+
+### 16.6 Selective Multi-Sheet Excel Export & Dashboard Alignment
+- `/performance/overview/export/` (`performance:overview/export`) supports selective section checkboxes (`summary`, `groups`, `daily`, `visited`, `unvisited`, `all_eligible`, `visits`), enforces `MAX_EXPORT_RANGE_DAYS = 732`, applies `sanitize_excel_cell()` formula-injection protection across all worksheets, includes company branding + active filter metadata, preserves current/prior/variance columns on the summary sheet, and logs `SecurityAuditLog(action_type='REPORT_EXPORTED')`.
+- `/home/` Executive Dashboard uses `COMPLETED_VISIT_Q` for visit KPIs and `visits_by_area`, excludes `status='inactive'` from contact KPIs, aligns `so_proc` to the selected period, and renders distinct normalized 2-ring sunburst charts (`Governorate → Brick` for area/visit charts and `Representative → Area` for rep charts).
+
 
 
 

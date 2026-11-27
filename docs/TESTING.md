@@ -21,7 +21,7 @@ ERP/
 ├── master_data/tests_excel.py     # Global Excel Import/Export Engine (10 importers + scoped exports)
 ├── notifications/tests.py         # Notification registry (61 events), Role rules, DataScope, FCM & deep links
 ├── purchases/tests.py             # Purchase Orders, Returns, Receiving, Supplier Payments
-├── reports/tests/                 # Calculations, Performance Dashboards, Permissions/Scope, 8 Reports
+├── reports/tests/                 # Calculations, Performance Dashboards, Permissions/Scope, 8 Reports, Phase 2 Visit Analytics & Selective Export
 ├── sales/tests.py                 # Sales Orders, Returns, Collections, Rep Scoping
 └── treasury/tests.py              # Vaults, Transfers, Reversals, Payment Requests, Auth Security
 ```
@@ -84,6 +84,7 @@ python manage.py test activities.tests.AgreementWorkflowTests.test_agreement_ant
 | `master_data` | `AreaModelTests`, `CompanyProfileTests`, `DashboardAndSettingsTests`, `AreaManagementTests`, `DashboardRolePermissionsTests`, `EgyptAreasStructureTests`, `PaginationAndFiltersTests`, `DashboardStatsAndLifecycleTests`, `R2StorageAndAttachmentsTests`, `GlobalExcelImportExportTests` | Two-level territorial hierarchy (Governorate / Brick), company settings, dashboard KPIs, `SettingsService` request caching, R2 deduplication, Excel import/export engine. |
 | `notifications` | `ArabicNotificationAndDeepLinkingTests` | Notification registry (61 events), `RoleNotificationRule`, 4-layer DataScope & anti-self-approval, bulk plan vs single visit emission, FCM HTTP v1 payload, device registration & `/open/` deep linking. |
 | `purchases` | `PurchaseOrderModelTests`, `PurchaseOrderViewsTests`, `PurchaseOrderLifecycleTests`, `VendorPaymentSettlementTests` | Purchase order creation, pricing validation, supplier approval, stock receiving memos, vendor ledger settlement. |
+| `reports` | `CalculationTests`, `PerformanceDashboardTests`, `PermissionsAndScopeTests`, `ReportsViewsTests`, `VisitAnalyticsPhase2Tests` | Qualifying completed visit rules, working days, Saturday→Friday & full-month date ranges, eligible/visited/unvisited invariants, exclusive `AccountTypeReportGroup` CRUD & reconciliation, AJAX drill-down, selective multi-sheet Excel export + formula sanitization + audit logging, dashboard sunburst/scope integrity, `O(1)` query scaling, 8 standalone reports. |
 | `sales` | `SalesOrderModelTests`, `SalesOrderViewsTests`, `SalesOrderWorkflowTests`, `RepresentativeSalesScopingTests` | Sales orders, discounts, taxes, rep warehouse stock validation, delivery transactions, collections into cash vaults. |
 | `treasury` | `VaultModelTests`, `VaultViewsTests`, `TreasuryTransactionTests`, `TreasuryRbacAndStatsTests`, `VaultAuthorizationSecurityTests` | Cash vaults, deposits, withdrawals, internal transfers, balance locking (`select_for_update`), deposit/withdraw permissions. |
 

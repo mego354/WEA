@@ -95,16 +95,16 @@
                     <tr>
                         <th class="py-3 px-3 sticky right-0 bg-slate-50 z-20 shadow-xs" data-col="rep" data-col-label="المندوب" data-required="true">المندوب</th>
                         <th class="py-3 px-3" data-col="area" data-col-label="المنطقة">المنطقة</th>
-                        <th class="py-3 px-3 text-center" data-col="doctors" data-col-label="أطباء">أطباء</th>
-                        <th class="py-3 px-3 text-center" data-col="pharmacies" data-col-label="صيدليات">صيدليات</th>
-                        <th class="py-3 px-3 text-center" data-col="hospitals" data-col-label="مستشفيات">مستشفيات</th>
-                        <th class="py-3 px-3 text-center" data-col="warehouses" data-col-label="مخازن">مخازن</th>
+                        {% for gc in group_columns %}
+                        <th class="py-3 px-3 text-center" data-col="grp_{{ gc.code }}" data-col-label="{{ gc.name }}">{{ gc.name }}</th>
+                        {% endfor %}
                         <th class="py-3 px-3 text-center" data-col="cov_a" data-col-label="تغطية A">تغطية A</th>
                         <th class="py-3 px-3 text-center" data-col="cov_b" data-col-label="تغطية B">تغطية B</th>
                         <th class="py-3 px-3 text-center" data-col="cov_c" data-col-label="تغطية C">تغطية C</th>
-                        <th class="py-3 px-3 text-center" data-col="total_visits" data-col-label="إجمالي الزيارات">إجمالي الزيارات</th>
-                        <th class="py-3 px-3 text-center" data-col="planned" data-col-label="مخططة">مخططة</th>
-                        <th class="py-3 px-3 text-center" data-col="unplanned" data-col-label="خارج خطة">خارج خطة</th>
+                        <th class="py-3 px-3 text-center" data-col="total_visits" data-col-label="المكتملة">المكتملة</th>
+                        <th class="py-3 px-3 text-center" data-col="planned" data-col-label="مخططة مكتملة">مخطط مكتمل</th>
+                        <th class="py-3 px-3 text-center" data-col="planned_inc" data-col-label="مخططة غير مكتملة">مخطط غير مكتمل</th>
+                        <th class="py-3 px-3 text-center" data-col="unplanned" data-col-label="غير مخططة">غير مخططة</th>
                         <th class="py-3 px-3 text-center" data-col="am" data-col-label="صباحية">صباحية</th>
                         <th class="py-3 px-3 text-center" data-col="pm" data-col-label="مسائية">مسائية</th>
                         <th class="py-3 px-3 text-center" data-col="avg_duration" data-col-label="متوسط المدة">متوسط المدة</th>
@@ -125,16 +125,19 @@
                             <span class="block text-[10px] text-slate-400 font-normal">#{{ r.code }}</span>
                         </td>
                         <td data-col="area" class="py-3 px-3 text-slate-600">{{ r.area }}</td>
-                        <td data-col="doctors" class="py-3 px-3 text-center text-slate-700 font-mono">{{ r.total_doctors }}</td>
-                        <td data-col="pharmacies" class="py-3 px-3 text-center text-slate-700 font-mono">{{ r.total_pharmacies }}</td>
-                        <td data-col="hospitals" class="py-3 px-3 text-center text-slate-700 font-mono">{{ r.total_hospitals }}</td>
-                        <td data-col="warehouses" class="py-3 px-3 text-center text-slate-700 font-mono">{{ r.total_stores }}</td>
+                        {% for gc in r.group_cells %}
+                        <td data-col="grp_{{ gc.code }}" class="py-3 px-3 text-center font-mono">
+                            <span class="font-bold text-slate-900">{{ gc.completed_visits }}</span>
+                            <span class="block text-[10px] text-slate-400">{{ gc.accounts }} حساب</span>
+                        </td>
+                        {% endfor %}
                         <td data-col="cov_a" class="py-3 px-3 text-center font-bold text-slate-800 font-mono">{{ r.class_a_cov }}%</td>
                         <td data-col="cov_b" class="py-3 px-3 text-center font-bold text-slate-800 font-mono">{{ r.class_b_cov }}%</td>
                         <td data-col="cov_c" class="py-3 px-3 text-center font-bold text-slate-800 font-mono">{{ r.class_c_cov }}%</td>
                         <td data-col="total_visits" class="py-3 px-3 text-center font-black text-brand-600 font-mono">{{ r.total_visits }}</td>
-                        <td data-col="planned" class="py-3 px-3 text-center text-blue-600 font-mono">{{ r.planned_visits }}</td>
-                        <td data-col="unplanned" class="py-3 px-3 text-center text-purple-600 font-mono">{{ r.unplanned_visits }}</td>
+                        <td data-col="planned" class="py-3 px-3 text-center text-emerald-700 font-bold font-mono">{{ r.planned_visits }}</td>
+                        <td data-col="planned_inc" class="py-3 px-3 text-center text-amber-600 font-mono">{{ r.planned_incomplete }}</td>
+                        <td data-col="unplanned" class="py-3 px-3 text-center text-indigo-600 font-mono">{{ r.unplanned_visits }}</td>
                         <td data-col="am" class="py-3 px-3 text-center text-amber-600 font-mono">{{ r.am_visits }}</td>
                         <td data-col="pm" class="py-3 px-3 text-center text-indigo-600 font-mono">{{ r.pm_visits }}</td>
                         <td data-col="avg_duration" class="py-3 px-3 text-center text-slate-700 font-mono">{{ r.avg_duration }} د</td>

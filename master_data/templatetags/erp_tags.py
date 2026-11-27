@@ -499,6 +499,8 @@ _NAV_URL_MAP = {
     # Performance
     'performance_root': ('submenu-performance', 'performance_overview'),
     'performance_overview': ('submenu-performance', 'performance_overview'),
+    'performance_overview_export': ('submenu-performance', 'performance_overview'),
+    'performance_overview_accounts_api': ('submenu-performance', 'performance_overview'),
     'performance_analysis': ('submenu-performance', 'performance_analysis'),
     'performance_analysis_export': ('submenu-performance', 'performance_analysis'),
     'performance_daily': ('submenu-performance', 'performance_daily'),
@@ -593,6 +595,12 @@ _NAV_URL_MAP = {
     'sales_settings': ('submenu-settings', 'sales_settings'),
     'purchase_settings': ('submenu-settings', 'purchase_settings'),
     'inventory_settings': ('submenu-settings', 'inventory_settings'),
+    'report_groups_settings': ('submenu-settings', 'report_groups_settings'),
+    'report_group_create': ('submenu-settings', 'report_groups_settings'),
+    'report_group_edit': ('submenu-settings', 'report_groups_settings'),
+    'report_group_toggle': ('submenu-settings', 'report_groups_settings'),
+    'report_group_reorder': ('submenu-settings', 'report_groups_settings'),
+    'report_group_delete': ('submenu-settings', 'report_groups_settings'),
 }
 
 # Ordered longest-prefix-first fallback when resolver_match is absent (e.g. unit tests)
@@ -610,6 +618,7 @@ _NAV_PATH_PREFIXES = [
     ('/settings/sales', ('submenu-settings', 'sales_settings')),
     ('/settings/purchase', ('submenu-settings', 'purchase_settings')),
     ('/settings/inventory', ('submenu-settings', 'inventory_settings')),
+    ('/settings/report-groups', ('submenu-settings', 'report_groups_settings')),
     ('/settings/audit-logs', ('submenu-settings', 'audit_logs')),
     ('/settings/roles', ('submenu-settings', 'roles')),
     ('/settings/users', ('submenu-settings', 'users')),

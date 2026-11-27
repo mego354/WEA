@@ -43,122 +43,184 @@ def _format_metric_amount(val):
     return f"{int(round(v)):,} جنيه"
 
 
-def _build_area_sunburst(queryset, amount_field='grand_total', is_count=False):
-    if is_count:
-        qs = queryset.filter(customer__area__isnull=False).values(
-            'customer__area__name',
-            'customer__area__parent__name'
-        ).annotate(val=Count('id')).order_by('-val')
-    else:
-        qs = queryset.filter(customer__area__isnull=False).values(
-            'customer__area__name',
-            'customer__area__parent__name'
-        ).annotate(val=Sum(amount_field)).order_by('-val')
-
+def _build_geo_sunburst_tree(rows, gov_key, brick_key, legacy_parent_key, legacy_area_key, max_parents=8, max_children=10, is_int=False):
+    """
+    Build a clean 2-ring ECharts Sunburst hierarchy strictly reflecting
+    Governorate (inner ring) -> Brick (outer ring), supporting both normalized
+    (area=Governorate, brick=Subarea) and legacy (area=Subarea) contact records
+    without duplicate governorates or empty child levels.
+    """
     tree = {}
-    for item in qs:
-        parent_name = item['customer__area__parent__name'] or item['customer__area__name']
-        child_name = item['customer__area__name']
-        val = float(item['val'] or 0)
+    for item in rows:
+        raw_val = item['val'] or 0
+        val = int(raw_val) if is_int else float(raw_val)
         if val <= 0:
             continue
-        if parent_name not in tree:
-            tree[parent_name] = {'name': parent_name, 'children': []}
-        if item['customer__area__parent__name']:
-            tree[parent_name]['children'].append({'name': child_name, 'value': val})
+
+        gov_name = (
+            item.get(legacy_parent_key)
+            or item.get(gov_key)
+            or item.get(legacy_area_key)
+        )
+        if not gov_name:
+            continue
+
+        brick_name = item.get(brick_key)
+        if not brick_name and item.get(legacy_parent_key):
+            brick_name = item.get(legacy_area_key)
+
+        node = tree.setdefault(gov_name, {'name': gov_name, 'children_map': {}, 'direct_val': 0})
+        if brick_name and brick_name != gov_name:
+            node['children_map'][brick_name] = node['children_map'].get(brick_name, 0) + val
         else:
-            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
+            node['direct_val'] += val
+
+    def _node_total(n):
+        return sum(n['children_map'].values()) + n['direct_val']
 
     result = []
-    sorted_parents = sorted(tree.values(), key=lambda n: sum(c.get('value', 0) for c in n.get('children', [])) + n.get('value', 0), reverse=True)[:8]
-    for p in sorted_parents:
-        if 'children' in p and p['children']:
-            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:10]
-        result.append(p)
+    for node in sorted(tree.values(), key=_node_total, reverse=True)[:max_parents]:
+        children = [
+            {'name': b_name, 'value': round(b_val, 2) if not is_int else int(b_val)}
+            for b_name, b_val in sorted(node['children_map'].items(), key=lambda kv: kv[1], reverse=True)[:max_children]
+        ]
+        if children:
+            if node['direct_val'] > 0:
+                children.append({
+                    'name': 'بدون خط محدد',
+                    'value': round(node['direct_val'], 2) if not is_int else int(node['direct_val']),
+                })
+            result.append({'name': node['name'], 'children': children})
+        elif node['direct_val'] > 0:
+            result.append({
+                'name': node['name'],
+                'value': round(node['direct_val'], 2) if not is_int else int(node['direct_val']),
+            })
     return result
+
+
+def _build_area_sunburst(queryset, amount_field='grand_total', is_count=False):
+    base = queryset.filter(Q(customer__area__isnull=False) | Q(customer__brick__isnull=False)).values(
+        'customer__area__name',
+        'customer__area__parent__name',
+        'customer__brick__name',
+        'customer__brick__parent__name',
+    )
+    qs = base.annotate(val=Count('id') if is_count else Sum(amount_field)).order_by('-val')
+    return _build_geo_sunburst_tree(
+        qs,
+        gov_key='customer__brick__parent__name',
+        brick_key='customer__brick__name',
+        legacy_parent_key='customer__area__parent__name',
+        legacy_area_key='customer__area__name',
+        max_parents=8,
+        max_children=10,
+        is_int=is_count,
+    )
 
 
 def _build_visits_sunburst(queryset):
-    qs = queryset.filter(contact__area__isnull=False).values(
+    qs = queryset.filter(Q(contact__area__isnull=False) | Q(contact__brick__isnull=False)).values(
         'contact__area__name',
-        'contact__area__parent__name'
+        'contact__area__parent__name',
+        'contact__brick__name',
+        'contact__brick__parent__name',
     ).annotate(val=Count('id')).order_by('-val')
-
-    tree = {}
-    for item in qs:
-        parent_name = item['contact__area__parent__name'] or item['contact__area__name']
-        child_name = item['contact__area__name']
-        val = int(item['val'] or 0)
-        if val <= 0:
-            continue
-        if parent_name not in tree:
-            tree[parent_name] = {'name': parent_name, 'children': []}
-        if item['contact__area__parent__name']:
-            tree[parent_name]['children'].append({'name': child_name, 'value': val})
-        else:
-            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
-
-    result = []
-    for p in list(tree.values())[:8]:
-        if 'children' in p and p['children']:
-            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:10]
-        result.append(p)
-    return result
+    return _build_geo_sunburst_tree(
+        qs,
+        gov_key='contact__brick__parent__name',
+        brick_key='contact__brick__name',
+        legacy_parent_key='contact__area__parent__name',
+        legacy_area_key='contact__area__name',
+        max_parents=8,
+        max_children=10,
+        is_int=True,
+    )
 
 
 def _build_reps_sunburst(amount_field='current_balance', user=None, base_qs=None):
+    """
+    Build a 2-ring ECharts Sunburst grouped accurately by Representative (inner ring)
+    -> Governorate/Account area (outer ring) with zero double-counting for multi-rep contacts.
+    """
     if base_qs is not None:
         qs = base_qs.filter(**{f"{amount_field}__gt": 0})
     else:
         qs = CustomerAccount.objects.filter(**{f"{amount_field}__gt": 0})
         if user:
             qs = get_scoped_queryset(qs, user, 'customeraccount')
-    qs = qs.values(
-        'customer__area__name',
-        'customer__area__parent__name'
-    ).annotate(val=Sum(amount_field)).order_by('-val')
+
+    accounts = list(
+        qs.select_related(
+            'customer', 'customer__created_by', 'customer__area', 'customer__brick', 'customer__brick__parent'
+        ).prefetch_related('customer__assigned_team')
+    )
 
     tree = {}
-    for item in qs:
-        parent_name = item['customer__area__parent__name'] or item['customer__area__name'] or 'منطقة عامة'
-        child_name = item['customer__area__name'] or 'عميل'
-        val = float(item['val'] or 0)
+    for acc in accounts:
+        val = float(getattr(acc, amount_field, 0) or 0)
         if val <= 0:
             continue
-        if parent_name not in tree:
-            tree[parent_name] = {'name': parent_name, 'children': []}
-        if item['customer__area__parent__name']:
-            tree[parent_name]['children'].append({'name': child_name, 'value': val})
-        else:
-            tree[parent_name]['value'] = tree[parent_name].get('value', 0) + val
+        cust = acc.customer
+        team = list(cust.assigned_team.all())
+        primary_rep = team[0] if team else cust.created_by
+        rep_name = (primary_rep.name or primary_rep.username) if primary_rep else 'غير معين لمندوب'
+        area_name = (
+            cust.brick.name if cust.brick
+            else (cust.area.name if cust.area else 'منطقة عامة')
+        )
+
+        node = tree.setdefault(rep_name, {'name': rep_name, 'children_map': {}})
+        node['children_map'][area_name] = node['children_map'].get(area_name, 0.0) + val
 
     result = []
-    sorted_parents = sorted(tree.values(), key=lambda n: sum(c.get('value', 0) for c in n.get('children', [])) + n.get('value', 0), reverse=True)[:7]
-    for p in sorted_parents:
-        if 'children' in p and p['children']:
-            p['children'] = sorted(p['children'], key=lambda x: x.get('value', 0), reverse=True)[:8]
-        result.append(p)
+    sorted_reps = sorted(tree.values(), key=lambda n: sum(n['children_map'].values()), reverse=True)[:8]
+    for node in sorted_reps:
+        children = [
+            {'name': a_name, 'value': round(a_val, 2)}
+            for a_name, a_val in sorted(node['children_map'].items(), key=lambda kv: kv[1], reverse=True)[:8]
+        ]
+        result.append({'name': node['name'], 'children': children})
     return result
 
 
-def _get_dashboard_filter_module(user):
+def _get_dashboard_visible_modules(user):
     from accounts.permissions import has_perm_or_admin
+    mods = []
     if has_perm_or_admin(user, ['sales:orders/list', 'sales:orders/view', 'sales:collections/list']):
-        return 'sales'
+        mods.append('sales')
     if has_perm_or_admin(user, ['activities:visits/list', 'activities:visits/view']):
-        return 'activities'
+        mods.append('activities')
     if has_perm_or_admin(user, ['purchases:orders/list', 'purchases:orders/view']):
-        return 'purchases'
-    return 'contacts'
+        mods.append('purchases')
+    if has_perm_or_admin(user, ['contacts:contacts/list', 'contacts:contacts/view']):
+        mods.append('contacts')
+    return mods or ['contacts']
+
+
+def _get_dashboard_scoped_geo_querysets(user):
+    """
+    Resolve permitted governorates and bricks as the union across all dashboard modules
+    visible to `user`, so a restrictive scope on one module never blocks legitimate filters
+    on another authorized module.
+    """
+    from accounts.scope_service import ScopeResolutionService
+    mods = _get_dashboard_visible_modules(user)
+    gov_ids = set()
+    brick_ids = set()
+    for m in mods:
+        gov_ids.update(ScopeResolutionService.get_scoped_choices(user, 'governorates', m).values_list('id', flat=True))
+        brick_ids.update(ScopeResolutionService.get_scoped_choices(user, 'bricks', m).values_list('id', flat=True))
+    govs_qs = Area.objects.filter(id__in=gov_ids, parent__isnull=True).order_by('name')
+    bricks_qs = Area.objects.filter(id__in=brick_ids, parent__isnull=False).select_related('parent').order_by('name')
+    return govs_qs, bricks_qs
 
 
 @login_required
 def dashboard_search_areas_api(request):
-    from accounts.scope_service import ScopeResolutionService
     from master_data.search_utils import filter_by_arabic_search
     q = (request.GET.get('q') or '').strip()
-    mod = _get_dashboard_filter_module(request.user)
-    qs = ScopeResolutionService.get_scoped_choices(request.user, 'governorates', mod)
+    qs, _ = _get_dashboard_scoped_geo_querysets(request.user)
     if q:
         qs = filter_by_arabic_search(qs, ['name', 'name_en', 'code'], q)
     results = [{'id': a.id, 'name': a.name, 'code': a.code or ''} for a in qs[:50]]
@@ -167,12 +229,10 @@ def dashboard_search_areas_api(request):
 
 @login_required
 def dashboard_search_bricks_api(request):
-    from accounts.scope_service import ScopeResolutionService
     from master_data.filter_utils import parse_multi_int
     from master_data.search_utils import filter_by_arabic_search
     q = (request.GET.get('q') or '').strip()
-    mod = _get_dashboard_filter_module(request.user)
-    qs = ScopeResolutionService.get_scoped_choices(request.user, 'bricks', mod)
+    _, qs = _get_dashboard_scoped_geo_querysets(request.user)
     main_area_ids = parse_multi_int(request.GET, 'main_area', 'area', 'area_id', 'governorate')
     if main_area_ids:
         qs = qs.filter(parent_id__in=main_area_ids)
@@ -180,7 +240,7 @@ def dashboard_search_bricks_api(request):
         qs = filter_by_arabic_search(qs, ['name', 'name_en', 'code', 'parent__name'], q)
     results = [
         {'id': b.id, 'name': b.name, 'parent_id': b.parent_id, 'parent_name': b.parent.name if b.parent else ''}
-        for b in qs.select_related('parent')[:60]
+        for b in qs[:60]
     ]
     return JsonResponse({'results': results})
 
@@ -189,23 +249,34 @@ def dashboard_search_bricks_api(request):
 def home_view(request):
     """
     Unified Permission-Controlled & Data-Scope-Aware Home Dashboard:
-    - Single unified layout across roles; every KPI card, chart, and table is strictly
-      gated by backend module permissions and ScopeResolutionService.
-    - Supports scoped Smart Area/Brick multi-select filters, Date Range, and Rep selector.
+    - Strictly governed by backend module permissions and ScopeResolutionService
+      (zero hardcoded role-name authorization checks).
+    - Visit KPIs and sunburst charts strictly use canonical completed-visit rules.
+    - Supports scoped Smart Area/Brick multi-select filters, unified Date Range, and Rep selector.
     """
     user = request.user
     UserModel = get_user_model()
     from accounts.scope_service import ScopeResolutionService
     from accounts.permissions import is_accountant, is_manager_or_higher, has_perm_or_admin
     from master_data.filter_utils import (
-        resolve_scoped_area_brick_filters,
+        parse_multi_int,
         build_contact_area_q,
         build_contact_brick_q,
     )
+    from reports.visit_analytics import COMPLETED_VISIT_Q, PLANNED_INCOMPLETE_Q
 
     is_super = getattr(user, 'is_super_admin', False) or user.is_superuser
-    user_act_scope = ScopeResolutionService.get_user_scope(user, 'activities', 'view')
-    user_sales_scope = ScopeResolutionService.get_user_scope(user, 'sales', 'view')
+    user_act_scope = 'all' if is_super else ScopeResolutionService.get_user_scope(user, 'activities', 'view')
+    user_sales_scope = 'all' if is_super else ScopeResolutionService.get_user_scope(user, 'sales', 'view')
+    user_contacts_scope = 'all' if is_super else ScopeResolutionService.get_user_scope(user, 'contacts', 'view')
+    user_accounts_scope = 'all' if is_super else ScopeResolutionService.get_user_scope(user, 'accounts', 'view')
+
+    # Scope-driven capability flags (never hardcoded role checks)
+    can_select_team_reps = is_super or user_accounts_scope in ('area', 'all')
+    can_view_cross_rep_charts = is_super or user_sales_scope in ('area', 'all')
+    can_view_leads_card = is_super or user_contacts_scope in ('area', 'all')
+
+    # Backward-compatible display booleans for legacy template/test contexts only
     is_acct = not is_super and is_accountant(user)
     is_mgr = not is_super and not is_acct and (is_manager_or_higher(user) or user_act_scope in ['area', 'all'] or user_sales_scope in ['area', 'all'])
     is_rep = not is_super and not is_mgr and not is_acct
@@ -223,10 +294,10 @@ def home_view(request):
     can_view_inventory = has_perm_or_admin(user, ['inventory:stocks/view', 'inventory:warehouses/view'])
     can_view_activities = has_perm_or_admin(user, ['activities:visits/list', 'activities:visits/view'])
 
-    # Manager / Superadmin representative selection
+    # Scope-governed representative selection
     eligible_reps = []
     selected_rep = None
-    if is_super or is_mgr:
+    if can_select_team_reps:
         if is_super:
             eligible_reps = list(UserModel.objects.filter(is_active=True).filter(
                 Q(role__is_rep=True) | Q(assigned_warehouses__isnull=False) | Q(assigned_vaults__isnull=False)
@@ -236,26 +307,36 @@ def home_view(request):
                 is_active=True
             ).exclude(id=user.id).select_related('role').order_by('name'))
 
+        eligible_rep_ids = {r.id for r in eligible_reps}
         selected_rep_id = request.GET.get('rep_id', '').strip()
         if selected_rep_id and selected_rep_id.isdigit():
-            target_user = UserModel.objects.filter(id=int(selected_rep_id), is_active=True).first()
-            if target_user:
-                if is_super or ScopeResolutionService.is_manager_eligible_for_user(user, target_user):
-                    selected_rep = target_user
-                else:
-                    selected_rep = None
-                    messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
+            rid = int(selected_rep_id)
+            target_user = UserModel.objects.filter(id=rid, is_active=True).first()
+            if target_user and (is_super or rid in eligible_rep_ids or ScopeResolutionService.is_manager_eligible_for_user(user, target_user)):
+                selected_rep = target_user
+            elif target_user:
+                selected_rep = None
+                messages.warning(request, "لا تملك صلاحية استعراض بيانات هذا المندوب، تم الرجوع لإحصائيات الفريق.")
 
-    # Scoped Smart Area / Brick multi-select filters
-    filter_mod = _get_dashboard_filter_module(user)
-    filter_scope = ScopeResolutionService.get_user_scope(user, filter_mod, 'view')
-    can_filter_area_brick = is_super or filter_scope in ('brick', 'area', 'all')
+    # Multi-module scoped Area / Brick filters
+    visible_mods = _get_dashboard_visible_modules(user)
+    can_filter_area_brick = is_super or any(
+        ScopeResolutionService.get_user_scope(user, m, 'view') in ('brick', 'area', 'all')
+        for m in visible_mods
+    )
     if can_filter_area_brick:
-        main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = resolve_scoped_area_brick_filters(
-            request, filter_mod,
-            area_params=('main_area', 'area_id', 'governorate'),
-            brick_params=('brick', 'subarea'),
-        )
+        auth_govs_qs, auth_bricks_qs = _get_dashboard_scoped_geo_querysets(user)
+        auth_gov_ids = set(auth_govs_qs.values_list('id', flat=True))
+        auth_brick_parent_map = dict(auth_bricks_qs.values_list('id', 'parent_id'))
+        raw_area_ids = parse_multi_int(request.GET, 'main_area', 'area_id', 'governorate', 'area')
+        raw_brick_ids = parse_multi_int(request.GET, 'brick', 'subarea', 'brick_id')
+        main_area_ids = [aid for aid in raw_area_ids if aid in auth_gov_ids]
+        brick_ids = [
+            bid for bid in raw_brick_ids
+            if bid in auth_brick_parent_map and (not main_area_ids or auth_brick_parent_map[bid] in main_area_ids)
+        ]
+        selected_main_areas_chips = list(Area.objects.filter(id__in=main_area_ids).values('id', 'name')) if main_area_ids else []
+        selected_bricks_chips = list(Area.objects.filter(id__in=brick_ids).values('id', 'name', 'parent_id')) if brick_ids else []
     else:
         main_area_ids, brick_ids, selected_main_areas_chips, selected_bricks_chips = [], [], [], []
 
@@ -290,11 +371,11 @@ def home_view(request):
         if can_view_activities else Visit.objects.none()
     )
     cont_qs = (
-        get_scoped_queryset(Contact.objects.filter(is_customer=True), user, 'contact')
+        get_scoped_queryset(Contact.objects.filter(is_customer=True).exclude(status='inactive'), user, 'contact')
         if can_view_contacts else Contact.objects.none()
     )
     all_contacts_scoped = (
-        get_scoped_queryset(Contact.objects.all(), user, 'contact')
+        get_scoped_queryset(Contact.objects.exclude(status='inactive'), user, 'contact')
         if can_view_contacts else Contact.objects.none()
     )
     cust_acc_qs = (
@@ -318,7 +399,7 @@ def home_view(request):
         if can_view_collections:
             col_qs = col_qs.filter(created_by=selected_rep)
         if can_view_activities:
-            vis_qs = vis_qs.filter(Q(owner=selected_rep) | Q(created_by=selected_rep))
+            vis_qs = vis_qs.filter(owner=selected_rep)
         if can_view_contacts:
             cont_qs = cont_qs.filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep)).distinct()
             all_contacts_scoped = all_contacts_scoped.filter(Q(created_by=selected_rep) | Q(assigned_team=selected_rep)).distinct()
@@ -379,13 +460,16 @@ def home_view(request):
         ro_acc_qs = ro_base_qs.filter(status__in=['settled', 'delivered', 'approved'])
         po_period_qs = po_qs
 
+    # Canonical completed visits queryset for all dashboard visit metrics & charts
+    vis_completed_qs = vis_qs.filter(COMPLETED_VISIT_Q)
+
     # Unified Permission-Driven KPI Cards
     kpi_cards = []
 
     if can_view_sales:
         so_created = so_qs.exclude(status__in=['cancelled', 'rejected']).aggregate(total=Sum('grand_total'), count=Count('id'))
         so_deliv = so_deliv_qs.aggregate(total=Sum('grand_total'), count=Count('id'))
-        so_proc = so_base_qs.filter(status__in=['pending', 'manager_approval', 'preparing']).aggregate(total=Sum('grand_total'), count=Count('id'))
+        so_proc = so_qs.filter(status__in=['pending', 'manager_approval', 'preparing']).aggregate(total=Sum('grand_total'), count=Count('id'))
         kpi_cards.extend([
             {'id': 'pos_created_stats', 'title': 'الطلبات المنشأة', 'amount': _format_metric_amount(so_created['total']), 'subtitle': f"{so_created['count']} طلب"},
             {'id': 'pos_delivered_stats', 'title': 'الطلبات المسلمة', 'amount': _format_metric_amount(so_deliv['total']), 'subtitle': f"{so_deliv['count']} طلب"},
@@ -424,12 +508,12 @@ def home_view(request):
     if can_view_contacts:
         new_customers_count = cont_qs.count()
         customers_count = all_contacts_scoped.filter(is_customer=True, status='customer').count()
-        leads_count = all_contacts_scoped.filter(status='lead').count()
+        leads_count = all_contacts_scoped.filter(is_customer=True, status='lead').count()
         kpi_cards.extend([
             {'id': 'customers_count_stats', 'title': 'العملاء المعتمدين', 'amount': f"{customers_count}", 'subtitle': 'حساب نشط'},
-            {'id': 'merchants_to_customers_stats', 'title': 'العملاء الجدد بالفترة', 'amount': f"{new_customers_count}", 'subtitle': ''},
+            {'id': 'merchants_to_customers_stats', 'title': 'الحسابات الجديدة بالفترة', 'amount': f"{new_customers_count}", 'subtitle': 'عملاء ومحتملون'},
         ])
-        if not is_rep:
+        if can_view_leads_card:
             kpi_cards.append({'id': 'leads_count_stats', 'title': 'العملاء المحتملين (Leads)', 'amount': f"{leads_count}", 'subtitle': 'قيد المتابعة'})
 
     if can_view_customer_acc:
@@ -471,13 +555,27 @@ def home_view(request):
         kpi_cards.append({'id': 'rep_stock_stats', 'title': 'كمية المخزون المتاح', 'amount': f"{rep_stock_qty:,.0f} قطعة", 'subtitle': f"{scoped_whs.count()} مخزن"})
 
     if can_view_activities:
-        visits_lead_count = vis_qs.filter(contact__status='lead').count()
-        visits_cust_count = vis_qs.filter(contact__status='customer').count()
-        if visits_lead_count == 0 and visits_cust_count == 0:
-            visits_cust_count = vis_qs.count()
+        vis_agg = vis_qs.aggregate(
+            lead_done=Count('id', filter=COMPLETED_VISIT_Q & Q(contact__status='lead'), distinct=True),
+            cust_done=Count('id', filter=COMPLETED_VISIT_Q & Q(contact__status='customer'), distinct=True),
+            planned_inc=Count('id', filter=PLANNED_INCOMPLETE_Q, distinct=True),
+        )
+        visits_lead_count = vis_agg['lead_done'] or 0
+        visits_cust_count = vis_agg['cust_done'] or 0
+        planned_inc_count = vis_agg['planned_inc'] or 0
         kpi_cards.extend([
-            {'id': 'visits_created_lead_stats', 'title': 'زيارات العملاء المحتملين', 'amount': f"{visits_lead_count}", 'subtitle': ''},
-            {'id': 'visits_created_customer_stats', 'title': 'زيارات العملاء الحاليين', 'amount': f"{visits_cust_count}", 'subtitle': ''},
+            {
+                'id': 'visits_created_lead_stats',
+                'title': 'زيارات العملاء المحتملين (مكتملة)',
+                'amount': f"{visits_lead_count}",
+                'subtitle': 'زيارات منتهية',
+            },
+            {
+                'id': 'visits_created_customer_stats',
+                'title': 'زيارات العملاء الحاليين (مكتملة)',
+                'amount': f"{visits_cust_count}",
+                'subtitle': f"مخططة غير مكتملة: {planned_inc_count}" if planned_inc_count else 'زيارات منتهية',
+            },
         ])
 
     # Recent orders strictly gated by permission & annotated to avoid N+1
@@ -499,7 +597,7 @@ def home_view(request):
         available_chart_keys.append('collections_by_area')
 
     if can_view_activities:
-        charts_dict['visits_by_area'] = _build_visits_sunburst(vis_qs)
+        charts_dict['visits_by_area'] = _build_visits_sunburst(vis_completed_qs)
         available_chart_keys.append('visits_by_area')
 
     if can_view_sales:
@@ -508,7 +606,7 @@ def home_view(request):
         charts_dict['orders_delivered_by_area'] = _build_area_sunburst(so_deliv_qs, amount_field='grand_total')
         available_chart_keys.append('orders_delivered_by_area')
 
-    if can_view_customer_acc and not is_rep:
+    if can_view_customer_acc and can_view_cross_rep_charts:
         charts_dict['reps_balance'] = _build_reps_sunburst('current_balance', base_qs=cust_acc_qs)
         charts_dict['reps_overdue'] = _build_reps_sunburst('overdue_balance', base_qs=cust_acc_qs)
         available_chart_keys.extend(['reps_balance', 'reps_overdue'])
@@ -1425,4 +1523,312 @@ def geocoding_reverse_api(request):
             })
     except Exception:
         return JsonResponse({'display_name': '', 'address': {}})
+
+
+# ==============================================================================
+# CONFIGURABLE ACCOUNT-TYPE REPORT GROUPS SETTINGS (/settings/report-groups/)
+# ==============================================================================
+
+def _extract_group_account_types_from_post(post_data):
+    raw_list = post_data.getlist('account_types')
+    custom_raw = (post_data.get('custom_account_types') or '').strip()
+    if custom_raw:
+        raw_list.extend([p.strip() for p in custom_raw.split(',') if p.strip()])
+    from master_data.models import AccountTypeReportGroup
+    return AccountTypeReportGroup.normalize_account_types(raw_list)
+
+
+@require_permission('settings:reportGroups/manage')
+def report_groups_settings_view(request):
+    from master_data.models import AccountTypeReportGroup
+    from contacts.models import Contact
+
+    groups = list(AccountTypeReportGroup.objects.all().order_by('display_order', 'id'))
+    available_types = AccountTypeReportGroup.get_available_account_types()
+
+    # Live active contact counts per account_type for compact admin visibility
+    type_counts_raw = (
+        Contact.objects.filter(is_customer=True)
+        .exclude(status='inactive')
+        .values('account_type')
+        .annotate(cnt=Count('id'))
+    )
+    type_counts = {}
+    for row in type_counts_raw:
+        key = (row['account_type'] or '').strip()
+        if key:
+            type_counts[key.lower()] = row['cnt']
+
+    active_assigned_map = {}
+    for g in groups:
+        if g.is_active:
+            for t in (g.account_types or []):
+                active_assigned_map[str(t).strip().lower()] = {
+                    'group_id': g.id,
+                    'group_name': g.name,
+                }
+
+    available_type_items = []
+    unassigned_types = []
+    for at in available_types:
+        low = at.lower()
+        assigned_info = active_assigned_map.get(low)
+        cnt = type_counts.get(low, 0)
+        item = {
+            'name': at,
+            'count': cnt,
+            'assigned_group_id': assigned_info['group_id'] if assigned_info else None,
+            'assigned_group_name': assigned_info['group_name'] if assigned_info else '',
+        }
+        available_type_items.append(item)
+        if not assigned_info and cnt > 0:
+            unassigned_types.append(item)
+
+    groups_payload = [
+        {
+            'id': g.id,
+            'name': g.name,
+            'code': g.code,
+            'account_types': g.account_types or [],
+            'display_order': g.display_order,
+            'icon': g.icon or 'category',
+            'is_active': g.is_active,
+            'contacts_count': sum(type_counts.get(str(t).strip().lower(), 0) for t in (g.account_types or [])),
+        }
+        for g in groups
+    ]
+
+    return render(request, 'settings/report_groups_settings.html', {
+        'groups': groups,
+        'groups_payload': groups_payload,
+        'groups_json': json.dumps(groups_payload, ensure_ascii=False),
+        'available_type_items': available_type_items,
+        'unassigned_types': unassigned_types,
+        'icon_choices': AccountTypeReportGroup.ICON_CHOICES,
+        'next_order': (max((g.display_order for g in groups), default=0) + 1),
+    })
+
+
+@require_permission('settings:reportGroups/manage')
+def report_group_create(request):
+    from django.core.exceptions import ValidationError
+    from master_data.models import AccountTypeReportGroup
+    from master_data.services import SettingsService
+    from accounts.services import AuditLogService
+
+    if request.method != 'POST':
+        return redirect('report_groups_settings')
+
+    name = (request.POST.get('name') or '').strip()
+    icon = (request.POST.get('icon') or 'category').strip() or 'category'
+    is_active = request.POST.get('is_active') in ('on', '1', 'true', 'True')
+    try:
+        display_order = max(1, int(request.POST.get('display_order') or 1))
+    except (TypeError, ValueError):
+        display_order = 1
+    account_types = _extract_group_account_types_from_post(request.POST)
+
+    group = AccountTypeReportGroup(
+        name=name,
+        icon=icon,
+        display_order=display_order,
+        is_active=is_active,
+        account_types=account_types,
+    )
+    try:
+        group.full_clean()
+        group.save()
+        SettingsService.clear_cache()
+        AuditLogService.log(
+            action_type='REPORT_GROUP_CREATED',
+            module='settings',
+            actor=request.user,
+            record_id=group.pk,
+            record_name=group.name,
+            new_values={
+                'name': group.name,
+                'account_types': group.account_types,
+                'display_order': group.display_order,
+                'is_active': group.is_active,
+                'icon': group.icon,
+            },
+            description=f"إنشاء مجموعة تقارير حسابات جديدة: {group.name}",
+            status='SUCCESS',
+            request=request,
+        )
+        messages.success(request, f"تمت إضافة مجموعة التقارير '{group.name}' بنجاح.")
+    except ValidationError as ve:
+        for errs in ve.message_dict.values():
+            for e in errs:
+                messages.error(request, e)
+    return redirect('report_groups_settings')
+
+
+@require_permission('settings:reportGroups/manage')
+def report_group_edit(request, pk):
+    from django.core.exceptions import ValidationError
+    from master_data.models import AccountTypeReportGroup
+    from master_data.services import SettingsService
+    from accounts.services import AuditLogService
+
+    group = get_object_or_404(AccountTypeReportGroup, pk=pk)
+    if request.method != 'POST':
+        return redirect('report_groups_settings')
+
+    old_values = {
+        'name': group.name,
+        'account_types': list(group.account_types or []),
+        'display_order': group.display_order,
+        'is_active': group.is_active,
+        'icon': group.icon,
+    }
+
+    group.name = (request.POST.get('name') or '').strip()
+    group.icon = (request.POST.get('icon') or 'category').strip() or 'category'
+    group.is_active = request.POST.get('is_active') in ('on', '1', 'true', 'True')
+    try:
+        group.display_order = max(1, int(request.POST.get('display_order') or group.display_order))
+    except (TypeError, ValueError):
+        pass
+    group.account_types = _extract_group_account_types_from_post(request.POST)
+
+    try:
+        group.full_clean()
+        group.save()
+        SettingsService.clear_cache()
+        AuditLogService.log(
+            action_type='REPORT_GROUP_UPDATED',
+            module='settings',
+            actor=request.user,
+            record_id=group.pk,
+            record_name=group.name,
+            previous_values=old_values,
+            new_values={
+                'name': group.name,
+                'account_types': group.account_types,
+                'display_order': group.display_order,
+                'is_active': group.is_active,
+                'icon': group.icon,
+            },
+            description=f"تحديث مجموعة تقارير الحسابات: {group.name}",
+            status='SUCCESS',
+            request=request,
+        )
+        messages.success(request, f"تم تحديث مجموعة التقارير '{group.name}' بنجاح.")
+    except ValidationError as ve:
+        for errs in ve.message_dict.values():
+            for e in errs:
+                messages.error(request, e)
+    return redirect('report_groups_settings')
+
+
+@require_permission('settings:reportGroups/manage')
+def report_group_toggle(request, pk):
+    from django.core.exceptions import ValidationError
+    from master_data.models import AccountTypeReportGroup
+    from master_data.services import SettingsService
+    from accounts.services import AuditLogService
+
+    group = get_object_or_404(AccountTypeReportGroup, pk=pk)
+    if request.method != 'POST':
+        return redirect('report_groups_settings')
+
+    prev_active = group.is_active
+    group.is_active = not group.is_active
+    try:
+        group.full_clean()
+        group.save(update_fields=['is_active', 'updated_at'])
+        SettingsService.clear_cache()
+        AuditLogService.log(
+            action_type='REPORT_GROUP_TOGGLED',
+            module='settings',
+            actor=request.user,
+            record_id=group.pk,
+            record_name=group.name,
+            previous_values={'is_active': prev_active},
+            new_values={'is_active': group.is_active},
+            description=f"{'تفعيل' if group.is_active else 'تعطيل'} مجموعة تقارير الحسابات: {group.name}",
+            status='SUCCESS',
+            request=request,
+        )
+        messages.success(request, f"تم {'تفعيل' if group.is_active else 'تعطيل'} المجموعة '{group.name}'.")
+    except ValidationError as ve:
+        for errs in ve.message_dict.values():
+            for e in errs:
+                messages.error(request, e)
+    return redirect('report_groups_settings')
+
+
+@require_permission('settings:reportGroups/manage')
+def report_group_reorder(request, pk):
+    from django.db import transaction
+    from master_data.models import AccountTypeReportGroup
+    from master_data.services import SettingsService
+    from accounts.services import AuditLogService
+
+    if request.method != 'POST':
+        return redirect('report_groups_settings')
+
+    direction = (request.POST.get('direction') or '').strip().lower()
+    groups = list(AccountTypeReportGroup.objects.all().order_by('display_order', 'id'))
+    idx = next((i for i, g in enumerate(groups) if g.pk == pk), None)
+    if idx is None:
+        return redirect('report_groups_settings')
+
+    swap_idx = idx - 1 if direction == 'up' else (idx + 1 if direction == 'down' else None)
+    if swap_idx is not None and 0 <= swap_idx < len(groups):
+        groups[idx], groups[swap_idx] = groups[swap_idx], groups[idx]
+        with transaction.atomic():
+            for order_num, grp in enumerate(groups, start=1):
+                if grp.display_order != order_num:
+                    grp.display_order = order_num
+                    grp.save(update_fields=['display_order', 'updated_at'])
+        SettingsService.clear_cache()
+        AuditLogService.log(
+            action_type='REPORT_GROUP_REORDERED',
+            module='settings',
+            actor=request.user,
+            record_id=pk,
+            record_name=groups[swap_idx].name,
+            new_values={'order': [g.id for g in groups]},
+            description=f"إعادة ترتيب مجموعات تقارير الحسابات",
+            status='SUCCESS',
+            request=request,
+        )
+    return redirect('report_groups_settings')
+
+
+@require_permission('settings:reportGroups/manage')
+def report_group_delete(request, pk):
+    from master_data.models import AccountTypeReportGroup
+    from master_data.services import SettingsService
+    from accounts.services import AuditLogService
+
+    group = get_object_or_404(AccountTypeReportGroup, pk=pk)
+    if request.method != 'POST':
+        return redirect('report_groups_settings')
+
+    snapshot = {
+        'name': group.name,
+        'account_types': list(group.account_types or []),
+        'display_order': group.display_order,
+    }
+    group_name = group.name
+    group_pk = group.pk
+    group.delete()
+    SettingsService.clear_cache()
+    AuditLogService.log(
+        action_type='REPORT_GROUP_DELETED',
+        module='settings',
+        actor=request.user,
+        record_id=group_pk,
+        record_name=group_name,
+        previous_values=snapshot,
+        description=f"حذف مجموعة تقارير الحسابات: {group_name}",
+        status='SUCCESS',
+        request=request,
+    )
+    messages.success(request, f"تم حذف المجموعة '{group_name}' بنجاح.")
+    return redirect('report_groups_settings')
+
 

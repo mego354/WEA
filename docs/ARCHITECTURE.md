@@ -201,12 +201,13 @@ erDiagram
 
 ## 4. Centralized Settings Architecture (`SettingsService`)
 
-Singleton configuration records are managed through `master_data.services.SettingsService`:
+Singleton configuration records and report-group definitions are managed through `master_data.services.SettingsService`:
 - `CompanyProfile`: Enterprise profile, tax configuration, packaging units, memo role permissions.
 - `LocationSettings`: GPS visit tolerance, distance verification enforcement, bypass permissions.
 - `SalesSettings`: Order creation flags, mandatory manager approval requirement.
 - `PurchaseSettings`: Purchase creation flags, supplier approval requirement.
 - `UserSettings`: Representative auto-provisioning flags for warehouses and cash vaults.
+- `AccountTypeReportGroup`: Configurable, ordered, mutually-exclusive account-type reporting groups (seeded by default with `الصيدليات` → `['Pharmacy']` and `المنشآت الطبية` → `['Clinic', 'Polyclinic']`), managed via `/settings/report-groups/` (`settings:reportGroups/manage`) and request-cached via `SettingsService.get_account_type_report_groups()`.
 
 **Thread-Safe Request Caching:**
 - Settings instances are resolved and cached per thread in `threading.local()`.
@@ -240,20 +241,23 @@ The `reports` app provides real-time field performance tracking, analytical comp
   - `SalesTarget`: Representative monthly quotas for sales volume (EGP), collections (EGP), and visit counts.
   - `CustomerCall`: Telesales and remote medical detailing phone logs with duration, purpose, outcome, and linked sales order.
   - `CoachingEvaluation`: Joint double-visit field evaluations assessing product knowledge, selling skills, detailing clarity, objection handling, and action plans.
+- **Centralized Visit Analytics Engine (`reports/visit_analytics.py`)**:
+  - Single source of truth for qualifying completed visit predicates (`COMPLETED_VISIT_Q`, `PLANNED_COMPLETED_Q`, `PLANNED_INCOMPLETE_Q`, `UNPLANNED_COMPLETED_Q`, `UNPLANNED_IN_PROGRESS_Q`, `UNLINKED_PLANNED_ITEM_Q`), strictly scope-validated filter resolution (`resolve_performance_filters`), set-based `VisitAnalyticsService.get_analytics_bundle()`, correlated-subquery accounts drill-down (`get_accounts_drilldown_queryset`), and visit-detail inspection (`get_account_visit_details_queryset`).
+  - Reused consistently across `/performance/*`, `/home/` dashboard visit statistics, and `/reports/customer-360/`.
 - **Performance Modules (`/performance/*`)**:
-  - `overview/`: 22 KPI summary cards comparing current vs prior periods with variance deltas, working days calculator, and top detailed products leaderboard.
-  - `analysis/`: 8 Chart.js comparative visual charts across representatives + 11-column representative performance comparison table with Excel export.
-  - `daily/`: Day picker (`prev`/`today`/`next`), 4 Today vs Yesterday comparative KPI cards, 20-column daily representative activity matrix with Excel export, and 8 drilldown sub-tabs (Visits, Customers, Calls, Expenses, Tasks, Approvals, Orders, Collections).
-  - `detailed/`: 63-column mega performance matrix across all field metrics and operational rates + dual-visit coaching evaluations audit log table with supervisor feedback + Excel export.
+  - `overview/`: Clean compact Arabic RTL field performance dashboard with quick period & account-status pills, 6-card core KPI strip (Completed Visits, Planned Completed + Plan Completion %, Planned Not Completed, Unplanned Completed, Working Days + Avg Visits/Working Day & Calendar Day, Account Coverage), dynamic `AccountTypeReportGroup` breakdown cards (including auto-appended `أنواع أخرى غير مصنفة` when unassigned accounts/visits exist), bundled `static/libs/echarts.min.js` continuous Daily Visit Activity chart, AJAX Visited/Unvisited/All Eligible accounts drill-down (`/performance/overview/accounts-api/`), combinable `.erp-filter-drawer`, and selective multi-sheet `.xlsx` export (`/performance/overview/export/`).
+  - `analysis/`: Comparative visual charts across representatives + representative performance comparison table built via constant `O(1)` set-based queries with Excel export.
+  - `daily/`: Day picker (`prev`/`today`/`next`), Today vs Yesterday comparative KPI cards, daily representative activity matrix with Excel export, and drilldown sub-tabs (Visits, Customers, Calls, Expenses, Tasks, Approvals, Orders, Collections).
+  - `detailed/`: Full performance matrix with dynamic `AccountTypeReportGroup` columns (no hardcoded account types), `planned_incomplete`, and dual-visit coaching evaluations audit log + Excel export.
 - **Reports Section (`/reports/*`)**:
-  - `reports_hub`: Unified enterprise portal categorizing reports into Financial, Commercial, Supply Chain, and Activity categories with permission-aware cards.
+  - `reports_hub`: Unified enterprise portal categorizing reports into Financial, Commercial, Supply Chain, and Activity categories (including direct shortcut to Field Visits & Performance Report) with permission-aware cards.
   - **8 Standalone Reports**:
     1. AR Aging (`/reports/ar-aging/` + `/export/` + `/print/`): 5 overdue aging buckets + DSO.
     2. Trial Balance (`/reports/trial-balance/` + `/export/` + `/print/`): Opening, debit, credit, and closing balances.
     3. Net Sales & Profitability (`/reports/net-sales/` + `/export/`): Delivered sales minus returns, COGS, gross profit, and margin % per product.
-    4. Customer 360 (`/reports/customer-360/` + `/export/`): 18-column comprehensive client financial and operational audit.
+    4. Customer 360 (`/reports/customer-360/` + `/export/`): 18-column comprehensive client financial and operational audit (using `COMPLETED_VISIT_Q` and excluding `inactive`).
     5. Item Sales by Customer (`/reports/item-sales-by-customer/` + `/export/`): Product distribution matrix across clinics and pharmacies.
     6. Delivery Stock Availability (`/reports/delivery-stock/` + `/export/`): Open orders allocation against on-hand, reserved, and free stock with warehouse filtering.
     7. Item Purchases & Vendors (`/reports/item-purchases/` + `/export/`): Purchase order volumes, vendor spend, and average purchase unit cost.
-    8. Agreements ROI (`/reports/agreements-roi/` + `/export/`): Budget vs actual sales and ROI %.
-- **Data Scoping**: Every report and KPI strictly executes `get_scoped_queryset(qs, request.user)`, ensuring complete data isolation between managers and reps.
+    8. Agreements ROI (`/reports/agreements-roi/` + `/export/`): Budget vs actual sales and ROI % (batched `O(1)` aggregation).
+- **Data Scoping**: Every report, KPI, drill-down API, and export strictly enforces `ScopeResolutionService` (`get_scoped_queryset` and validated filter choices), ensuring complete data isolation across governorates, bricks, and representatives.

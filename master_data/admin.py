@@ -4,7 +4,7 @@ from .models import (
     Area, CompanyProfile, LocationSettings, SalesSettings,
     PurchaseSettings, ExpenseType, TicketType, ApprovalRequestType,
     AgreementType, DataSyncConfig, ERPAttachment, R2StorageConfig,
-    PendingStorageDeletion,
+    PendingStorageDeletion, AccountTypeReportGroup,
 )
 from .admin_mixins import (
     SafeCascadeAdminMixin,
@@ -170,3 +170,15 @@ class PendingStorageDeletionAdmin(SafeCascadeAdminMixin, admin.ModelAdmin):
     list_display = ('storage_key', 'attempts', 'created_at', 'last_attempt_at')
     search_fields = ('storage_key', 'last_error')
     readonly_fields = ('storage_key', 'attempts', 'last_error', 'created_at', 'last_attempt_at')
+
+
+@admin.register(AccountTypeReportGroup)
+class AccountTypeReportGroupAdmin(ProtectedMasterAdminMixin, admin.ModelAdmin):
+    list_display = ('display_order', 'name', 'code', 'account_types_display', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'code')
+    ordering = ('display_order', 'id')
+
+    def account_types_display(self, obj):
+        return ", ".join(obj.account_types or []) or "—"
+    account_types_display.short_description = "أنواع الحسابات"

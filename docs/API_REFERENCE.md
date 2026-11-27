@@ -441,10 +441,31 @@ Unauthorized requests return HTTP 401 Unauthorized or HTTP 403 Forbidden with `{
 
 ---
 
-## 6. Performance & Reports Export Endpoints
+## 6. Performance, Report Groups & Reports Endpoints
 
-All performance and reporting views provide standard OpenXML Excel downloads (`.xlsx`) and formatted print views, respecting the requester's data scope:
+All performance and reporting views provide standard OpenXML Excel downloads (`.xlsx`) with formula-injection protection (`sanitize_excel_cell`), `CompanyProfile` headers, and formatted print views, strictly respecting the requester's `ScopeResolutionService` data scope:
 
+### 6.1 Performance Overview AJAX & Selective Export Endpoints
+- **Scoped Accounts Drill-Down API**: `GET /performance/overview/accounts-api/` (`performance_overview_accounts_api`)
+  - **Permission**: `performance:overview/view`
+  - **Query Parameters**: Standard performance filters (`period`, `start_date`, `end_date`, `rep`, `area`, `brick`, `account_status`, `account_type`, `group`, `contact`) plus `tab` (`visited` | `unvisited` | `all`), `q` (Arabic-normalized search), `sort` (`visits_desc` | `visits_asc` | `name_asc` | `name_desc` | `last_visit_desc`), `page`, `per_page` (max `100`).
+  - **Response**: `{ "success": true, "tab": "...", "page": 1, "num_pages": P, "per_page": 25, "total_count": C, "has_previous": false, "has_next": true, "rows": [...] }`.
+- **Scoped Performance Contact Smart Search**: `GET /performance/overview/contacts-search/?q=...` (`performance_contacts_search_api`)
+  - **Permission**: `performance:overview/view`
+  - **Response**: `{ "results": [{ "id": 1, "name": "...", "code": "...", "account_type": "...", "status": "customer", "location": "..." }] }`.
+- **Performance Overview Selective Multi-Sheet Export**: `GET /performance/overview/export/` (`performance_overview_export`)
+  - **Permission**: `performance:overview/export`
+  - **Query Parameters**: All performance overview filters plus optional `selective=1` and repeated `sections=` values from `summary`, `groups`, `daily`, `visited`, `unvisited`, `all_eligible`, `visits` (omitting `selective=1` exports default sections: `summary`, `groups`, `daily`, `visited`, `unvisited`). Enforces maximum 732-day export window and logs `SecurityAuditLog(action_type='REPORT_EXPORTED')`.
+
+### 6.2 Configurable Account-Type Report Groups Settings Endpoints
+- `GET /settings/report-groups/` (`report_groups_settings`) — Permission: `settings:reportGroups/manage`
+- `POST /settings/report-groups/add/` (`report_group_create`) — Creates an exclusive `AccountTypeReportGroup` + `REPORT_GROUP_CREATED` audit log.
+- `POST /settings/report-groups/<int:pk>/edit/` (`report_group_edit`) — Updates name, icon, display order, active flag, and exclusive `account_types` + `REPORT_GROUP_UPDATED`.
+- `POST /settings/report-groups/<int:pk>/toggle/` (`report_group_toggle`) — Toggles `is_active` (re-validating exclusivity on re-activation) + `REPORT_GROUP_TOGGLED`.
+- `POST /settings/report-groups/<int:pk>/reorder/` (`report_group_reorder`) — Moves display order `up` or `down` + `REPORT_GROUP_REORDERED`.
+- `POST /settings/report-groups/<int:pk>/delete/` (`report_group_delete`) — Deletes group + `REPORT_GROUP_DELETED`.
+
+### 6.3 Other Performance & Standalone Reports Exports
 - **Performance Analytical Export**: `GET /performance/analysis/export/?period=...&area=...`
   - Permission: `performance:analysis/export`
 - **Performance Daily Activity Export**: `GET /performance/daily/export/?date=YYYY-MM-DD`
@@ -455,27 +476,17 @@ All performance and reporting views provide standard OpenXML Excel downloads (`.
   - Permission: `reports:financial/export`
 - **Trial Balance Export & Print**: `GET /reports/trial-balance/export/` & `GET /reports/trial-balance/print/`
   - Permission: `reports:financial/export`
-- **Target Achievement Export**: `GET /reports/target-achievement/export/`
-  - Permission: `reports:financial/export`
 - **Net Sales & Profitability Export**: `GET /reports/net-sales/export/`
   - Permission: `reports:sales/export`
 - **Customer 360 Export**: `GET /reports/customer-360/export/`
   - Permission: `reports:sales/export`
-- **Promotions Export**: `GET /reports/promotions/export/`
-  - Permission: `reports:sales/export`
 - **Item Sales by Customer Export**: `GET /reports/item-sales-by-customer/export/`
   - Permission: `reports:sales/export`
-- **Order Deliveries Export & Print**: `GET /reports/order-deliveries/export/` & `GET /reports/order-deliveries/print/`
-  - Permission: `reports:inventory/export`
 - **Delivery Stock Availability Export**: `GET /reports/delivery-stock/export/`
   - Permission: `reports:inventory/export`
 - **Item Purchases Export**: `GET /reports/item-purchases/export/`
   - Permission: `reports:inventory/export`
 - **Agreements ROI Export**: `GET /reports/agreements-roi/export/`
-  - Permission: `reports:activities/export`
-- **Calls & Telesales Export**: `GET /reports/calls/export/`
-  - Permission: `reports:activities/export`
-- **Medical Samples Export**: `GET /reports/samples/export/`
   - Permission: `reports:activities/export`
 
 ---

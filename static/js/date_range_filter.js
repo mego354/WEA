@@ -12,9 +12,11 @@
         all_time: 'كل الوقت',
         today: 'اليوم',
         yesterday: 'أمس',
+        this_week: 'هذا الأسبوع',
+        week: 'هذا الأسبوع',
         last_7_days: 'آخر 7 أيام',
         last_30_days: 'آخر 30 يوم',
-        this_month: 'هذا الشهر',
+        this_month: 'الشهر الحالي',
         last_month: 'الشهر الماضي',
         quarter: 'هذا الربع',
         this_year: 'هذه السنة',
@@ -40,6 +42,15 @@
             const y = new Date(now);
             y.setDate(y.getDate() - 1);
             s = e = fmt(y);
+        } else if (val === 'this_week' || val === 'week') {
+            // Saturday -> Friday (JS getDay(): Sun=0 .. Sat=6)
+            const daysSinceSat = (now.getDay() + 1) % 7;
+            const sat = new Date(now);
+            sat.setDate(now.getDate() - daysSinceSat);
+            const fri = new Date(sat);
+            fri.setDate(sat.getDate() + 6);
+            s = fmt(sat);
+            e = fmt(fri);
         } else if (val === 'last_7_days') {
             const d = new Date(now);
             d.setDate(d.getDate() - 6);
@@ -52,7 +63,7 @@
             e = fmt(now);
         } else if (val === 'this_month') {
             s = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
-            e = fmt(now);
+            e = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0));
         } else if (val === 'last_month') {
             const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             const last = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -61,10 +72,10 @@
         } else if (val === 'quarter') {
             const qStartMonth = Math.floor(now.getMonth() / 3) * 3;
             s = fmt(new Date(now.getFullYear(), qStartMonth, 1));
-            e = fmt(now);
+            e = fmt(new Date(now.getFullYear(), qStartMonth + 3, 0));
         } else if (val === 'this_year' || val === 'year') {
             s = `${now.getFullYear()}-01-01`;
-            e = fmt(now);
+            e = `${now.getFullYear()}-12-31`;
         }
         return { s, e };
     }

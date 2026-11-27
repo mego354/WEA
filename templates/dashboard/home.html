@@ -37,16 +37,28 @@
 
                     <!-- Quick Preset Buttons -->
                     <div class="grid grid-cols-2 gap-1.5 text-xs">
-                        <a href="{% url 'home' %}?period=today{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=today{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'today' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %} rounded-lg font-bold text-center transition-colors">
                             اليوم
                         </a>
-                        <a href="{% url 'home' %}?period=this_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium text-center transition-colors">
-                            هذا الشهر
+                        <a href="{% url 'home' %}?period=yesterday{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'yesterday' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %} rounded-lg font-bold text-center transition-colors">
+                            أمس
                         </a>
-                        <a href="{% url 'home' %}?period=last_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=this_week{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'this_week' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %} rounded-lg font-bold text-center transition-colors">
+                            هذا الأسبوع
+                        </a>
+                        <a href="{% url 'home' %}?period=this_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'this_month' %}bg-brand-500 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %} rounded-lg font-bold text-center transition-colors">
+                            الشهر الحالي
+                        </a>
+                        <a href="{% url 'home' %}?period=last_month{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'last_month' %}bg-brand-500 text-white{% else %}bg-slate-50 text-slate-600 hover:bg-slate-100{% endif %} rounded-lg font-bold text-center transition-colors">
                             الشهر الماضي
                         </a>
-                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-center transition-colors">
+                        <a href="{% url 'home' %}?period=quarter{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'quarter' %}bg-brand-500 text-white{% else %}bg-slate-50 text-slate-600 hover:bg-slate-100{% endif %} rounded-lg font-bold text-center transition-colors">
+                            هذا الربع
+                        </a>
+                        <a href="{% url 'home' %}?period=this_year{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'this_year' or period == 'year' %}bg-brand-500 text-white{% else %}bg-slate-50 text-slate-600 hover:bg-slate-100{% endif %} rounded-lg font-bold text-center transition-colors">
+                            هذه السنة
+                        </a>
+                        <a href="{% url 'home' %}?period=all{% if selected_rep %}&rep_id={{ selected_rep.id }}{% endif %}{% for a in selected_main_areas %}&main_area={{ a.id }}{% endfor %}{% for b in selected_bricks %}&brick={{ b.id }}{% endfor %}" class="px-2.5 py-1.5 {% if period == 'all_time' or period == 'all' %}bg-brand-500 text-white{% else %}bg-slate-50 text-slate-600 hover:bg-slate-100{% endif %} rounded-lg font-bold text-center transition-colors">
                             كل الوقت
                         </a>
                     </div>
@@ -54,11 +66,11 @@
                     <div class="space-y-2 pt-2 border-t border-slate-100">
                         <div>
                             <label class="block text-[11px] font-medium text-slate-600 mb-1">من تاريخ</label>
-                            <input type="date" name="start_date" id="input_start_date" value="{{ start_date_str }}" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                            <input type="date" name="start_date" id="input_start_date" value="{{ start_date_str }}" oninput="document.getElementById('input_period').value='custom'" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
                         </div>
                         <div>
                             <label class="block text-[11px] font-medium text-slate-600 mb-1">إلى تاريخ</label>
-                            <input type="date" name="end_date" id="input_end_date" value="{{ end_date_str }}" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                            <input type="date" name="end_date" id="input_end_date" value="{{ end_date_str }}" oninput="document.getElementById('input_period').value='custom'" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none">
                         </div>
                     </div>
 

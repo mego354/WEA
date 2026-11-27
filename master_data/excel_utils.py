@@ -234,6 +234,200 @@ def export_to_excel_response(
     return response
 
 
+def export_multisheet_excel_response(
+    sheets_spec,
+    filename="report_export",
+    report_title="تقرير النظام",
+    filter_summary="",
+    user=None,
+):
+    """
+    Generate a styled, secure, multi-worksheet RTL .xlsx workbook with CompanyProfile branding,
+    reporting period / active filter metadata banner, and Excel formula-injection sanitization.
+
+    `sheets_spec`: list of dicts:
+        {
+            'sheet_title': str (truncated cleanly to <=31 chars, deduplicated),
+            'section_title': str (optional subtitle on sheet),
+            'columns': [{'header': str, 'key': str|callable|int, 'width': int, 'align': str, 'format': str}],
+            'rows': iterable of dicts/objects/tuples,
+        }
+    """
+    wb = openpyxl.Workbook()
+    # Remove default sheet; we create one per selected section
+    wb.remove(wb.active)
+
+    from master_data.models import CompanyProfile
+    profile = CompanyProfile.get_settings()
+    company_name = getattr(profile, 'company_name', '') or 'WEA Pharma'
+    reg_info = " | ".join(
+        part for part in [
+            getattr(profile, 'commercial_registry', ''),
+            getattr(profile, 'tax_id', ''),
+            getattr(profile, 'phone', ''),
+        ] if part
+    )
+    now_str = timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M')
+    actor_name = ''
+    if user and getattr(user, 'is_authenticated', False):
+        actor_name = getattr(user, 'name', '') or getattr(user, 'username', '')
+
+    brand_banner_fill = PatternFill(start_color="FFF0FDFD", end_color="FFF0FDFD", fill_type="solid")
+    filter_banner_fill = PatternFill(start_color="FFF8FAFC", end_color="FFF8FAFC", fill_type="solid")
+    title_font = Font(name="Cairo", size=12, bold=True, color="FF0F766E")
+    meta_font = Font(name="Cairo", size=9, color="FF475569")
+    filter_font = Font(name="Cairo", size=9, bold=True, color="FF0F172A")
+
+    header_fill = PatternFill(start_color="FF27BEBE", end_color="FF27BEBE", fill_type="solid")
+    header_font = Font(name="Cairo", size=10, bold=True, color="FFFFFFFF")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    alt_row_fill = PatternFill(start_color="FFF8FAFC", end_color="FFF8FAFC", fill_type="solid")
+    white_row_fill = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
+    thin_side = Side(border_style="thin", color="FFE2E8F0")
+    cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    regular_font = Font(name="Cairo", size=10, color="FF0F172A")
+
+    used_titles = set()
+    invalid_chars = re.compile(r'[\[\]\*\?:/\\]')
+
+    for idx, spec in enumerate(sheets_spec or [], start=1):
+        raw_title = invalid_chars.sub(' ', str(spec.get('sheet_title') or f'قسم {idx}')).strip() or f'قسم {idx}'
+        base_title = raw_title[:28]
+        title_candidate = raw_title[:31]
+        suffix = 2
+        while title_candidate in used_titles:
+            title_candidate = f"{base_title}_{suffix}"[:31]
+            suffix += 1
+        used_titles.add(title_candidate)
+
+        ws = wb.create_sheet(title=title_candidate)
+        ws.sheet_view.rightToLeft = True
+
+        columns = spec.get('columns') or []
+        num_cols = max(1, len(columns))
+        last_col_letter = get_column_letter(num_cols)
+        section_title = spec.get('section_title') or title_candidate
+
+        # Row 1: Company + Report / Section Title
+        ws.cell(row=1, column=1, value=sanitize_excel_cell(f"{company_name} — {report_title} | {section_title}"))
+        if num_cols > 1:
+            ws.merge_cells(f"A1:{last_col_letter}1")
+        c1 = ws.cell(row=1, column=1)
+        c1.font = title_font
+        c1.fill = brand_banner_fill
+        c1.alignment = Alignment(horizontal="right", vertical="center")
+        ws.row_dimensions[1].height = 25
+
+        # Row 2: Active Filters & Period Metadata
+        filter_line = filter_summary or reg_info
+        ws.cell(row=2, column=1, value=sanitize_excel_cell(filter_line))
+        if num_cols > 1:
+            ws.merge_cells(f"A2:{last_col_letter}2")
+        c2 = ws.cell(row=2, column=1)
+        c2.font = filter_font
+        c2.fill = filter_banner_fill
+        c2.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+        ws.row_dimensions[2].height = 20
+
+        # Row 3: Export Timestamp + Actor
+        export_meta = f"تاريخ التصدير: {now_str}" + (f" | بواسطة: {actor_name}" if actor_name else "")
+        if reg_info and filter_summary:
+            export_meta = f"{export_meta} | {reg_info}"
+        ws.cell(row=3, column=1, value=sanitize_excel_cell(export_meta))
+        if num_cols > 1:
+            ws.merge_cells(f"A3:{last_col_letter}3")
+        c3 = ws.cell(row=3, column=1)
+        c3.font = meta_font
+        c3.alignment = Alignment(horizontal="right", vertical="center")
+        ws.row_dimensions[3].height = 18
+
+        # Row 5: Table Header
+        header_row_idx = 5
+        for col_idx, col in enumerate(columns, start=1):
+            cell = ws.cell(row=header_row_idx, column=col_idx, value=sanitize_excel_cell(col.get('header', '')))
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = cell_border
+        ws.row_dimensions[header_row_idx].height = 26
+        ws.freeze_panes = f"A{header_row_idx + 1}"
+
+        # Data Rows (streamed cleanly via iterator)
+        row_idx = header_row_idx + 1
+        for item in (spec.get('rows') or []):
+            is_even = (row_idx % 2 == 0)
+            current_fill = white_row_fill if is_even else alt_row_fill
+            for col_idx, col in enumerate(columns, start=1):
+                key = col.get('key')
+                if callable(key):
+                    try:
+                        val = key(item)
+                    except Exception:
+                        val = ""
+                elif isinstance(item, dict):
+                    val = item.get(key, "")
+                elif isinstance(item, (list, tuple)) and isinstance(key, int):
+                    val = item[key] if key < len(item) else ""
+                else:
+                    val = getattr(item, str(key), "")
+
+                if isinstance(val, (datetime, timezone.datetime)):
+                    val = timezone.localtime(val).strftime('%Y-%m-%d %H:%M') if timezone.is_aware(val) else val.strftime('%Y-%m-%d %H:%M')
+                elif isinstance(val, date):
+                    val = val.strftime('%Y-%m-%d')
+                elif isinstance(val, Decimal):
+                    val = float(val)
+                elif isinstance(val, bool):
+                    val = "نعم" if val else "لا"
+                elif val is None:
+                    val = ""
+
+                safe_val = sanitize_excel_cell(val)
+                cell = ws.cell(row=row_idx, column=col_idx, value=safe_val)
+                cell.font = regular_font
+                cell.fill = current_fill
+                cell.border = cell_border
+                align_pref = col.get('align') or 'right'
+                cell.alignment = Alignment(horizontal=align_pref, vertical="center")
+                num_fmt = col.get('format')
+                if num_fmt:
+                    cell.number_format = num_fmt
+                elif isinstance(safe_val, float):
+                    cell.number_format = '#,##0.00'
+            ws.row_dimensions[row_idx].height = 21
+            row_idx += 1
+
+        # Auto-size columns
+        for col_idx, col in enumerate(columns, start=1):
+            col_letter = get_column_letter(col_idx)
+            specified_width = col.get('width')
+            if specified_width:
+                ws.column_dimensions[col_letter].width = specified_width
+            else:
+                max_len = len(str(col.get('header', '')))
+                for r in range(header_row_idx, min(row_idx, header_row_idx + 80)):
+                    max_len = max(max_len, len(str(ws.cell(row=r, column=col_idx).value or '')))
+                ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 45)
+
+    if not wb.sheetnames:
+        ws = wb.create_sheet(title="ملخص")
+        ws.sheet_view.rightToLeft = True
+        ws.cell(row=1, column=1, value="لا توجد أقسام محددة للتصدير")
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    clean_filename = filename if filename.endswith('.xlsx') else f"{filename}.xlsx"
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{clean_filename}"'
+    return response
+
+
 def generate_excel_template_response(columns, sample_rows=None, filename="template", sheet_title="نموذج الاستيراد"):
     """
     Generates a ready-to-fill Excel template with formatted headers and explanatory sample data.

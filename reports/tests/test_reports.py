@@ -111,7 +111,7 @@ class ReportsHubAndSpecializedReportsTests(TestCase):
             owner=cls.rep_user,
             contact=cls.customer,
             date=cls.today,
-            status='ended',
+            status='finished',
             location_verified=True,
             created_by=cls.rep_user
         )

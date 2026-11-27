@@ -180,13 +180,17 @@ if not can_user_access_object(request.user, visit, 'edit'):
 | Transfer Approval & Execution | Yes | No | Yes (`inventory:transfers/approve`) | No |
 | Vault Deposits & Withdrawals | Yes | Subordinates + Perm | Yes | Own Vault |
 | Performance Overview & Analysis | Yes | Assigned Main Area (`performance:overview/view`, `performance:analysis/view`) | If granted | Own Performance (`performance:overview/view`) |
+| Performance Overview Export (Selective Multi-Sheet) | Yes (`performance:overview/export`) | Assigned Main Area (`performance:overview/export`) | If granted | If granted (Own Scoped) |
 | Performance Daily & Detailed | Yes | Assigned Main Area (`performance:daily/view`, `performance:detailed/view`) | If granted | Own Daily Activity (`performance:daily/view`) |
+| Account-Type Report Groups Settings (`/settings/report-groups/`) | Yes (`settings:reportGroups/manage`) | If granted | If granted | No |
 | Reports Hub & Financial Reports | Yes | Assigned Main Area | All Financials (`reports:financial/view`, `reports:sales/view`) | No |
 | Sales & Inventory Reports | Yes | Assigned Main Area | All Supply Chain & Sales (`reports:inventory/view`, `reports:sales/view`) | Own Sales (`reports:sales/view`) |
 | Activities & Samples Reports | Yes | Assigned Main Area | If granted | Own Activities (`reports:activities/view`) |
-
-
 | Cloudflare R2 Storage Settings (`/settings/storage/`) | Yes (`settings:storage/manage`, SuperAdmin-gated) | No | No | No |
 | Transaction Attachments Upload / View / Delete | Yes | Scoped (`can_user_access_object`) | Scoped | Own / Scoped |
 | Order / Return PDF Export | Yes | Scoped (`sales:orders/pdf`, `sales:returns/pdf`, `purchases:orders/pdf`, `purchases:returns/pdf`) | Scoped | Own / Scoped |
 | Customer & Vendor Account Statement PDF | Yes | Scoped (`sales:statements/pdf`, `purchases:statements/pdf`) | Scoped | Own / Scoped |
+
+### Performance & Dashboard DataScope Guarantees
+- **Filter Hardening (`resolve_performance_filters`)**: Submitted `rep`, `area`, `brick`, and `contact` query parameters on `/performance/*`, `/performance/overview/accounts-api/`, `/performance/overview/contacts-search/`, and `/performance/overview/export/` are strictly intersected against `ScopeResolutionService`-resolved querysets. Out-of-scope IDs cannot leak records or trigger errors; for `OWN`-scoped users, `rep` is pinned to the requesting user.
+- **Dashboard Multi-Module Union (`/home/`)**: Geographic filter dropdowns (`areas`, `bricks`) combine authorized scopes across all active modules the user can view (`sales`, `activities`, `contacts`, `purchases`, `inventory`, `treasury`) instead of falling back to a single module. Team rep selector, cross-rep charts, and Leads KPI card are gated by resolved `ScopeResolutionService` scopes and permissions — never hardcoded role names.

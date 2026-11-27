@@ -683,7 +683,7 @@ class DashboardRolePermissionsAndMobileNavTests(TestCase):
 
         context = response.context
         self.assertTrue(context['is_super'])
-        self.assertEqual(len(context['kpi_cards']), 18)
+        self.assertEqual(len(context['kpi_cards']), 20)
 
         charts_data = json.loads(context['charts_json'])
         self.assertIn('collections_by_area', charts_data)
@@ -1372,15 +1372,17 @@ class PDFInvoicesAndStatementsTests(TestCase):
         self.assertIn(self.client.get(reverse('customer_statement_pdf', args=[self.customer.pk])).status_code, (302, 403))
 
     def test_date_range_resolver_and_home_default_current_month(self):
+        import calendar
         from master_data.date_filter_utils import resolve_date_range
         from django.test import RequestFactory
 
         rf = RequestFactory()
         s, e, preset, _, _ = resolve_date_range(rf.get('/home/'), default_preset='this_month')
         today = timezone.localdate()
+        last_day = calendar.monthrange(today.year, today.month)[1]
         self.assertEqual(preset, 'this_month')
         self.assertEqual(s, today.replace(day=1))
-        self.assertEqual(e, today)
+        self.assertEqual(e, today.replace(day=last_day))
 
         # Home view no longer defaults to hardcoded Oct 2026
         self.client.force_login(self.admin)
