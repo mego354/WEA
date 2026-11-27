@@ -391,9 +391,9 @@ class Command(BaseCommand):
                 report['unmatched']['memo_warehouse'] += 1
                 wh = lookups['default_warehouse']
             m_type_raw = clean_str(r.get('Type')).lower()
-            m_type = 'addition' if m_type_raw in ('stock', 'in', 'addition') else 'dispatch'
+            m_type = 'inward' if m_type_raw in ('stock', 'in', 'addition', 'inward') else 'outward'
             st_raw = clean_str(r.get('Status Progress State') or r.get('Status Name')).lower()
-            st = 'done' if st_raw == 'done' else ('cancelled' if 'cancel' in st_raw else 'pending')
+            st = 'applied' if st_raw in ('done', 'applied') else ('cancelled' if 'cancel' in st_raw else 'draft')
             rec = {
                 'serial_num': ser,
                 'memo_type': m_type,
@@ -481,13 +481,19 @@ class Command(BaseCommand):
             subtotal = parse_dec(head.get('الإجمالي قبل الخصم') or head.get('الإجمالي') or grand_total)
             items = []
             for r in grp:
-                prod = self._match_product(lookups, sku=r.get('المنتج - الكود'), name=r.get('المنتج - الاسم'))
+                prod = self._match_product(
+                    lookups,
+                    sku=r.get('العناصر - المنتج - الكود') or r.get('المنتج - الكود'),
+                    name=r.get('العناصر - المنتج - الاسم') or r.get('المنتج - الاسم'),
+                )
                 if not prod:
                     continue
-                qty = parse_dec(r.get('الكمية'), '1.00')
-                price = parse_dec(r.get('سعر الوحدة') or r.get('السعر'))
-                disc_pct = parse_dec(r.get('نسبة الخصم'))
-                disc_amt = parse_dec(r.get('قيمة الخصم'))
+                qty = parse_dec(r.get('العناصر - الكمية') or r.get('الكمية'), '1.00')
+                price = parse_dec(r.get('العناصر - سعر القطعة') or r.get('سعر الوحدة') or r.get('السعر'))
+                disc_pct = parse_dec(r.get('العناصر - خصم القطعة %') or r.get('نسبة الخصم'))
+                raw_sub = (qty * price).quantize(Decimal('0.01'))
+                after_disc = parse_dec(r.get('العناصر - السعر بعد كل الخصومات') or r.get('العناصر - الكلي'))
+                disc_amt = max(Decimal('0.00'), raw_sub - after_disc) if after_disc > Decimal('0.00') and raw_sub > after_disc else parse_dec(r.get('قيمة الخصم'))
                 items.append({
                     'product': prod,
                     'quantity': qty,
@@ -1012,20 +1018,30 @@ class Command(BaseCommand):
         InventoryStock.objects.all().delete()
 
         # 2. Memos
-        memo_objs = [
-            InventoryMemo(
-                serial_num=m['serial_num'],
-                memo_number=f"MEMO-{m['serial_num']}",
+        seen_memo_nums = set()
+        memo_objs = []
+        for m in parsed['memos']:
+            m_num = f"MEMO-{m['serial_num']}"
+            if m_num in seen_memo_nums:
+                continue
+            seen_memo_nums.add(m_num)
+            stmt = f"{m['source_type']} {m['source_number']}".strip() or m_num
+            memo_objs.append(InventoryMemo(
+                memo_number=m_num,
                 memo_type=m['memo_type'],
                 warehouse=m['warehouse'],
+                statement=stmt[:255],
                 status=m['status'],
+                applied_at=m['done_at'],
                 notes=m['notes'],
                 created_by=m['created_by'],
-            )
-            for m in parsed['memos']
-        ]
+            ))
         InventoryMemo.objects.bulk_create(memo_objs, batch_size=500)
-        memo_by_serial = {m.serial_num: m for m in InventoryMemo.objects.all()}
+        memo_by_serial = {}
+        for m in InventoryMemo.objects.all().only('id', 'memo_number', 'warehouse_id'):
+            s_part = m.memo_number.replace('MEMO-', '')
+            if s_part.isdigit():
+                memo_by_serial[int(s_part)] = m
 
         # 3. InventoryStock & InventoryLot
         stock_agg = {}

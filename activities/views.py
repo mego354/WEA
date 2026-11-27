@@ -2082,12 +2082,15 @@ def planned_visits_export(request):
             if not all_reps.filter(pk=target_id).exists():
                 return render_forbidden_response(request, "غير مصرح لك بتصدير خطة زيارات مندوب خارج نطاق منطقتك الجغرافية.")
         items = items.filter(plan_day__assignee_id=target_id)
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
-    if date_from:
-        items = items.filter(plan_day__date__gte=date_from)
-    if date_to:
-        items = items.filter(plan_day__date__lte=date_to)
+    from master_data.date_filter_utils import resolve_date_range
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
+    if parsed_from:
+        items = items.filter(plan_day__date__gte=parsed_from)
+    if parsed_to:
+        items = items.filter(plan_day__date__lte=parsed_to)
+    search = request.GET.get('search', '').strip()
+    if search:
+        items = filter_by_arabic_search(items, search, ['contact__name', 'contact__code', 'notes', 'plan__plan_id'])
 
     from master_data.excel_utils import export_to_excel_response
     columns = [

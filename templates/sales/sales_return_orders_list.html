@@ -145,7 +145,7 @@
                             {{ r.order_date|date:"Y-m-d" }}
                         </td>
                         <td data-col="created_by" class="py-3.5 px-4 text-slate-600">
-                            {{ r.created_by.get_full_name|default:r.created_by.username|default:"—" }}
+                            {% if r.created_by %}{{ r.created_by.get_full_name|default:r.created_by.username }}{% else %}—{% endif %}
                         </td>
                         <td data-col="status" class="py-3.5 px-4">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border {{ r.status_badge_class }}">

@@ -159,7 +159,7 @@
                             {{ r.created_at|date:"d/m/Y h:i A" }}
                         </td>
                         <td data-col="created_by" class="py-3.5 px-4 text-slate-700">
-                            {{ r.created_by.get_full_name|default:r.created_by.username|default:"المدير" }}
+                            {% if r.created_by %}{{ r.created_by.get_full_name|default:r.created_by.username }}{% else %}المدير{% endif %}
                         </td>
                         <td data-col="status" class="py-3.5 px-4">
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold {{ r.status_badge_class }}">

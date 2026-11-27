@@ -35,7 +35,7 @@
                 {% endif %}
                 <span class="px-3 py-1 rounded-full text-xs font-bold {{ order.payment_status_badge_class }}">{{ order.payment_status_display_ar }}</span>
             </div>
-            <p class="text-xs text-slate-400 mt-1 font-mono">تاريخ الإنشاء: {{ order.created_at|date:"Y-m-d H:i" }} | بواسطة: {{ order.created_by.get_full_name|default:order.created_by.username }}</p>
+            <p class="text-xs text-slate-400 mt-1 font-mono">تاريخ الإنشاء: {{ order.created_at|date:"Y-m-d H:i" }} | بواسطة: {% if order.created_by %}{{ order.created_by.get_full_name|default:order.created_by.username }}{% else %}—{% endif %}</p>
         </div>
 
         <!-- Action Buttons -->
@@ -354,7 +354,7 @@
                                 {{ item.get_action_display }}
                             </span>
                         </td>
-                        <td class="py-2.5 px-4 font-bold text-slate-800">{{ item.actor.get_full_name|default:item.actor.username|default:"النظام" }}</td>
+                        <td class="py-2.5 px-4 font-bold text-slate-800">{% if item.actor %}{{ item.actor.get_full_name|default:item.actor.username }}{% else %}النظام{% endif %}</td>
                         <td class="py-2.5 px-4 font-mono text-slate-500">{{ item.status_before|default:"-" }} ➔ {{ item.status_after|default:"-" }}</td>
                         <td class="py-2.5 px-4 text-slate-700">{{ item.reason|default:"-" }}</td>
                     </tr>

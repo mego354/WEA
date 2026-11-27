@@ -301,7 +301,7 @@
                     {% endif %}
                     <div class="flex items-center justify-between">
                         <span class="text-slate-500">المنشئ:</span>
-                        <span class="font-medium text-slate-800">{{ return_order.created_by.get_full_name|default:return_order.created_by.username|default:"—" }}</span>
+                        <span class="font-medium text-slate-800">{% if return_order.created_by %}{{ return_order.created_by.get_full_name|default:return_order.created_by.username }}{% else %}—{% endif %}</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-slate-500">تاريخ الإنشاء:</span>

@@ -690,33 +690,33 @@ def purchase_order_print(request, pk):
 
 @require_permission('purchases:orders/export')
 def purchase_orders_export(request):
-    status_filter = request.GET.get('status', 'all')
+    from master_data.filter_utils import parse_multi_str, parse_single_int
+    from master_data.date_filter_utils import resolve_date_range
+
+    status_choices_dict = dict(PurchaseOrder.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
     payment_status_filter = request.GET.get('payment_status', 'all')
-    supplier_filter = request.GET.get('supplier')
+    supplier_id_int = parse_single_int(request.GET, 'supplier')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
-    remaining_min = request.GET.get('remaining_min', '').strip()
-    remaining_max = request.GET.get('remaining_max', '').strip()
 
     qs = PurchaseOrder.objects.select_related(
         'supplier', 'supplier__area', 'target_warehouse', 'created_by'
     ).all().order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'purchaseorder')
-    qs = PurchaseOrder.with_payment_totals(qs)
 
-    if status_filter and status_filter != 'all':
-        qs = qs.filter(status=status_filter)
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
     if payment_status_filter != 'all' and payment_status_filter in dict(PurchaseOrder.PAYMENT_STATUS_CHOICES):
         qs = qs.filter(payment_status=payment_status_filter)
-    if supplier_filter:
-        qs = qs.filter(supplier_id=supplier_filter)
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+    if supplier_id_int:
+        qs = qs.filter(supplier_id=supplier_id_int)
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
     if total_min:
         try:
             qs = qs.filter(grand_total__gte=Decimal(total_min))
@@ -725,17 +725,6 @@ def purchase_orders_export(request):
     if total_max:
         try:
             qs = qs.filter(grand_total__lte=Decimal(total_max))
-        except Exception:
-            pass
-    from django.db.models import F
-    if remaining_min:
-        try:
-            qs = qs.filter(grand_total__gte=F('_annotated_total_paid') + Decimal(remaining_min))
-        except Exception:
-            pass
-    if remaining_max:
-        try:
-            qs = qs.filter(grand_total__lte=F('_annotated_total_paid') + Decimal(remaining_max))
         except Exception:
             pass
     if search:

@@ -1129,11 +1129,19 @@ def accounting_customers_export(request):
         {'header': 'المنطقة', 'key': lambda a: a.customer.area.name if a.customer.area else '', 'width': 20, 'align': 'right'},
         {'header': 'الرصيد المدين المستحق', 'key': lambda a: float(a.current_balance or 0), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
         {'header': 'المديونية المتأخرة', 'key': lambda a: float(a.overdue_balance or 0), 'format': '#,##0.00', 'width': 20, 'align': 'right'},
+        {'header': 'واجب السداد الشهر الحالي', 'key': lambda a: float(a.due_this_month_balance or 0), 'format': '#,##0.00', 'width': 22, 'align': 'right'},
         {'header': 'حد الائتمان', 'key': lambda a: float(a.credit_limit or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
         {'header': 'فترة الائتمان (أيام)', 'key': 'credit_period_days', 'width': 18, 'align': 'center'},
         {'header': 'تاريخ آخر معاملة', 'key': lambda a: a.last_transaction_date.strftime('%Y-%m-%d') if a.last_transaction_date else '', 'width': 18, 'align': 'center'},
     ]
-    return export_to_excel_response(qs, columns, filename="customer_accounts_export", sheet_title="حسابات العملاء")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="customer_accounts_export",
+        sheet_title="حسابات العملاء",
+        report_title="كشف أرصدة وحسابات العملاء",
+        user=request.user,
+    )
 
 
 @require_permission('sales:customers/zero_balance')
@@ -1367,15 +1375,25 @@ def customer_transactions_list(request):
 
 @require_permission('sales:customers/transactions_export')
 def customer_transactions_export(request):
-    """Export Customer Ledger Transactions to Excel."""
-    customer_id = request.GET.get('customer_id') or request.GET.get('customer')
+    """Export Customer Ledger Transactions to Excel (exact filter parity with list view)."""
+    from master_data.filter_utils import (
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
+
+    customer_id_int = parse_single_int(request.GET, 'customer_id', 'customer')
     tx_type = request.GET.get('type')
     reason_filter = request.GET.get('reason', '').strip()
-    main_area = request.GET.get('main_area', '').strip()
-    brick = request.GET.get('brick', '').strip()
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     search = request.GET.get('search', '').strip()
+    main_area_ids, brick_ids, _, _ = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
 
     qs = get_scoped_queryset(
         CustomerTransaction.objects.select_related('account', 'account__customer', 'account__customer__area', 'account__customer__brick', 'created_by').order_by('-serial'),
@@ -1383,24 +1401,20 @@ def customer_transactions_export(request):
         'customertransaction',
     )
 
-    if customer_id:
-        qs = qs.filter(account__customer_id=customer_id)
+    if customer_id_int:
+        qs = qs.filter(account__customer_id=customer_id_int)
     if tx_type in ['debit', 'credit']:
         qs = qs.filter(transaction_type=tx_type)
     if reason_filter and reason_filter != 'all':
         qs = qs.filter(reason=reason_filter)
-    if main_area and main_area.isdigit():
-        qs = qs.filter(
-            Q(account__customer__area_id=int(main_area))
-            | Q(account__customer__area__parent_id=int(main_area))
-            | Q(account__customer__brick__parent_id=int(main_area))
-        )
-    if brick and brick.isdigit():
-        qs = qs.filter(Q(account__customer__brick_id=int(brick)) | Q(account__customer__area_id=int(brick)))
-    if date_from:
-        qs = qs.filter(transaction_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(transaction_date__lte=date_to)
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='account__customer', include_addresses=False))
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='account__customer', include_addresses=False))
+    if parsed_from:
+        qs = qs.filter(transaction_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(transaction_date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial', 'description', 'account__customer__name'])
 
@@ -1414,46 +1428,58 @@ def customer_transactions_export(request):
         {'header': 'الرصيد بعد الحركة', 'key': lambda t: float(t.running_balance or 0), 'format': '#,##0.00', 'width': 18, 'align': 'right'},
         {'header': 'المسؤول', 'key': lambda t: t.created_by.get_full_name() or t.created_by.username if t.created_by else '', 'width': 20, 'align': 'right'},
     ]
-    return export_to_excel_response(qs, columns, filename="customer_transactions_export", sheet_title="عمليات العملاء")
+    return export_to_excel_response(
+        qs,
+        columns,
+        filename="customer_transactions_export",
+        sheet_title="عمليات العملاء",
+        report_title="سجل حركات وعمليات العملاء",
+        user=request.user,
+    )
 
 
 @require_permission('sales:orders/export')
 def sales_orders_export(request):
-    status_filter = request.GET.get('status', 'all')
+    from master_data.filter_utils import (
+        parse_multi_str,
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
+
+    status_choices_dict = dict(SalesOrder.STATUS_CHOICES)
+    selected_statuses = [s for s in parse_multi_str(request.GET, 'status') if s in status_choices_dict]
     payment_status_filter = request.GET.get('payment_status', 'all')
-    customer_filter = request.GET.get('customer')
-    main_area = request.GET.get('main_area', '').strip()
-    brick = request.GET.get('brick', '').strip()
+    customer_id_int = parse_single_int(request.GET, 'customer')
     search = request.GET.get('search', '').strip()
-    date_from = request.GET.get('date_from', '').strip()
-    date_to = request.GET.get('date_to', '').strip()
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
     total_min = request.GET.get('total_min', '').strip()
     total_max = request.GET.get('total_max', '').strip()
-    remaining_min = request.GET.get('remaining_min', '').strip()
-    remaining_max = request.GET.get('remaining_max', '').strip()
+    main_area_ids, brick_ids, _, _ = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
 
     qs = SalesOrder.objects.select_related('customer', 'customer__area', 'customer__brick', 'source_warehouse', 'created_by').all().order_by('-order_date', '-id')
     qs = get_scoped_queryset(qs, request.user, 'salesorder')
-    qs = SalesOrder.with_payment_totals(qs)
 
-    if status_filter and status_filter != 'all':
-        qs = qs.filter(status=status_filter)
+    if selected_statuses:
+        qs = qs.filter(status__in=selected_statuses)
     if payment_status_filter != 'all' and payment_status_filter in dict(SalesOrder.PAYMENT_STATUS_CHOICES):
         qs = qs.filter(payment_status=payment_status_filter)
-    if customer_filter:
-        qs = qs.filter(customer_id=customer_filter)
-    if main_area and main_area.isdigit():
-        qs = qs.filter(
-            Q(customer__area_id=int(main_area))
-            | Q(customer__area__parent_id=int(main_area))
-            | Q(customer__brick__parent_id=int(main_area))
-        )
-    if brick and brick.isdigit():
-        qs = qs.filter(Q(customer__brick_id=int(brick)) | Q(customer__area_id=int(brick)))
-    if date_from:
-        qs = qs.filter(order_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(order_date__lte=date_to)
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+    if parsed_from:
+        qs = qs.filter(order_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(order_date__lte=parsed_to)
     if total_min:
         try:
             qs = qs.filter(grand_total__gte=Decimal(total_min))
@@ -1462,16 +1488,6 @@ def sales_orders_export(request):
     if total_max:
         try:
             qs = qs.filter(grand_total__lte=Decimal(total_max))
-        except Exception:
-            pass
-    if remaining_min:
-        try:
-            qs = qs.filter(grand_total__gte=F('_annotated_total_paid') + Decimal(remaining_min))
-        except Exception:
-            pass
-    if remaining_max:
-        try:
-            qs = qs.filter(grand_total__lte=F('_annotated_total_paid') + Decimal(remaining_max))
         except Exception:
             pass
     if search:
@@ -1483,9 +1499,9 @@ def sales_orders_export(request):
         {'header': 'المنطقة', 'key': lambda o: o.customer.area.name if o.customer.area else '', 'width': 20, 'align': 'right'},
         {'header': 'المخزن المنصرف منه', 'key': lambda o: o.source_warehouse.name if o.source_warehouse else '', 'width': 22, 'align': 'right'},
         {'header': 'تاريخ الطلب', 'key': lambda o: o.order_date.strftime('%Y-%m-%d') if o.order_date else '', 'width': 16, 'align': 'center'},
+        {'header': 'الحالة', 'key': lambda o: o.status_display_ar, 'width': 18, 'align': 'center'},
         {'header': 'حالة السداد', 'key': lambda o: o.payment_status_display_ar, 'width': 16, 'align': 'center'},
         {'header': 'إجمالي القيمة', 'key': lambda o: float(o.grand_total) if o.grand_total is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
-        {'header': 'المتبقي', 'key': lambda o: float(o.outstanding_balance) if o.outstanding_balance is not None else 0.0, 'format': '#,##0.00', 'width': 18, 'align': 'right'},
         {'header': 'المنشئ', 'key': lambda o: (o.created_by.name or o.created_by.username) if o.created_by else '', 'width': 22, 'align': 'right'},
         {'header': 'ملاحظات', 'key': lambda o: o.notes or '', 'width': 30, 'align': 'right'},
     ]
@@ -1502,25 +1518,41 @@ def sales_orders_export(request):
 
 @require_permission('sales:collections/export')
 def collections_export(request):
-    search = request.GET.get('search', '').strip()
-    customer_id = request.GET.get('customer')
-    vault_id = request.GET.get('vault')
-    payment_method = request.GET.get('payment_method')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    from master_data.filter_utils import (
+        parse_single_int,
+        resolve_scoped_area_brick_filters,
+        build_contact_area_q,
+        build_contact_brick_q,
+    )
+    from master_data.date_filter_utils import resolve_date_range
 
-    qs = Collection.objects.select_related('customer', 'vault', 'created_by').order_by('-serial_num')
+    search = request.GET.get('search', '').strip()
+    customer_id_int = parse_single_int(request.GET, 'customer', 'customer_id')
+    vault_id_int = parse_single_int(request.GET, 'vault')
+    payment_method = request.GET.get('payment_method')
+    parsed_from, parsed_to, _, _, _ = resolve_date_range(request, default_preset='all_time')
+    main_area_ids, brick_ids, _, _ = resolve_scoped_area_brick_filters(
+        request, 'sales',
+        area_params=('main_area', 'area_id', 'governorate'),
+        brick_params=('brick', 'brick_id', 'area'),
+    )
+
+    qs = Collection.objects.select_related('customer', 'customer__area', 'customer__brick', 'vault', 'created_by').order_by('-serial_num')
     qs = get_scoped_queryset(qs, request.user, 'collection')
-    if customer_id:
-        qs = qs.filter(customer_id=customer_id)
-    if vault_id:
-        qs = qs.filter(vault_id=vault_id)
-    if payment_method:
+    if customer_id_int:
+        qs = qs.filter(customer_id=customer_id_int)
+    if vault_id_int:
+        qs = qs.filter(vault_id=vault_id_int)
+    if payment_method and payment_method != 'all':
         qs = qs.filter(payment_method=payment_method)
-    if date_from:
-        qs = qs.filter(collection_date__gte=date_from)
-    if date_to:
-        qs = qs.filter(collection_date__lte=date_to)
+    if main_area_ids:
+        qs = qs.filter(build_contact_area_q(main_area_ids, prefix='customer', include_addresses=False))
+    if brick_ids:
+        qs = qs.filter(build_contact_brick_q(brick_ids, prefix='customer', include_addresses=False))
+    if parsed_from:
+        qs = qs.filter(collection_date__gte=parsed_from)
+    if parsed_to:
+        qs = qs.filter(collection_date__lte=parsed_to)
     if search:
         qs = filter_by_arabic_search(qs, search, ['serial_num', 'customer__name', 'notes'])
 
